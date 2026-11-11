@@ -1,8 +1,0 @@
-{
-  "imports": {
-    "#value": {
-      "import": "./value.mjs"
-    }
-  },
-  "type": "module"
-}

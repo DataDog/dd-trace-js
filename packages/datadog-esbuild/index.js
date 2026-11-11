@@ -2,13 +2,10 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { pathToFileURL, fileURLToPath } = require('node:url')
+const { fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
-const {
-  createEsmResolver,
-  processModule,
-} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { createEsmWrapper } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
@@ -25,6 +22,23 @@ const DC_MODULE_LITERAL = JSON.stringify(DC_MODULE)
 // Keep the marker split so source-map scanners do not treat this literal as this file's map.
 // eslint-disable-next-line unicorn/no-useless-concat
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
+// Marks the plugin's own `build.resolve()` calls made while analyzing re-exports, which must see real modules.
+const ANALYSIS_PLUGIN_DATA = { ddAnalysisResolve: true }
+
+/**
+ * @typedef {import('../datadog-instrumentations/src/helpers/bundler-esm-exports').WrapperImportTarget
+ * } WrapperImportTarget
+ */
+/**
+ * @typedef {{
+ *   path: string,
+ *   importer: string,
+ *   namespace: string,
+ *   resolveDir: string,
+ *   kind: string,
+ *   pluginData?: object
+ * }} OnResolveArgs
+ */
 
 let rewriter
 let bundlerRewrite
@@ -133,15 +147,80 @@ ${build.initialOptions.banner.js}`
     log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
   }
 
-  let resolver
-
-  build.onEnd(async () => {
-    const activeResolver = resolver
-    resolver = undefined
-    await activeResolver?.close()
-  })
+  /**
+   * The placeholder imports of each generated IITM wrapper, keyed by the wrapper path. Each wrapper's entry is replaced
+   * when it is loaded again, which esbuild does before resolving that wrapper's imports.
+   *
+   * @type {Map<string, { filename: string, imports: Map<string, WrapperImportTarget> }>}
+   */
+  const wrappers = new Map()
 
   build.onResolve({ filter: /.*/ }, args => {
+    const wrapper = wrappers.get(args.importer)
+    const target = wrapper?.imports.get(args.path)
+    if (wrapper !== undefined && target !== undefined) return resolveWrapperImport(target, wrapper.filename, args)
+
+    if (args.pluginData?.ddAnalysisResolve === true) return
+
+    return resolveModule(args)
+  })
+
+  /**
+   * @param {WrapperImportTarget} target
+   * @param {string} filename The wrapped module's path.
+   * @param {OnResolveArgs} args
+   */
+  function resolveWrapperImport (target, filename, args) {
+    if ('external' in target) return { path: target.path, external: true }
+    if (target.kind === 'runtime') return { path: target.path }
+
+    // The original keeps the wrapper as importer, so it loads unwrapped (and rewritten when it is a rewrite target).
+    // A module defining a re-exported name resolves as it does from the wrapped module's own `export *` chain.
+    return resolveModule({
+      ...args,
+      path: target.path,
+      importer: target.kind === 'original' ? args.importer : filename,
+      resolveDir: path.dirname(target.path),
+    }) ?? { path: target.path }
+  }
+
+  /**
+   * Resolves a re-export of an analyzed module the way the bundle resolves it.
+   *
+   * @param {string} specifier
+   * @param {string} importer
+   * @param {'import' | 'require'} kind
+   */
+  async function resolveReexport (specifier, importer, kind) {
+    const result = await build.resolve(specifier, {
+      importer,
+      kind: kind === 'require' ? 'require-call' : 'import-statement',
+      namespace: 'file',
+      pluginData: ANALYSIS_PLUGIN_DATA,
+      resolveDir: path.dirname(importer),
+    })
+    if (result.errors.length > 0) {
+      throw new Error(`Unable to resolve "${specifier}" from "${importer}": ${result.errors[0].text}`)
+    }
+    if (!result.external) {
+      if (result.namespace !== 'file') {
+        throw new Error(`Unsupported re-export "${specifier}" from "${importer}" in namespace "${result.namespace}"`)
+      }
+      return { path: result.path }
+    }
+    if (result.path.startsWith('node:') || builtins.has(result.path)) return { path: result.path }
+
+    // The bundle leaves the module out, so its exports are read from where Node.js finds it.
+    const modulePath = path.isAbsolute(result.path)
+      ? result.path
+      : dotFriendlyResolve(specifier, path.dirname(importer), kind === 'import')
+    return { path: modulePath, external: result.path }
+  }
+
+  /**
+   * @param {OnResolveArgs} args
+   */
+  function resolveModule (args) {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       log.debug('EXTERNAL: %s', args.path)
@@ -278,7 +357,7 @@ ${build.initialOptions.banner.js}`
         }
       }
     }
-  })
+  }
 
   build.onLoad({ filter: /.*/ }, async args => {
     if (args.pluginData?.pkgOfInterest) {
@@ -293,6 +372,7 @@ ${build.initialOptions.banner.js}`
       // Read the content of the module file of interest
       let contents
       let sourceMap
+      let watchFiles
       const target = getRewriteTarget(args.path.replaceAll('\\', '/'))
 
       if (target) {
@@ -331,37 +411,22 @@ ${build.initialOptions.banner.js}`
         }
       } else if (data.isESM) {
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+          const wrapperPath = args.path
           args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
           }
 
-          resolver ??= createEsmResolver()
-          const setters = await processModule({
+          const wrapper = await createEsmWrapper({
             path: args.path,
             internal: data.internal,
-            context: { format: 'module' },
-            excludeDefault: false,
-            moduleSources: new Map(),
-            resolver,
-            transform: build.esbuild.transformSync,
+            specifier: data.raw,
+            resolve: resolveReexport,
           })
-
-          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
-          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
-          contents = `
-import { register } from ${JSON.stringify(iitmPath)};
-import * as namespace from ${JSON.stringify(args.path)};
-const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
-const set = {};
-const get = {};
-
-${[...setters.values()].join(';\n')};
-
-register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
-`
+          wrappers.set(wrapperPath, { filename: args.path, imports: wrapper.imports })
+          contents = wrapper.code
+          watchFiles = wrapper.watchFiles
         } else {
           contents = fs.readFileSync(args.path, 'utf8')
         }
@@ -411,6 +476,7 @@ ${fileCode}
         resolveDir: data.internal
           ? build.initialOptions.absWorkingDir ?? process.cwd()
           : path.dirname(args.path),
+        watchFiles,
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {

@@ -163,12 +163,12 @@ esbuildVersions.forEach((version) => {
         const output = result.outputFiles[0].text
         assert.match(
           output,
-          /register.*"node:dns\/promises".*"node:dns\/promises"\);$/m,
+          /register.*"node:dns\/promises".*"node:dns\/promises", "builtin"\);$/m,
           'Bundle should contain the node:dns/promises instrumentation'
         )
         assert.match(
           output,
-          /register.*"node:http".*"node:http"\);$/m,
+          /register.*"node:http".*"node:http", "builtin"\);$/m,
           'Bundle should contain the node:http instrumentation'
         )
       })

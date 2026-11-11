@@ -2,32 +2,63 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const { SourceMap } = require('node:module')
+const { builtinModules, createRequire, SourceMap } = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
 const { after, before, describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
-const transformTypeScript =
-  require('../../datadog-instrumentations/test/helpers/bundler-esm-exports/transform-typescript')
 
 const FIXTURES = path.join(__dirname, '../../datadog-instrumentations/test/helpers/bundler-esm-exports')
 
+const builtins = new Set(builtinModules)
+
 /**
- * @param {object} [initialOptions]
+ * Stands in for esbuild's `build.resolve()`: Node.js resolution, with builtins kept external.
+ *
+ * @param {object[]} calls
  */
-function captureOnLoad (initialOptions = {}) {
-  let onEnd
+function createResolve (calls) {
+  /**
+   * @param {string} specifier
+   * @param {{ importer: string, resolveDir: string, kind: string, pluginData?: object }} options
+   */
+  return async function resolve (specifier, options) {
+    calls.push({ specifier, ...options })
+    if (specifier.startsWith('node:') || builtins.has(specifier)) {
+      return { path: specifier, external: true, namespace: 'file', errors: [] }
+    }
+    try {
+      const resolved = createRequire(options.importer).resolve(specifier)
+      return { path: resolved, external: false, namespace: 'file', errors: [] }
+    } catch (error) {
+      return { path: '', errors: [{ text: error.message }] }
+    }
+  }
+}
+
+/**
+ * Sets the plugin up on a fake build and returns its callbacks.
+ *
+ * @param {object} [initialOptions]
+ * @param {Function} [resolve] Replaces the fake `build.resolve()`.
+ */
+function setupPlugin (initialOptions = {}, resolve) {
   let onLoad
+  let onResolve
+  const resolveCalls = []
   ddPlugin.setup({
-    esbuild: { transformSync: transformTypeScript },
     initialOptions,
-    /** @param {Function} callback */
-    onEnd (callback) {
-      onEnd = callback
+    resolve: resolve ?? createResolve(resolveCalls),
+    onEnd () {},
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
+    onResolve (options, callback) {
+      onResolve = callback
     },
-    onResolve () {},
     /**
      * @param {object} options
      * @param {Function} callback
@@ -36,14 +67,14 @@ function captureOnLoad (initialOptions = {}) {
       onLoad = callback
     },
   })
-  /** @param {object} args */
-  return async function runOnLoad (args) {
-    try {
-      return await onLoad(args)
-    } finally {
-      await onEnd()
-    }
-  }
+  return { onLoad, onResolve, resolveCalls }
+}
+
+/**
+ * @param {object} [initialOptions]
+ */
+function captureOnLoad (initialOptions) {
+  return setupPlugin(initialOptions).onLoad
 }
 
 /**
@@ -78,6 +109,40 @@ function captureOnResolve (initialOptions = {}) {
     onLoad () {},
   })
   return onResolve
+}
+
+/**
+ * @param {string} modulePath
+ * @returns {{ path: string, pluginData: object }}
+ */
+function wrapperArgs (modulePath) {
+  return {
+    path: `${modulePath}._dd_esbuild_intercepted`,
+    pluginData: {
+      internal: false,
+      isESM: true,
+      pkg: 'fixture',
+      pkgOfInterest: true,
+      raw: 'fixture',
+    },
+  }
+}
+
+/**
+ * Resolves an import of a loaded wrapper through the plugin.
+ *
+ * @param {Function} onResolve
+ * @param {string} wrapperPath
+ * @param {string} specifier
+ */
+function resolveWrapperImport (onResolve, wrapperPath, specifier) {
+  return onResolve({
+    path: specifier,
+    importer: wrapperPath,
+    resolveDir: path.dirname(wrapperPath),
+    kind: 'import-statement',
+    namespace: 'file',
+  })
 }
 
 describe('datadog-esbuild plugin', () => {
@@ -330,7 +395,7 @@ describe('datadog-esbuild plugin', () => {
       fs.mkdirSync(path.dirname(resourcePath), { recursive: true })
       fs.writeFileSync(path.join(esmDir, 'package.json'), JSON.stringify({ type: 'module' }))
       fs.writeFileSync(resourcePath, 'export class McpServer { async executeToolHandler () { return 1 } }\n')
-      const onResolve = captureOnResolve({ format: 'esm' })
+      const { onLoad, onResolve } = setupPlugin({ format: 'esm' })
       const request = '@modelcontextprotocol/sdk/dist/esm/server/mcp.js'
 
       const wrapper = resolve(request, { format: 'esm' })
@@ -338,20 +403,14 @@ describe('datadog-esbuild plugin', () => {
       assert.equal(wrapper.pluginData.isESM, true)
       assert.equal(wrapper.pluginData.rewriteOnly, false)
 
-      const loadWrapper = captureOnLoad()
-      const wrapperResult = await loadWrapper(wrapper)
-      assert.match(wrapperResult.contents, /import-in-the-middle/)
-      assert.ok(wrapperResult.contents.includes(`import * as namespace from ${JSON.stringify(resourcePath)}`))
+      const wrapperPath = wrapper.path
+      const wrapperResult = await onLoad(wrapper)
+      assert.ok(wrapperResult.contents.includes('import * as namespace from "./__iitm_module_0__.js"'))
       assert.doesNotMatch(wrapperResult.contents, /orchestrion:/)
 
-      const real = onResolve({
-        path: resourcePath,
-        resolveDir: path.dirname(resourcePath),
-        kind: 'import-statement',
-        namespace: 'file',
-        importer: wrapper.path,
-      })
+      const real = resolveWrapperImport(onResolve, wrapperPath, './__iitm_module_0__.js')
       assert.equal(real.path, resourcePath)
+      assert.equal(real.pluginData.isESM, true)
 
       const loadReal = captureOnLoad()
       const realResult = await loadReal(real)
@@ -361,6 +420,29 @@ describe('datadog-esbuild plugin', () => {
   })
 
   describe('ESM wrappers', () => {
+    let projectDir
+
+    before(() => {
+      projectDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-esbuild-wrapper-')))
+    })
+
+    after(() => {
+      fs.rmSync(projectDir, { recursive: true, force: true })
+    })
+
+    /**
+     * Writes the modules into a new directory and returns the path of the first one.
+     *
+     * @param {Record<string, string>} files
+     */
+    function writeModules (files) {
+      const dir = fs.mkdtempSync(path.join(projectDir, 'case-'))
+      for (const [name, source] of Object.entries(files)) {
+        fs.writeFileSync(path.join(dir, name), source)
+      }
+      return path.join(dir, Object.keys(files)[0])
+    }
+
     it('uses the build directory to resolve imports in built-in module wrappers', async () => {
       const absWorkingDir = path.dirname(process.cwd())
       const result = await loadBuiltinWrapper({ absWorkingDir })
@@ -372,6 +454,22 @@ describe('datadog-esbuild plugin', () => {
       const result = await loadBuiltinWrapper()
 
       assert.strictEqual(result.resolveDir, process.cwd())
+    })
+
+    it('keeps the built-in module of a built-in module wrapper external', async () => {
+      const { onLoad, onResolve } = setupPlugin()
+      const wrapperPath = '/_dd_esm_internal_/dns/promises._dd_esbuild_intercepted'
+
+      const result = await onLoad({
+        path: wrapperPath,
+        pluginData: { internal: true, isESM: true, pkgOfInterest: true, raw: 'dns/promises' },
+      })
+
+      assert.ok(result.contents.includes('register("node:dns/promises", __binder, "dns/promises", "builtin")'))
+      assert.deepStrictEqual(resolveWrapperImport(onResolve, wrapperPath, './__iitm_module_0__.js'), {
+        path: 'node:dns/promises',
+        external: true,
+      })
     })
 
     it('uses the module directory to resolve imports in package wrappers', async () => {
@@ -392,41 +490,117 @@ describe('datadog-esbuild plugin', () => {
       assert.strictEqual(result.resolveDir, path.dirname(modulePath))
     })
 
-    it('generates setters for cyclic star exports', async () => {
-      const onLoad = captureOnLoad()
-      const modulePath = path.join(FIXTURES, 'export-cycle-a.mjs')
-
-      const result = await onLoad({
-        path: `${modulePath}._dd_esbuild_intercepted`,
-        pluginData: {
-          internal: false,
-          isESM: true,
-          pkg: 'fixture',
-          pkgOfInterest: true,
-          raw: 'fixture',
-        },
+    it('resolves the wrapper placeholders and watches the analyzed modules', async () => {
+      const { onLoad, onResolve } = setupPlugin()
+      const modulePath = writeModules({
+        'index.mjs': "export * from './left.mjs'\nexport * from './right.mjs'\n",
+        'left.mjs': "export * from './shared.mjs'\n",
+        'right.mjs': "export * from './shared.mjs'\n",
+        'shared.mjs': 'export const shared = true\n',
       })
+      const dir = path.dirname(modulePath)
+      const args = wrapperArgs(modulePath)
+      const wrapperPath = args.path
 
-      assert.match(result.contents, /set\["fromA"\]/)
-      assert.match(result.contents, /set\["fromB"\]/)
+      const result = await onLoad(args)
+
+      assert.deepStrictEqual(result.watchFiles, ['index.mjs', 'left.mjs', 'shared.mjs', 'right.mjs'].map(name => {
+        return path.join(dir, name)
+      }))
+      assert.deepStrictEqual(resolveWrapperImport(onResolve, wrapperPath, './__iitm_runtime__.js'), {
+        path: fs.realpathSync(require.resolve('import-in-the-middle/lib/register.js')),
+      })
+      const original = resolveWrapperImport(onResolve, wrapperPath, './__iitm_module_0__.js')
+      assert.deepStrictEqual(original, { path: modulePath })
+      assert.deepStrictEqual(resolveWrapperImport(onResolve, wrapperPath, './__iitm_module_1__.js'), {
+        path: path.join(dir, 'shared.mjs'),
+      })
+      assert.strictEqual(resolveWrapperImport(onResolve, wrapperPath, './unknown.js'), undefined)
     })
 
-    it('generates setters for TypeScript module exports', async () => {
-      const onLoad = captureOnLoad()
-      const modulePath = path.join(FIXTURES, 'typescript-export.mts')
-
-      const result = await onLoad({
-        path: `${modulePath}._dd_esbuild_intercepted`,
-        pluginData: {
-          internal: false,
-          isESM: true,
-          pkg: 'fixture',
-          pkgOfInterest: true,
-          raw: 'fixture',
-        },
+    it('resolves re-exports through build.resolve without instrumenting them', async () => {
+      const { onLoad, onResolve, resolveCalls } = setupPlugin()
+      const modulePath = writeModules({
+        'index.mjs': "export * from './cjs.js'\n",
+        'cjs.js': "module.exports = require('./required.js')\n",
+        'required.js': 'exports.fromRequire = true\n',
       })
+      const dir = path.dirname(modulePath)
 
-      assert.match(result.contents, /set\["Client"\]/)
+      await onLoad(wrapperArgs(modulePath))
+
+      const pluginData = { ddAnalysisResolve: true }
+      assert.deepStrictEqual(resolveCalls, [
+        {
+          specifier: './cjs.js',
+          importer: modulePath,
+          kind: 'import-statement',
+          namespace: 'file',
+          pluginData,
+          resolveDir: dir,
+        },
+        {
+          specifier: './required.js',
+          importer: path.join(dir, 'cjs.js'),
+          kind: 'require-call',
+          namespace: 'file',
+          pluginData,
+          resolveDir: dir,
+        },
+      ])
+      assert.strictEqual(onResolve({
+        path: 'express',
+        importer: modulePath,
+        resolveDir: dir,
+        kind: 'import-statement',
+        namespace: 'file',
+        pluginData: resolveCalls[0].pluginData,
+      }), undefined)
+    })
+
+    it('analyzes re-exports the build keeps external and keeps their imports external', async () => {
+      const modulePath = writeModules({
+        'index.mjs': "export * from './left.mjs'\nexport * from './right.mjs'\n",
+        'left.mjs': "export * from 'external-package'\n",
+        'right.mjs': "export * from 'external-package'\n",
+      })
+      const packageDir = path.join(path.dirname(modulePath), 'node_modules', 'external-package')
+      fs.mkdirSync(packageDir, { recursive: true })
+      fs.writeFileSync(path.join(packageDir, 'package.json'), '{ "main": "index.mjs" }')
+      fs.writeFileSync(path.join(packageDir, 'index.mjs'), 'export const fromPackage = true\n')
+      const resolveExternal = async (/** @type {string} */ specifier, /** @type {{ importer: string }} */ options) => {
+        if (specifier === 'external-package') return { path: specifier, external: true, errors: [] }
+        return { path: createRequire(options.importer).resolve(specifier), namespace: 'file', errors: [] }
+      }
+      const { onLoad, onResolve } = setupPlugin({}, resolveExternal)
+      const args = wrapperArgs(modulePath)
+      const wrapperPath = args.path
+
+      const result = await onLoad(args)
+
+      assert.match(result.contents, /as "fromPackage"/)
+      assert.deepStrictEqual(resolveWrapperImport(onResolve, wrapperPath, './__iitm_module_1__.js'), {
+        path: 'external-package',
+        external: true,
+      })
+    })
+
+    it('rejects re-exports the build cannot resolve', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = writeModules({ 'index.mjs': "export * from './missing.mjs'\n" })
+
+      await assert.rejects(onLoad(wrapperArgs(modulePath)), {
+        message: new RegExp(`^Unable to resolve "./missing.mjs" from "${modulePath}": Cannot find module`),
+      })
+    })
+
+    it('rejects re-exports resolved into another namespace', async () => {
+      const { onLoad } = setupPlugin({}, async () => ({ path: 'virtual', namespace: 'virtual', errors: [] }))
+      const modulePath = writeModules({ 'index.mjs': "export * from 'virtual-module'\n" })
+
+      await assert.rejects(onLoad(wrapperArgs(modulePath)), {
+        message: `Unsupported re-export "virtual-module" from "${modulePath}" in namespace "virtual"`,
+      })
     })
   })
 

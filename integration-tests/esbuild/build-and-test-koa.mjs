@@ -28,10 +28,10 @@ try {
 
   if (NODE_MAJOR >= 22) {
     // it is resolved as ESM module only in node 22+, becaues the require.resolve accepts conditions in node 22+
-    assert.match(data, /register.*koa.mjs".*"koa"\);$/m, 'Bundle should contain the koa ESM instrumentation')
+    assert.match(data, /register.*koa.mjs".*"koa", "module"\);$/m, 'Bundle should contain the koa ESM instrumentation')
     assert.match(
       data,
-      /register.*@koa\/router[^\n\r"\u2028\u2029]*".*"@koa\/router"\);$/m,
+      /register.*@koa\/router[^\n\r"\u2028\u2029]*".*"@koa\/router", "module"\);$/m,
       'Bundle should contain the @koa/router instrumentation'
     )
   } else {
