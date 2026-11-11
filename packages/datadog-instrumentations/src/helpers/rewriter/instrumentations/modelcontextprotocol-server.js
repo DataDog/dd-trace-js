@@ -1,7 +1,7 @@
 'use strict'
 
-// SDK 2.x bundles Server and McpServer into one chunk whose hashed name changes between releases.
-const filePath = /^dist\/[\w-]+\.[cm]js$/
+// SDK 2.x bundles Server and McpServer into an `mcp-<hash>` chunk whose hash changes between releases.
+const filePath = /^dist\/mcp-[\w-]+\.[cm]js$/
 const sourceMatch = 'var McpServer = class'
 
 /**
