@@ -2,6 +2,7 @@
 
 const { DogStatsDClient, MetricsAggregationClient } = require('../../../dogstatsd')
 const log = require('../../../log')
+const { normalizeUsage } = require('./usage-tokens')
 
 // Open Trajectory GenAI usage metrics for AI SDK calls made through the Vercel AI Gateway provider. They follow the
 // profiles dd-trace-py's LiteLLM integration and libdd-ai-usage emit, under the same DogStatsD binding: Counts for
@@ -50,10 +51,7 @@ const PROVIDER_NAMES = {
  *   requestModel?: unknown,
  *   responseModel?: unknown,
  *   providerMetadata?: unknown,
- *   inputTokens?: unknown,
- *   outputTokens?: unknown,
- *   cacheReadTokens?: unknown,
- *   cacheWriteTokens?: unknown,
+ *   usage: import('./usage-tokens').ReportedUsage,
  *   durationSeconds: number,
  *   error?: unknown
  * }} GatewayCall
@@ -151,14 +149,6 @@ function reportedCost (cost) {
 }
 
 /**
- * @param {unknown} count
- * @returns {count is number}
- */
-function isCount (count) {
-  return Number.isInteger(count) && /** @type {number} */ (count) >= 0
-}
-
-/**
  * @param {unknown} value
  * @returns {value is string}
  */
@@ -205,7 +195,8 @@ class GatewayUsageMetrics {
     // `gen_ai.provider.name` is the provider the gateway routed to. Without routing metadata, such as on a call that
     // failed before the gateway answered, it is unknown and left out rather than guessed from the model id's creator.
     const tags = ['gen_ai.operation.name:chat', 'trajectory.observation.point:client']
-    const provider = providerName(routing?.finalProvider ?? routing?.resolvedProvider)
+    const providerSlug = routing?.finalProvider ?? routing?.resolvedProvider
+    const provider = providerName(providerSlug)
     if (provider) tags.push(`gen_ai.provider.name:${tagValue(provider)}`)
     const { requestModel, responseModel } = call
     if (isText(requestModel)) tags.push(`gen_ai.request.model:${tagValue(requestModel)}`)
@@ -224,27 +215,33 @@ class GatewayUsageMetrics {
     client.increment('gen_ai.client.inference.duration.sum', call.durationSeconds, durationTags)
     client.increment('gen_ai.client.inference.duration.count', 1, durationTags)
 
-    const { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = call
+    // Input tokens include cache reads and writes, and output tokens include reasoning, whichever way the provider
+    // and SDK version report them.
+    const { inputTokens, outputTokens, cacheReadTokens, cacheWrites } = normalizeUsage(call.usage, {
+      providerMetadata: metadata,
+      provider: providerSlug,
+      model: routing?.originalModelId ?? requestModel,
+    })
     const tokenTags = [...attempt, UNKNOWN_MODALITY]
-    if (isCount(inputTokens)) {
+    if (inputTokens !== undefined) {
       client.increment('gen_ai.client.inference.usage.input_tokens', inputTokens, tokenTags)
     }
-    if (isCount(outputTokens)) {
+    if (outputTokens !== undefined) {
       client.increment('gen_ai.client.inference.usage.output_tokens', outputTokens, tokenTags)
     }
 
     // The breakdown profile needs both totals. The AI SDK reports zero cache tokens for calls that used no prompt
     // cache, so a zero is treated as not observed.
-    if (isCount(inputTokens) && isCount(outputTokens)) {
+    if (inputTokens !== undefined && outputTokens !== undefined) {
       const breakdown = [TOKEN_BREAKDOWN_PROFILE, ...tags, UNKNOWN_MODALITY]
-      if (isCount(cacheReadTokens) && cacheReadTokens > 0) {
+      if (cacheReadTokens) {
         client.increment('gen_ai.client.inference.usage.cache_read.input_tokens', cacheReadTokens, breakdown)
       }
-      if (isCount(cacheWriteTokens) && cacheWriteTokens > 0) {
+      for (const { lifetime, tokens } of cacheWrites) {
         client.increment(
           'gen_ai.client.inference.usage.cache_write.input_tokens',
-          cacheWriteTokens,
-          [...breakdown, 'trajectory.cache.lifetime:unspecified']
+          tokens,
+          [...breakdown, `trajectory.cache.lifetime:${lifetime}`]
         )
       }
     }

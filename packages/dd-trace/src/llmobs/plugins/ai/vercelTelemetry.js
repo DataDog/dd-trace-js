@@ -3,6 +3,7 @@
 const { parseModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 const BaseLLMObsPlugin = require('../base')
 const { createGatewayUsageMetrics, isGatewayProvider } = require('./usage-metrics')
+const { languageModelUsage } = require('./usage-tokens')
 const {
   getLlmObsSpanName,
   getGenerationMetadataFromEvent,
@@ -256,15 +257,11 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     // a streamed call reports its usage and provider metadata on the `finish` chunk
     const source = gatewayUsage.finish ?? ctx.result
-    const { inputTokens, outputTokens } = source?.usage ?? {}
     this.#usageMetrics?.record({
       requestModel: ctx.event.modelId,
       responseModel: gatewayUsage.responseModel ?? ctx.result?.response?.modelId,
       providerMetadata: source?.providerMetadata,
-      inputTokens: inputTokens?.total,
-      outputTokens: outputTokens?.total,
-      cacheReadTokens: inputTokens?.cacheRead,
-      cacheWriteTokens: inputTokens?.cacheWrite,
+      usage: languageModelUsage(source?.usage),
       durationSeconds: (performance.now() - gatewayUsage.start) / 1000,
       error: ctx.error,
     })

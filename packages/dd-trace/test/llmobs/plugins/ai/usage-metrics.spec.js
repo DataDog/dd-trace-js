@@ -80,6 +80,83 @@ function series (profile, ...tags) {
   return [profile, ...tags].sort().join(',')
 }
 
+/**
+ * `providerMetadata.gateway` for a call AI Gateway served from its first choice.
+ *
+ * @param {string} provider
+ * @param {string} providerApiModelId
+ * @param {string} originalModelId
+ */
+function routedTo (provider, providerApiModelId, originalModelId) {
+  return {
+    routing: {
+      originalModelId,
+      resolvedProvider: provider,
+      resolvedProviderApiModelId: providerApiModelId,
+      finalProvider: provider,
+      modelAttempts: [{ success: true, providerAttempts: [{ provider, providerApiModelId, success: true }] }],
+    },
+    cost: '0.01',
+  }
+}
+
+const ANTHROPIC_MODEL = 'anthropic/claude-sonnet-4.5'
+const ANTHROPIC = routedTo('anthropic', 'claude-sonnet-4-5-20250929', ANTHROPIC_MODEL)
+const ANTHROPIC_ON_VERTEX = routedTo('vertex', 'claude-sonnet-4-5@20250929', ANTHROPIC_MODEL)
+const BEDROCK = routedTo('bedrock', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', ANTHROPIC_MODEL)
+const OPENAI_MODEL = 'openai/gpt-5'
+const OPENAI = routedTo('openai', 'gpt-5', OPENAI_MODEL)
+const GEMINI_MODEL = 'google/gemini-2.5-pro'
+const GEMINI = routedTo('google', 'gemini-2.5-pro', GEMINI_MODEL)
+const GEMINI_ON_VERTEX = routedTo('vertex', 'gemini-2.5-pro', GEMINI_MODEL)
+
+// Anthropic's raw `usage` for 5,000 uncached input tokens and 3,000 read from the cache, as
+// `providerMetadata.anthropic.usage` carries it
+const ANTHROPIC_CACHE_READ_USAGE = {
+  input_tokens: 5000,
+  cache_creation_input_tokens: 0,
+  cache_read_input_tokens: 3000,
+  cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+  output_tokens: 200,
+  service_tier: 'standard',
+}
+
+// Gemini's raw `usageMetadata` for 5,000 input tokens, 3,000 of them cached, and 200 output tokens plus 800 thoughts
+const GEMINI_USAGE_METADATA = {
+  promptTokenCount: 5000,
+  candidatesTokenCount: 200,
+  thoughtsTokenCount: 800,
+  cachedContentTokenCount: 3000,
+  totalTokenCount: 6000,
+}
+
+/**
+ * The token counts in flushed metrics, summed over their series, with the cache writes by lifetime.
+ *
+ * @param {object} flushed what `flushedMetrics` returns
+ */
+function tokenCounts (flushed) {
+  const metrics = /** @type {Record<string, Record<string, { values: number[] }>>} */ (flushed)
+  /** @param {number[]} values */
+  const sum = values => values.reduce((a, b) => a + b, 0)
+  /** @param {string} name */
+  const total = name => metrics[name] && sum(Object.values(metrics[name]).flatMap(({ values }) => values))
+
+  const cacheWrite = {}
+  const writes = metrics['gen_ai.client.inference.usage.cache_write.input_tokens'] ?? {}
+  for (const [key, { values }] of Object.entries(writes)) {
+    const lifetime = key.split(',').find(tag => tag.startsWith('trajectory.cache.lifetime:'))?.split(':')[1]
+    cacheWrite[lifetime] = sum(values)
+  }
+
+  return {
+    input: total('gen_ai.client.inference.usage.input_tokens'),
+    output: total('gen_ai.client.inference.usage.output_tokens'),
+    cacheRead: total('gen_ai.client.inference.usage.cache_read.input_tokens'),
+    cacheWrite,
+  }
+}
+
 describe('vercel ai gateway usage metrics', () => {
   let socket
   let port
@@ -332,6 +409,243 @@ describe('vercel ai gateway usage metrics', () => {
       assert.deepStrictEqual(await flushedMetrics(), {})
     })
 
+    describe('token accounting', () => {
+      // What ai@5 (`@ai-sdk/gateway@2`, provider specification v2) records: each provider's own counts. A
+      // `doGenerate` span names them `promptTokens` and `completionTokens` and leaves the cache to the metadata.
+      const AI_SDK_5 = [
+        {
+          title: 'adds the cache reads Anthropic leaves out of the input tokens',
+          model: ANTHROPIC_MODEL,
+          span: 'ai.generateText.doGenerate',
+          attributes: {
+            'ai.usage.promptTokens': 5000,
+            'ai.usage.completionTokens': 200,
+            'ai.response.providerMetadata': JSON.stringify({
+              anthropic: { usage: ANTHROPIC_CACHE_READ_USAGE, cacheCreationInputTokens: 0, stopSequence: null },
+              gateway: ANTHROPIC,
+            }),
+          },
+          expected: { input: 8000, output: 200, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'adds Anthropic cache writes and splits them by lifetime',
+          model: ANTHROPIC_MODEL,
+          span: 'ai.streamText.doStream',
+          attributes: {
+            'ai.usage.inputTokens': 12,
+            'ai.usage.outputTokens': 80,
+            'ai.usage.totalTokens': 92,
+            'ai.usage.cachedInputTokens': 0,
+            'ai.response.providerMetadata': JSON.stringify({
+              anthropic: {
+                usage: {
+                  input_tokens: 12,
+                  cache_creation_input_tokens: 4096,
+                  cache_read_input_tokens: 0,
+                  cache_creation: { ephemeral_5m_input_tokens: 1024, ephemeral_1h_input_tokens: 3072 },
+                  output_tokens: 1,
+                },
+                cacheCreationInputTokens: 4096,
+                stopSequence: null,
+              },
+              gateway: ANTHROPIC,
+            }),
+          },
+          expected: { input: 4108, output: 80, cacheRead: undefined, cacheWrite: { '5m': 1024, '1h': 3072 } },
+        },
+        {
+          title: 'adds the cache reads of Anthropic on Vertex from the routing alone',
+          model: ANTHROPIC_MODEL,
+          span: 'ai.streamText.doStream',
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.outputTokens': 200,
+            'ai.usage.totalTokens': 5200,
+            'ai.usage.cachedInputTokens': 3000,
+            'ai.response.providerMetadata': JSON.stringify({ gateway: ANTHROPIC_ON_VERTEX }),
+          },
+          expected: { input: 8000, output: 200, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'does not add the cache again to Anthropic input tokens that already include it',
+          model: ANTHROPIC_MODEL,
+          span: 'ai.generateText.doGenerate',
+          attributes: {
+            'ai.usage.promptTokens': 8000,
+            'ai.usage.completionTokens': 200,
+            'ai.response.providerMetadata': JSON.stringify({
+              anthropic: { usage: ANTHROPIC_CACHE_READ_USAGE, cacheCreationInputTokens: 0 },
+              gateway: ANTHROPIC,
+            }),
+          },
+          expected: { input: 8000, output: 200, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'adds the cache reads and writes Bedrock leaves out of the input tokens',
+          model: ANTHROPIC_MODEL,
+          span: 'ai.streamText.doStream',
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.outputTokens': 200,
+            'ai.usage.totalTokens': 5200,
+            'ai.usage.cachedInputTokens': 3000,
+            'ai.response.providerMetadata': JSON.stringify({
+              bedrock: { usage: { cacheWriteInputTokens: 1000 } },
+              gateway: BEDROCK,
+            }),
+          },
+          expected: { input: 9000, output: 200, cacheRead: 3000, cacheWrite: { unspecified: 1000 } },
+        },
+        {
+          title: 'keeps OpenAI counts, which include cached input and reasoning',
+          model: OPENAI_MODEL,
+          span: 'ai.streamText.doStream',
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.outputTokens': 600,
+            'ai.usage.totalTokens': 5600,
+            'ai.usage.reasoningTokens': 400,
+            'ai.usage.cachedInputTokens': 3000,
+            'ai.response.providerMetadata': JSON.stringify({
+              openai: { responseId: 'resp_1', serviceTier: 'default' },
+              gateway: OPENAI,
+            }),
+          },
+          expected: { input: 5000, output: 600, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'adds the thoughts Gemini leaves out of the output tokens',
+          model: GEMINI_MODEL,
+          span: 'ai.generateText.doGenerate',
+          attributes: {
+            'ai.usage.promptTokens': 5000,
+            'ai.usage.completionTokens': 200,
+            'ai.response.providerMetadata': JSON.stringify({
+              google: { usageMetadata: GEMINI_USAGE_METADATA, groundingMetadata: null, safetyRatings: null },
+              gateway: GEMINI_ON_VERTEX,
+            }),
+          },
+          expected: { input: 5000, output: 1000, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'adds Gemini reasoning tokens from the routing alone',
+          model: GEMINI_MODEL,
+          span: 'ai.streamText.doStream',
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.outputTokens': 200,
+            'ai.usage.totalTokens': 6000,
+            'ai.usage.reasoningTokens': 800,
+            'ai.usage.cachedInputTokens': 3000,
+            'ai.response.providerMetadata': JSON.stringify({ gateway: GEMINI }),
+          },
+          expected: { input: 5000, output: 1000, cacheRead: 3000, cacheWrite: {} },
+        },
+      ]
+
+      // What ai@6 (`@ai-sdk/gateway@3`, provider specification v3) records: totals that already include the cache
+      // and reasoning, with their breakdown.
+      const AI_SDK_6 = [
+        {
+          title: 'keeps Anthropic totals and splits cache writes by lifetime',
+          model: ANTHROPIC_MODEL,
+          attributes: {
+            'ai.usage.inputTokens': 9000,
+            'ai.usage.inputTokenDetails.noCacheTokens': 5000,
+            'ai.usage.inputTokenDetails.cacheReadTokens': 3000,
+            'ai.usage.inputTokenDetails.cacheWriteTokens': 1000,
+            'ai.usage.outputTokens': 200,
+            'ai.usage.totalTokens': 9200,
+            'ai.usage.cachedInputTokens': 3000,
+            'ai.response.providerMetadata': JSON.stringify({
+              anthropic: {
+                usage: {
+                  input_tokens: 5000,
+                  cache_creation_input_tokens: 1000,
+                  cache_read_input_tokens: 3000,
+                  cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1000 },
+                  output_tokens: 200,
+                },
+                cacheCreationInputTokens: 1000,
+              },
+              gateway: ANTHROPIC,
+            }),
+          },
+          expected: { input: 9000, output: 200, cacheRead: 3000, cacheWrite: { '1h': 1000 } },
+        },
+        {
+          title: 'keeps Bedrock totals and splits cache writes by lifetime',
+          model: ANTHROPIC_MODEL,
+          attributes: {
+            'ai.usage.inputTokens': 9000,
+            'ai.usage.inputTokenDetails.noCacheTokens': 5000,
+            'ai.usage.inputTokenDetails.cacheReadTokens': 3000,
+            'ai.usage.inputTokenDetails.cacheWriteTokens': 1000,
+            'ai.usage.outputTokens': 200,
+            'ai.usage.totalTokens': 9200,
+            'ai.response.providerMetadata': JSON.stringify({
+              bedrock: { usage: { cacheWriteInputTokens: 1000, cacheDetails: [{ ttl: '5m', inputTokens: 1000 }] } },
+              gateway: BEDROCK,
+            }),
+          },
+          expected: { input: 9000, output: 200, cacheRead: 3000, cacheWrite: { '5m': 1000 } },
+        },
+        {
+          title: 'keeps OpenAI totals',
+          model: OPENAI_MODEL,
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.inputTokenDetails.noCacheTokens': 2000,
+            'ai.usage.inputTokenDetails.cacheReadTokens': 3000,
+            'ai.usage.outputTokens': 600,
+            'ai.usage.outputTokenDetails.textTokens': 200,
+            'ai.usage.outputTokenDetails.reasoningTokens': 400,
+            'ai.usage.totalTokens': 5600,
+            'ai.response.providerMetadata': JSON.stringify({ openai: { responseId: 'resp_1' }, gateway: OPENAI }),
+          },
+          expected: { input: 5000, output: 600, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'does not add the thoughts again to Gemini totals',
+          model: GEMINI_MODEL,
+          attributes: {
+            'ai.usage.inputTokens': 5000,
+            'ai.usage.inputTokenDetails.noCacheTokens': 2000,
+            'ai.usage.inputTokenDetails.cacheReadTokens': 3000,
+            'ai.usage.outputTokens': 1000,
+            'ai.usage.outputTokenDetails.textTokens': 200,
+            'ai.usage.outputTokenDetails.reasoningTokens': 800,
+            'ai.usage.totalTokens': 6000,
+            'ai.response.providerMetadata': JSON.stringify({
+              google: { usageMetadata: GEMINI_USAGE_METADATA },
+              gateway: GEMINI_ON_VERTEX,
+            }),
+          },
+          expected: { input: 5000, output: 1000, cacheRead: 3000, cacheWrite: {} },
+        },
+      ]
+
+      for (const { title, model, span, attributes, expected } of AI_SDK_5) {
+        it(`AI SDK 5: ${title}`, async () => {
+          enable(true)
+
+          runSpan(span, { 'ai.model.id': model, 'ai.model.provider': 'gateway' }, attributes)
+
+          assert.deepStrictEqual(tokenCounts(await flushedMetrics()), expected)
+        })
+      }
+
+      for (const { title, model, attributes, expected } of AI_SDK_6) {
+        it(`AI SDK 6: ${title}`, async () => {
+          enable(true)
+
+          runSpan('ai.generateText.doGenerate', { 'ai.model.id': model, 'ai.model.provider': 'gateway' }, attributes)
+
+          assert.deepStrictEqual(tokenCounts(await flushedMetrics()), expected)
+        })
+      }
+    })
+
     it('records nothing when the metrics are disabled', async () => {
       enable(false)
 
@@ -470,6 +784,84 @@ describe('vercel ai gateway usage metrics', () => {
           [series(PROVIDER_ATTEMPT, ...tags, 'gen_ai.token.modality:unknown')]: { type: 'c', values: [7] },
         },
       })
+    })
+
+    describe('token accounting', () => {
+      // What ai@7 (`@ai-sdk/gateway@4`, provider specification v4) publishes: totals that already include the cache
+      // and reasoning, with their breakdown.
+      const AI_SDK_7 = [
+        {
+          title: 'keeps Anthropic totals and splits cache writes by lifetime',
+          model: ANTHROPIC_MODEL,
+          usage: {
+            inputTokens: { total: 9000, noCache: 5000, cacheRead: 3000, cacheWrite: 1000 },
+            outputTokens: { total: 200, text: 200, reasoning: undefined },
+          },
+          providerMetadata: {
+            anthropic: {
+              usage: {
+                input_tokens: 5000,
+                cache_creation_input_tokens: 1000,
+                cache_read_input_tokens: 3000,
+                cache_creation: { ephemeral_5m_input_tokens: 400, ephemeral_1h_input_tokens: 600 },
+                output_tokens: 200,
+              },
+              cacheCreationInputTokens: 1000,
+            },
+            gateway: ANTHROPIC,
+          },
+          expected: { input: 9000, output: 200, cacheRead: 3000, cacheWrite: { '5m': 400, '1h': 600 } },
+        },
+        {
+          title: 'keeps Bedrock totals',
+          model: ANTHROPIC_MODEL,
+          usage: {
+            inputTokens: { total: 9000, noCache: 5000, cacheRead: 3000, cacheWrite: 1000 },
+            outputTokens: { total: 200, text: 200, reasoning: undefined },
+          },
+          providerMetadata: { bedrock: { usage: { cacheWriteInputTokens: 1000 } }, gateway: BEDROCK },
+          expected: { input: 9000, output: 200, cacheRead: 3000, cacheWrite: { unspecified: 1000 } },
+        },
+        {
+          title: 'keeps OpenAI totals',
+          model: OPENAI_MODEL,
+          usage: {
+            inputTokens: { total: 5000, noCache: 2000, cacheRead: 3000, cacheWrite: undefined },
+            outputTokens: { total: 600, text: 200, reasoning: 400 },
+          },
+          providerMetadata: { openai: { responseId: 'resp_1' }, gateway: OPENAI },
+          expected: { input: 5000, output: 600, cacheRead: 3000, cacheWrite: {} },
+        },
+        {
+          title: 'keeps Gemini totals',
+          model: GEMINI_MODEL,
+          usage: {
+            inputTokens: { total: 5000, noCache: 2000, cacheRead: 3000, cacheWrite: undefined },
+            outputTokens: { total: 1000, text: 200, reasoning: 800 },
+          },
+          providerMetadata: { google: { usageMetadata: GEMINI_USAGE_METADATA }, gateway: GEMINI_ON_VERTEX },
+          expected: { input: 5000, output: 1000, cacheRead: 3000, cacheWrite: {} },
+        },
+      ]
+
+      for (const { title, model, usage, providerMetadata, expected } of AI_SDK_7) {
+        it(`AI SDK 7: ${title}`, async () => {
+          enable(true)
+
+          const ctx = buildCtx({ callId: 'call-1', modelId: model, provider: 'gateway' })
+          startCh.publish(ctx)
+          ctx.result = {
+            content: [{ type: 'text', text: 'Hello' }],
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage,
+            providerMetadata,
+            response: { headers: {} },
+          }
+          asyncEndCh.publish(ctx)
+
+          assert.deepStrictEqual(tokenCounts(await flushedMetrics()), expected)
+        })
+      }
     })
 
     it('records nothing when the metrics are disabled', async () => {

@@ -20,6 +20,7 @@ const {
   getTelemetryMetadata,
 } = require('./util')
 const { createGatewayUsageMetrics, isGatewayProvider } = require('./usage-metrics')
+const { spanUsage } = require('./usage-tokens')
 
 /**
  * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
@@ -108,15 +109,11 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     ctx.gatewayUsageStart = undefined
 
     const tags = getSpanTags(ctx)
-    const usage = getUsage(tags)
     this.#usageMetrics?.record({
       requestModel: tags['ai.model.id'],
       responseModel: tags['ai.response.model'],
       providerMetadata: getJsonStringValue(tags['ai.response.providerMetadata'], {}),
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cacheReadTokens: usage.cacheReadTokens,
-      cacheWriteTokens: usage.cacheWriteTokens ?? tags['ai.usage.inputTokenDetails.cacheWriteTokens'],
+      usage: spanUsage(tags),
       durationSeconds: (performance.now() - start) / 1000,
       error: ctx.error,
     })
