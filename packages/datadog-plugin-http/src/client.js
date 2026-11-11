@@ -40,6 +40,14 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    let otelUrl = uri
+    if (otelSemantics) {
+      const otelHostname = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
+      const otelHost = options.port ? `${otelHostname}:${options.port}` : otelHostname
+      const auth = typeof options.auth === 'string' && options.auth ? 'REDACTED:REDACTED@' : ''
+      const otelBase = `${protocol}//${auth}${otelHost}`
+      otelUrl = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
+    }
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -52,7 +60,7 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
+        'http.url': otelUrl,
         'out.host': hostname,
       },
       metrics: {

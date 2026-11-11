@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { mkdtemp, rm, writeFile } = require('node:fs/promises')
 const net = require('node:net')
 const { tmpdir } = require('node:os')
@@ -40,17 +41,15 @@ function callbackResult (invoke) {
 }
 
 /**
- * Resolves after a MariaDB result stream ends.
+ * Collects the rows from a MariaDB result stream.
  *
  * @param {import('node:stream').Readable} stream
- * @returns {Promise<void>}
+ * @returns {Promise<Array<unknown>>}
  */
-function consumeStream (stream) {
-  return new Promise((resolve, reject) => {
-    stream.once('error', reject)
-    stream.once('end', resolve)
-    stream.resume()
-  })
+async function consumeStream (stream) {
+  const rows = []
+  for await (const row of stream) rows.push(row)
+  return rows
 }
 
 /**
@@ -130,6 +129,286 @@ describe('Plugin', () => {
             assert.strictEqual(mariadb.default.importFile, mariadb.importFile)
           })
         }
+      })
+
+      describe('DBM propagation', () => {
+        const marker = `dbm_bundle_${version.replaceAll('.', '_')}`
+        const logQuery = 'SELECT argument FROM mysql.general_log ' +
+          'WHERE command_type IN (\'Query\', \'Prepare\', \'Execute\') AND argument LIKE ? ' +
+          'AND argument NOT LIKE \'%general_log%\' ORDER BY event_time DESC LIMIT 1'
+
+        /**
+         * @param {(connection: import('mariadb').Connection) => Promise<void>} run
+         */
+        async function withPromiseLog (run) {
+          await agent.load('mariadb', { dbmPropagationMode: 'service', service: 'serviced' })
+          const mariadb = require(versionModule).get('mariadb')
+          const connection = await mariadb.createConnection(connectionOptions)
+
+          try {
+            await connection.query("SET GLOBAL log_output = 'TABLE'")
+            await connection.query("SET GLOBAL general_log = 'ON'")
+            await run(connection)
+          } finally {
+            await connection.query("SET GLOBAL general_log = 'OFF'")
+            await connection.end()
+            await agent.close()
+          }
+        }
+
+        /**
+         * @param {(connection: import('mariadb/callback').Connection) => Promise<void>} run
+         */
+        async function withCallbackLog (run) {
+          await agent.load('mariadb', { dbmPropagationMode: 'service', service: 'serviced' })
+          const mariadb = require(versionModule).get('mariadb/callback')
+          const connection = mariadb.createConnection(connectionOptions)
+          await callbackResult(callback => connection.connect(callback))
+
+          try {
+            await callbackResult(callback => connection.query("SET GLOBAL log_output = 'TABLE'", callback))
+            await callbackResult(callback => connection.query("SET GLOBAL general_log = 'ON'", callback))
+            await run(connection)
+          } finally {
+            await callbackResult(callback => connection.query("SET GLOBAL general_log = 'OFF'", callback))
+            await callbackResult(callback => connection.end(callback))
+            await agent.close()
+          }
+        }
+
+        it('sends injected SQL through the promise connection', async () => {
+          await withPromiseLog(async connection => {
+            const sql = `SELECT ? AS ${marker}_promise`
+            const [, rows] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(marker) }),
+              connection.query({ sql }, [42]),
+            ])
+            const logged = await connection.query(logQuery, [`%${marker}_promise%`])
+
+            assert.strictEqual(Number(rows[0][`${marker}_promise`]), 42)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+            assert.match(logged[0].argument.toString(), new RegExp(`SELECT 42 AS ${marker}_promise$`))
+          })
+        })
+
+        it('sends injected SQL through the promise stream', async () => {
+          await withPromiseLog(async connection => {
+            const sql = `SELECT 43 AS ${marker}_stream`
+            const [, rows] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(marker) }),
+              consumeStream(connection.queryStream(sql)),
+            ])
+            const logged = await connection.query(logQuery, [`%${marker}_stream%`])
+
+            assert.strictEqual(Number(rows[0][`${marker}_stream`]), 43)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('sends injected SQL through promise execute', async () => {
+          await withPromiseLog(async connection => {
+            const sql = `SELECT ? AS ${marker}_execute`
+            const command = { sql }
+            const [, rows] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(`${marker}_execute`) }),
+              connection.execute(command, [44]),
+            ])
+            const logged = await connection.query(logQuery, [`%${marker}_execute%`])
+
+            assert.strictEqual(Number(rows[0][`${marker}_execute`]), 44)
+            assert.strictEqual(command.sql, sql)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('sends injected SQL through promise batch', async () => {
+          await withPromiseLog(async connection => {
+            const table = `${marker}_promise_batch`
+            await connection.query(`CREATE TEMPORARY TABLE ${table} (value INT)`)
+            const sql = `INSERT INTO ${table} (value) VALUES (?) /* ${marker}_promise_batch_insert */`
+            const [, result] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /_promise_batch_insert/ }),
+              connection.batch(sql, [[51], [52]]),
+            ])
+            const logged = await connection.query(logQuery, [`%${marker}_promise_batch_insert%`])
+            const rows = await connection.query(`SELECT SUM(value) AS total FROM ${table}`)
+
+            assert.strictEqual(result.affectedRows, 2)
+            assert.strictEqual(Number(rows[0].total), 103)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('sends injected SQL through the callback connection', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT ? AS ${marker}_callback`
+            const [, [rows]] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(marker) }),
+              callbackResult(callback => connection.query(sql, [42], callback)),
+            ])
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback%`], callback)
+            })
+
+            assert.strictEqual(Number(rows[0][`${marker}_callback`]), 42)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+            assert.match(logged[0].argument.toString(), new RegExp(`SELECT 42 AS ${marker}_callback$`))
+          })
+        })
+
+        it('preserves callback query options while injecting SQL', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT ? AS ${marker}_callback_object`
+            const command = { sql }
+            Object.defineProperty(command, 'metaAsArray', { value: false, writable: true, configurable: true })
+            const [, [rows]] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /_callback_object/ }),
+              callbackResult(callback => connection.query(command, [45], callback)),
+            ])
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_object%`], callback)
+            })
+
+            assert.strictEqual(Number(rows[`${marker}_callback_object`]), 45)
+            assert.strictEqual(command.sql, sql)
+            assert.strictEqual(command.metaAsArray, true)
+            assert.strictEqual(Object.getOwnPropertyDescriptor(command, 'metaAsArray').enumerable, false)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('preserves callback query options without an application callback', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT 49 AS ${marker}_callback_no_callback`
+            const command = { sql }
+            const rows = []
+            const query = connection.query(command)
+            query.on('data', row => rows.push(row))
+            await once(query, 'end')
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_no_callback%`], callback)
+            })
+
+            assert.strictEqual(Number(rows[0][`${marker}_callback_no_callback`]), 49)
+            assert.strictEqual(command.sql, sql)
+            assert.strictEqual(Object.hasOwn(command, 'metaAsArray'), false)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('sends injected SQL through the callback stream', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT 46 AS ${marker}_callback_stream`
+            const command = { sql }
+            const [, rows] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /_callback_stream/ }),
+              consumeStream(connection.queryStream(command)),
+            ])
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_stream%`], callback)
+            })
+
+            assert.strictEqual(Number(rows[0][`${marker}_callback_stream`]), 46)
+            assert.strictEqual(command.sql, sql)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('preserves callback execute options while injecting SQL', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT ? AS ${marker}_callback_execute`
+            const command = { sql }
+            const [, [rows]] = await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /_callback_execute/ }),
+              callbackResult(callback => connection.execute(command, [47], callback)),
+            ])
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_execute%`], callback)
+            })
+
+            assert.strictEqual(Number(rows[0][`${marker}_callback_execute`]), 47)
+            assert.strictEqual(command.sql, sql)
+            assert.strictEqual(command.metaAsArray, true)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('preserves callback execute options without an application callback', async () => {
+          await withCallbackLog(async connection => {
+            const sql = `SELECT 50 AS ${marker}_callback_execute_no_callback`
+            const command = { sql }
+            connection.execute(command)
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_execute_no_callback%`], callback)
+            })
+
+            assert.strictEqual(command.sql, sql)
+            assert.strictEqual(command.metaAsArray, true)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('sends injected SQL through callback batch', async () => {
+          await withCallbackLog(async connection => {
+            const table = `${marker}_callback_batch`
+            await callbackResult(callback => connection.query(`CREATE TEMPORARY TABLE ${table} (value INT)`, callback))
+            const sql = `INSERT INTO ${table} (value) VALUES (?) /* ${marker}_callback_batch_insert */`
+            const command = { sql }
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: /_callback_batch_insert/ }),
+              callbackResult(callback => connection.batch(command, [[53], [54]], callback)),
+            ])
+            const [logged] = await callbackResult(callback => {
+              connection.query(logQuery, [`%${marker}_callback_batch_insert%`], callback)
+            })
+            const [rows] = await callbackResult(callback => {
+              connection.query(`SELECT SUM(value) AS total FROM ${table}`, callback)
+            })
+
+            assert.strictEqual(Number(rows[0].total), 107)
+            assert.strictEqual(command.sql, sql)
+            assert.strictEqual(Object.hasOwn(command, 'metaAsArray'), false)
+            assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+        })
+
+        it('preserves native errors for frozen callback options', async () => {
+          await withCallbackLog(async connection => {
+            const command = Object.freeze({ sql: `SELECT 48 AS ${marker}_frozen` })
+            assert.throws(() => connection.query(command, () => {}), TypeError)
+            assert.throws(() => connection.execute(command, () => {}), TypeError)
+          })
+        })
+
+        it('preserves invalid SQL results on promise commands', async () => {
+          await withPromiseLog(async connection => {
+            assert.throws(() => connection.query(null), TypeError)
+            await assert.rejects(connection.query(''), { errno: 45049 })
+            await assert.rejects(connection.execute({ sql: '' }, [1]), { errno: 45049 })
+            await assert.rejects(connection.batch({ sql: '' }, [[1]]), { errno: 45049 })
+            await assert.rejects(consumeStream(connection.queryStream('')), { errno: 1065 })
+          })
+        })
+
+        it('preserves invalid SQL results on callback commands', async () => {
+          await withCallbackLog(async connection => {
+            assert.throws(() => connection.query(null, () => {}), TypeError)
+            const query = callbackResult(callback => connection.query('', callback))
+            await assert.rejects(query, { errno: 1065 })
+
+            const executeCommand = { sql: '' }
+            const execute = callbackResult(callback => connection.execute(executeCommand, [1], callback))
+            await assert.rejects(execute, { errno: 45049 })
+            assert.strictEqual(executeCommand.metaAsArray, true)
+
+            const batchCommand = { sql: '' }
+            const batch = callbackResult(callback => connection.batch(batchCommand, [[1]], callback))
+            await assert.rejects(batch, { errno: 45049 })
+            assert.strictEqual(Object.hasOwn(batchCommand, 'metaAsArray'), false)
+
+            await assert.rejects(consumeStream(connection.queryStream('')), { errno: 1065 })
+          })
+        })
       })
 
       describe('promise API', () => {

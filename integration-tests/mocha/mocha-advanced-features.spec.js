@@ -59,14 +59,12 @@ const {
 const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
-const { getLatestMochaSpecifier } = require('./versions')
+const { getLatestMochaSpecifier, oldest: oldestMochaVersion } = require('./versions')
 
 const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
 const finalFlushMarker = 'dd-trace final flush completed\n'
 
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
-const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
 const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
 const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecifier() : MOCHA_VERSION
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)

@@ -313,6 +313,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -360,6 +361,7 @@ interface Plugins {
   "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "react-router": tracer.plugins.react_router;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -2793,6 +2795,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
+
+    /**
+     * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
     interface express extends HttpServer {}
@@ -3457,6 +3465,17 @@ declare namespace tracer {
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
     interface protobufjs extends Integration {}
+
+    /**
+     * This plugin automatically instruments
+     * [React Router](https://reactrouter.com/) Framework Mode via the
+     * ServerInstrumentation API (`createRequestHandler`), tagging Express/http
+     * spans with parameterized routes and creating loader/action child spans.
+     *
+     * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     * Configure request span options on `http` or the host framework integration.
+     */
+    interface react_router extends Pick<Instrumentation, 'enabled' | 'measured'> {}
 
     /**
      * This plugin automatically instruments the

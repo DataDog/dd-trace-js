@@ -17,6 +17,7 @@ const id = require('../../src/id')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
+const { applyHttpOtelSemantics } = require('../../src/plugins/util/http-otel-semantics')
 const processTags = require('../../src/process-tags')
 const { SpanBuckets } = require('../../src/span_stats')
 
@@ -670,6 +671,90 @@ describe('OpenTelemetry Traces', () => {
     })
 
     describe('otelTraceSemanticsEnabled', () => {
+      for (const [kind, statusCode] of [['server', 500], ['server', 599], ['client', 400], ['client', 500]]) {
+        it(`leaves the status description empty for an HTTP ${kind} ${statusCode} error`, () => {
+          const transformer = new OtlpTraceTransformer({}, true)
+          const span = createMockSpan({
+            error: 1,
+            meta: { 'span.kind': kind, 'http.method': 'GET', 'http.status_code': String(statusCode) },
+            metrics: {},
+          })
+          applyHttpOtelSemantics(span)
+
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+          const attrs = extractAttrs(otlpSpan.attributes)
+
+          assert.strictEqual(attrs['error.type'], String(statusCode))
+          assert.strictEqual(attrs['http.response.status_code'], statusCode)
+          assert.deepStrictEqual(otlpSpan.status, { code: 2, message: '' })
+        })
+      }
+
+      for (const { description, meta, metrics, semantics = true, error = 1, message } of [
+        {
+          description: 'OTel semantics are disabled',
+          meta: { 'span.kind': 'server', 'error.type': '500' },
+          metrics: { 'http.response.status_code': 500 },
+          semantics: false,
+          message: '500',
+        },
+        {
+          description: 'the error type comes from an exception',
+          meta: { 'span.kind': 'server', 'error.type': 'TypeError', 'error.message': 'request failed' },
+          metrics: { 'http.response.status_code': 500 },
+          message: 'TypeError: request failed',
+        },
+        {
+          description: 'the matching error type has an exception message',
+          meta: { 'span.kind': 'server', 'error.type': '500', 'error.message': 'request failed' },
+          metrics: { 'http.response.status_code': 500 },
+          message: '500: request failed',
+        },
+        {
+          description: 'the matching error type has an exception stack',
+          meta: { 'span.kind': 'server', 'error.type': '500', 'error.stack': '500\n    at handler (app.js:1:1)' },
+          metrics: { 'http.response.status_code': 500 },
+          message: '500',
+        },
+        {
+          description: 'the error type differs from the response status',
+          meta: { 'span.kind': 'server', 'error.type': '503' },
+          metrics: { 'http.response.status_code': 500 },
+          message: '503',
+        },
+        {
+          description: 'the response status is absent',
+          meta: { 'span.kind': 'server', 'error.type': '500' },
+          metrics: {},
+          message: '500',
+        },
+        {
+          description: 'the span is not an HTTP client or server',
+          meta: { 'span.kind': 'internal', 'error.type': '500' },
+          metrics: { 'http.response.status_code': 500 },
+          message: '500',
+        },
+        {
+          description: 'the span is not marked as an error',
+          meta: { 'span.kind': 'server', 'error.type': '500' },
+          metrics: { 'http.response.status_code': 500 },
+          error: 0,
+          message: '',
+        },
+      ]) {
+        it(`preserves the status when ${description}`, () => {
+          const transformer = new OtlpTraceTransformer({}, semantics)
+          const span = createMockSpan({ error, meta, metrics })
+
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+          assert.deepStrictEqual(otlpSpan.status, { code: error ? 2 : 0, message })
+          assert.strictEqual(extractAttrs(otlpSpan.attributes)['error.type'], meta['error.type'])
+        })
+      }
+
       it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })
@@ -860,6 +945,51 @@ describe('OpenTelemetry Traces', () => {
       const tracer = new DatadogTracer(getConfigFresh())
       assert(!(tracer._exporter instanceof OtlpHttpTraceExporter),
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
+    })
+
+    it('exports HTTP spans over OTLP when only OTel semantics is enabled', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const DatadogTracer = require('../../src/opentracing/tracer')
+      const tracer = new DatadogTracer(getConfigFresh({ flushMinSpans: 1, sampleRate: 1 }))
+      assert.ok(tracer._exporter instanceof OtlpHttpTraceExporter)
+      const sendPayload = sinon.stub(tracer._exporter, 'sendPayload')
+
+      tracer.startSpan('http.request', {
+        tags: {
+          'resource.name': 'GET /wire',
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.status_code': 200,
+        },
+      }).finish()
+
+      sinon.assert.calledOnce(sendPayload)
+      const payload = JSON.parse(sendPayload.firstCall.args[0])
+      const [span] = payload.resourceSpans[0].scopeSpans[0].spans
+      assert.strictEqual(span.name, 'GET /wire')
+      assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.request.method').value,
+        { stringValue: 'GET' })
+      assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.response.status_code').value,
+        { intValue: 200 })
+      assert.ok(!span.attributes.some(attribute => attribute.key === '_dd.sdk.otlp_export'))
+    })
+
+    it('marks agentless spans as native when agentless overrides OTLP and OTel semantics', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      sinon.stub(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, 'add')
+      const DatadogTracer = require('../../src/opentracing/tracer')
+      const AgentlessExporter = require('../../src/exporters/agentless')
+      const tracer = new DatadogTracer(getConfigFresh({ flushMinSpans: 1, sampleRate: 1 }))
+      assert.ok(tracer._exporter instanceof AgentlessExporter)
+      const exportSpans = sinon.stub(tracer._exporter, 'export')
+
+      tracer.startSpan('native.request').finish()
+
+      sinon.assert.calledOnce(exportSpans)
+      const [span] = exportSpans.firstCall.args[0]
+      assert.strictEqual(span.meta['_dd.sdk.otlp_export'], 'false')
     })
 
     it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
@@ -1114,11 +1244,15 @@ describe('OpenTelemetry Traces', () => {
       })
       const config = getConfigFresh()
       const exporter = createOtlpTraceExporter(config)
+      const initialRuntimeId = config.tags['runtime-id']
+      const startupResource = exporter.getStartupResourceAttributes()
 
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
       exporter.export([createMockSpan()])
 
+      assert.strictEqual(startupResource['runtime-id'], initialRuntimeId)
+      assert.strictEqual(exporter.getStartupResourceAttributes(), startupResource)
       validator()
     })
 

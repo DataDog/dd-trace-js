@@ -28,6 +28,7 @@ const { assertObjectContains, getCiVisAgentlessConfig } = require('../helpers')
 const {
   PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT,
   describePlaywrightTestManagement,
+  getUniqueOutputDir,
 } = require('./playwright-test-management')
 
 const DISABLED_MANAGEMENT_TESTS = {
@@ -173,6 +174,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
@@ -230,6 +232,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
               PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
             },
@@ -287,6 +290,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
               },
             }
@@ -316,6 +320,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
                 FAIL_AFTER_DISABLED: 'true',
                 PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
@@ -449,6 +454,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
@@ -533,6 +539,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
@@ -632,6 +639,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 ...(shouldUseCustomReporter ? { PLAYWRIGHT_FROZEN_REPORTER: '1' } : {}),
                 ...(shouldFailGlobalTeardown ? { FAIL_GLOBAL_TEARDOWN: '1' } : {}),
                 ...(shouldReachMaxFailures ? { MAX_FAILURES: '1', PLAYWRIGHT_WORKERS: '1' } : {}),
@@ -762,6 +770,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
               },
@@ -798,6 +807,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 SHOULD_PASS_NATIVE_RETRIES: '1',
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',

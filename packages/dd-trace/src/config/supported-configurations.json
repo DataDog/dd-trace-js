@@ -1757,6 +1757,14 @@
         ]
       }
     ],
+    "DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
+      }
+    ],
     "DD_OPENAI_REALTIME_ENABLED": [
       {
         "implementation": "A",
@@ -3374,9 +3382,9 @@
     ],
     "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "string",
-        "default": "400-499"
+        "default": null
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [
@@ -4156,6 +4164,13 @@
       }
     ],
     "DD_TRACE_REACT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_REACT_ROUTER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

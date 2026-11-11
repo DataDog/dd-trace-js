@@ -59,9 +59,7 @@ const SRC_FILES = [
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   '.mochamultireporterrc.js',
-  'ci/diagnose.js',
   'ci/init.js',
-  'ci/test-optimization-validation/command-runner.js',
   'ci/vitest-no-worker-init-setup.mjs',
   'nyc.config.js',
   'packages/datadog-esbuild/index.js',
@@ -70,7 +68,6 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
   'packages/datadog-webpack/src/log.js',
-  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
   'packages/dd-trace/src/config/helper.js',
@@ -808,6 +805,9 @@ export default [
       'unicorn/no-declarations-before-early-exit': 'off', // many
       'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
+      // Enable when Map and Set initialization can be excluded.
+      // https://github.com/sindresorhus/eslint-plugin-unicorn/issues/3992
+      'unicorn/no-immediate-mutation': 'off',
       'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
@@ -1269,8 +1269,8 @@ export default [
     },
   },
   {
-    name: 'dd-trace/datadog-esbuild/cyclic-star-fixtures',
-    files: ['packages/datadog-esbuild/test/resources/export-cycle-*.mjs'],
+    name: 'dd-trace/bundler-esm-exports/cyclic-star-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-cycle-*.mjs'],
     rules: {
       'import/export': 'off',
       'import/no-cycle': 'off',
