@@ -139,8 +139,9 @@ describe('sdk', () => {
         task: () => ({ answer: '4' }),
       }, llmobs).run()
 
-      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.append)
-      assert.deepStrictEqual(LLMObsSpanWriter.prototype.append.firstCall.firstArg.meta.expected_output, expectedOutput)
+      sinon.assert.calledOnce(LLMObsSpanProcessor.prototype.process)
+      const event = LLMObsSpanProcessor.prototype.process.firstCall.firstArg.meta_struct._llmobs
+      assert.deepStrictEqual(event.meta.expected_output, expectedOutput)
     })
 
     it('includes expected output when the experiment task fails', async () => {
@@ -156,9 +157,10 @@ describe('sdk', () => {
         task: () => { throw new Error('task failed') },
       }, llmobs).run()
 
-      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.append)
-      const event = LLMObsSpanWriter.prototype.append.firstCall.firstArg
-      assert.strictEqual(event.status, 'error')
+      sinon.assert.calledOnce(LLMObsSpanProcessor.prototype.process)
+      const event = LLMObsSpanProcessor.prototype.process.firstCall.firstArg.meta_struct._llmobs
+      assert.strictEqual(event.meta.error.message, 'task failed')
+      assert.strictEqual(event.meta.error.type, 'Error')
       assert.deepStrictEqual(event.meta.expected_output, expectedOutput)
     })
 
@@ -176,9 +178,11 @@ describe('sdk', () => {
         task: input => input,
       }, llmobs).run({ concurrency: 1 })
 
-      sinon.assert.callCount(LLMObsSpanWriter.prototype.append, expectedOutputs.length)
+      sinon.assert.callCount(LLMObsSpanProcessor.prototype.process, expectedOutputs.length)
       assert.deepStrictEqual(
-        LLMObsSpanWriter.prototype.append.getCalls().map(call => call.firstArg.meta.expected_output),
+        LLMObsSpanProcessor.prototype.process.getCalls().map(
+          call => call.firstArg.meta_struct._llmobs.meta.expected_output
+        ),
         expectedOutputs
       )
     })
