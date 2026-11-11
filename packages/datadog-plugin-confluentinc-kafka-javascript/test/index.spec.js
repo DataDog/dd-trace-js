@@ -38,6 +38,18 @@ describe('Plugin', () => {
       let messages
       let nativeApi
       let testTopic
+      let clusterId
+
+      /**
+       * @param {Record<string, string>} meta
+       */
+      function assertClusterId (meta) {
+        if (clusterId) {
+          assert.strictEqual(meta['kafka.cluster_id'], clusterId)
+        } else {
+          assert.ok(!('kafka.cluster_id' in meta))
+        }
+      }
 
       describe('without configuration', () => {
         beforeEach(async () => {
@@ -63,6 +75,8 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
+          // `clusterId()` exists from 1.11.0 on; earlier releases expose no cluster id to report.
+          clusterId = typeof admin.clusterId === 'function' ? await admin.clusterId() : undefined
           await admin.createTopics({
             topics: [{
               topic: testTopic,
@@ -129,6 +143,41 @@ describe('Plugin', () => {
               } catch (e) {
                 error = e
                 return expectedSpanPromise
+              }
+            })
+          })
+
+          describe('cluster id', () => {
+            it('should tag producer spans', async () => {
+              const spanPromise = agent.assertSomeTraces(traces => {
+                const span = traces[0].find(s => s.name === expectedSchema.send.opName)
+                assert.ok(span)
+                assertClusterId(span.meta)
+              })
+
+              await Promise.all([sendMessages(kafka, testTopic, messages), spanPromise])
+            })
+
+            it('should tag consumer spans', async () => {
+              const consumer = kafka.consumer({
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
+              })
+              await consumer.connect()
+              await consumer.subscribe({ topic: testTopic })
+
+              try {
+                const spanPromise = agent.assertSomeTraces(traces => {
+                  const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
+                  assert.ok(span)
+                  assertClusterId(span.meta)
+                })
+                const receivedPromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
+                  consumer.run({ eachMessage: async () => resolve() }).catch(reject)
+                }))
+
+                await Promise.all([sendMessages(kafka, testTopic, messages), receivedPromise, spanPromise])
+              } finally {
+                await consumer.disconnect()
               }
             })
           })
@@ -402,6 +451,24 @@ describe('Plugin', () => {
               nativeProducer.produce(testTopic, null, message, key)
 
               return expectedSpanPromise
+            })
+
+            it('should tag the cluster id once the first produce looked it up', async () => {
+              const isProducerSpan = (span) => span.name === expectedSchema.send.opName
+
+              const firstSpanPromise = agent.assertSomeTraces(traces => {
+                assert.ok(traces[0].find(isProducerSpan))
+              })
+              nativeProducer.produce(testTopic, null, Buffer.from('first'), 'native-key')
+              await firstSpanPromise
+
+              const spanPromise = agent.assertSomeTraces(traces => {
+                const span = traces[0].find(isProducerSpan)
+                assert.ok(span)
+                assertClusterId(span.meta)
+              })
+              nativeProducer.produce(testTopic, null, Buffer.from('second'), 'native-key')
+              await spanPromise
             })
 
             it('should include every repeated native header key in the DSM payload size', () => {

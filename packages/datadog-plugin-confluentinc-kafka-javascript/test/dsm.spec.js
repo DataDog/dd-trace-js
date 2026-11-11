@@ -15,12 +15,15 @@ const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { waitForTopicReady } = require('./helpers')
 
-const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
+const getDsmPathwayHash = (testTopic, isProducer, parentHash, clusterId) => {
   let edgeTags
   if (isProducer) {
     edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
   } else {
     edgeTags = ['direction:in', 'group:test-group-confluent', 'topic:' + testTopic, 'type:kafka']
+  }
+  if (clusterId) {
+    edgeTags.push(`kafka_cluster_id:${clusterId}`)
   }
 
   edgeTags.sort()
@@ -52,6 +55,7 @@ describe('Plugin', () => {
         let consumer
         let expectedProducerHash
         let expectedConsumerHash
+        let clusterId
 
         beforeEach(async () => {
           messages = [{ key: 'key1', value: 'test2' }]
@@ -76,6 +80,8 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
+          // `clusterId()` exists from 1.11.0 on; earlier releases expose no cluster id to report.
+          clusterId = typeof admin.clusterId === 'function' ? await admin.clusterId() : undefined
           await admin.createTopics({
             topics: [{
               topic: testTopic,
@@ -94,8 +100,8 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
-          expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
+          expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH, clusterId)
+          expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash, clusterId)
         })
 
         afterEach(async () => {
@@ -254,6 +260,7 @@ describe('Plugin', () => {
             assert.strictEqual(runArg?.topic, commitMeta.topic)
             assert.strictEqual(runArg?.type, 'kafka_commit')
             assert.strictEqual(runArg?.consumer_group, groupId)
+            assert.strictEqual(runArg?.kafka_cluster_id, clusterId)
           })
 
           it('Should add backlog on producer response', async () => {
