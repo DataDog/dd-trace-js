@@ -508,7 +508,7 @@ describe('TracerProxy', () => {
       })
 
       for (const enabled of ['false', 'true', undefined]) {
-        it(`keeps AppSec and LLMObs inactive with product flags set to ${enabled ?? 'unset'}`, () => {
+        it(`keeps application products inactive with flags set to ${enabled ?? 'unset'}`, () => {
           const entrypoint = path.resolve(__dirname, '../../../ci/init')
           const modules = [
             require.resolve('../src/appsec'),
@@ -519,6 +519,11 @@ describe('TracerProxy', () => {
             require.resolve('../src/otel-thread-ctx'),
             require.resolve('../src/llmobs'),
             require.resolve('../src/llmobs/sdk'),
+            require.resolve('../src/aiguard'),
+            require.resolve('../src/aiguard/sdk'),
+            require.resolve('../src/profiling'),
+            require.resolve('../src/datastreams/processor'),
+            require.resolve('../src/datastreams/manager'),
           ]
           const script = `
             const tracer = require(${JSON.stringify(entrypoint)})
@@ -528,22 +533,37 @@ describe('TracerProxy', () => {
             const result = tracer.trace('test-operation', span => {
               const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
               appsec.trackCustomEvent('test-event', {})
+              const profiling = tracer.profiling
+              profiling.setCustomLabelKeys(['test-label'])
+              const profilingResult = profiling.runWithLabels({ 'test-label': 'test-value' }, () => {
+                return tracer.scope().active() === span ? 43 : 0
+              })
+              const carrier = {}
+              tracer.dataStreamsCheckpointer.setProduceCheckpoint('kafka', 'test-topic', carrier)
+              tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kafka', 'test-topic', carrier)
+              tracer.dataStreamsCheckpointer.trackTransaction('transaction', 'checkpoint', span)
               const llmobsResult = llmobs.trace({ kind: 'workflow', name: 'test-workflow' }, () => {
                 return tracer.scope().active() === span ? 42 : 0
               })
               return {
                 sameTracer,
                 llmobsResult,
+                profilingResult,
+                dsmCarrierEmpty: Object.keys(carrier).length === 0,
                 userTagAbsent: span.context().getTag('usr.id') === undefined,
               }
             })
-            process.stdout.write(JSON.stringify({
-              ...result,
-              sameAppsec: appsec === tracer.appsec,
-              sameLlmobs: llmobs === tracer.llmobs,
-              llmobsEnabled: llmobs.enabled,
-              loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
-            }), () => process.exit(0))
+            Promise.all([tracer.aiguard.evaluate([]), tracer.profilerStarted()]).then(([evaluation, started]) => {
+              process.stdout.write(JSON.stringify({
+                ...result,
+                aiGuardAction: evaluation.action,
+                profilingStarted: started,
+                sameAppsec: appsec === tracer.appsec,
+                sameLlmobs: llmobs === tracer.llmobs,
+                llmobsEnabled: llmobs.enabled,
+                loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
+              }), () => process.exit(0))
+            }).catch(error => { console.error(error); process.exit(1) })
           `
           const inherited = Object.fromEntries(Object.entries(process.env)
             .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
@@ -557,6 +577,13 @@ describe('TracerProxy', () => {
               DD_IAST_ENABLED: enabled,
               DD_LLMOBS_ENABLED: enabled,
               DD_LLMOBS_ML_APP: 'test-app',
+              DD_AI_GUARD_ENABLED: enabled,
+              DD_PROFILING_ENABLED: enabled,
+              DD_DATA_STREAMS_ENABLED: enabled,
+              DD_API_KEY: 'test-only-not-a-real-key',
+              DD_APP_KEY: 'test-only-not-a-real-key',
+              DD_AI_GUARD_ENDPOINT: 'http://127.0.0.1:1',
+              DD_TRACE_AGENT_URL: 'http://127.0.0.1:1',
               DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
               DD_CRASHTRACKING_ENABLED: 'false',
               JEST_WORKER_ID: '1',
@@ -571,6 +598,10 @@ describe('TracerProxy', () => {
             sameLlmobs: true,
             llmobsEnabled: false,
             llmobsResult: 42,
+            profilingResult: 43,
+            dsmCarrierEmpty: true,
+            aiGuardAction: 'ALLOW',
+            profilingStarted: false,
             loaded: modules.map(() => false),
           })
         })

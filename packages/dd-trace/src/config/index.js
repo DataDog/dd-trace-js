@@ -384,6 +384,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
       setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', false)
+      setAndTrack(this, 'aiguard.DD_AI_GUARD_ENABLED', false)
+      setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      setAndTrack(this, 'dsmEnabled', false)
     }
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
