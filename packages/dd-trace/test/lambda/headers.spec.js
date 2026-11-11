@@ -80,7 +80,7 @@ describeSupported('Lambda trace headers', () => {
       const received = agent.assertSomeTraces(([trace]) => {
         assert.strictEqual(trace[0].name, 'aws.lambda')
       })
-      const [result] = await Promise.all([handler(), received])
+      const [result] = await Promise.all([handler({}, { getRemainingTimeInMillis: () => 100 }), received])
       assert.strictEqual(result, 'done')
       assert.deepStrictEqual(lambda.getTraceHeaders(), {})
     })
@@ -132,6 +132,6 @@ describeSupported('Lambda trace headers', () => {
     const received = agent.assertSomeTraces(([trace]) => {
       assert.strictEqual(trace[0].name, 'aws.lambda')
     })
-    await Promise.all([handler(), received])
+    await Promise.all([handler({}, { getRemainingTimeInMillis: () => 100 }), received])
   })
 })

@@ -165,7 +165,7 @@ describe('Plugin', () => {
         {
           name: 'inherits the plugin service when per-handler service is undefined',
           config: { service: 'plugin-service' },
-          handlerConfig: { service: undefined, handlerCompletion: 'return' },
+          handlerConfig: { service: undefined },
           expected: 'plugin-service',
         },
         {

@@ -482,25 +482,6 @@ describe('Config', () => {
   })
 
   describe('AWS Lambda configuration', () => {
-    for (const ddMajor of [5, 6, 7]) {
-      for (const [value, expected] of [
-        [undefined, 'auto'], ['auto', 'auto'], ['return', 'return'], ['RETURN', 'return'], ['invalid', 'auto'],
-        ['callback', 'callback'], ['CALLBACK', 'callback'],
-      ]) {
-        it(`parses Lambda handler completion ${value} on v${ddMajor}`, () => {
-          if (value === undefined) delete process.env.DD_LAMBDA_HANDLER_COMPLETION
-          else process.env.DD_LAMBDA_HANDLER_COMPLETION = value
-          const config = getConfig(undefined, { ddMajor })
-          assert.strictEqual(config.lambda.DD_LAMBDA_HANDLER_COMPLETION, expected)
-          if (expected !== 'auto') {
-            assertConfigUpdateContains(updateConfig.lastCall.args[0], [{
-              name: 'DD_LAMBDA_HANDLER_COMPLETION', value, origin: 'env_var',
-            }])
-          }
-        })
-      }
-    }
-
     it('owns the datadog-lambda-js defaults in the Config singleton', () => {
       const config = getConfig()
 
@@ -516,7 +497,6 @@ describe('Config', () => {
         DD_FLUSH_TO_LOG: false,
         DD_KMS_API_KEY: undefined,
         DD_LAMBDA_FIPS_MODE: false,
-        DD_LAMBDA_HANDLER_COMPLETION: 'auto',
         DD_MERGE_XRAY_TRACES: false,
         DD_MIN_COLD_START_DURATION: 3,
         DD_TRACE_AWS_LAMBDA_ENABLED: true,
@@ -538,7 +518,6 @@ describe('Config', () => {
         DD_FLUSH_TO_LOG: 'true',
         DD_KMS_API_KEY: 'kms-ciphertext',
         DD_LAMBDA_FIPS_MODE: 'true',
-        DD_LAMBDA_HANDLER_COMPLETION: 'callback',
         DD_MERGE_XRAY_TRACES: 'true',
         DD_MIN_COLD_START_DURATION: '7',
         DD_TRACE_AWS_LAMBDA_ENABLED: 'false',
@@ -560,7 +539,6 @@ describe('Config', () => {
         DD_FLUSH_TO_LOG: true,
         DD_KMS_API_KEY: 'kms-ciphertext',
         DD_LAMBDA_FIPS_MODE: true,
-        DD_LAMBDA_HANDLER_COMPLETION: 'callback',
         DD_MERGE_XRAY_TRACES: true,
         DD_MIN_COLD_START_DURATION: 7,
         DD_TRACE_AWS_LAMBDA_ENABLED: false,

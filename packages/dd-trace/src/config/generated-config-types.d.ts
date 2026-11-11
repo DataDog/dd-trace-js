@@ -475,7 +475,6 @@ export interface GeneratedConfig {
     DD_FLUSH_TO_LOG: boolean;
     DD_KMS_API_KEY: string | undefined;
     DD_LAMBDA_FIPS_MODE: boolean;
-    DD_LAMBDA_HANDLER_COMPLETION: "auto" | "return" | "callback";
     DD_MERGE_XRAY_TRACES: boolean;
     DD_MIN_COLD_START_DURATION: number;
     DD_TRACE_AWS_LAMBDA_ENABLED: boolean;
@@ -806,7 +805,6 @@ export interface GeneratedEnvVarConfig {
   DD_KMS_API_KEY: string | undefined;
   DD_LAMBDA_FIPS_MODE: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
-  DD_LAMBDA_HANDLER_COMPLETION: "auto" | "return" | "callback";
   DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
   DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;

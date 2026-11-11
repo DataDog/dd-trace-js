@@ -362,18 +362,6 @@ const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.valu
   serviceRepresentationEnabled: false,
 });
 lambdaHandler({ value: 'ok' });
-const synchronousLambdaHandler = lambda.wrap((_event: { value: string }): void => {}, {
-  handlerCompletion: 'return',
-});
-synchronousLambdaHandler({ value: 'ok' });
-const automaticLambdaOptions: lambda.LambdaWrapOptions = { handlerCompletion: 'auto' };
-lambda.wrap(() => 'done', automaticLambdaOptions);
-const callbackLambdaHandler = lambda.wrap((_event: { value: string }, _context: object,
-  callback: (error: Error | null, result: string) => void = () => {}) => {
-  callback(null, 'done');
-  return { incidental: true };
-}, { handlerCompletion: 'callback' });
-callbackLambdaHandler({ value: 'ok' }, {});
 // Compile-only checks: the wrapper always returns a Promise and preserves its callable inputs and metadata.
 function checkLambdaWrapperTypes() {
   const sync = lambda.wrap((event: { value: number }) => event.value);
@@ -386,15 +374,13 @@ function checkLambdaWrapperTypes() {
   const thenableResult: Promise<number> = lambda.wrap((): PromiseLike<number> => Promise.resolve(42))();
   const callbackResult: Promise<void> = lambda.wrap((_event: object, _context: object,
     callback: (error: Error | null, value: number) => void): void => { callback(null, 42); })({}, {}, () => {});
-  const withMetadata = Object.assign(function (this: { base: number }, value: number, extra?: number) {
-    return this.base + value + (extra ?? 0);
-  }, { version: 1 });
+  const withMetadata = Object.assign((event: { value: number }) => event.value, { version: 1 });
   const wrapped = lambda.wrap(withMetadata);
-  const boundResult: Promise<number> = wrapped.call({ base: 1 }, 2);
+  const metadataResult: Promise<number> = wrapped({ value: 2 });
   const version: number = wrapped.version;
-  // @ts-expect-error An explicit handler receiver is preserved.
-  wrapped.call({ base: 'invalid' }, 2);
-  void [syncResult, asyncResult, thenableResult, callbackResult, boundResult, version];
+  // @ts-expect-error Completion mode overrides are not part of the Lambda facade.
+  lambda.wrap(() => 'result', { handlerCompletion: 'return' });
+  void [syncResult, asyncResult, thenableResult, callbackResult, metadataResult, version];
 }
 void checkLambdaWrapperTypes;
 

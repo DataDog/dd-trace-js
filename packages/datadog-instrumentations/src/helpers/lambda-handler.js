@@ -7,264 +7,132 @@ const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
 const STREAM_RESPONSE = 'response'
 
-function noop () {}
+/*
+ * MIGRATION SCOPE (#10488): move the existing datadog-lambda-js completion policy as-is.
+ * Source: https://github.com/DataDog/datadog-lambda-js/blob/bb5266a00e72eba0edcfe8d73256fe70461547c4/src/utils/handler.ts
+ * Only TypeScript types, module syntax and repository formatting are changed in promisifiedHandler below.
+ *
+ * Known legacy corner cases intentionally left for separate behavior changes:
+ * - Callback intent is inferred from handler.length and the returned value. Rest/default parameters can
+ *   hide callback intent; undefined and server/socket/emitter-like returns can leave completion pending.
+ * - Promise.race selects the adapter result, not AWS's native response timing. Callback/context methods
+ *   are not forwarded to their originals or restored, and outer wrappers can observe that shared mutation.
+ * - A handler or then getter can throw synchronously, including after calling a completion method.
+ *   A callback Promise abandoned by a synchronous return/throw can later reject without an observer.
+ * - Metadata, then and artifact detection read properties directly, so getters/Proxy traps can run.
+ *   A null return can throw during these checks. These are the upstream checks, not a new type policy.
+ * - The adapter installs methods on the supplied context. Frozen/read-only contexts, replacement methods
+ *   and freezing after installation retain the shim's existing behavior; there is no defensive context view.
+ * - Buffered calls use (event, context, syntheticCallback); streaming calls use (event, stream, context).
+ *   Custom receivers, additional arguments and alternative buffered argument positions are not preserved.
+ *
+ * Record newly identified legacy completion concerns here rather than expanding this migration's policy.
+ * Fixes to those behaviors belong in a separate change. A difference introduced by this port is still a bug.
+ */
 
 /**
- * Converts callback, promise, synchronous, and response-streaming Lambda handlers to one promise-returning shape.
- *
  * @param {Function} handler Customer Lambda handler.
- * @param {'auto' | 'return' | 'callback'} [completionMode] Completion policy for buffered handlers.
- * @returns {Function} Promise-returning handler.
+ * @returns {Function} Existing shim completion adapter.
  */
-function promisifiedHandler (handler, completionMode = 'auto') {
-  const mode = getDataProperty(handler, HANDLER_STREAMING) === STREAM_RESPONSE ? 'return' : completionMode
-  return function (...args) {
-    return invokeHandler(handler, this, args, mode)
-  }
-}
-
-/**
- * Adapts customer completion while preserving the receiver and sharing context fields.
- * The optional invocation owns lifecycle publication and native completion forwarding.
- *
- * @param {Function} handler Customer handler.
- * @param {unknown} receiver Customer receiver.
- * @param {unknown[]} args Customer arguments.
- * @param {'auto' | 'return' | 'callback'} completionMode Selected completion policy.
- * @param {object} [invocation] Internal lifecycle observer.
- * @returns {Promise<unknown>} Selected handler completion.
- */
-function invokeHandler (handler, receiver, args, completionMode, invocation) {
-  if (completionMode === 'return') {
-    try {
-      return Promise.resolve(Reflect.apply(handler, receiver, args))
-    } catch (error) {
-      return Promise.reject(error)
+// Keep the upstream completion policy recognizable for this as-is migration.
+/* eslint-disable unicorn/consistent-function-scoping, no-useless-assignment, unicorn/no-duplicate-if-branches */
+/* eslint-disable sonarjs/prefer-immediate-return, unicorn/no-negated-condition */
+function promisifiedHandler (handler) {
+  // Response Stream Lambda function.
+  if (handler[HANDLER_STREAMING] !== undefined && handler[HANDLER_STREAMING] === STREAM_RESPONSE) {
+    return (event, responseStream, context) => {
+      // This handler will always be a promise.
+      const promise = handler(event, responseStream, context)
+      return promise
     }
   }
-
-  const contextIndex = findContextIndex(args)
-  const context = contextIndex === -1 ? {} : args[contextIndex]
-  const suppliedCallbackIndex = findCallbackIndex(args, contextIndex)
-  const originalCallback = suppliedCallbackIndex === -1 ? undefined : args[suppliedCallbackIndex]
-  const originals = invocation && ['done', 'succeed', 'fail'].map(name => [
-    name, Object.getOwnPropertyDescriptor(context, name), getDataProperty(context, name),
-  ])
-  let callbackSettled = false
-  let nativeCompleted = false
-  let acceptsCompletion = true
-  let racePending = false
-  /** @type {(() => unknown) | undefined} */
-  let pendingNativeCompletion
-  let modifiedCallback = noop
-  let modifiedLegacyDoneCallback = noop
-  let modifiedLegacySucceedCallback = noop
-  let modifiedLegacyFailCallback = noop
-
-  const callbackPromise = new Promise(function (resolve, reject) {
-    const complete = (error, result, failed, original, self, values, callback = false) => {
-      const first = !callbackSettled
-      if (first) {
-        callbackSettled = true
-        if (failed) reject(error)
-        else resolve(result)
-      }
-      if (!invocation) return
-      const forward = () => {
-        if (nativeCompleted || !acceptsCompletion || invocation.completed) return
-        // The monitor observes a supplied callback, including a runtime's event-loop-drain policy.
-        // Context methods and synthetic callbacks finish the lifecycle before native delivery.
-        if (first && !(callback && invocation.callbackObserved)) invocation.complete(error, result, failed)
-        if (typeof original === 'function') {
-          nativeCompleted = true
-          return Reflect.apply(original, self, values)
+  // Buffered Lambda function.
+  return (event, context) => {
+    // Lambda functions in node complete in one of two possible ways.
+    // 1. By calling the "callback" function with a result.
+    // 2. Returning a value directly from the function using a promise.
+    let modifiedCallback = () => {}
+    let modifiedLegacyDoneCallback = () => {}
+    let modifiedLegacySucceedCallback = () => {}
+    let modifiedLegacyFailCallback = () => {}
+    const callbackProm = new Promise((resolve, reject) => {
+      modifiedCallback = (err, result) => {
+        if (err !== undefined && err !== null) {
+          reject(err)
+        } else {
+          resolve(result)
         }
       }
-      // A callback can run before the already-settled Promise's race reaction. Deliver only the winner.
-      // Hold duplicate context completions too, so they cannot overtake the first pending callback.
-      if (racePending) {
-        if (first) pendingNativeCompletion = forward
-        return
+      // Legacy done callback finished immediately, and doesn't wait for pending
+      // event loop
+      modifiedLegacyDoneCallback = (err, result) => {
+        context.callbackWaitsForEmptyEventLoop = false
+        if (err !== undefined && err !== null) {
+          reject(err)
+        } else {
+          resolve(result)
+        }
       }
-      return forward()
-    }
-    modifiedCallback = function (error, result) {
-      return complete(error, result, error != null, originalCallback, this, arguments, true)
-    }
-    modifiedLegacyDoneCallback = function (error, result) {
-      // Preserve legacy adapter behavior when no native context method is present.
-      if (typeof originals?.[0][2] !== 'function') context.callbackWaitsForEmptyEventLoop = false
-      return complete(error, result, error != null, originals?.[0][2], this, arguments)
-    }
-    modifiedLegacySucceedCallback = function (result) {
-      if (typeof originals?.[1][2] !== 'function') context.callbackWaitsForEmptyEventLoop = false
-      return complete(undefined, result, false, originals?.[1][2], this, arguments)
-    }
-    modifiedLegacyFailCallback = function (error) {
-      if (typeof originals?.[2][2] !== 'function') context.callbackWaitsForEmptyEventLoop = false
-      return complete(error, undefined, true, originals?.[2][2], this, arguments)
-    }
-  })
-
-  const completions = {
-    done: modifiedLegacyDoneCallback,
-    succeed: modifiedLegacySucceedCallback,
-    fail: modifiedLegacyFailCallback,
-  }
-  const invocationArgs = [...args]
-  if (invocation) {
-    if (contextIndex !== -1) invocationArgs[contextIndex] = createContextView(context, completions)
-    // RIC captures these after dispatch to deliver the outer wrapper's final Promise result.
-    // Customer context methods use the selection guard instead, even after native methods are restored.
-    const handoffs = originals.map(([, , original]) => function (...values) {
-      if (nativeCompleted) return
-      nativeCompleted = true
-      if (typeof original === 'function') return Reflect.apply(original, this, values)
+      modifiedLegacySucceedCallback = (result) => {
+        context.callbackWaitsForEmptyEventLoop = false
+        resolve(result)
+      }
+      modifiedLegacyFailCallback = (err) => {
+        context.callbackWaitsForEmptyEventLoop = false
+        reject(err)
+      }
     })
-    for (let index = 0; index < originals.length; index++) context[originals[index][0]] = handoffs[index]
-    invocation.restore = () => {
-      for (let index = 0; index < originals.length; index++) {
-        const [name, descriptor] = originals[index]
-        if (getDataProperty(context, name) !== handoffs[index]) continue
-        if (descriptor) Object.defineProperty(context, name, descriptor)
-        else delete context[name]
+    context.done = modifiedLegacyDoneCallback
+    context.succeed = modifiedLegacySucceedCallback
+    context.fail = modifiedLegacyFailCallback
+    const asyncProm = handler(event, context, modifiedCallback)
+    let promise = callbackProm
+    if (asyncProm !== undefined && typeof asyncProm.then === 'function') {
+      // Mimics behaviour of lambda runtime, the first method of returning a result always wins.
+      promise = Promise.race([callbackProm, asyncProm])
+    } else if (handler.length >= 3) {
+      // Handler takes a callback, wait for the callback to be called
+      promise = callbackProm
+    } else if (asyncProm === undefined) {
+      // Handler returned nothing (implicit `undefined`) and doesn't take a callback parameter.
+      // It must be relying on `context.succeed` / `context.done` / `context.fail` to signal
+      // completion (e.g. `aws-serverless-express`'s `proxy()` with the default
+      // `CONTEXT_SUCCEED` resolution mode, or any other fire-and-forget pattern that finishes
+      // asynchronously). Wait for callbackProm rather than resolving immediately, otherwise
+      // the wrapper would shortcut the function before its work finishes, which causes the
+      // Lambda runtime to return an empty response and freeze the worker before any pending
+      // stdout writes are flushed to CloudWatch.
+      promise = callbackProm
+    } else {
+      // Handler returned a value directly
+      // Distinguish between:
+      //  - ordinary sync return value -> resolve immediately
+      //  - side-effect artifact (e.g. aws-serverless-express server) -> wait for context.done
+      // Heuristic: trying to detect common types of side-effect artifacts
+      const looksLikeArtifact = asyncProm !== undefined &&
+        typeof asyncProm === 'object' &&
+        // 1. Node.js http.Server or similar
+        ((typeof asyncProm.listen === 'function' && typeof asyncProm.close === 'function') ||
+          // 2. EventEmitter-like (has .on and .emit)
+          (typeof asyncProm.on === 'function' && typeof asyncProm.emit === 'function') ||
+          // 3. Instance of EventEmitter (covers Server, Socket, etc.)
+          asyncProm instanceof EventEmitter ||
+          // 4. Constructor name hint
+          (asyncProm.constructor && /Server|Socket|Emitter/i.test(asyncProm.constructor.name)))
+      if (looksLikeArtifact) {
+        // Wait for callbackProm instead (the context.done/succeed/fail will resolve it)
+        promise = callbackProm
+      } else {
+        // Return the value directly
+        promise = Promise.resolve(asyncProm)
       }
     }
-  } else {
-    Object.assign(context, completions)
+    return promise
   }
-
-  // Explicit callback mode covers rest/default parameters whose arity hides callback intent.
-  // A supplied runtime callback alone does not select callback completion in auto mode.
-  const takesCallback = (completionMode === 'callback' || getDataProperty(handler, 'length') >= 3) &&
-    contextIndex !== 2
-  if (suppliedCallbackIndex !== -1) invocationArgs[suppliedCallbackIndex] = modifiedCallback
-  else if (takesCallback) invocationArgs[2] = modifiedCallback
-
-  let result
-  try {
-    result = Reflect.apply(handler, receiver, invocationArgs)
-    if (result !== undefined && typeof result?.then === 'function') {
-      racePending = true
-      return new Promise((resolve, reject) => {
-        /**
-         * @param {boolean} fromCallback Whether the callback/context contender won.
-         * @param {boolean} failed Whether the selected completion failed.
-         * @param {unknown} value Selected result or failure.
-         */
-        const settle = (fromCallback, failed, value) => {
-          if (!racePending) return
-          racePending = false
-          acceptsCompletion = fromCallback
-          const forward = pendingNativeCompletion
-          pendingNativeCompletion = undefined
-          if (failed) reject(value)
-          else resolve(value)
-          if (fromCallback) forward?.()
-        }
-        // Register the original contenders in Promise.race order, without chaining either one first.
-        callbackPromise.then(value => settle(true, false, value), error => settle(true, true, error))
-        try {
-          Promise.resolve(result).then(value => settle(false, false, value), error => settle(false, true, error))
-        } catch (error) {
-          settle(false, true, error)
-        }
-      })
-    }
-  } catch (error) {
-    if (callbackSettled) return callbackPromise
-    acceptsCompletion = false
-    // A thrown handler or then getter can leave a callback scheduled after this rejection.
-    callbackPromise.catch(noop)
-    return Promise.reject(error)
-  }
-  if (callbackSettled || completionMode === 'callback' ||
-      isCallbackCompletion(handler, result, contextIndex)) return callbackPromise
-  acceptsCompletion = false
-  // Only discarded callback Promises need an observer; returned and raced Promises are already consumed.
-  callbackPromise.catch(noop)
-  return Promise.resolve(result)
 }
 
-/**
- * Shares runtime fields and mutations while keeping customer completion methods separate.
- *
- * @param {object} context Runtime context.
- * @param {Record<string, Function>} completions Guarded customer completion methods.
- * @returns {object} Customer context view.
- */
-function createContextView (context, completions) {
-  return new Proxy(context, {
-    /**
-     * @param {object} target
-     * @param {string | symbol} key
-     * @param {object} receiver
-     */
-    get (target, key, receiver) {
-      return Object.hasOwn(completions, key) ? completions[key] : Reflect.get(target, key, receiver)
-    },
-    /**
-     * @param {object} target
-     * @param {string | symbol} key
-     * @param {unknown} value
-     * @param {object} receiver
-     */
-    set (target, key, value, receiver) {
-      if (Object.hasOwn(completions, key)) return Reflect.set(completions, key, value)
-      return Reflect.set(target, key, value, receiver)
-    },
-    /**
-     * @param {object} target
-     * @param {string | symbol} key
-     */
-    getOwnPropertyDescriptor (target, key) {
-      // Copying context descriptors must retain the customer guard, not expose native completion.
-      return Object.getOwnPropertyDescriptor(completions, key) ?? Object.getOwnPropertyDescriptor(target, key)
-    },
-  })
-}
-
-/**
- * Finds a Lambda context object in the supported argument positions.
- *
- * @param {unknown[]} args Handler arguments.
- */
-function findContextIndex (args) {
-  for (let index = 0; index < args.length && index < 3; index++) {
-    if (args[index] && typeof args[index].getRemainingTimeInMillis === 'function') return index
-  }
-  return -1
-}
-
-/**
- * Finds a supplied callback while excluding a function that is itself the Lambda context.
- *
- * @param {unknown[]} args Handler arguments.
- * @param {number} contextIndex Lambda context position.
- */
-function findCallbackIndex (args, contextIndex) {
-  return contextIndex !== 2 && typeof args[2] === 'function' ? 2 : -1
-}
-
-/**
- * @param {Function} handler
- * @param {unknown} result
- * @param {number} contextIndex
- */
-function isCallbackCompletion (handler, result, contextIndex) {
-  if (getDataProperty(handler, HANDLER_STREAMING) === 'response') return false
-  if ((getDataProperty(handler, 'length') >= 3 && contextIndex !== 2) || result === undefined) return true
-  if (result === null || typeof result !== 'object') return false
-  for (let target = result; target !== null && !isProxy(target); target = Object.getPrototypeOf(target)) {
-    if (target === EventEmitter.prototype) return true
-  }
-  if ((typeof getDataProperty(result, 'listen') === 'function' &&
-      typeof getDataProperty(result, 'close') === 'function') ||
-      (typeof getDataProperty(result, 'on') === 'function' &&
-      typeof getDataProperty(result, 'emit') === 'function')) return true
-  const name = getDataProperty(getDataProperty(result, 'constructor'), 'name')
-  return typeof name === 'string' && /Server|Socket|Emitter/i.test(name)
-}
+/* eslint-enable unicorn/consistent-function-scoping, no-useless-assignment, unicorn/no-duplicate-if-branches */
+/* eslint-enable sonarjs/prefer-immediate-return, unicorn/no-negated-condition */
 
 /**
  * Reads metadata without executing application getters or Proxy traps.
@@ -317,7 +185,5 @@ module.exports = {
   copyHandlerMetadata,
   getDataProperty,
   STREAM_RESPONSE,
-  isCallbackCompletion,
   promisifiedHandler,
-  invokeHandler,
 }

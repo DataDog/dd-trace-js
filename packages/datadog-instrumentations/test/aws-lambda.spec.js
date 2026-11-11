@@ -52,7 +52,7 @@ describe('aws-lambda instrumentation', () => {
       const forced = wrapHandler(handler, { forceWrap: true })
       assert.notStrictEqual(forced, wrapped)
       assert.strictEqual(wrapHandler(handler), forced)
-      assert.strictEqual(await forced({}), 'result')
+      assert.strictEqual(await forced({}, {}), 'result')
       const forcedWrapper = wrapHandler(wrapped, { forceWrap: true })
       assert.strictEqual(wrapHandler(wrapped), forcedWrapper)
       assert.deepStrictEqual(Object.getOwnPropertyDescriptors(handler), descriptors)
@@ -70,7 +70,7 @@ describe('aws-lambda instrumentation', () => {
     assert.strictEqual(wrapHandler(handler), forced)
     const starts = []
     subscribe(invocationChannel.start, message => starts.push(message))
-    assert.strictEqual(await forced({}), 'result')
+    assert.strictEqual(await forced({}, {}), 'result')
     assert.strictEqual(starts.length, 1)
   })
 
@@ -118,7 +118,7 @@ describe('aws-lambda instrumentation', () => {
     }
 
     const wrapped = wrapHandler(() => 'result')
-    const result = await wrapped({})
+    const result = await wrapped({}, {})
 
     assert.strictEqual(result, 'result')
     assert.deepStrictEqual(events, ['start', 'end', 'asyncStart', 'asyncEnd'])
@@ -147,7 +147,7 @@ describe('aws-lambda instrumentation', () => {
       throw new Error('synchronous failure')
     })
 
-    await assert.rejects(handler({}), { message: 'synchronous failure' })
+    await assert.rejects(handler({}, {}), { message: 'synchronous failure' })
     assert.deepStrictEqual(events, ['start', 'end', 'error', 'asyncStart', 'asyncEnd'])
   })
 
