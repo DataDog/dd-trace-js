@@ -195,9 +195,17 @@ function handleLLMObsInjection (injection) {
   const parentContext = parent?.context()
   const parentTraceTags = parentContext?._trace?.tags
   const parentId = parentContext?.toSpanId()
+
+  // Without a local LLMObs span, values fall back to what was propagated from upstream, so a service that
+  // only forwards the request still carries the context in baggage, even when the upstream hop only sent
+  // the legacy tags.
+  const traceTags = parentTraceTags ?? injection.spanContext?._trace?.tags
+
+  // The upstream ml_app wins over this service's own config, so a forwarding service does not rename
+  // the downstream spans' app.
   const mlApp =
     mlObsSpanTags?.[ML_APP] ||
-    getPropagatedValue(parentTraceTags, PROPAGATED_ML_APP_KEY) ||
+    getPropagatedValue(traceTags, PROPAGATED_ML_APP_KEY) ||
     globalTracerConfig.llmobs.DD_LLMOBS_ML_APP
 
   const sampleRate =
@@ -213,10 +221,6 @@ function handleLLMObsInjection (injection) {
     ? parentTraceTags?.[PROPAGATED_TRACE_ID_KEY]
     : llmObsTraceIdToWire(llmobsTraceId)
 
-  // Without a local LLMObs span, the baggage values fall back to what was propagated from upstream, so a
-  // service that only forwards the request still carries the context in baggage, even when the upstream
-  // hop only sent the legacy tags.
-  const traceTags = parentTraceTags ?? injection.spanContext?._trace?.tags
   const propagatedParentId = parentId ?? getPropagatedValue(traceTags, PROPAGATED_PARENT_ID_KEY)
 
   if (!propagatedParentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
@@ -238,7 +242,7 @@ function handleLLMObsInjection (injection) {
   injection.baggageItems = compactBaggageItems({
     [BAGGAGE_PARENT_ID_KEY]: propagatedParentId,
     [BAGGAGE_TRACE_ID_KEY]: llmobsTraceId ?? getPropagatedLlmObsTraceId(traceTags),
-    [BAGGAGE_ML_APP_KEY]: mlApp || getPropagatedValue(traceTags, PROPAGATED_ML_APP_KEY),
+    [BAGGAGE_ML_APP_KEY]: mlApp,
     [BAGGAGE_SESSION_ID_KEY]: sessionId ?? getPropagatedValue(traceTags, PROPAGATED_SESSION_ID_KEY),
     [BAGGAGE_SAMPLE_RATE_KEY]: sampleRate ?? getPropagatedValue(traceTags, PROPAGATED_SAMPLE_RATE_KEY),
     [BAGGAGE_SAMPLING_DECISION_KEY]:

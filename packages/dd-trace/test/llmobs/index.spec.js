@@ -402,9 +402,10 @@ describe('module', () => {
       const carrier = {}
       inject(carrier, propagatedTags)
 
+      // Without a local LLMObs span, the propagated ml_app wins over the configured one.
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=older-app'
       )
     })
 
@@ -439,7 +440,7 @@ describe('module', () => {
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=test'
+        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app'
       )
     })
 
@@ -524,7 +525,8 @@ describe('module', () => {
 
       const mlAppEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_ml_app='))
       assert.strictEqual(mlAppEntries.length, 1, `Expected exactly one _dd.p.llmobs_ml_app entry in: ${tags}`)
-      assert.strictEqual(mlAppEntries[0], '_dd.p.llmobs_ml_app=downstream-app')
+      // Without a local LLMObs span, the upstream ml_app wins over this service's own config.
+      assert.strictEqual(mlAppEntries[0], '_dd.p.llmobs_ml_app=upstream-app')
 
       const sidEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_sid='))
       assert.strictEqual(sidEntries.length, 1, `Expected exactly one _dd.p.llmobs_sid entry in: ${tags}`)
@@ -634,6 +636,27 @@ describe('module', () => {
           'llmobs.ml_app': 'upstream-app',
           'llmobs.parent_agent_span_id': 'agent-id',
         })
+      })
+
+      it('forwards the upstream ml_app over its own configured ml_app without a local LLMObs span', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'forwarder-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+        const carrier = {}
+        inject(carrier, '_dd.p.llmobs_parent_id=upstream-parent,_dd.p.llmobs_ml_app=upstream-app')
+
+        assert.strictEqual(parseBaggage(carrier)['llmobs.ml_app'], 'upstream-app')
+        assert.match(carrier['x-datadog-tags'], /_dd\.p\.llmobs_ml_app=upstream-app/)
+        assert.doesNotMatch(carrier['x-datadog-tags'], /forwarder-app/)
+      })
+
+      it('uses its own configured ml_app without a local LLMObs span or an upstream ml_app', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'forwarder-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+        const carrier = {}
+        inject(carrier, '_dd.p.llmobs_parent_id=upstream-parent')
+
+        assert.strictEqual(parseBaggage(carrier)['llmobs.ml_app'], 'forwarder-app')
+        assert.match(carrier['x-datadog-tags'], /_dd\.p\.llmobs_ml_app=forwarder-app/)
       })
 
       it('replaces stale in-process LLMObs items after the user items without mutating them', () => {
