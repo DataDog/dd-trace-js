@@ -6,8 +6,6 @@ const { resolve } = require('node:path')
 const captured = require('../../../datadog-instrumentations/src/otel-api')
 
 function loadApi () {
-  if (captured.api) return captured.api
-
   let filename
   try {
     const entry = require.main?.filename ?? resolve(process.argv[1] ?? 'package.json')
@@ -16,7 +14,7 @@ function loadApi () {
     if (error.code !== 'MODULE_NOT_FOUND' ||
         !error.message.startsWith("Cannot find module '@opentelemetry/api'")) throw error
   }
-  return filename ? require(filename) : require('@opentelemetry/api')
+  return filename ? require(filename) : captured.api ?? require('@opentelemetry/api')
 }
 
 module.exports = loadApi()

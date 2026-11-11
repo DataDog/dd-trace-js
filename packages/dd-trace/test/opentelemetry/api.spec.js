@@ -15,7 +15,7 @@ const extractPackageAndModulePath = require(
 const execFileAsync = promisify(execFile)
 const tracerDirectory = resolve(__dirname, '../../../..')
 const apiMain = require.resolve('@opentelemetry/api')
-const apiDirectory = dirname(extractPackageAndModulePath(apiMain).pkgJson)
+const apiDirectory = dirname(extractPackageAndModulePath(apiMain.replaceAll('\\', '/')).pkgJson)
 const apiEntrypoint = relative(apiDirectory, apiMain)
 const nativeSpan = `
   tracer.trace('native', span => {
@@ -75,7 +75,7 @@ describe('OpenTelemetry application API selection', () => {
       'use strict'
       ${mode === 'esm'
         ? `import { createRequire } from 'node:module'
-           const require = createRequire(import.meta.url)`
+          const require = createRequire(import.meta.url)`
         : ''}
       const assert = require('node:assert/strict')
       ${source}
@@ -129,6 +129,22 @@ describe('OpenTelemetry application API selection', () => {
     `)
   })
 
+  for (const mode of ['commonjs', 'esm', 'eval']) {
+    it(`uses the entrypoint API ahead of an intercepted dependency API (${mode})`, async () => {
+      const [, dependencyApi] = await Promise.all([
+        installApi(),
+        installApi('dependency/node_modules/@opentelemetry/api'),
+      ])
+      await run(`
+        const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+        require('node:module')
+          .createRequire(${JSON.stringify(join(dependencyApi, 'package.json'))})('@opentelemetry/api')
+        const applicationApi = '@opentelemetry/api'
+        ${recordingSpan}
+      `, {}, mode)
+    })
+  }
+
   it('retains the tracer API as a fallback when the application has none', async () => {
     await run(`
       const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
@@ -140,7 +156,8 @@ describe('OpenTelemetry application API selection', () => {
   it('does not load an API for native tracing', async () => {
     await run(`
       const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
-      assert.equal(Object.keys(require.cache).some(filename => filename.includes('/@opentelemetry/api/')), false)
+      assert.equal(Object.keys(require.cache).some(filename =>
+        filename.replaceAll('\\\\', '/').includes('/@opentelemetry/api/')), false)
       ${nativeSpan}
     `)
   })
@@ -150,15 +167,24 @@ describe('OpenTelemetry application API selection', () => {
     ['module evaluation error', "throw Object.assign(new Error('application API failed'), { code: 'API_FAILED' })",
       'API_FAILED'],
   ]) {
-    it(`does not replace an application API with a ${name}`, async () => {
-      const applicationApi = await installApi()
-      await writeFile(join(applicationApi, apiEntrypoint), contents)
-      await run(`
-        const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
-        assert.throws(() => tracer.TracerProvider, { code: '${expectedCode}' })
-        ${nativeSpan}
-      `)
-    })
+    for (const preloadDependency of [false, true]) {
+      it(`does not replace an application API with a ${name} (dependency: ${preloadDependency})`, async () => {
+        const applicationApi = await installApi()
+        const dependencyApi = preloadDependency
+          ? await installApi('dependency/node_modules/@opentelemetry/api')
+          : undefined
+        await writeFile(join(applicationApi, apiEntrypoint), contents)
+        await run(`
+          const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+          ${dependencyApi
+            ? `require('node:module')
+              .createRequire(${JSON.stringify(join(dependencyApi, 'package.json'))})('@opentelemetry/api')`
+            : ''}
+          assert.throws(() => tracer.TracerProvider, { code: '${expectedCode}' })
+          ${nativeSpan}
+        `)
+      })
+    }
   }
 
   for (const [signal, runtimeMetrics] of [['LOGS', false], ['METRICS', false], ['METRICS', true]]) {
@@ -172,17 +198,26 @@ describe('OpenTelemetry application API selection', () => {
     })
   }
 
-  it('does not replace an application API with an inaccessible package export', async () => {
-    const applicationApi = await installApi()
-    await writeFile(join(applicationApi, 'package.json'), JSON.stringify({
-      name: '@opentelemetry/api',
-      version: '1.10.0',
-      exports: { './other': './other.js' },
-    }))
-    await run(`
-      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
-      assert.throws(() => tracer.TracerProvider, { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' })
-      ${nativeSpan}
-    `)
-  })
+  for (const preloadDependency of [false, true]) {
+    it(`preserves an inaccessible application API export error (dependency: ${preloadDependency})`, async () => {
+      const applicationApi = await installApi()
+      const dependencyApi = preloadDependency
+        ? await installApi('dependency/node_modules/@opentelemetry/api')
+        : undefined
+      await writeFile(join(applicationApi, 'package.json'), JSON.stringify({
+        name: '@opentelemetry/api',
+        version: '1.10.0',
+        exports: { './other': './other.js' },
+      }))
+      await run(`
+        const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+        ${dependencyApi
+          ? `require('node:module')
+            .createRequire(${JSON.stringify(join(dependencyApi, 'package.json'))})('@opentelemetry/api')`
+          : ''}
+        assert.throws(() => tracer.TracerProvider, { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' })
+        ${nativeSpan}
+      `)
+    })
+  }
 })

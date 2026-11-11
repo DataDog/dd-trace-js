@@ -5,6 +5,10 @@ const require = createRequire(import.meta.url)
 const order = process.argv[2]
 let api = order === 'cached-api-first' ? await import('@opentelemetry/api') : undefined
 const tracer = process.env.NATIVE_OTEL ? undefined : require('dd-trace').init()
+if (order === 'dependency-api-first') {
+  const dependencyRequire = createRequire(process.argv[3])
+  dependencyRequire('@opentelemetry/api')
+}
 if (order === 'api-first' || order === 'diag-first') {
   api = await import('@opentelemetry/api')
   if (order === 'diag-first') {
