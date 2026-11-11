@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 
 const { storage } = require('../../../../datadog-core')
 const {
+  fetchRequestStart,
   httpClientRequestStart,
   httpClientResponseStart,
   httpClientResponseFinish,
@@ -71,6 +72,7 @@ describe('RASP - ssrf.js', () => {
       enable: sinon.stub(),
       disable: sinon.stub(),
       extractRequestData: sinon.stub().returns({}),
+      extractFetchRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
       planResponseBodyCollection: sinon.stub().callsFake((originatingReq, res, ctx) => {
@@ -384,6 +386,49 @@ describe('RASP - ssrf.js', () => {
       })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+  })
+
+  describe('analyze fetch ssrf', () => {
+    const fetchUrl = 'http://example.com/path'
+
+    it('should analyze ssrf for an outgoing fetch request', () => {
+      const request = new Request(fetchUrl, { method: 'POST' })
+      const { req } = stubStore({}, {})
+      downstream.extractFetchRequestData.returns({ [addresses.HTTP_OUTGOING_METHOD]: 'POST' })
+
+      fetchRequestStart.publish({ req: request, abortController: new AbortController() })
+
+      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request)
+      sinon.assert.calledOnceWithExactly(
+        waf.run,
+        {
+          ephemeral: {
+            [addresses.HTTP_OUTGOING_URL]: fetchUrl,
+            [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+          },
+        },
+        req,
+        { type: 'ssrf', variant: 'request' }
+      )
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+    })
+
+    it('should not analyze an outgoing fetch request without an incoming request', () => {
+      clearStore()
+
+      fetchRequestStart.publish({ req: new Request(fetchUrl), abortController: new AbortController() })
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze an outgoing fetch request if rasp is disabled', () => {
+      ssrf.disable()
+      stubStore({}, {})
+
+      fetchRequestStart.publish({ req: new Request(fetchUrl), abortController: new AbortController() })
+
+      sinon.assert.notCalled(waf.run)
     })
   })
 })

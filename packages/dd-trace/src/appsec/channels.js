@@ -20,6 +20,7 @@ module.exports = {
   fastifyPathParams: dc.channel('datadog:fastify:path-params:finish'),
   fastifyQueryParams: dc.channel('datadog:fastify:query-params:finish'),
   fastifyResponseChannel: dc.channel('datadog:fastify:response:finish'),
+  fetchRequestStart: dc.channel('tracing:apm:fetch:request:start'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),
   httpClientRequestStart: dc.channel('apm:http:client:request:start'),

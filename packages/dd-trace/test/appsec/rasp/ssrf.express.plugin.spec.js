@@ -9,6 +9,7 @@ const { describe, it, beforeEach, before, after } = require('mocha')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
+const { json } = require('../../../src/appsec/blocking/templates')
 const { withVersions } = require('../../setup/mocha')
 const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
@@ -30,8 +31,8 @@ describe('RASP - ssrf', () => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
-      expressApp.get('/', (req, res) => {
-        app(req, res)
+      expressApp.get('/', (req, res, next) => {
+        app(req, res, next)
       })
 
       appsec.enable(getConfigFresh({
@@ -126,6 +127,172 @@ describe('RASP - ssrf', () => {
 
             await testBlockingRequest()
           })
+        })
+      })
+
+      describe('Test using fetch', () => {
+        let target
+        let targetRequests
+        let targetAuthorizations
+
+        before(async () => {
+          // The first fetch of the process loads the fetch plugin, and RASP would count the files read then as LFI
+          // evaluations of the test request.
+          await fetch('not-a-real-protocol://preload').catch(noop)
+
+          target = require('http').createServer((req, res) => {
+            targetRequests++
+            targetAuthorizations.push(req.headers.authorization)
+            res.end('target')
+          })
+          await new Promise(resolve => target.listen(0, '127.0.0.1', resolve))
+        })
+
+        beforeEach(() => {
+          targetRequests = 0
+          targetAuthorizations = []
+        })
+
+        after(done => {
+          target.closeAllConnections()
+          target.close(done)
+        })
+
+        function getTargetHost () {
+          return `127.0.0.1:${(/** @type {import('net').AddressInfo} */ (target.address())).port}`
+        }
+
+        async function testBlockedFetch () {
+          const targetHost = getTargetHost()
+
+          const [response] = await Promise.all([
+            httpRequest.get(`/?host=${targetHost}`, { validateStatus: null }),
+            checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1'),
+          ])
+
+          assert.strictEqual(response.status, 403)
+          assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          assert.strictEqual(targetRequests, 0)
+        }
+
+        it('Should not detect threat', async () => {
+          app = (req, res) => {
+            const abortController = new AbortController()
+            fetch(`http://${req.query.host}`, { signal: abortController.signal }).catch(noop)
+
+            setImmediate(() => {
+              abortController.abort()
+              res.end('end')
+            })
+          }
+
+          await Promise.all([
+            checkRaspExecutedAndNotThreat(agent),
+            httpRequest.get(`/?host=${NON_ROUTABLE_HOST}`),
+          ])
+        })
+
+        it('Should block a threat doing a GET request', async () => {
+          app = async (req, res, next) => {
+            try {
+              await fetch(`http://${req.query.host}/`)
+              res.end('end')
+            } catch (error) {
+              next(error)
+            }
+          }
+
+          await testBlockedFetch()
+        })
+
+        it('Should block a threat doing a POST request', async () => {
+          app = async (req, res, next) => {
+            try {
+              await fetch(`http://${req.query.host}/`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ key: 'value' }),
+              })
+              res.end('end')
+            } catch (error) {
+              next(error)
+            }
+          }
+
+          await testBlockedFetch()
+        })
+
+        it('Should block a threat doing a request with a Request and options', async () => {
+          app = async (req, res, next) => {
+            try {
+              await fetch(new Request(`http://${req.query.host}/`), {
+                method: 'POST',
+                body: JSON.stringify({ key: 'value' }),
+              })
+              res.end('end')
+            } catch (error) {
+              next(error)
+            }
+          }
+
+          await testBlockedFetch()
+        })
+
+        it('Should cancel the stream body of a blocked request', async () => {
+          /** @type {Error | undefined} */
+          let cancelReason
+          app = async (req, res, next) => {
+            const body = new ReadableStream({
+              pull (controller) {
+                controller.enqueue(new TextEncoder().encode('chunk'))
+              },
+              cancel (reason) {
+                cancelReason = reason
+              },
+            })
+
+            try {
+              await fetch(`http://${req.query.host}/`, { method: 'POST', body, duplex: 'half' })
+              res.end('end')
+            } catch (error) {
+              next(error)
+            }
+          }
+
+          await testBlockedFetch()
+
+          assert.strictEqual(cancelReason?.name, 'DatadogRaspAbortError')
+        })
+
+        it('Should send the headers of a one-shot iterator in the options of a Request', async () => {
+          app = async (req, res) => {
+            const headers = new Map([['authorization', 'Bearer token']]).entries()
+            // @ts-expect-error fetch accepts any iterable of header pairs
+            const response = await fetch(new Request(`http://${getTargetHost()}/`), { headers })
+            res.end(await response.text())
+          }
+
+          const response = await httpRequest.get('/')
+
+          assert.strictEqual(response.data, 'target')
+          assert.deepStrictEqual(targetAuthorizations, ['Bearer token'])
+        })
+
+        it('Should keep the rejection of an invalid method in the options of a Request', async () => {
+          app = async (req, res) => {
+            try {
+              // @ts-expect-error fetch rejects a method that can't be converted to a string
+              await fetch(new Request(`http://${getTargetHost()}/`), { method: { toString: 0 } })
+              res.end('resolved')
+            } catch (error) {
+              res.end(error.name)
+            }
+          }
+
+          const response = await httpRequest.get('/')
+
+          assert.strictEqual(response.data, 'TypeError')
+          assert.strictEqual(targetRequests, 0)
         })
       })
 

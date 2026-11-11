@@ -2,6 +2,7 @@
 
 const { format } = require('url')
 const {
+  fetchRequestStart,
   httpClientRequestStart,
   httpClientResponseStart,
   httpClientResponseFinish,
@@ -24,6 +25,7 @@ function enable (_config) {
   httpClientRequestStart.subscribe(analyzeSsrf)
   httpClientResponseStart.subscribe(planResponseBodyCollection)
   httpClientResponseFinish.subscribe(handleResponseFinish)
+  fetchRequestStart.subscribe(analyzeFetchSsrf)
 }
 
 function disable () {
@@ -32,6 +34,7 @@ function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
   if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
+  if (fetchRequestStart.hasSubscribers) fetchRequestStart.unsubscribe(analyzeFetchSsrf)
 }
 
 function analyzeSsrf (ctx) {
@@ -40,8 +43,28 @@ function analyzeSsrf (ctx) {
 
   if (!req || !outgoingUrl) return
 
-  const requestAddresses = downstream.extractRequestData(ctx)
+  runRequestEvaluation(req, outgoingUrl, downstream.extractRequestData(ctx), ctx.abortController)
+}
 
+/**
+ * Evaluates an outgoing request of the global fetch before it is sent.
+ * @param {{ req: Request, abortController: AbortController }} ctx fetch instrumentation context.
+ */
+function analyzeFetchSsrf ({ req: request, abortController }) {
+  const req = getActiveRequest()
+  if (!req) return
+
+  runRequestEvaluation(req, request.url, downstream.extractFetchRequestData(request), abortController)
+}
+
+/**
+ * Runs the request variant of SSRF RASP and aborts the outgoing request when a rule blocks it.
+ * @param {import('http').IncomingMessage} req originating request.
+ * @param {string} outgoingUrl URL of the outgoing request.
+ * @param {object} requestAddresses method and headers of the outgoing request.
+ * @param {AbortController} abortController aborts the outgoing request.
+ */
+function runRequestEvaluation (req, outgoingUrl, requestAddresses, abortController) {
   const ephemeral = {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl,
     ...requestAddresses,
@@ -51,7 +74,7 @@ function analyzeSsrf (ctx) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, web.getContext(req)?.res, ctx.abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
 }

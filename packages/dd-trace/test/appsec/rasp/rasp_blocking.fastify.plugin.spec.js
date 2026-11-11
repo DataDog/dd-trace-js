@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const { describe, it, afterEach, before, after } = require('mocha')
+const { describe, it, afterEach, before, after, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
@@ -34,10 +34,18 @@ describe('RASP - fastify blocking', () => {
   })
 
   withVersions('fastify', 'fastify', '>=2', (version) => {
-    let app, hooks, httpRequest, pool
+    let app, hooks, httpRequest, pool, target, targetRequests
 
     before(async () => {
-      await agent.load(['http', 'fastify'], { client: false })
+      // The fetch plugin is loaded so SSRF through fetch is analyzed inside the fetch client span, as in production.
+      await agent.load(['http', 'fastify', 'fetch'], { client: false })
+
+      // The first fetch of the process loads the fetch plugin, and RASP would count the files read then as LFI
+      // evaluations of the test request. Its span is drained here so it can't land in a test's assertion window.
+      await Promise.all([
+        fetch('not-a-real-protocol://preload').catch(() => {}),
+        agent.assertSomeTraces(() => {}).catch(() => {}),
+      ])
 
       appsec.enable(getConfigFresh({
         appsec: {
@@ -102,6 +110,17 @@ describe('RASP - fastify blocking', () => {
         })
       })
 
+      app.get('/ssrf-fetch', async (request, reply) => {
+        const response = await fetch(`http://${request.query.payload}/`)
+        return response.text()
+      })
+
+      target = http.createServer((req, res) => {
+        targetRequests++
+        res.end('target')
+      })
+      await new Promise(resolve => target.listen(0, '127.0.0.1', resolve))
+
       await app.listen({ host: '127.0.0.1', port: 0 })
 
       httpRequest = HttpRequest.create({
@@ -111,6 +130,10 @@ describe('RASP - fastify blocking', () => {
       })
     })
 
+    beforeEach(() => {
+      targetRequests = 0
+    })
+
     afterEach(() => {
       sinon.resetHistory()
     })
@@ -118,6 +141,8 @@ describe('RASP - fastify blocking', () => {
     after(async () => {
       // The pg.Pool keeps connections and a reaper timer alive; leaking one per fastify version starves the
       // event loop until later `before` hooks (server startup) time out.
+      target.closeAllConnections()
+      await new Promise(resolve => target.close(resolve))
       await app.close()
       await pool?.end()
       appsec.disable()
@@ -200,6 +225,18 @@ describe('RASP - fastify blocking', () => {
       sinon.assert.notCalled(hooks.onError)
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, blockedJson)
+      await checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
+    })
+
+    it('should block with SSRF through fetch', async () => {
+      const res = await httpRequest(`/ssrf-fetch?payload=127.0.0.1:${target.address().port}`)
+
+      sinon.assert.calledOnce(hooks.onSend)
+      sinon.assert.calledOnce(hooks.onResponse)
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, blockedJson)
+      assert.strictEqual(targetRequests, 0)
       await checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
     })
   })
