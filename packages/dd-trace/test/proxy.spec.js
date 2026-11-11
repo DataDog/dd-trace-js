@@ -205,8 +205,12 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.stub().callsFake(() => configUpdateChannel.publish(config)),
+      setRemoteConfig: sinon.stub().callsFake(() => {
+        config.setUpdateHandler.lastCall.args[0](config)
+        configUpdateChannel.publish(config)
+      }),
       setProgrammaticConfig: sinon.stub(),
+      setUpdateHandler: sinon.stub(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -623,7 +627,7 @@ describe('TracerProxy', () => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
           config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = isCiVisibility
           config.isCiVisibility = isCiVisibility
-          config.setProgrammaticConfig.callsFake(() => configUpdateChannel.publish(config))
+          config.setProgrammaticConfig.callsFake(() => config.setRemoteConfig())
 
           proxy.init()
           proxy.setUrl('http://updated:8126')
@@ -817,7 +821,7 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
-          configUpdateChannel.publish(config)
+          config.setUpdateHandler.lastCall.args[0](config)
         })
         proxy.init()
 
@@ -836,7 +840,7 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
-          configUpdateChannel.publish(config)
+          config.setUpdateHandler.lastCall.args[0](config)
         })
         proxy.init()
 
@@ -1019,7 +1023,7 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
-          configUpdateChannel.publish(config)
+          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         proxy.init()
@@ -1039,7 +1043,7 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
-          configUpdateChannel.publish(config)
+          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         proxy.init()
@@ -1111,7 +1115,7 @@ describe('TracerProxy', () => {
         config.iast.DD_IAST_ENABLED = true
         config.setRemoteConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
-          configUpdateChannel.publish(config)
+          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -1698,7 +1702,7 @@ describe('TracerProxy', () => {
       it('logs a runtime consumer failure without throwing from setUrl', () => {
         const error = new Error('configuration failed')
         tracer.configure = sinon.stub().throws(error)
-        config.setProgrammaticConfig.callsFake(() => configUpdateChannel.publish(config))
+        config.setProgrammaticConfig.callsFake(() => config.setRemoteConfig())
 
         assert.strictEqual(proxy.setUrl('http://example.com'), proxy)
 

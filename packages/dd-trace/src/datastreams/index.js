@@ -21,30 +21,35 @@ const {
  * @returns {T}
  */
 function lazyClass (classGetter, methods = [], staticMethods = []) {
-  let constructorArgs
   let ActiveClass
-
-  const LazyClass = function (...args) {
-    constructorArgs = args
-  }
 
   const activate = () => {
     ActiveClass ??= classGetter()
     return ActiveClass
   }
 
-  for (const method of methods) {
-    LazyClass.prototype[method] = function (...args) {
-      const instance = activate() && new ActiveClass(...constructorArgs)
+  class LazyClass {
+    /** @type {unknown[] | undefined} */
+    #args
 
-      // Replace the whole prototype instead of only the method itself whenever
-      // any individual method is called to avoid running through this code
-      // again every time another method is called. This is not only more
-      // efficient but it also means that the class instance does not need to be
-      // stored for future calls to other methods.
-      Object.setPrototypeOf(this, instance)
+    /** @param {...unknown} args */
+    constructor (...args) {
+      this.#args = args
+    }
 
-      return this[method](...args)
+    static {
+      for (const method of methods) {
+        this.prototype[method] = function (...args) {
+          let instance = Object.getPrototypeOf(this)
+          if (this.#args !== undefined) {
+            instance = new (activate())(...this.#args)
+            this.#args = undefined
+            Object.setPrototypeOf(this, instance)
+          }
+
+          return instance[method].apply(this, args)
+        }
+      }
     }
   }
 
@@ -56,7 +61,7 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
     }
   }
 
-  return LazyClass
+  return /** @type {T} */ (/** @type {unknown} */ (LazyClass))
 }
 
 /**

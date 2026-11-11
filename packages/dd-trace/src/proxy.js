@@ -269,9 +269,9 @@ class Tracer extends NoopProxy {
         registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
-      /** @type {import('./opentelemetry/startup-config').Pipelines | undefined} */
-      let tracing
-      configUpdateChannel.subscribe(config => {
+      /** @param {ReturnType<typeof getConfig>} config */
+      const updateConfig = config => {
+        let tracing
         try {
           if (rc) rc.url = config.url
           tracing = this.#updateTracing(config)
@@ -279,7 +279,10 @@ class Tracer extends NoopProxy {
         } catch (error) {
           log.error(this.#configPublished ? 'Error reconfiguring tracer' : 'Error initializing tracer', error)
         }
-      })
+        return tracing
+      }
+      config.setUpdateHandler(updateConfig)
+      const tracing = updateConfig(config)
       configUpdateChannel.publish(config)
       this.#configPublished = true
       setStartupLogConfig(config, { ...tracing, logs, metrics })

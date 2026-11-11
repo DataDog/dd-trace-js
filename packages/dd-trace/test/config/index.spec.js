@@ -237,6 +237,21 @@ describe('Config', () => {
       }
     })
 
+    it('restores cleared LLMObs options after remote overrides are removed', () => {
+      const config = getConfig({ llmobs: { mlApp: 'original', agentlessEnabled: true } })
+      config.setProgrammaticConfig({ llmobs: { enabled: true, mlApp: undefined, agentlessEnabled: undefined } })
+      config.setRemoteConfig({ DD_LLMOBS_ML_APP: 'remote', DD_LLMOBS_AGENTLESS_ENABLED: 'false' })
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ML_APP, 'remote')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, false)
+
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ML_APP, undefined)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
+      assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ML_APP'), 'code')
+      assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_AGENTLESS_ENABLED'), 'code')
+    })
+
     it('rejects invalid URLs without changing configuration or publishing', () => {
       const config = getConfig({ url: initial })
       const listener = sinon.spy()
@@ -6473,6 +6488,38 @@ rules:
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
       sinon.assert.calledOnce(subscriber)
       assert.strictEqual(subscriber.firstCall.args[0], config)
+    })
+
+    it('applies the owning tracer update before notifying process consumers', () => {
+      const config = getConfig({ url: 'http://initial:8126/' })
+      let destination
+      config.setUpdateHandler(updated => { destination = updated.url.href })
+      const observe = () => assert.strictEqual(destination, config.url.href)
+      configUpdateChannel.subscribe(observe)
+
+      try {
+        config.setProgrammaticConfig({ url: 'http://updated:8126/' })
+        assert.strictEqual(destination, 'http://updated:8126/')
+        config.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
+        assert.strictEqual(destination, 'http://remote:8126/')
+      } finally {
+        configUpdateChannel.unsubscribe(observe)
+      }
+    })
+
+    it('keeps replacement tracer updates with their owning configuration', () => {
+      const first = getConfig()
+      const firstDestinations = []
+      first.setUpdateHandler(config => firstDestinations.push(config.url.href))
+      const second = getConfig()
+      const secondDestinations = []
+      second.setUpdateHandler(config => secondDestinations.push(config.url.href))
+
+      second.setProgrammaticConfig({ url: 'http://second:8126/' })
+      first.setProgrammaticConfig({ url: 'http://first:8126/' })
+
+      assert.deepStrictEqual(firstDestinations, ['http://first:8126/'])
+      assert.deepStrictEqual(secondDestinations, ['http://second:8126/'])
     })
   })
 

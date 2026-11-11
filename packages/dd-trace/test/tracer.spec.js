@@ -10,6 +10,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
+const { DataStreamsProcessor } = require('../src/datastreams')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -34,6 +35,13 @@ describe('Tracer', () => {
   })
 
   describe('configure', () => {
+    it('preserves the destination when only sampling options change', () => {
+      const sampler = { sampleRate: 0.5 }
+      tracer.configure({ env: 'updated', sampler })
+      sinon.assert.notCalled(tracer._exporter.setUrl)
+      sinon.assert.calledWith(tracer._prioritySampler.configure, 'updated', sampler)
+    })
+
     it('should pass the sampling options to the priority sampler', () => {
       const env = 'test'
       const sampler = { sampleRate: 0.5 }
@@ -48,6 +56,46 @@ describe('Tracer', () => {
       const url = new URL('http://example.com')
       tracer.configure({ ...config, url })
       sinon.assert.calledOnceWithExactly(tracer._exporter.setUrl, url)
+    })
+
+    it('changes an independent exporter destination only for an explicit override', () => {
+      const createConfig = proxyquire('../src/config', {})
+      const independentConfig = createConfig({ experimental: { exporter: 'agentless' } })
+      const independentTracer = new Tracer(independentConfig)
+      const exporter = /** @type {import('../src/exporters/agentless')} */ (independentTracer._exporter)
+      const setUrl = sinon.spy(exporter, 'setUrl')
+
+      independentConfig.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
+      independentTracer.configure(independentConfig)
+      sinon.assert.notCalled(setUrl)
+
+      independentConfig.setProgrammaticConfig({ url: 'http://override:8126/' })
+      independentTracer.configure(independentConfig)
+      sinon.assert.calledOnceWithExactly(setUrl, independentConfig.url)
+    })
+  })
+
+  describe('lazy Data Streams activation', () => {
+    it('uses each pending processor configuration', () => {
+      const first = new DataStreamsProcessor({ service: 'first' })
+      const second = new DataStreamsProcessor({ service: 'second' })
+
+      first.bucketFromTimestamp(0)
+      second.bucketFromTimestamp(0)
+
+      assert.strictEqual(first.service, 'first')
+      assert.strictEqual(second.service, 'second')
+    })
+
+    it('activates once through an observed method', () => {
+      const processor = new DataStreamsProcessor({ service: 'observed' })
+      const bucketFromTimestamp = sinon.spy(processor, 'bucketFromTimestamp')
+
+      const first = processor.bucketFromTimestamp(0)
+      const second = processor.bucketFromTimestamp(0)
+
+      assert.strictEqual(first, second)
+      sinon.assert.calledTwice(bucketFromTimestamp)
     })
   })
 

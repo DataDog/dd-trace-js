@@ -133,7 +133,7 @@ function undo (config, source) {
     if (trackedConfigOrigins.get(name) !== source) continue
 
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
-    setAndTrack(config, name, entry.value, undefined, entry.source)
+    setAndTrack(config, name, entry.value, undefined, entry.source, true)
   }
 }
 
@@ -202,6 +202,8 @@ module.exports = getConfig
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
   #runtimeUrlSet = false
+  /** @type {((config: Config) => void) | undefined} */
+  #updateHandler
 
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
@@ -396,8 +398,14 @@ class Config extends ConfigBase {
     this.#publishUpdate()
   }
 
+  /** @param {(config: Config) => void} handler */
+  setUpdateHandler (handler) {
+    this.#updateHandler = handler
+  }
+
   #publishUpdate () {
     this.#applyCalculated()
+    this.#updateHandler?.(this)
     configUpdateChannel.publish(this)
   }
 
