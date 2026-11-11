@@ -103,8 +103,9 @@ class LLMObs extends NoopLLMObs {
         version: this._config.version,
       })
       if (!event) return false
-      providerCostAppendCh.publish({ event, routing: storage.getStore()?.routingContext })
-      return true
+      const submission = { event, routing: storage.getStore()?.routingContext, submitted: false }
+      providerCostAppendCh.publish(submission)
+      return submission.submitted
     } catch (error) {
       logger.debug('Could not submit provider conversation billing: %s', error.message)
       return false

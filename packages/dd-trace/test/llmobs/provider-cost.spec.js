@@ -122,6 +122,15 @@ describe('conversation billing SDK emission', () => {
     }
   })
 
+  it('returns false without affecting the application when the local writer rejects', () => {
+    const append = sinon.stub(SpanWriter.prototype, 'append').throws(new Error('writer rejected billing'))
+    try {
+      assert.equal(llmobs.submitConversationCost(cases[0].response), false)
+    } finally {
+      append.restore()
+    }
+  })
+
   it('submits duplicate sources with stable IDs for backend deduplication', async () => {
     assert.equal(llmobs.submitConversationCost(cases[0].response), true)
     assert.equal(llmobs.submitConversationCost(cases[0].response, {

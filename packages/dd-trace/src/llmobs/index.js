@@ -288,13 +288,15 @@ function handleTraceSampled (trace) {
 }
 
 /**
- * @param {{event: Record<string, unknown>, routing?: {apiKey?: string, site?: string}}} message
+ * @param {{event: Record<string, unknown>, routing?: {apiKey?: string, site?: string}, submitted: boolean}} message
  */
-function handleProviderCostAppend ({ event, routing }) {
+function handleProviderCostAppend (message) {
+  const { event, routing } = message
   try {
     // Subscription lifetime is owned by the currently enabled writer.
     const currentWriter = /** @type {LLMObsSpanWriter} */ (spanWriter)
     currentWriter.append(event, routing)
+    message.submitted = true
   } catch (error) {
     log.warn('Could not append provider conversation billing: %s', error.message)
   }
