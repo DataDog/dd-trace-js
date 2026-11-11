@@ -58,8 +58,9 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
 } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
-const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { NODE_MAJOR } = require('../../version')
 const { getBabelDependencies } = require('./babel-dependencies')
+const { oldest: oldestJestVersion } = require('./versions')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedCoverageFiles = [
@@ -70,7 +71,6 @@ const expectedCoverageFiles = [
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
-const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const jestMajor = JEST_VERSION === 'latest' ? Infinity : Number(JEST_VERSION.split('.')[0])
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip

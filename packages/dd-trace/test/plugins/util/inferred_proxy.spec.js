@@ -271,8 +271,13 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         await agent.assertSomeTraces(traces => {
           const proxySpan = traces[0][0]
 
-          assert.strictEqual(proxySpan.name, config.expectedSpanName)
+          assert.strictEqual(proxySpan.type, undefined)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'operation.name'), false)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'span.type'), false)
           assertObjectContains(proxySpan, {
+            name: 'GET /test',
+            resource: 'GET /test',
+            service: 'aws-server',
             meta: {
               'span.kind': 'server',
               'http.request.method': 'GET',

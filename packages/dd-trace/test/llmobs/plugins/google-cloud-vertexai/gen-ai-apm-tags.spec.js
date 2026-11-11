@@ -53,6 +53,31 @@ describe('vertexai gen_ai APM attributes with LLM Observability disabled', () =>
     assert.equal(apmTags['gen_ai.usage.total_tokens'], 18)
   })
 
+  it('counts thinking, tool-use and cached tokens like the other Gemini integrations', () => {
+    const { metrics } = plugin.getGenAiApmEndTags({
+      result: {
+        response: {
+          usageMetadata: {
+            promptTokenCount: 5,
+            toolUsePromptTokenCount: 4,
+            cachedContentTokenCount: 3,
+            candidatesTokenCount: 7,
+            thoughtsTokenCount: 30,
+            totalTokenCount: 46,
+          },
+        },
+      },
+    })
+
+    assert.deepEqual(metrics, {
+      inputTokens: 9,
+      outputTokens: 37,
+      totalTokens: 46,
+      cacheReadTokens: 3,
+      reasoningOutputTokens: 30,
+    })
+  })
+
   it('omits usage when the response reports none', () => {
     publish({ instance: { model: 'publishers/google/models/gemini-1.5-flash' }, result: { response: {} } })
 

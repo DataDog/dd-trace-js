@@ -259,11 +259,15 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
-        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
-          agent.assertSomeTraces(traces => {
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', async () => {
+          const tracesReceived = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
+            assert.strictEqual(span.type, undefined)
+            assert.strictEqual(Object.hasOwn(span.meta, 'operation.name'), false)
+            assert.strictEqual(Object.hasOwn(span.meta, 'span.type'), false)
             assertObjectContains(span, {
-              name: 'web.request',
+              name: 'GET',
+              resource: 'GET',
               meta: {
                 'span.kind': 'server',
                 'http.request.method': 'GET',
@@ -278,9 +282,12 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'http.method'))
             assert.ok(!Object.hasOwn(span.meta, 'http.url'))
             assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
-          }).then(done).catch(done)
+          })
 
-          request(http2, `http://localhost:${port}/user`).catch(done)
+          await Promise.all([
+            tracesReceived,
+            request(http2, `http://localhost:${port}/user`),
+          ])
         })
       })
 

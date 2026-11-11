@@ -39,6 +39,7 @@ const {
   TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
+const { getVitestVersions } = require('./versions')
 
 const NUM_RETRIES_EFD = 3
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
@@ -49,8 +50,7 @@ const FLAKY_NEVER_PASSING_RESOURCE =
 const FLAKY_UNNECESSARY_RETRY_RESOURCE =
   'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
 
-// vitest@4.x requires Node.js >= 20
-const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = getVitestVersions()
 const requestedVersion = process.env.VITEST_VERSION
 const versions = requestedVersion && requestedVersion !== 'all'
   ? [requestedVersion === 'oldest'

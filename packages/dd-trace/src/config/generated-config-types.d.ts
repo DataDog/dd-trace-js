@@ -287,7 +287,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
-  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -385,6 +385,7 @@ export interface GeneratedConfig {
   DD_TRACE_Q_ENABLED: boolean;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REQUEST_ENABLED: boolean;
@@ -484,6 +485,7 @@ export interface GeneratedConfig {
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
     DD_OPENAI_REALTIME_ENABLED: boolean;
+    DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
@@ -800,6 +802,7 @@ export interface GeneratedEnvVarConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
   DD_OPENAI_REALTIME_ENABLED: boolean;
+  DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
@@ -1006,7 +1009,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
-  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -1114,6 +1117,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_RATE_LIMIT: number;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: boolean;

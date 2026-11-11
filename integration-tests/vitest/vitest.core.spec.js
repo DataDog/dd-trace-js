@@ -58,6 +58,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
+const { getVitestVersions } = require('./versions')
 const { describeDynamicAtr } = require('./dynamic-atr')
 
 const NUM_RETRIES_EFD = 3
@@ -100,8 +101,7 @@ function assertCompleteTestSessionTrace (events, testOutput) {
   }
 }
 
-// vitest@4.x requires Node.js >= 20
-const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = getVitestVersions()
 const requestedVersion = process.env.VITEST_VERSION
 const versions = requestedVersion && requestedVersion !== 'all'
   ? [requestedVersion === 'oldest'
@@ -142,6 +142,31 @@ versions.forEach((version) => {
       childProcess.kill()
       await receiver.stop()
     })
+
+    for (const method of ['createVitest', 'startVitest']) {
+      for (const readonly of ['overrides', 'plugins']) {
+        it(`preserves read-only ${readonly} passed to ${method}`, async () => {
+          // Native success establishes that these inputs are supported by the actual framework version.
+          for (const traced of [false, true]) {
+            const script = 'ci-visibility/vitest-tests-programmatic-api/run-readonly-programmatic-api.mjs'
+            childProcess = exec(`${process.execPath} ${script}`, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: traced ? '--import dd-trace/register.js -r dd-trace/ci/init' : '',
+                READONLY_VITEST_OPTIONS: readonly,
+                VITEST_PROGRAMMATIC_METHOD: method,
+              },
+            })
+            let output = ''
+            childProcess.stdout.on('data', data => { output += data })
+            childProcess.stderr.on('data', data => { output += data })
+            const [exitCode] = await once(childProcess, 'exit')
+            assert.strictEqual(exitCode, 0, `${traced ? 'instrumented' : 'native'}: ${output}`)
+          }
+        })
+      }
+    }
 
     const poolConfig = ['forks', 'threads']
 
