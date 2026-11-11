@@ -47,7 +47,7 @@ describe('generate supported integrations', () => {
     })
 
     assert.deepStrictEqual(rows, [{
-      dependencyName: 'node:http',
+      libraryName: 'node:http',
       integrationName: 'http',
       autoInstrumented: true,
       versions: [{
@@ -90,7 +90,7 @@ describe('generate supported integrations', () => {
     })
 
     assert.deepStrictEqual(rows, [{
-      dependencyName: 'express',
+      libraryName: 'express',
       integrationName: 'express',
       autoInstrumented: true,
       versions: [{
@@ -136,7 +136,7 @@ describe('generate supported integrations', () => {
     for (const row of rows) {
       const major = row.integrationName === 'azure-service-bus' ? 7 : 6
       assert.deepStrictEqual(row.versions, [{
-        testedRuntimes: { node: ['26.2.0'] },
+        testedRuntimes: { node: ['26.2.0', '24.16.0'] },
         supportedRange: `>=${major}.0.0`,
         tested: [`${major}.0.0`, `${major}.0.4`],
       }])
@@ -599,7 +599,7 @@ describe('generate supported integrations', () => {
     try {
       await writeSupportedIntegrations(options)
       const output = readFileSync(outputPath, 'utf8')
-      assert.match(output, /^\[\n {4}\{\n {8}"dependencyName": "node:fs"/)
+      assert.match(output, /^\[\n {4}\{\n {8}"libraryName": "node:fs"/)
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }

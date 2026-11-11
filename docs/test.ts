@@ -378,6 +378,8 @@ tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('electron');
 tracer.use('electron', { net: false, ipc: false });
+tracer.use('elevenlabs');
+tracer.use('elevenlabs', { llmobs: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
