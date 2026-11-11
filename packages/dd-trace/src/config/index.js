@@ -801,7 +801,7 @@ class Config extends ConfigBase {
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? false)
 
     if (usesOtlpTraceExporter(this) || this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: this.OTEL_TRACES_SPAN_METRICS_ENABLED }
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED)
     }
 
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')

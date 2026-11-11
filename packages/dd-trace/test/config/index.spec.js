@@ -1455,6 +1455,11 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
     assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER is not otlp', () => {
@@ -1463,6 +1468,11 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
     assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'env_var')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'env_var',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when DD_METRICS_OTEL_ENABLED is false', () => {
@@ -1480,6 +1490,11 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
     assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
   })
 
   it('should enable stats computation when OTLP span metrics are explicitly enabled', () => {
@@ -1490,6 +1505,11 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
     assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'calculated',
+    })
   })
 
   describe('HTTP server error statuses', () => {
