@@ -1,6 +1,5 @@
 'use strict'
 
-const { normalizeService } = require('../config/normalize-service')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
@@ -14,8 +13,12 @@ const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is r
 // The CDN attributes configuration requests to the DD-Service header only when it matches this, and drops any other
 // value.
 const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
-const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has nothing left the CDN can attribute usage to ' +
-  'once cleaned up; DD-Service header not sent'
+const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has no APM name the CDN can attribute usage to; ' +
+  'DD-Service header not sent'
+// The Agent cuts span service names to this many UTF-8 bytes before normalizing them.
+const MAX_APM_SERVICE_BYTES = 100
+const APM_SERVICE_ASCII_CHAR = /^[a-z0-9:./-]$/
+const APM_SERVICE_NON_ASCII_CHAR = /^[\p{L}\p{Nd}]$/u
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
@@ -115,18 +118,45 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Selects the service sent as DD-Service. The name is cleaned up the way the Agent cleans up span service names, so
- * `My Service` is attributed as `my_service`, as in APM, instead of being dropped by the CDN. Only this header value is
- * cleaned up; the tracer's service stays as configured. A name with nothing left once cleaned up is not sent. Cleaning
- * up also removes characters outside Latin-1, which make Node.js throw and would end the polling loop.
+ * Selects the service sent as DD-Service: the name APM shows for the tracer service, so usage is attributed to the
+ * same service as its traces (`My Service` is sent as `my_service`). A name whose APM form the CDN would drop, such as
+ * `_svc` or `café-api`, is not sent, rather than sent under a different name. Only this header value is derived; the
+ * tracer's service stays as configured. The APM form is plain ASCII whenever it is sent, so Node.js never throws on it.
  *
  * @param {string | undefined} service - Tracer service name.
  */
 function usageService (service) {
-  const cleaned = normalizeService(service)
-  const accepted = cleaned !== undefined && USAGE_SERVICE_PATTERN.test(cleaned)
+  const name = service ? apmServiceName(service) : ''
+  const accepted = USAGE_SERVICE_PATTERN.test(name)
   if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
-  return accepted ? cleaned : undefined
+  return accepted ? name : undefined
+}
+
+/**
+ * Normalizes a service name the way the Agent's `NormalizeService` does for spans: cut to 100 UTF-8 bytes without
+ * splitting a character, ASCII letters lowercased, letters, digits and `:./-` kept, and every other run of characters,
+ * underscores included, replaced by a single `_`, dropped at the end. Non-ASCII letters stay as they are; the CDN
+ * pattern then rejects the name. Returns an empty string when nothing is left.
+ *
+ * @param {string} service - Tracer service name.
+ */
+function apmServiceName (service) {
+  let name = ''
+  let bytes = 0
+  let pendingUnderscore = false
+  for (const character of service) {
+    bytes += Buffer.byteLength(character)
+    if (bytes > MAX_APM_SERVICE_BYTES) break
+    const char = character >= 'A' && character <= 'Z' ? character.toLowerCase() : character
+    if (APM_SERVICE_ASCII_CHAR.test(char) || (char > '\u007F' && APM_SERVICE_NON_ASCII_CHAR.test(char))) {
+      if (pendingUnderscore) name += '_'
+      pendingUnderscore = false
+      name += char
+    } else {
+      pendingUnderscore = true
+    }
+  }
+  return name
 }
 
 /**

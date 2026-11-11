@@ -279,42 +279,66 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  it('passes a service at the edges of the format the CDN accepts unchanged', () => {
-    for (const service of ['a', 'svc_name.v2:api/edge-1', `a${'b'.repeat(99)}`]) {
+  // What the Agent's NormalizeService (datadog-agent pkg/trace/traceutil/normalize v0.82.3) makes of each name,
+  // followed by the CDN format check. `undefined` means DD-Service is not sent.
+  const APM_SERVICE_NAMES = [
+    ['checkout', 'checkout'],
+    ['My Service', 'my_service'],
+    ['My-API', 'my-api'],
+    ['UPPER', 'upper'],
+    ['bad\nvalue', 'bad_value'],
+    ['a\tb', 'a_b'],
+    ['a  b!', 'a_b'],
+    ['svc ', 'svc'],
+    [' svc', undefined],
+    ['a_', 'a'],
+    ['svc-', 'svc-'],
+    ['a..b', 'a..b'],
+    ['2fa-service', '2fa-service'],
+    ['9lives', '9lives'],
+    ['unnamed-service', 'unnamed-service'],
+    ['svc_name.v2:api/edge-1', 'svc_name.v2:api/edge-1'],
+    ['my__service', 'my_service'],
+    ['Default Web Site/Shop', 'default_web_site/shop'],
+    [`a${'b'.repeat(99)}`, `a${'b'.repeat(99)}`],
+    [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
+    [`${'a'.repeat(100)} b`, 'a'.repeat(100)],
+    [`${'a'.repeat(99)}é`, 'a'.repeat(99)],
+    ['_svc', undefined],
+    ['-svc', undefined],
+    ['.svc', undefined],
+    [':svc', undefined],
+    ['café-api', undefined],
+    ['Café', undefined],
+    ['支付', undefined],
+    ['a🐶b', 'a_b'],
+    ['İstanbul', undefined],
+    ['é'.repeat(60), undefined],
+    ['___', undefined],
+    ['-', undefined],
+    ['', undefined],
+    ['   ', undefined],
+  ]
+
+  it('passes the name APM shows for the service, or none when the CDN would drop that name', () => {
+    for (const [service, sent] of APM_SERVICE_NAMES) {
       AgentlessConfigurationSource.resetHistory()
       config.service = service
 
-      assert.strictEqual(createSourceConfig().service, service)
+      assert.strictEqual(createSourceConfig().service, sent, JSON.stringify(service))
     }
   })
 
-  // The CDN drops any name outside its format, so the usage would bill without a service.
-  it('cleans up a service the CDN would drop the way the Agent does for APM', () => {
-    const cases = [
-      ['My Service', 'my_service'],
-      ['My-API', 'my-api'],
-      ['_svc', 'svc'],
-      ['bad\nvalue', 'bad_value'],
-      [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
-    ]
-    for (const [service, cleaned] of cases) {
-      AgentlessConfigurationSource.resetHistory()
-      config.service = service
-
-      assert.strictEqual(createSourceConfig().service, cleaned, service)
-    }
-  })
-
-  it('cleans up only the service it sends, not the tracer service', () => {
+  it('derives only the service it sends, not the tracer service', () => {
     config.service = 'My Service'
 
     assert.strictEqual(createSourceConfig().service, 'my_service')
     assert.strictEqual(config.service, 'My Service')
   })
 
-  // Node.js throws on header characters outside Latin-1, which would end polling.
-  it('does not pass a service with nothing left once cleaned up', () => {
-    for (const service of ['支付', '___']) {
+  // A different spelling would attribute the usage to a service APM doesn't show.
+  it('does not pass a service whose APM name the CDN would drop', () => {
+    for (const service of ['_svc', 'café-api', '支付', '___']) {
       AgentlessConfigurationSource.resetHistory()
       log.debug.resetHistory()
       config.service = service
@@ -322,8 +346,7 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(createSourceConfig().service, undefined, service)
       sinon.assert.calledWithExactly(
         log.debug,
-        'Feature Flags: service %s has nothing left the CDN can attribute usage to once cleaned up; ' +
-          'DD-Service header not sent',
+        'Feature Flags: service %s has no APM name the CDN can attribute usage to; DD-Service header not sent',
         service
       )
     }
@@ -367,16 +390,20 @@ describe('OpenFeature configuration source', () => {
       return requests[0].headers
     }
 
-    it('sends a service the CDN would drop as its cleaned-up DD-Service', async () => {
+    it('sends the name APM shows for the service in DD-Service', async () => {
       config.service = 'My Service'
 
       assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
     })
 
-    it('still polls, without DD-Service, when nothing is left of the service', async () => {
-      config.service = '支付'
+    it('still polls, without DD-Service, when the CDN would drop the APM name of the service', async () => {
+      for (const service of ['_svc', 'café-api', '支付']) {
+        source?.stop()
+        requests = []
+        config.service = service
 
-      assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false)
+        assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false, service)
+      }
     })
   })
 
