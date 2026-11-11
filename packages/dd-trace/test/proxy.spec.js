@@ -507,51 +507,8 @@ describe('TracerProxy', () => {
         }
       })
 
-      it('defers the LLMObs SDK in Test Optimization until first access', () => {
-        const entrypoint = path.resolve(__dirname, '../../../ci/init')
-        const sdkModule = require.resolve('../src/llmobs/sdk')
-        const script = `
-          const tracer = require(${JSON.stringify(entrypoint)})
-          const sdkModule = ${JSON.stringify(sdkModule)}
-          const loadedBefore = require.cache[sdkModule] !== undefined
-          const sdk = tracer.llmobs
-          const callSucceeded = sdk.trace({ kind: 'workflow', name: 'sdk-test' }, () => 42) === 42
-          process.stdout.write(JSON.stringify({
-            loadedBefore,
-            loadedAfter: require.cache[sdkModule] !== undefined,
-            sameInstance: sdk === tracer.llmobs,
-            method: typeof sdk.trace,
-            callSucceeded,
-          }), () => process.exit(0))
-        `
-        const inherited = Object.fromEntries(Object.entries(process.env)
-          .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
-        const result = spawnSync(process.execPath, ['--eval', script], {
-          encoding: 'utf8',
-          timeout: 10_000,
-          env: {
-            ...inherited,
-            DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
-            DD_APPSEC_ENABLED: 'false',
-            DD_LLMOBS_ENABLED: 'false',
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-            DD_CRASHTRACKING_ENABLED: 'false',
-            JEST_WORKER_ID: '1',
-          },
-        })
-
-        assert.strictEqual(result.status, 0, result.stderr)
-        assert.deepStrictEqual(JSON.parse(result.stdout), {
-          loadedBefore: false,
-          loadedAfter: true,
-          sameInstance: true,
-          method: 'function',
-          callSucceeded: true,
-        })
-      })
-
-      for (const enabled of ['false', 'true']) {
-        it(`keeps AppSec inactive in Test Optimization with security flags set to ${enabled}`, () => {
+      for (const enabled of ['false', 'true', undefined]) {
+        it(`keeps AppSec and LLMObs inactive with product flags set to ${enabled ?? 'unset'}`, () => {
           const entrypoint = path.resolve(__dirname, '../../../ci/init')
           const modules = [
             require.resolve('../src/appsec'),
@@ -560,21 +517,31 @@ describe('TracerProxy', () => {
             require.resolve('../src/appsec/iast'),
             require.resolve('../src/appsec/iast/taint-tracking/rewriter'),
             require.resolve('../src/otel-thread-ctx'),
+            require.resolve('../src/llmobs'),
+            require.resolve('../src/llmobs/sdk'),
           ]
           const script = `
             const tracer = require(${JSON.stringify(entrypoint)})
             const appsec = tracer.appsec
+            const llmobs = tracer.llmobs
+            llmobs.enable({ mlApp: 'test-app' })
             const result = tracer.trace('test-operation', span => {
               const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
               appsec.trackCustomEvent('test-event', {})
+              const llmobsResult = llmobs.trace({ kind: 'workflow', name: 'test-workflow' }, () => {
+                return tracer.scope().active() === span ? 42 : 0
+              })
               return {
                 sameTracer,
+                llmobsResult,
                 userTagAbsent: span.context().getTag('usr.id') === undefined,
               }
             })
             process.stdout.write(JSON.stringify({
               ...result,
-              sameSdk: appsec === tracer.appsec,
+              sameAppsec: appsec === tracer.appsec,
+              sameLlmobs: llmobs === tracer.llmobs,
+              llmobsEnabled: llmobs.enabled,
               loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
             }), () => process.exit(0))
           `
@@ -588,7 +555,8 @@ describe('TracerProxy', () => {
               DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
               DD_APPSEC_ENABLED: enabled,
               DD_IAST_ENABLED: enabled,
-              DD_LLMOBS_ENABLED: 'false',
+              DD_LLMOBS_ENABLED: enabled,
+              DD_LLMOBS_ML_APP: 'test-app',
               DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
               DD_CRASHTRACKING_ENABLED: 'false',
               JEST_WORKER_ID: '1',
@@ -599,7 +567,10 @@ describe('TracerProxy', () => {
           assert.deepStrictEqual(JSON.parse(result.stdout), {
             sameTracer: true,
             userTagAbsent: true,
-            sameSdk: true,
+            sameAppsec: true,
+            sameLlmobs: true,
+            llmobsEnabled: false,
+            llmobsResult: 42,
             loaded: modules.map(() => false),
           })
         })

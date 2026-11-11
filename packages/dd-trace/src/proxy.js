@@ -442,10 +442,9 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         if (!config.isCiVisibility) {
           lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+          lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+            () => this.openfeature)
         }
-        const defineLlmobs = config.isCiVisibility ? defineLazily : lazyProxy
-        defineLlmobs(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
-          () => this.openfeature)
 
         if (aiguardEnabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)

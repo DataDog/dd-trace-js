@@ -383,6 +383,7 @@ class Config extends ConfigBase {
     if (this.isCiVisibility) {
       setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
       setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', false)
     }
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
@@ -526,7 +527,8 @@ class Config extends ConfigBase {
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+    if (!this.isCiVisibility &&
+        !this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
