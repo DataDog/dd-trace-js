@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -334,6 +334,50 @@ describe('OpenFeature configuration source', () => {
 
     assert.strictEqual(createSourceConfig().service, undefined)
     sinon.assert.calledOnce(log.debug)
+  })
+
+  describe('with the agentless source polling', () => {
+    let clock
+    let requests
+    let source
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+      requests = []
+      const RealAgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+        '../exporters/common/request': (data, options) => { requests.push(options) },
+        '../log': log,
+      })
+      configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+        '../log': log,
+        './agentless_configuration_source': RealAgentlessConfigurationSource,
+      })
+    })
+
+    afterEach(() => {
+      source?.stop()
+      clock.restore()
+    })
+
+    async function firstRequestHeaders () {
+      source = configurationSource.create(config, sinon.spy())
+      source.start()
+      for (let i = 0; i < 10; i++) await clock.tickAsync(0)
+      assert.strictEqual(requests.length, 1)
+      return requests[0].headers
+    }
+
+    it('sends a service the CDN would drop as its cleaned-up DD-Service', async () => {
+      config.service = 'My Service'
+
+      assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
+    })
+
+    it('still polls, without DD-Service, when nothing is left of the service', async () => {
+      config.service = '支付'
+
+      assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false)
+    })
   })
 
   it('requires a Datadog API key for the default Datadog Feature Flagging endpoint', () => {
