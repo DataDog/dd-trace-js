@@ -356,12 +356,12 @@ tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-lambda');
 tracer.use('aws-lambda', { serviceRepresentationEnabled: false });
-const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.value, {
+const lambdaHandler = lambda.wrap(async (event: { value: string }, _context: object) => event.value, {
   captureLambdaPayload: true,
   enhancedMetrics: false,
   serviceRepresentationEnabled: false,
 });
-lambdaHandler({ value: 'ok' });
+lambdaHandler({ value: 'ok' }, { getRemainingTimeInMillis: () => 1000 });
 // Compile-only checks: the wrapper always returns a Promise and preserves its callable inputs and metadata.
 function checkLambdaWrapperTypes() {
   const sync = lambda.wrap((event: { value: number }) => event.value);
