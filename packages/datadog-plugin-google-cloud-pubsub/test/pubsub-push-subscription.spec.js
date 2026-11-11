@@ -266,8 +266,7 @@ describe('Push Subscription Plugin', () => {
 
         agent
           .assertSomeTraces(traces => assertMeta(findPubSubSpan(traces).meta))
-          .then(done)
-          .catch(done)
+          .then(() => done(), done)
 
         sendPushRequest(port, headers).catch(done)
       })
