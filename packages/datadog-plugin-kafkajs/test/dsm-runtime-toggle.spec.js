@@ -66,8 +66,8 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
     it('does not throw on malformed input while inactive', () => {
       const plugin = createProducer(false)
 
-      assert.doesNotThrow(() => plugin.start({}))
-      assert.doesNotThrow(() => plugin.commit(undefined))
+      plugin.start({})
+      plugin.commit(undefined)
     })
 
     it('uses the live state once the plugin is reconfigured', () => {

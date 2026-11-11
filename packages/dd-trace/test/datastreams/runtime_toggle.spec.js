@@ -130,7 +130,8 @@ describe('Data Streams Monitoring runtime toggle', () => {
 
     function createTracer (dsmEnabled) {
       process.env.DD_DATA_STREAMS_ENABLED = String(dsmEnabled)
-      config = proxyquire('../../src/config', {})({ service: 'service' })
+      const createConfig = proxyquire('../../src/config', {})
+      config = createConfig({ service: 'service' })
       config.flushInterval = 1000
       tracer = new DatadogTracer(config)
       tracer._prioritySampler.configure = sinon.stub()
@@ -202,14 +203,14 @@ describe('Data Streams Monitoring runtime toggle', () => {
       createTracer(false)
       sinon.stub(tracer._dataStreamsProcessor, 'start').throws(new Error('boom'))
 
-      assert.doesNotThrow(() => remoteConfigure(true))
+      remoteConfigure(true)
     })
 
     it('does not throw when stopping the processor fails', () => {
       createTracer(true)
       sinon.stub(tracer._dataStreamsProcessor, 'stop').throws(new Error('boom'))
 
-      assert.doesNotThrow(() => remoteConfigure(false))
+      remoteConfigure(false)
     })
   })
 })
