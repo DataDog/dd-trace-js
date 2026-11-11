@@ -102,8 +102,9 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       publishTime: req.headers['x-goog-pubsub-publish-time'],
     }
 
-    const topicName = req.headers['pubsub.topic'] || 'push-subscription-topic'
-    return { message, subscription, attrs: req.headers, topicName }
+    const topic = req.headers['pubsub.topic']
+    const topicName = topic || 'push-subscription-topic'
+    return { message, subscription, attrs: req.headers, topic, topicName }
   }
 
   #extractContext (messageData) {
@@ -111,7 +112,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   #createPushReceiveSpan (messageData, parentContext, linkContext) {
-    const { message, subscription, topicName, attrs } = messageData
+    const { message, subscription, topic, topicName, attrs } = messageData
     const subscriptionName = subscription?.slice(subscription.lastIndexOf('/') + 1) ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
@@ -136,6 +137,11 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     if (!span) {
       return null
+    }
+
+    // The placeholder used without the header is not a destination.
+    if (topic) {
+      span.setTag('messaging.destination.name', topic.slice(topic.lastIndexOf('/') + 1))
     }
 
     span._integrationName = 'google-cloud-pubsub'
