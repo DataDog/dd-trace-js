@@ -1,5 +1,7 @@
 'use strict'
 
+const semver = require('semver')
+
 const id = require('../../dd-trace/src/id')
 
 const STREAM_POLL_INTERVAL = 100
@@ -99,12 +101,26 @@ function waitForDeletedStream (kinesis, streamName, cb) {
   })
 }
 
+/**
+ * Whether the Kinesis client sends `StreamARN`: `aws-sdk` v2 rejects the member as unknown before it was modelled, and
+ * `@aws-sdk/client-kinesis` below 3.232.0 drops it while serializing, so the request names no stream.
+ *
+ * @param {string} kinesisClientName
+ * @param {string} version Version range the test installed the client for.
+ */
+function sendsStreamArn (kinesisClientName, version) {
+  if (kinesisClientName !== '@aws-sdk/client-kinesis') return false
+  const clientVersion = require(`../../../versions/${kinesisClientName}@${version}`).version()
+  return semver.gte(clientVersion, '3.232.0')
+}
+
 module.exports = {
   dataBuffer,
   getTestData,
   getTestRecord,
   putTestRecord,
   putTestRecords,
+  sendsStreamArn,
   waitForActiveStream,
   waitForDeletedStream,
 }
