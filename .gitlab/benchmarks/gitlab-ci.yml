@@ -203,7 +203,7 @@ benchmark-serverless-pr-performance:
         $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
     - when: never
 
-# DSM overhead (baseline / apm-only / apm+dsm) on benchmarks/kafka_throughput. Not gating yet.
+# DSM overhead (baseline / apm-only / apm+dsm) on benchmark/kafka_dsm. Not gating yet.
 dsm-throughput:
   stage: benchmarks
   needs: []

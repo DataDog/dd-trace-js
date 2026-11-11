@@ -1,0 +1,13 @@
+{
+  "name": "dsm-kafka-benchmark",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Kafka DSM overhead benchmark workload (benchmarking-platform js/data-streams-monitoring)",
+  "main": "run-timeit.js",
+  "scripts": {
+    "start": "node run-timeit.js"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}
