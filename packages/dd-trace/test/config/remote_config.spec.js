@@ -203,6 +203,30 @@ describe('Tracing Remote Config', () => {
       sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.8' })
     })
 
+    it('should let the more specific DD_DATA_STREAMS_ENABLED config override the less specific one', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
+
+      handler(createTransaction([
+        {
+          id: 'dsm-org',
+          file: {
+            service_target: { service: '*', env: '*' },
+            sdk_config: sdkConfigPayload({ DD_DATA_STREAMS_ENABLED: 'true' }),
+          },
+        },
+        {
+          id: 'dsm-service-env',
+          file: {
+            service_target: { service: 'test-service', env: 'test-env' },
+            sdk_config: sdkConfigPayload({ DD_DATA_STREAMS_ENABLED: 'false' }),
+          },
+        },
+      ]))
+
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_DATA_STREAMS_ENABLED: 'false' })
+    })
+
     it('should handle config removal', () => {
       enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')

@@ -8,6 +8,9 @@ const proxyquire = require('proxyquire').noPreserveCache()
 
 require('../setup/core')
 const lazyDatastreams = require('../../src/datastreams')
+const log = require('../../src/log')
+const RealDatadogTracer = require('../../src/tracer')
+const { enable: enableTracingRemoteConfig } = require('../../src/config/remote_config')
 
 const writer = { flush: sinon.stub() }
 const { DataStreamsProcessor } = proxyquire('../../src/datastreams/processor', {
@@ -31,7 +34,8 @@ describe('Data Streams Monitoring runtime toggle', () => {
   let clock
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    // Fake only timers so countTimers() is not inflated by nextTick/microtask jobs.
+    clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
     writer.flush.resetHistory()
   })
 
@@ -144,7 +148,7 @@ describe('Data Streams Monitoring runtime toggle', () => {
 
     afterEach(() => {
       sinon.restore()
-      tracer._dataStreamsProcessor.stop()
+      tracer?._dataStreamsProcessor.stop()
       delete process.env.DD_DATA_STREAMS_ENABLED
     })
 
@@ -202,15 +206,91 @@ describe('Data Streams Monitoring runtime toggle', () => {
     it('does not throw when starting the processor fails', () => {
       createTracer(false)
       sinon.stub(tracer._dataStreamsProcessor, 'start').throws(new Error('boom'))
+      const logError = sinon.stub(log, 'error')
 
       remoteConfigure(true)
+
+      sinon.assert.calledOnceWithMatch(logError, 'Error %s Data Streams Monitoring', 'starting')
     })
 
     it('does not throw when stopping the processor fails', () => {
       createTracer(true)
       sinon.stub(tracer._dataStreamsProcessor, 'stop').throws(new Error('boom'))
+      const logError = sinon.stub(log, 'error')
 
       remoteConfigure(false)
+
+      sinon.assert.calledOnceWithMatch(logError, 'Error %s Data Streams Monitoring', 'stopping')
+    })
+
+    it('toggles the processor from a delivered APM_TRACING sdk_config payload', () => {
+      createTracer(false)
+      const handlers = new Map()
+      const rc = {
+        updateCapabilities: sinon.spy(),
+        subscribeProducts: sinon.spy(),
+        setBatchHandler: (products, handler) => handlers.set(products[0], handler),
+      }
+      // Same wiring as proxy.js: the handler updates config, then the tracer is reconfigured.
+      enableTracingRemoteConfig(rc, config, () => tracer.configure(config))
+      const handleApmTracing = handlers.get('APM_TRACING')
+      const deliver = (id, sdkConfig, action = 'toApply') => {
+        const item = { id, path: `datadog/1/APM_TRACING/${id}`, file: { sdk_config: { config: sdkConfig } } }
+        handleApmTracing({
+          toApply: action === 'toApply' ? [item] : [],
+          toModify: [],
+          toUnapply: action === 'toUnapply' ? [item] : [],
+          ack: () => {},
+          error: () => {},
+        })
+      }
+
+      deliver('dsm', { DD_DATA_STREAMS_ENABLED: 'true' })
+      assert.notStrictEqual(tracer.setCheckpoint(edgeTags, null), undefined)
+
+      deliver('dsm', { DD_DATA_STREAMS_ENABLED: 'false' }, 'toUnapply')
+      assert.strictEqual(tracer.setCheckpoint(edgeTags, null), undefined)
+    })
+  })
+
+  describe('production lazy DataStreamsProcessor', () => {
+    let tracer
+    let config
+    let flush
+
+    beforeEach(() => {
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
+      const createConfig = proxyquire('../../src/config', {})
+      config = createConfig({ service: 'service' })
+      config.flushInterval = 1000
+      // Required here: proxyquire.noPreserveCache above can evict the module cache at load time.
+      const { DataStreamsWriter } = require('../../src/datastreams/writer')
+      flush = sinon.stub(DataStreamsWriter.prototype, 'flush')
+      tracer = new RealDatadogTracer(config)
+      tracer._prioritySampler.configure = sinon.stub()
+    })
+
+    afterEach(() => {
+      tracer?._dataStreamsProcessor.stop()
+      sinon.restore()
+      delete process.env.DD_DATA_STREAMS_ENABLED
+    })
+
+    it('stops with a flush and restarts its timer through the lazy wrapper', () => {
+      tracer.setCheckpoint(edgeTags, null)
+      assert.strictEqual(clock.countTimers(), 1)
+
+      config.setRemoteConfig({ DD_DATA_STREAMS_ENABLED: 'false' })
+      tracer.configure(config)
+
+      assert.strictEqual(clock.countTimers(), 0)
+      sinon.assert.calledOnce(flush)
+
+      config.setRemoteConfig(null)
+      tracer.configure(config)
+
+      assert.strictEqual(clock.countTimers(), 1)
+      assert.notStrictEqual(tracer.setCheckpoint(edgeTags, null), undefined)
     })
   })
 })
