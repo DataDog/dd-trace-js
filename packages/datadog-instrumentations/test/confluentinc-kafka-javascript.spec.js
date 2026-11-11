@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 
+const { EventEmitter } = require('node:events')
+
 const dc = require('dc-polyfill')
 const { afterEach, describe, it } = require('mocha')
 
@@ -9,6 +11,10 @@ require('../src/confluentinc-kafka-javascript')
 
 const HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@confluentinc/kafka-javascript'][0].hook
 const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
+const consumerStart = dc.channel('apm:confluentinc-kafka-javascript:consume:start')
+// librdkafka error codes the KafkaJS-compatible API reports on `error.code`.
+const ERR__STATE = -172
+const ERR__TIMED_OUT = -185
 const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
 
 /** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
@@ -216,6 +222,230 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
       const applicationHeaders = [{ 'content-type': 'application/json' }]
 
       assert.strictEqual(produce(stageProducer(), applicationHeaders), applicationHeaders)
+    })
+  })
+
+  describe('cluster id', () => {
+    /** @type {Array<{ channel: import('dc-polyfill').Channel, subscriber: (ctx: object) => void }>} */
+    const clusterIdSubscribers = []
+
+    afterEach(() => {
+      for (const { channel, subscriber } of clusterIdSubscribers) {
+        channel.unsubscribe(subscriber)
+      }
+      clusterIdSubscribers.length = 0
+    })
+
+    /**
+     * @param {import('dc-polyfill').Channel} channel
+     * @returns {Array<string | undefined>} The cluster id of every published context, in order.
+     */
+    function recordClusterIds (channel) {
+      const clusterIds = []
+      const subscriber = (ctx) => clusterIds.push((ctx.extractedArgs ?? ctx).clusterId)
+      clusterIdSubscribers.push({ channel, subscriber })
+      channel.subscribe(subscriber)
+      return clusterIds
+    }
+
+    describe('KafkaJS-compatible API', () => {
+      /**
+       * @param {(() => Promise<string>) | undefined} clusterId Stub of `clusterId()`; omitted before 1.11.0.
+       * @param {() => Promise<unknown>} [connect]
+       */
+      function stageKafka (clusterId, connect = async () => 'connected') {
+        class Client {
+          connected = false
+
+          async connect () {
+            const value = await connect()
+            this.connected = true
+            return value
+          }
+
+          async send () {
+            return []
+          }
+
+          async run ({ eachMessage }) {
+            await eachMessage({ topic: 'topic', partition: 0, message: { offset: '1', headers: {} } })
+          }
+        }
+        if (clusterId) Client.prototype.clusterId = clusterId
+
+        class Kafka {
+          producer () {
+            return new Client()
+          }
+
+          consumer () {
+            return new Client()
+          }
+        }
+
+        const module = { KafkaJS: { Kafka } }
+        HOOK(module)
+        return new module.KafkaJS.Kafka({ kafkaJS: { brokers: ['127.0.0.1:9092'] } })
+      }
+
+      it('reads the cluster id once while connecting a producer', async () => {
+        const clusterIds = recordClusterIds(producerStart)
+        const lookups = []
+        const producer = stageKafka(async function (options) {
+          lookups.push(options)
+          return 'cluster-1'
+        }).producer()
+
+        await producer.connect()
+        await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+        await producer.send({ topic: 'topic', messages: [{ value: 'b' }] })
+
+        assert.deepStrictEqual(clusterIds, ['cluster-1', 'cluster-1'])
+        assert.deepStrictEqual(lookups, [{ timeout: 0 }])
+      })
+
+      it('reports the cluster id on consumed messages', async () => {
+        const clusterIds = recordClusterIds(consumerStart)
+        const consumer = stageKafka(async () => 'cluster-1').consumer({ kafkaJS: { groupId: 'group' } })
+
+        await consumer.connect()
+        await consumer.run({ eachMessage: async () => {} })
+
+        assert.deepStrictEqual(clusterIds, ['cluster-1'])
+      })
+
+      it('retries a lookup made before the client was connected', async () => {
+        const clusterIds = recordClusterIds(producerStart)
+        let lookups = 0
+        const producer = stageKafka(async function () {
+          lookups++
+          if (!this.connected) throw Object.assign(new Error('not connected'), { code: ERR__STATE })
+          return 'cluster-1'
+        }).producer()
+
+        await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+        await producer.connect()
+        await producer.send({ topic: 'topic', messages: [{ value: 'b' }] })
+
+        assert.deepStrictEqual(clusterIds, [undefined, 'cluster-1'])
+        assert.strictEqual(lookups, 2)
+      })
+
+      it('keeps any other lookup failure without retrying', async () => {
+        const clusterIds = recordClusterIds(producerStart)
+        let lookups = 0
+        const producer = stageKafka(async () => {
+          lookups++
+          throw Object.assign(new Error('Cluster id is not available'), { code: ERR__TIMED_OUT })
+        }).producer()
+
+        await producer.connect()
+        await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+        await producer.send({ topic: 'topic', messages: [{ value: 'b' }] })
+
+        assert.deepStrictEqual(clusterIds, [undefined, undefined])
+        assert.strictEqual(lookups, 1)
+      })
+
+      it('resolves connect() with the value of the library', async () => {
+        recordClusterIds(producerStart)
+        const producer = stageKafka(async () => 'cluster-1').producer()
+
+        assert.strictEqual(await producer.connect(), 'connected')
+      })
+
+      it('rejects connect() with the error of the library and looks nothing up', async () => {
+        recordClusterIds(producerStart)
+        const error = new Error('connection refused')
+        let lookups = 0
+        const producer = stageKafka(async () => {
+          lookups++
+          return 'cluster-1'
+        }, async () => { throw error }).producer()
+
+        await assert.rejects(producer.connect(), (rejection) => rejection === error)
+        assert.strictEqual(lookups, 0)
+      })
+
+      it('reports no cluster id for releases without clusterId()', async () => {
+        const clusterIds = recordClusterIds(producerStart)
+        const producer = stageKafka(undefined).producer()
+
+        assert.strictEqual(await producer.connect(), 'connected')
+        await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+
+        assert.deepStrictEqual(clusterIds, [undefined])
+      })
+    })
+
+    describe('node-rdkafka API', () => {
+      /**
+       * @param {((timeout: number, callback: Function) => void) | undefined} clusterId Stub of `clusterId()`.
+       */
+      function stageNativeProducer (clusterId) {
+        class Producer extends EventEmitter {
+          isConnectedValue = false
+
+          isConnected () {
+            return this.isConnectedValue
+          }
+
+          produce () {}
+        }
+        if (clusterId) Producer.prototype.clusterId = clusterId
+
+        const module = { Producer }
+        HOOK(module)
+        return new module.Producer()
+      }
+
+      /**
+       * @param {{ produce: Function }} producer
+       */
+      function produceMessage (producer) {
+        producer.produce('topic', null, Buffer.from('message'), 'key')
+      }
+
+      it('starts the lookup when the client is ready', () => {
+        const clusterIds = recordClusterIds(producerStart)
+        const timeouts = []
+        const producer = stageNativeProducer(function (timeout, callback) {
+          timeouts.push(timeout)
+          callback(null, 'cluster-1')
+        })
+
+        producer.isConnectedValue = true
+        producer.emit('ready')
+        assert.deepStrictEqual(timeouts, [0])
+
+        produceMessage(producer)
+        produceMessage(producer)
+
+        assert.deepStrictEqual(clusterIds, ['cluster-1', 'cluster-1'])
+        assert.deepStrictEqual(timeouts, [0])
+      })
+
+      it('starts the lookup on the first produce of a connected client', () => {
+        const clusterIds = recordClusterIds(producerStart)
+        const producer = stageNativeProducer((timeout, callback) => callback(null, 'cluster-1'))
+
+        produceMessage(producer)
+        producer.isConnectedValue = true
+        produceMessage(producer)
+
+        assert.deepStrictEqual(clusterIds, [undefined, 'cluster-1'])
+      })
+
+      it('reports no cluster id for releases without clusterId()', () => {
+        const clusterIds = recordClusterIds(producerStart)
+        const producer = stageNativeProducer(undefined)
+
+        producer.isConnectedValue = true
+        producer.emit('ready')
+        produceMessage(producer)
+
+        assert.deepStrictEqual(clusterIds, [undefined])
+      })
     })
   })
 })
