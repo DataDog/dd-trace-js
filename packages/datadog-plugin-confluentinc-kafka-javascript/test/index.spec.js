@@ -701,6 +701,22 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
+            it('should tag the cluster id', async () => {
+              const spanPromise = agent.assertSomeTraces(traces => {
+                const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
+                assert.ok(span)
+                assertClusterId(span.meta)
+              }, { timeoutMs: 10000 })
+
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
+
+              await Promise.all([
+                consume(nativeConsumer, nativeProducer, testTopic, Buffer.from('cluster id message')),
+                spanPromise,
+              ])
+            })
+
             it('should propagate context', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0].find(s => s.name === 'kafka.consume')
