@@ -333,7 +333,9 @@ describe('Plugin', () => {
             // A fresh handle has no cached metadata, and a producer without this tracer propagates no topic.
             const sub = pubsub.subscription(created.name)
             const requestStart = dc.channel('apm:google-cloud-pubsub:request:start')
+            const requestedApis = []
             const dropPropagatedTopic = ({ api, request }) => {
+              requestedApis.push(api)
               if (api !== 'publish') return
               for (const message of request.messages) delete message.attributes['pubsub.topic']
             }
@@ -355,6 +357,43 @@ describe('Plugin', () => {
             } finally {
               requestStart.unsubscribe(dropPropagatedTopic)
               await sub.close()
+            }
+
+            // Naming the resources must not look up the subscription or topic metadata.
+            assert.ok(!requestedApis.includes('getSubscription'), `Requested: ${requestedApis}`)
+            assert.ok(!requestedApis.includes('getTopic'), `Requested: ${requestedApis}`)
+          })
+
+          it('should name the subscription of a client with an auto-detected project', async () => {
+            const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+            const [topic] = await pubsub.createTopic(topicName)
+            await topic.createSubscription('foo')
+
+            const previousProject = process.env.GOOGLE_CLOUD_PROJECT
+            process.env.GOOGLE_CLOUD_PROJECT = project
+            // Before 4.0 the subscription name keeps `{{projectId}}` until the client resolved the project.
+            const sub = new lib.PubSub().subscription('foo')
+            try {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                type: 'worker',
+                meta: {
+                  'span.kind': 'consumer',
+                  'gcp.pubsub.subscription.name': `projects/${project}/subscriptions/foo`,
+                },
+              })
+
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+              await expectedSpanPromise
+            } finally {
+              await sub.close()
+              if (previousProject === undefined) {
+                delete process.env.GOOGLE_CLOUD_PROJECT
+              } else {
+                process.env.GOOGLE_CLOUD_PROJECT = previousProject
+              }
             }
           })
 

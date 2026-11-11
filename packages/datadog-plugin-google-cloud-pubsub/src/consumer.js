@@ -132,7 +132,10 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     // The topic is only known from cached subscription metadata or the name the producer propagated.
     const topicFullName = getTopicName(topic)
     if (topicFullName) meta['gcp.pubsub.topic.name'] = topicFullName
-    const subscriptionFullName = getSubscriptionName(subscription.name)
+    // Before 4.0 a subscription created with an auto-detected project keeps `{{projectId}}` in its name; the
+    // subscriber resolved it to open the stream that delivered this message.
+    const subscriptionFullName = getSubscriptionName(subscription.name) ??
+      getSubscriptionName(message._subscriber.name)
     if (subscriptionFullName) meta['gcp.pubsub.subscription.name'] = subscriptionFullName
 
     let batchContext
