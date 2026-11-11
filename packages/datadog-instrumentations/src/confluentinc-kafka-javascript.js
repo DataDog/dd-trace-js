@@ -72,6 +72,7 @@ function instrumentBaseModule (module) {
     return shimmer.wrap(module, className, function wrapProducer (Original) {
       return function wrappedProducer (...args) {
         const producer = new Original(...args)
+        lookUpNativeClusterIdWhenReady(producer, channels.producerStart)
 
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
@@ -152,6 +153,7 @@ function instrumentBaseModule (module) {
       return function wrappedConsumer (...args) {
         const consumer = new Original(...args)
         const groupId = this.groupId || (args[0]?.['group.id'])
+        lookUpNativeClusterIdWhenReady(consumer, channels.consumerStart)
 
         // Wrap the consume method
         if (typeof consumer?.consume === 'function') {
@@ -546,6 +548,20 @@ function lookUpKafkaJsClusterId (client) {
     if (clusterId) clusterIds.set(client, clusterId)
   }, (error) => {
     if (error?.code === ERR__STATE) clusterIds.delete(client)
+  })
+}
+
+/**
+ * Start the cluster id lookup of a node-rdkafka client as soon as `connect()` fetched metadata, so produce and
+ * consume calls following the `ready` event soon enough are the only ones without it.
+ *
+ * @param {{ once?: Function }} client node-rdkafka producer or consumer.
+ * @param {import('dc-polyfill').Channel} startCh Channel whose subscribers want the id.
+ */
+function lookUpNativeClusterIdWhenReady (client, startCh) {
+  if (typeof client?.once !== 'function') return
+  client.once('ready', () => {
+    if (startCh.hasSubscribers) lookUpNativeClusterId(client)
   })
 }
 
