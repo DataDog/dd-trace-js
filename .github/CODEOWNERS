@@ -527,6 +527,7 @@
 /packages/dd-trace/src/index.js @DataDog/lang-platform-js
 /packages/dd-trace/src/pkg.js @DataDog/lang-platform-js
 /packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
+/packages/dd-trace/src/quantize-peer-ip-addresses.js @DataDog/lang-platform-js
 /packages/dd-trace/src/rate_limiter.js @DataDog/lang-platform-js
 /packages/dd-trace/src/require-package-json.js @DataDog/lang-platform-js
 /packages/dd-trace/src/ritm.js @DataDog/lang-platform-js
@@ -568,6 +569,7 @@
 /packages/dd-trace/test/profile.js @DataDog/lang-platform-js
 /packages/dd-trace/test/proxy.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/proxyquire.js @DataDog/lang-platform-js
+/packages/dd-trace/test/quantize-peer-ip-addresses.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/rate_limiter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/register.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/require-package-json.spec.js @DataDog/lang-platform-js
