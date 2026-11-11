@@ -112,7 +112,7 @@ class Kinesis extends BaseAwsSdkPlugin {
    */
   #trackShardStream (request, response) {
     if (request.operation === 'getShardIterator') {
-      this.#rememberShardStream(response?.ShardIterator, request.params?.StreamName)
+      if (request.params) this.#rememberShardStream(response?.ShardIterator, getStreamName(request.params))
     } else if (request.operation === 'getRecords') {
       this.#advanceShardStream(request.params?.ShardIterator, response?.NextShardIterator)
     }
@@ -168,9 +168,10 @@ class Kinesis extends BaseAwsSdkPlugin {
   storeStreamName (params, operation, store) {
     if (!operation) return store
     if (operation !== 'getShardIterator' && operation !== 'listShards') return store
-    if (!params || !params.StreamName) return store
+    if (!params) return store
 
-    const streamName = params.StreamName
+    const streamName = getStreamName(params)
+    if (!streamName) return store
     return { ...store, streamName }
   }
 

@@ -193,6 +193,61 @@ describe('Kinesis', function () {
         })
       }
 
+      // aws-sdk v2 releases predating the StreamARN request member reject it as an unknown parameter.
+      if (moduleName === '@aws-sdk/smithy-client') {
+        describe('when the consumer addresses the stream by ARN', () => {
+          let streamArn
+          let record
+
+          beforeEach(async () => {
+            const { StreamDescription } = await callViaPromise(kinesis, 'describeStream', { StreamName: streamNameDSM })
+            streamArn = StreamDescription.StreamARN
+            record = await callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamName: streamNameDSM,
+            })
+          })
+
+          function expectConsumerPathwayHash () {
+            return agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === 'aws.response')
+              assert.ok(span)
+              assert.strictEqual(span.meta['pathway.hash'], expectedConsumerHash)
+            }, { timeoutMs: 10000 })
+          }
+
+          it('sets the DSM topic of promise-based getRecords polls', async () => {
+            const tracePromise = expectConsumerPathwayHash()
+
+            const { ShardIterator } = await callViaPromise(kinesis, 'getShardIterator', {
+              ShardId: record.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: record.SequenceNumber,
+              StreamARN: streamArn,
+            })
+            await Promise.all([
+              tracePromise,
+              callViaPromise(kinesis, 'getRecords', { ShardIterator, Limit: 1 }),
+            ])
+          })
+
+          it('sets the DSM topic of callback-based getRecords polls', done => {
+            expectConsumerPathwayHash().then(done, done)
+
+            kinesis.getShardIterator({
+              ShardId: record.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: record.SequenceNumber,
+              StreamARN: streamArn,
+            }, (err, { ShardIterator } = {}) => {
+              if (err) return done(err)
+              kinesis.getRecords({ ShardIterator, Limit: 1 }, () => {})
+            })
+          })
+        })
+      }
+
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         let putRecordSpanMeta = {}
         agent.assertSomeTraces(traces => {
