@@ -415,7 +415,7 @@ class DataStreamsProcessor {
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.enabled) {
-      log.warn('trackTransaction called but DD_DATA_STREAMS_ENABLED is not set. Transaction will not be tracked.')
+      log.warn('trackTransaction called but Data Streams Monitoring is disabled. Transaction will not be tracked.')
       return
     }
 

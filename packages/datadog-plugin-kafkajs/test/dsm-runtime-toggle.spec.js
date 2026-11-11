@@ -16,7 +16,8 @@ const dsmContext = {
   edgeStartNs: 1e12,
 }
 
-// Broker-free: hooks are driven directly, as the instrumentation would through diagnostic channels.
+// Broker-free: hooks are driven directly. Plugins are never configure()d so they never
+// subscribe to the real diagnostic channels, and `config` is set directly as commit.spec.js does.
 describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
   let tracer
 
@@ -32,13 +33,13 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
 
   function createProducer (dsmEnabled) {
     const plugin = new KafkajsProducerPlugin(tracer, {})
-    plugin.configure({ enabled: true, dsmEnabled })
+    plugin.config = { dsmEnabled }
     return plugin
   }
 
   function createConsumer (dsmEnabled) {
     const plugin = new KafkajsConsumerPlugin(tracer, {})
-    plugin.configure({ enabled: true, dsmEnabled })
+    plugin.config = { dsmEnabled }
     return plugin
   }
 
@@ -72,7 +73,7 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
 
     it('uses the live state once the plugin is reconfigured', () => {
       const plugin = createProducer(false)
-      plugin.configure({ enabled: true, dsmEnabled: true })
+      plugin.config = { dsmEnabled: true }
       const ctx = produceContext()
 
       plugin.start(ctx)
@@ -83,7 +84,7 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
 
     it('stops injecting once reconfigured as inactive again', () => {
       const plugin = createProducer(true)
-      plugin.configure({ enabled: true, dsmEnabled: false })
+      plugin.config = { dsmEnabled: false }
       const ctx = produceContext()
 
       plugin.start(ctx)
@@ -114,7 +115,7 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
 
     it('checkpoints once reconfigured as active', () => {
       const plugin = createConsumer(false)
-      plugin.configure({ enabled: true, dsmEnabled: true })
+      plugin.config = { dsmEnabled: true }
 
       plugin.start(consumeContext())
 
@@ -126,7 +127,7 @@ describe('Plugin kafkajs DSM hooks while DSM is toggled at runtime', () => {
   describe('batch consumer', () => {
     function consumeBatch (dsmEnabled) {
       const plugin = new KafkajsBatchConsumerPlugin(tracer, {})
-      plugin.configure({ enabled: true, dsmEnabled })
+      plugin.config = { dsmEnabled }
       plugin.startSpan = sinon.stub().returns({ addLink: sinon.stub() })
       plugin.bindStart({
         topic: 't',
