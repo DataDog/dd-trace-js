@@ -83,7 +83,7 @@ async function main () {
     `RSS median: ${(metrics['process.rss_bytes.median'] / 1_000_000).toFixed(2)} MB | ` +
     `produce median: ${metrics['phase.produce_ms.median'].toFixed(3)} ms | ` +
     `consume+commit median: ${metrics['phase.consume_ms.median'].toFixed(3)} ms | ` +
-    `iteration wall median (not gated): ${metrics['process.iteration_wall_ms.median'].toFixed(3)} ms | ` +
+    `iteration wall median (context only): ${metrics['process.iteration_wall_ms.median'].toFixed(3)} ms | ` +
     `runs: ${count} (warmup ${warmup}) | commit every ${COMMIT_EVERY} | threads: ${NUM_THREADS}`
   )
 }

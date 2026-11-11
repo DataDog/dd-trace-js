@@ -140,7 +140,7 @@ async function runWorker (kafka, topic, groupId) {
 
     return { produceMs, consumeMs }
   } finally {
-    // Release a gated eachMessage if produce failed, so disconnect does not wait on it forever.
+    // Release an eachMessage waiting on consumePhase if produce failed, so disconnect does not wait on it forever.
     startConsumePhase()
     await consumer.disconnect()
     await producer.disconnect()
