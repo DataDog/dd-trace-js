@@ -1159,6 +1159,16 @@ describe('SpanStatsProcessor', () => {
       assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing'], ['tracer_blocked_value']])
     })
 
+    it('should not read /info without an Agent URL', () => {
+      const p = new SpanStatsProcessor({ ...config, url: undefined })
+      clearTimeout(p.timer)
+      p.onInterval()
+      p.onSpanFinished(clientSpan)
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      assert.deepStrictEqual(exportedPeerTags(p), [[]])
+    })
+
     it('should not read /info when agent stats are disabled', () => {
       const disabled = new SpanStatsProcessor({
         ...config,

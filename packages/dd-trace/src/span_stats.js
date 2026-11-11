@@ -28,6 +28,17 @@ const BASE_SERVICE_PEER_TAG_KEYS = [BASE_SERVICE]
 const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
 // Span kinds the Agent computes stats for even when a span is neither top-level nor measured.
 const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
+
+/**
+ * Whether stats are computed for spans of this kind even when they are neither top-level nor measured. Most spans
+ * that get here carry no or an already lowercase kind, so only others pay for lowercasing.
+ *
+ * @param {string | undefined} spanKind
+ */
+function isStatsSpanKind (spanKind) {
+  if (spanKind === undefined) return false
+  return STATS_SPAN_KINDS.has(spanKind) || STATS_SPAN_KINDS.has(spanKind.toLowerCase())
+}
 const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
@@ -365,10 +376,12 @@ class SpanStatsProcessor {
    * Stats computed before the first answer, or while the Agent does not answer, carry no peer tags.
    */
   #refreshPeerTagKeys () {
-    if (!this.enabled || this.otlpExporter || this.#fetchingAgentInfo) return
+    const { url } = this.#config
+    // Without an Agent URL, as in partial configurations built by benchmarks, there is no `/info` to read.
+    if (!this.enabled || this.otlpExporter || this.#fetchingAgentInfo || !url) return
 
     this.#fetchingAgentInfo = true
-    fetchAgentInfo(/** @type {URL} */ (this.#config.url), (error, agentInfo) => {
+    fetchAgentInfo(/** @type {URL} */ (url), (error, agentInfo) => {
       this.#fetchingAgentInfo = false
       if (error) {
         log.debug('Could not read the peer tags from the Agent /info: %s', error.message)
@@ -433,10 +446,7 @@ class SpanStatsProcessor {
 
   onSpanFinished (span) {
     if (!this.enabled && !this.otlpExporter) return
-    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED] &&
-        !STATS_SPAN_KINDS.has(span.meta[SPAN_KIND]?.toLowerCase())) {
-      return
-    }
+    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED] && !isStatsSpanKind(span.meta[SPAN_KIND])) return
 
     const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
