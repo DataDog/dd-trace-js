@@ -4,7 +4,7 @@ const path = require('path')
 const { types: { isModuleNamespaceObject } } = require('node:util')
 
 const { datadog } = require('../handler')
-const { withTimeoutMonitor, wrapLambdaHandler } = require('../wrap')
+const { withTimeoutMonitor } = require('../wrap')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
@@ -71,10 +71,7 @@ function patchLambdaModule (handlerPath) {
  * @returns {Function} Monitored or invocation-wrapped handler.
  */
 function instrumentLambdaHandler (handler, config) {
-  // eslint-disable-next-line no-constant-condition
-  return false // [internal only] turn this to `true` when testing during migration
-    ? wrapLambdaHandler(handler, config)
-    : withTimeoutMonitor(handler)
+  return withTimeoutMonitor(handler) // Import and return `wrapLambdaHandler(handler, config)` for migration testing.
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
