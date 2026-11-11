@@ -12,6 +12,7 @@ require('../src/confluentinc-kafka-javascript')
 const HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@confluentinc/kafka-javascript'][0].hook
 const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
 const consumerStart = dc.channel('apm:confluentinc-kafka-javascript:consume:start')
+const batchConsumerStart = dc.channel('apm:confluentinc-kafka-javascript:consume-batch:start')
 // librdkafka error codes the KafkaJS-compatible API reports on `error.code`.
 const ERR__STATE = -172
 const ERR__TIMED_OUT = -185
@@ -272,8 +273,15 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
             return payload.messages.map(() => ({ topicName: payload.topic, partition: 0, baseOffset: '0' }))
           }
 
-          async run ({ eachMessage }) {
-            await eachMessage({ topic: 'topic', partition: 0, message: { offset: '1', headers: {} } })
+          /**
+           * @param {{ eachMessage?: Function, eachBatch?: Function }} options
+           */
+          async run ({ eachMessage, eachBatch }) {
+            if (eachMessage) {
+              await eachMessage({ topic: 'topic', partition: 0, message: { offset: '1', headers: {} } })
+            } else if (eachBatch) {
+              await eachBatch({ batch: { topic: 'topic', partition: 0, messages: [{ offset: '1', headers: {} }] } })
+            }
           }
         }
         if (clusterId) Client.prototype.clusterId = clusterId
@@ -431,6 +439,24 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
           assert.deepStrictEqual(servers, [undefined])
         })
+
+        it('reports the brokers and the cluster id of consumed batches', async () => {
+          const batches = []
+          const subscriber = (ctx) => batches.push(ctx.extractedArgs)
+          clusterIdSubscribers.push({ channel: batchConsumerStart, subscriber })
+          batchConsumerStart.subscribe(subscriber)
+          // `run` only wraps with subscribers on the message channel, as the plugin always has both.
+          recordClusterIds(consumerStart)
+          const consumer = stageKafka(async () => 'cluster-1', undefined, { kafkaJS: { brokers: ['kafka-1:9092'] } })
+            .consumer({ kafkaJS: { groupId: 'group' } })
+
+          await consumer.connect()
+          await consumer.run({ eachBatch: async () => {} })
+
+          assert.deepStrictEqual(batches.map(({ topic, bootstrapServers, clusterId, groupId }) => ({
+            topic, bootstrapServers, clusterId, groupId,
+          })), [{ topic: 'topic', bootstrapServers: 'kafka-1:9092', clusterId: 'cluster-1', groupId: 'group' }])
+        })
       })
     })
 
@@ -501,6 +527,59 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         produceMessage(producer)
 
         assert.deepStrictEqual(clusterIds, [undefined])
+      })
+
+      /**
+       * @param {((timeout: number, callback: Function) => void) | undefined} clusterId Stub of `clusterId()`.
+       */
+      function stageNativeConsumer (clusterId) {
+        class KafkaConsumer extends EventEmitter {
+          /**
+           * @param {Record<string, string>} config
+           */
+          constructor (config) {
+            super()
+            this.config = config
+          }
+
+          isConnectedValue = false
+          globalConfig = { 'bootstrap.servers': 'kafka-1:9092,kafka-2:9092', 'group.id': 'group' }
+
+          isConnected () {
+            return this.isConnectedValue
+          }
+
+          /**
+           * @param {number} numMessages
+           * @param {Function} callback
+           */
+          consume (numMessages, callback) {
+            callback(null, [{ topic: 'topic', partition: 0, offset: 1, value: Buffer.from('message') }])
+          }
+        }
+        if (clusterId) KafkaConsumer.prototype.clusterId = clusterId
+
+        const module = { KafkaConsumer }
+        HOOK(module)
+        return new module.KafkaConsumer({ 'group.id': 'group' })
+      }
+
+      it('reports the brokers and, once ready, the cluster id of consumed messages', () => {
+        const consumed = []
+        const subscriber = (ctx) => consumed.push({ bootstrapServers: ctx.bootstrapServers, clusterId: ctx.clusterId })
+        clusterIdSubscribers.push({ channel: consumerStart, subscriber })
+        consumerStart.subscribe(subscriber)
+        const consumer = stageNativeConsumer((timeout, callback) => callback(null, 'cluster-1'))
+
+        consumer.consume(1, () => {})
+        consumer.isConnectedValue = true
+        consumer.emit('ready')
+        consumer.consume(1, () => {})
+
+        assert.deepStrictEqual(consumed, [
+          { bootstrapServers: 'kafka-1:9092,kafka-2:9092', clusterId: undefined },
+          { bootstrapServers: 'kafka-1:9092,kafka-2:9092', clusterId: 'cluster-1' },
+        ])
       })
     })
   })
