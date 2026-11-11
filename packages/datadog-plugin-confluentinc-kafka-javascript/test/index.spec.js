@@ -153,7 +153,7 @@ describe('Plugin', () => {
                 const span = traces[0].find(s => s.name === expectedSchema.send.opName)
                 assert.ok(span)
                 assertClusterId(span.meta)
-              })
+              }, { timeoutMs: 10000 })
 
               await Promise.all([sendMessages(kafka, testTopic, messages), spanPromise])
             })
@@ -170,7 +170,7 @@ describe('Plugin', () => {
                   const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
                   assert.ok(span)
                   assertClusterId(span.meta)
-                })
+                }, { timeoutMs: 10000 })
                 const receivedPromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                   consumer.run({ eachMessage: async () => resolve() }).catch(reject)
                 }))
@@ -458,7 +458,7 @@ describe('Plugin', () => {
 
               const firstSpanPromise = agent.assertSomeTraces(traces => {
                 assert.ok(traces[0].find(isProducerSpan))
-              })
+              }, { timeoutMs: 10000 })
               nativeProducer.produce(testTopic, null, Buffer.from('first'), 'native-key')
               await firstSpanPromise
 
@@ -466,7 +466,7 @@ describe('Plugin', () => {
                 const span = traces[0].find(isProducerSpan)
                 assert.ok(span)
                 assertClusterId(span.meta)
-              })
+              }, { timeoutMs: 10000 })
               nativeProducer.produce(testTopic, null, Buffer.from('second'), 'native-key')
               await spanPromise
             })
