@@ -99,8 +99,7 @@ describe('lambda', () => {
       assert.throws(loadLambdaWithHookSpy, { message: 'Malformed handler name: handler' })
     })
 
-    // The hook check and the plugin check previously disagreed: this one matched `lambda` with no
-    // trim, the other trimmed but rejected `aws-lambda`. Central array parsing now trims both checks.
+    // Both spellings disable Lambda. Trim entries locally without changing shared configuration parsing.
     for (const value of [
       'http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ', 'fs,\tlambda', ', aws-lambda,,',
     ]) {

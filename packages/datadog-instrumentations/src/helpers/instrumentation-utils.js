@@ -42,7 +42,9 @@ function matchesInstrumentation (name, version, moduleName, instrumentation) {
  * @returns {Set<string>}
  */
 function getDisabledInstrumentations () {
-  const disabled = new Set(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))
+  const disabled = new Set(
+    getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').filter(Boolean)
+  )
   if (disabled.size === 0) return disabled
 
   const expanded = new Set(disabled)

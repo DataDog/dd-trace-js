@@ -50,11 +50,8 @@ function enableLambdaEnvironment () {
   if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return
 
   if (DD_TRACE_DISABLED_PLUGINS === undefined) {
-    const { disabledPlugins: lambdaDisabledPlugins } = require('../../datadog-plugin-aws-lambda/src/defaults')
-    for (const plugin of lambdaDisabledPlugins) {
-      disabledPlugins.add(plugin)
-      maybeEnable(pluginClasses[plugin])
-    }
+    disabledPlugins.add('fs')
+    maybeEnable(pluginClasses.fs)
   }
 
   // `DD_TRACE_DISABLED_PLUGINS` is matched against the plugin id below, so the legacy `lambda`
@@ -66,6 +63,7 @@ function enableLambdaEnvironment () {
   require('./lambda')
   // Disabling the instrumentation disables the span too: there is no hook left to carry it.
   const disabledInstrumentations = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
+    ?.split(',').map(name => name.trim()) ?? []
   if (!disabledInstrumentations.includes('lambda') && !disabledInstrumentations.includes('aws-lambda')) {
     maybeEnable(plugins['aws-lambda'])
   }

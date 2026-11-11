@@ -481,24 +481,6 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
-  describe('disabled instrumentation configuration', () => {
-    for (const ddMajor of [5, 6, 7]) {
-      for (const [value, expected] of [
-        [undefined, []],
-        ['', []],
-        [' , http , lambda,, node:fs, ', ['http', 'lambda', 'node:fs']],
-      ]) {
-        it(`parses ${JSON.stringify(value)} as an array on v${ddMajor}`, () => {
-          if (value === undefined) delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
-          else process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
-          const config = getConfig(undefined, { ddMajor })
-
-          assert.deepStrictEqual(config.DD_TRACE_DISABLED_INSTRUMENTATIONS, expected)
-        })
-      }
-    }
-  })
-
   describe('AWS Lambda configuration', () => {
     for (const ddMajor of [5, 6, 7]) {
       for (const [value, expected] of [

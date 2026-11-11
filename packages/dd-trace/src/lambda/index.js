@@ -16,6 +16,7 @@ const {
   getLambdaFilePaths,
 } = require('./handler-paths')
 const disabledInstrumentations = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
+  ?.split(',').map(name => name.trim()) ?? []
 
 if (!disabledInstrumentations.includes('lambda') && !disabledInstrumentations.includes('aws-lambda')) {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')

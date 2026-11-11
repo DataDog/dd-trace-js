@@ -15,7 +15,6 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 const partialChannel = channel('dd-trace:test:partial-plugin-activation')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const log = require('../src/log')
-const { parsers } = require('../src/config/parsers')
 const CompositePlugin = require('../src/plugins/composite')
 
 describe('Plugin Manager', () => {
@@ -205,7 +204,6 @@ describe('Plugin Manager', () => {
           return process.env[name]
         },
         getValueFromEnvSources (name, skipDefault) {
-          if (name === 'DD_TRACE_DISABLED_INSTRUMENTATIONS') return parsers.ARRAY(process.env[name])
           if (name === 'DD_TRACE_NINE_ENABLED') {
             throw new Error(`${name} is not registered`)
           }
