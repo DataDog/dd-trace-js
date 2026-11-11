@@ -141,8 +141,8 @@ describe('Lambda runtime completion handoff', () => {
             order.push('handler')
             assert.strictEqual(this, receiver)
             assert.strictEqual(input, event)
-            assert.strictEqual(context, ric.context)
-            assert.strictEqual(identities.get(context), 'original')
+            assert.notStrictEqual(context, ric.context)
+            assert.strictEqual(identities.has(context), false)
             context.customerValue = 'visible'
             const child = tracer.startSpan('runtime.child', { childOf: tracer.scope().active() })
             child.finish()
@@ -359,7 +359,7 @@ describe('Lambda runtime completion handoff', () => {
   it('leaves an outer wrapper in control of returned Promise transformations', async () => {
     const ric = runtime()
     const wrapped = facade.wrap((_event, context) => {
-      assert.strictEqual(context, ric.context)
+      assert.notStrictEqual(context, ric.context)
       return Promise.resolve('inner')
     })
     let finishOuter
@@ -457,6 +457,171 @@ describe('Lambda runtime completion handoff', () => {
 
           assert.deepStrictEqual(ric.posts, [{ error: null, value: 'callback' }])
           assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(clock.countTimers(), 0)
+        })
+      }
+    }
+  })
+
+  it('shares context fields while keeping reflected customer completion methods guarded', async () => {
+    const ric = runtime()
+    const symbol = Symbol('customer')
+    ric.context.details = { shared: true }
+    let customerContext
+    let finishOuter
+    const wrapped = facade.wrap((_event, context) => {
+      customerContext = context
+      assert.notStrictEqual(context, ric.context)
+      assert.strictEqual(context.details, ric.context.details)
+      assert.deepStrictEqual(Object.keys(context), Object.keys(ric.context))
+      context.callbackWaitsForEmptyEventLoop = true
+      assert.strictEqual(ric.context.callbackWaitsForEmptyEventLoop, true)
+      context[symbol] = 'shared symbol'
+      context.customerValue = 'shared value'
+      Object.defineProperty(context, 'defined', { value: 'shared descriptor', configurable: true })
+      return Promise.resolve('inner')
+    })
+    const result = ric.invoke((...args) => wrapped(...args).then(() => {
+      return new Promise(resolve => { finishOuter = () => resolve('outer') })
+    }))
+    await clock.tickAsync(0)
+    assert.strictEqual(ric.context[symbol], 'shared symbol')
+    assert.strictEqual(ric.context.customerValue, 'shared value')
+    assert.strictEqual(ric.context.defined, 'shared descriptor')
+    ric.context.customerValue = 'changed outside'
+    assert.strictEqual(customerContext.customerValue, 'changed outside')
+    delete customerContext.customerValue
+    assert.strictEqual(Object.hasOwn(ric.context, 'customerValue'), false)
+    const copied = Object.defineProperties({}, Object.getOwnPropertyDescriptors(customerContext))
+    copied.succeed('losing reflected completion')
+    assert.strictEqual(ric.posts.length, 0)
+    finishOuter()
+    assert.strictEqual(await result, 'outer')
+    await clock.tickAsync(0)
+    assert.strictEqual(ric.posts.length, 1)
+    assert.strictEqual(ric.posts[0].value, 'outer')
+    assertExactlyOneLambdaSpan(traces)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  describe('late context completions during outer post-processing', () => {
+    for (const mode of ['auto', 'callback']) {
+      for (const outcome of ['promise', 'reject', 'throw', 'then getter']) {
+        for (const method of ['done', 'succeed', 'fail']) {
+          for (const captured of [false, true]) {
+            const title = `keeps ${outcome} selected with late ${method}, captured ${captured}, in ${mode}`
+            it(title, async () => {
+              process.env.DD_LAMBDA_HANDLER_COMPLETION = mode
+              const ric = runtime()
+              const innerError = new Error('inner failure')
+              const outerError = new Error('outer failure')
+              const failed = outcome !== 'promise'
+              let complete
+              let finishOuter
+              const wrapped = facade.wrap((_event, context) => {
+                const completion = context[method]
+                complete = () => {
+                  const values = method === 'done'
+                    ? [null, 'late context']
+                    : method === 'succeed' ? ['late context'] : [new Error('late context failure')]
+                  Reflect.apply(captured ? completion : context[method], context, values)
+                }
+                if (outcome === 'throw') throw innerError
+                if (outcome === 'then getter') return { get then () { throw innerError } }
+                return failed ? Promise.reject(innerError) : Promise.resolve('inner')
+              })
+              const result = ric.invoke((...args) => wrapped(...args).then(value => {
+                assert.strictEqual(value, 'inner')
+                return new Promise(resolve => { finishOuter = () => resolve('outer result') })
+              }, error => {
+                assert.strictEqual(error, innerError)
+                return new Promise((resolve, reject) => { finishOuter = () => reject(outerError) })
+              }))
+              const observed = failed ? assert.rejects(result, error => error === outerError) : result
+              await clock.tickAsync(0)
+              assert.strictEqual(typeof finishOuter, 'function')
+              assert.strictEqual(ric.posts.length, 0)
+              complete()
+              assert.strictEqual(ric.posts.length, 0, 'a losing context completion must not reach the runtime')
+              finishOuter()
+              if (failed) await observed
+              else assert.strictEqual(await observed, 'outer result')
+              await clock.tickAsync(0)
+
+              assert.strictEqual(ric.posts.length, 1)
+              if (failed) assert.strictEqual(ric.posts[0].error, outerError)
+              else assert.strictEqual(ric.posts[0].value, 'outer result')
+              assert.strictEqual(assertExactlyOneLambdaSpan(traces).error, failed ? 1 : 0)
+              assert.strictEqual(clock.countTimers(), 0)
+            })
+          }
+        }
+      }
+    }
+  })
+
+  describe('customer context completion selection', () => {
+    for (const mode of ['auto', 'callback']) {
+      for (const method of ['done', 'succeed', 'fail']) {
+        for (const first of ['context', 'promise']) {
+          it(`keeps ${first} before queued context.${method} in ${mode}`, async () => {
+            const ric = runtime()
+            const error = new Error('context failure')
+            let rejectPromise
+            const wrapped = facade.wrap((_event, context) => {
+              queueMicrotask(() => queueMicrotask(() => {
+                if (method === 'done') context.done(null, 'context')
+                else if (method === 'succeed') context.succeed('context')
+                else context.fail(error)
+              }))
+              return first === 'promise'
+                ? Promise.resolve('promise')
+                : new Promise((resolve, reject) => { rejectPromise = reject })
+            }, { handlerCompletion: mode })
+            const failed = first === 'context' && method === 'fail'
+            const result = ric.invoke(wrapped)
+            if (failed) await assert.rejects(result, failure => failure === error)
+            else assert.strictEqual(await result, first)
+            rejectPromise?.(new Error('losing returned Promise'))
+            await clock.tickAsync(0)
+
+            assert.strictEqual(ric.posts.length, 1)
+            if (failed) assert.strictEqual(ric.posts[0].error, error)
+            else assert.strictEqual(ric.posts[0].value, first)
+            assert.strictEqual(assertExactlyOneLambdaSpan(traces).error, failed ? 1 : 0)
+            assert.strictEqual(clock.countTimers(), 0)
+          })
+        }
+      }
+    }
+
+    for (const monitor of [false, true]) {
+      for (const method of ['done', 'succeed', 'fail']) {
+        it(`ignores late context.${method} with tracing disabled and monitoring ${monitor}`, async () => {
+          tracer.use('aws-lambda', { enabled: false })
+          const ric = runtime()
+          if (!monitor) ric.context.getRemainingTimeInMillis = () => NaN
+          let customerContext
+          let finishOuter
+          const wrapped = facade.wrap((_event, context) => {
+            customerContext = context
+            return Promise.resolve('inner')
+          })
+          const result = ric.invoke((...args) => wrapped(...args).then(() => {
+            return new Promise(resolve => { finishOuter = () => resolve('outer') })
+          }))
+          await clock.tickAsync(0)
+          if (method === 'done') customerContext.done(null, 'late context')
+          else if (method === 'succeed') customerContext.succeed('late context')
+          else customerContext.fail(new Error('late context failure'))
+          assert.strictEqual(ric.posts.length, 0)
+          finishOuter()
+          assert.strictEqual(await result, 'outer')
+          await clock.tickAsync(0)
+
+          assert.strictEqual(ric.posts.length, 1)
+          assert.strictEqual(ric.posts[0].value, 'outer')
+          assert.strictEqual(traces.length, 0)
           assert.strictEqual(clock.countTimers(), 0)
         })
       }

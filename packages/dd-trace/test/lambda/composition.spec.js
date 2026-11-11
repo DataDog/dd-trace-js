@@ -296,13 +296,14 @@ describe('Lambda facade and hook composition', () => {
 
     it('lets a per-handler auto option preserve delayed context completion over the environment', async () => {
       process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
-      const wrapped = facade.wrap(() => undefined, { handlerCompletion: 'auto' })
+      let customerContext
+      const wrapped = facade.wrap((_event, ctx) => { customerContext = ctx }, { handlerCompletion: 'auto' })
       let settled = false
       const observed = wrapped({}, context).then(value => { settled = true; return value })
       await clock.tickAsync(0)
       assert.strictEqual(settled, false)
       assert.strictEqual(clock.countTimers(), 1)
-      context.succeed('context result')
+      customerContext.succeed('context result')
       assert.strictEqual(await observed, 'context result')
       assertExactlyOneLambdaSpan(traces)
       assert.strictEqual(clock.countTimers(), 0)
@@ -556,14 +557,15 @@ describe('Lambda facade and hook composition', () => {
 
   for (const name of ['done', 'succeed', 'fail']) {
     it(`waits for context.${name} through the public facade`, async () => {
-      const wrapped = facade.wrap(() => undefined)
+      let customerContext
+      const wrapped = facade.wrap((_event, ctx) => { customerContext = ctx })
       const result = wrapped({}, context)
       await Promise.resolve()
       assert.strictEqual(traces.length, 0)
       assert.strictEqual(clock.countTimers(), 1)
-      if (name === 'done') context.done(null, 'done')
-      else if (name === 'succeed') context.succeed('done')
-      else context.fail(new Error('failure'))
+      if (name === 'done') customerContext.done(null, 'done')
+      else if (name === 'succeed') customerContext.succeed('done')
+      else customerContext.fail(new Error('failure'))
       if (name === 'fail') await assert.rejects(result, { message: 'failure' })
       else assert.strictEqual(await result, 'done')
       assertExactlyOneLambdaSpan(traces)

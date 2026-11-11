@@ -24,7 +24,7 @@ function promisifiedHandler (handler, completionMode = 'auto') {
 }
 
 /**
- * Adapts customer completion while preserving the original receiver and context.
+ * Adapts customer completion while preserving the receiver and sharing context fields.
  * The optional invocation owns lifecycle publication and native completion forwarding.
  *
  * @param {Function} handler Customer handler.
@@ -52,7 +52,7 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
   ])
   let callbackSettled = false
   let nativeCompleted = false
-  let acceptsCallback = true
+  let acceptsCompletion = true
   let racePending = false
   /** @type {(() => unknown) | undefined} */
   let pendingNativeCompletion
@@ -71,9 +71,7 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
       }
       if (!invocation) return
       const forward = () => {
-        // Return completion can precede an outer wrapper's final result. Ignore late callbacks,
-        // but allow context methods to deliver that result through the runtime's Promise continuation.
-        if (nativeCompleted || (callback && (!acceptsCallback || invocation.completed))) return
+        if (nativeCompleted || !acceptsCompletion || invocation.completed) return
         // The monitor observes a supplied callback, including a runtime's event-loop-drain policy.
         // Context methods and synthetic callbacks finish the lifecycle before native delivery.
         if (first && !(callback && invocation.callbackObserved)) invocation.complete(error, result, failed)
@@ -108,26 +106,38 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
     }
   })
 
-  context.done = modifiedLegacyDoneCallback
-  context.succeed = modifiedLegacySucceedCallback
-  context.fail = modifiedLegacyFailCallback
+  const completions = {
+    done: modifiedLegacyDoneCallback,
+    succeed: modifiedLegacySucceedCallback,
+    fail: modifiedLegacyFailCallback,
+  }
+  const invocationArgs = [...args]
   if (invocation) {
-    const replacements = [modifiedLegacyDoneCallback, modifiedLegacySucceedCallback, modifiedLegacyFailCallback]
+    if (contextIndex !== -1) invocationArgs[contextIndex] = createContextView(context, completions)
+    // RIC captures these after dispatch to deliver the outer wrapper's final Promise result.
+    // Customer context methods use the selection guard instead, even after native methods are restored.
+    const handoffs = originals.map(([, , original]) => function (...values) {
+      if (nativeCompleted) return
+      nativeCompleted = true
+      if (typeof original === 'function') return Reflect.apply(original, this, values)
+    })
+    for (let index = 0; index < originals.length; index++) context[originals[index][0]] = handoffs[index]
     invocation.restore = () => {
       for (let index = 0; index < originals.length; index++) {
         const [name, descriptor] = originals[index]
-        if (getDataProperty(context, name) !== replacements[index]) continue
+        if (getDataProperty(context, name) !== handoffs[index]) continue
         if (descriptor) Object.defineProperty(context, name, descriptor)
         else delete context[name]
       }
     }
+  } else {
+    Object.assign(context, completions)
   }
 
   // Explicit callback mode covers rest/default parameters whose arity hides callback intent.
   // A supplied runtime callback alone does not select callback completion in auto mode.
   const takesCallback = (completionMode === 'callback' || getDataProperty(handler, 'length') >= 3) &&
     contextIndex !== 2
-  const invocationArgs = [...args]
   if (suppliedCallbackIndex !== -1) invocationArgs[suppliedCallbackIndex] = modifiedCallback
   else if (takesCallback) invocationArgs[2] = modifiedCallback
 
@@ -145,7 +155,7 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
         const settle = (fromCallback, failed, value) => {
           if (!racePending) return
           racePending = false
-          acceptsCallback = fromCallback
+          acceptsCompletion = fromCallback
           const forward = pendingNativeCompletion
           pendingNativeCompletion = undefined
           if (failed) reject(value)
@@ -163,17 +173,55 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
     }
   } catch (error) {
     if (callbackSettled) return callbackPromise
-    acceptsCallback = false
+    acceptsCompletion = false
     // A thrown handler or then getter can leave a callback scheduled after this rejection.
     callbackPromise.catch(noop)
     return Promise.reject(error)
   }
   if (callbackSettled || completionMode === 'callback' ||
       isCallbackCompletion(handler, result, contextIndex)) return callbackPromise
-  acceptsCallback = false
+  acceptsCompletion = false
   // Only discarded callback Promises need an observer; returned and raced Promises are already consumed.
   callbackPromise.catch(noop)
   return Promise.resolve(result)
+}
+
+/**
+ * Shares runtime fields and mutations while keeping customer completion methods separate.
+ *
+ * @param {object} context Runtime context.
+ * @param {Record<string, Function>} completions Guarded customer completion methods.
+ * @returns {object} Customer context view.
+ */
+function createContextView (context, completions) {
+  return new Proxy(context, {
+    /**
+     * @param {object} target
+     * @param {string | symbol} key
+     * @param {object} receiver
+     */
+    get (target, key, receiver) {
+      return Object.hasOwn(completions, key) ? completions[key] : Reflect.get(target, key, receiver)
+    },
+    /**
+     * @param {object} target
+     * @param {string | symbol} key
+     * @param {unknown} value
+     * @param {object} receiver
+     */
+    set (target, key, value, receiver) {
+      if (Object.hasOwn(completions, key)) return Reflect.set(completions, key, value)
+      return Reflect.set(target, key, value, receiver)
+    },
+    /**
+     * @param {object} target
+     * @param {string | symbol} key
+     */
+    getOwnPropertyDescriptor (target, key) {
+      // Copying context descriptors must retain the customer guard, not expose native completion.
+      return Object.getOwnPropertyDescriptor(completions, key) ?? Object.getOwnPropertyDescriptor(target, key)
+    },
+  })
 }
 
 /**
