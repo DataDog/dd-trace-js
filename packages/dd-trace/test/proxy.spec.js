@@ -619,6 +619,17 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(pluginManager.configure, config)
       })
 
+      it('applies DD_DATA_STREAMS_ENABLED to the config before reconfiguring the tracer', () => {
+        proxy.init()
+        tracer.configure.resetHistory()
+
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('dsm', { DD_DATA_STREAMS_ENABLED: 'true' }))
+
+        sinon.assert.calledWith(config.setRemoteConfig, { DD_DATA_STREAMS_ENABLED: 'true' })
+        sinon.assert.callOrder(config.setRemoteConfig, tracer.configure)
+      })
+
       it('logs missing AI Guard configuration once across remote config updates', () => {
         config.DD_API_KEY = undefined
         config.apmTracingEnabled = true
