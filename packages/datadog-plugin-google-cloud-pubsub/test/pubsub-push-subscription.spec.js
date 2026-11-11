@@ -255,6 +255,44 @@ describe('Push Subscription Plugin', () => {
       })
     })
 
+    it('should set the destination name from the pubsub.topic header', (done) => {
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        agent
+          .assertSomeTraces(traces => {
+            const pubsubSpan = findPubSubSpan(traces)
+
+            assertObjectContains(pubsubSpan.meta, {
+              'pubsub.topic': 'projects/test-project/topics/test-topic',
+              'messaging.destination.name': 'test-topic',
+            })
+          })
+          .then(done)
+          .catch(done)
+
+        sendPushRequest(port, { 'pubsub.topic': 'projects/test-project/topics/test-topic' }).catch(done)
+      })
+    })
+
+    it('should not set a destination name without the pubsub.topic header', (done) => {
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        agent
+          .assertSomeTraces(traces => {
+            const pubsubSpan = findPubSubSpan(traces)
+
+            assert.strictEqual(pubsubSpan.meta['pubsub.topic'], 'push-subscription-topic')
+            assert.ok(!('messaging.destination.name' in pubsubSpan.meta))
+          })
+          .then(done)
+          .catch(done)
+
+        sendPushRequest(port).catch(done)
+      })
+    })
+
     it('should propagate distributed trace context from producer to push receive', (done) => {
       const producerTraceId = '1234567890abcdef'
       const producerSpanId = 'fedcba0987654321'
