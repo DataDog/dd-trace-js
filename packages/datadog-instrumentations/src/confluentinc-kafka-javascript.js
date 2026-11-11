@@ -171,6 +171,7 @@ function instrumentBaseModule (module) {
               const ctx = {
                 groupId,
                 clusterId: clusterIds.get(consumer) ?? undefined,
+                bootstrapServers: this.globalConfig?.['bootstrap.servers'],
               }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
@@ -349,6 +350,8 @@ function instrumentKafkaJS (kafkaJS) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
+              // Like producers: the brokers of the client, else those of the consumer configuration.
+              const bootstrapServers = kafka._ddBrokers || config?.['bootstrap.servers']
 
               if (typeof consumer?.connect === 'function') {
                 shimmer.wrap(consumer, 'connect', connect => wrapConnect(connect, consumer))
@@ -382,6 +385,7 @@ function instrumentKafkaJS (kafkaJS) {
                             message: payload?.message,
                             groupId,
                             clusterId: clusterIds.get(consumer) ?? undefined,
+                            bootstrapServers,
                           }
                         })
                     } else if (eachBatch) {
@@ -402,6 +406,7 @@ function instrumentKafkaJS (kafkaJS) {
                             messages: batch?.messages,
                             groupId,
                             clusterId: clusterIds.get(consumer) ?? undefined,
+                            bootstrapServers,
                           }
                         }
                       )

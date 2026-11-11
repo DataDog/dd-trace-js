@@ -253,8 +253,9 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
        * @param {((options: { timeout: number }) => Promise<string>) | undefined} clusterId Stub of `clusterId()`;
        *   omitted before 1.11.0.
        * @param {() => Promise<unknown>} [connect]
+       * @param {object} [options] `Kafka` constructor options.
        */
-      function stageKafka (clusterId, connect = async () => 'connected') {
+      function stageKafka (clusterId, connect = async () => 'connected', options = undefined) {
         class Client {
           connected = false
 
@@ -278,6 +279,13 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         if (clusterId) Client.prototype.clusterId = clusterId
 
         class Kafka {
+          /**
+           * @param {object} [options]
+           */
+          constructor (options) {
+            this.options = options
+          }
+
           producer () {
             return new Client()
           }
@@ -292,7 +300,7 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
         const module = { KafkaJS: { Kafka } }
         HOOK(module)
-        return new module.KafkaJS.Kafka()
+        return new module.KafkaJS.Kafka(options)
       }
 
       it('reads the cluster id once while connecting a producer', async () => {
@@ -382,6 +390,47 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
 
         assert.deepStrictEqual(clusterIds, [undefined])
+      })
+      describe('consumer bootstrap servers', () => {
+        /**
+         * @param {object | undefined} kafkaOptions
+         * @param {object} consumerConfig
+         * @returns {Promise<Array<string | undefined>>}
+         */
+        async function consumedBootstrapServers (kafkaOptions, consumerConfig) {
+          const servers = []
+          const subscriber = (ctx) => servers.push(ctx.extractedArgs.bootstrapServers)
+          clusterIdSubscribers.push({ channel: consumerStart, subscriber })
+          consumerStart.subscribe(subscriber)
+          const consumer = stageKafka(undefined, undefined, kafkaOptions).consumer(consumerConfig)
+          await consumer.connect()
+          await consumer.run({ eachMessage: async () => {} })
+          return servers
+        }
+
+        it('reports the brokers of the client', async () => {
+          const servers = await consumedBootstrapServers(
+            { kafkaJS: { brokers: ['kafka-1:9092', 'kafka-2:9092'] } },
+            { kafkaJS: { groupId: 'group' } }
+          )
+
+          assert.deepStrictEqual(servers, ['kafka-1:9092,kafka-2:9092'])
+        })
+
+        it('falls back to the bootstrap.servers of the consumer configuration', async () => {
+          const servers = await consumedBootstrapServers(undefined, {
+            'group.id': 'group',
+            'bootstrap.servers': 'kafka-1:9092',
+          })
+
+          assert.deepStrictEqual(servers, ['kafka-1:9092'])
+        })
+
+        it('reports none when neither names brokers', async () => {
+          const servers = await consumedBootstrapServers(undefined, { kafkaJS: { groupId: 'group' } })
+
+          assert.deepStrictEqual(servers, [undefined])
+        })
       })
     })
 
