@@ -205,6 +205,7 @@ describe('Plugin Structure Validation', () => {
       '@azure/cosmos',
       '@langchain/core',
       '@langchain/langgraph',
+      '@openai/agents-realtime',
       '@supabase/auth-js',
       '@supabase/functions-js',
       '@supabase/postgrest-js',
