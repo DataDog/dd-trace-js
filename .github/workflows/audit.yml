@@ -2,32 +2,10 @@ name: Audit
 
 on:
   pull_request:
-    paths:
-      - "package.json"
-      - "bun.lock"
-      - "bunfig.toml"
-      - "vendor/package.json"
-      - "vendor/bun.lock"
-      - "docs/package.json"
-      - "docs/bun.lock"
-      - ".github/actions/datadog-ci/package.json"
-      - ".github/actions/datadog-ci/bun.lock"
-      - ".github/all-green/package.json"
-      - ".github/all-green/bun.lock"
-      - ".github/workflow-job-names/package.json"
-      - ".github/workflow-job-names/bun.lock"
-      - "packages/dd-trace/test/plugins/versions/package.json"
-      - ".github/actions/node/**"
-      - ".github/audit-allowlist.json"
-      - ".github/workflows/audit.yml"
-      - "scripts/audit.js"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
-
-permissions:
-  contents: read
 
 jobs:
   dependencies:
