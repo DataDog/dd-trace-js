@@ -240,6 +240,7 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'pubsub.topic': resource,
+                'messaging.destination.name': topicName,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
                 component: 'google-cloud-pubsub',
@@ -284,6 +285,7 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource,
+                'messaging.destination.name': topicName,
                 'pubsub.subscription': subscriptionName,
                 'pubsub.subscription_type': 'pull',
               },

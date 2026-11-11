@@ -99,6 +99,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         'gcloud.project_id': projectId,
         'pubsub.method': api,
         'pubsub.topic': topic,
+        'messaging.destination.name': topicName,
         'span.kind': 'producer',
         '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
