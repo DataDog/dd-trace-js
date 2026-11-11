@@ -162,7 +162,7 @@ class AgentlessConfigurationSource {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
-    // Lets the CDN attribute this request's usage to the service.
+    // The CDN uses this header to attribute the usage of this request to the service.
     if (this.#config.service) headers['DD-Service'] = this.#config.service
     if (this.#etag) headers['If-None-Match'] = this.#etag
 

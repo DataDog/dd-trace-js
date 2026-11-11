@@ -279,8 +279,8 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  // What the Agent's NormalizeService (datadog-agent pkg/trace/traceutil/normalize v0.82.3) makes of each name,
-  // followed by the CDN format check. `undefined` means DD-Service is not sent.
+  // Expected DD-Service values. They come from the Agent NormalizeService (datadog-agent
+  // pkg/trace/traceutil/normalize v0.82.3) and the CDN format check. `undefined` means: no DD-Service header.
   const APM_SERVICE_NAMES = [
     ['checkout', 'checkout'],
     ['My Service', 'my_service'],
@@ -336,7 +336,7 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(config.service, 'My Service')
   })
 
-  // A different spelling would attribute the usage to a service APM doesn't show.
+  // A different name attributes the usage to a service that APM does not show.
   it('does not pass a service whose APM name the CDN would drop', () => {
     for (const service of ['_svc', 'café-api', '支付', '___']) {
       AgentlessConfigurationSource.resetHistory()

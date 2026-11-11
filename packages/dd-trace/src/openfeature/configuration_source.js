@@ -10,12 +10,11 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
-// The CDN attributes configuration requests to the DD-Service header only when it matches this, and drops any other
-// value.
+// The CDN uses DD-Service for usage attribution only when the value matches this pattern. It ignores other values.
 const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
 const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has no APM name the CDN can attribute usage to; ' +
   'DD-Service header not sent'
-// The Agent cuts span service names to this many UTF-8 bytes before normalizing them.
+// The Agent cuts span service names to this many UTF-8 bytes before it normalizes them.
 const MAX_APM_SERVICE_BYTES = 100
 const APM_SERVICE_ASCII_CHAR = /^[a-z0-9:./-]$/
 const APM_SERVICE_NON_ASCII_CHAR = /^[\p{L}\p{Nd}]$/u
@@ -118,10 +117,12 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Selects the service sent as DD-Service: the name APM shows for the tracer service, so usage is attributed to the
- * same service as its traces (`My Service` is sent as `my_service`). A name whose APM form the CDN would drop, such as
- * `_svc` or `café-api`, is not sent, rather than sent under a different name. Only this header value is derived; the
- * tracer's service stays as configured. The APM form is plain ASCII whenever it is sent, so Node.js never throws on it.
+ * Selects the DD-Service value: the name that APM shows for the tracer service. Thus the usage goes to the same
+ * service as the traces. For example, `My Service` becomes `my_service`.
+ *
+ * If the CDN does not accept the APM name (for example `_svc` or `café-api`), no value is sent. A different name
+ * would attribute the usage to the wrong service. The tracer service itself does not change. A value that is sent is
+ * always plain ASCII, so Node.js cannot throw on the header.
  *
  * @param {string | undefined} service - Tracer service name.
  */
@@ -133,10 +134,14 @@ function usageService (service) {
 }
 
 /**
- * Normalizes a service name the way the Agent's `NormalizeService` does for spans: cut to 100 UTF-8 bytes without
- * splitting a character, ASCII letters lowercased, letters, digits and `:./-` kept, and every other run of characters,
- * underscores included, replaced by a single `_`, dropped at the end. Non-ASCII letters stay as they are; the CDN
- * pattern then rejects the name. Returns an empty string when nothing is left.
+ * Normalizes a service name with the same rules as the Agent `NormalizeService` for spans. Returns an empty string if
+ * nothing is left. The rules:
+ * - Cut the name to 100 UTF-8 bytes. Do not split a character.
+ * - Change ASCII capital letters to lowercase.
+ * - Keep letters, digits, and `:./-`.
+ * - Replace each run of other characters (`_` included) with one `_`. Remove a run at the end.
+ *
+ * Non-ASCII letters stay. The CDN pattern then rejects the name.
  *
  * @param {string} service - Tracer service name.
  */
