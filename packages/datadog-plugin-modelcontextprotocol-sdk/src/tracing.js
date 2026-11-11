@@ -5,6 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const {
   DISTRIBUTED_TRACE_META_KEY,
+  setErrorTags,
   tagErrorResult,
 } = require('./utils')
 
@@ -133,6 +134,11 @@ class McpServerRequestPlugin extends McpPlugin {
   onEnd (span, ctx) {
     if (ctx.error) {
       span.setTag('error', ctx.error)
+    } else if (ctx.extra?.mcpReq?.signal?.aborted) {
+      // SDK 2.x drops the result of a handler whose connection closed, so the client never gets it.
+      setErrorTags(span, 'Connection closed')
+    } else if (ctx.result?.resultType === 'input_required') {
+      span.setTag('mcp.input_required', true)
     } else {
       tagErrorResult(span, ctx.result)
     }
@@ -160,6 +166,12 @@ class McpServerToolCallPlugin extends McpPlugin {
   onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
+class McpServerV2ToolCallPlugin extends McpServerToolCallPlugin {
+  static id = 'modelcontextprotocol_server_tool_v2'
+  static component = McpServerToolCallPlugin.id
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/server:McpServer_executeToolHandler'
+}
+
 module.exports = [
   McpPropagationPlugin,
   McpToolCallPlugin,
@@ -170,4 +182,5 @@ module.exports = [
   McpGetPromptPlugin,
   McpServerRequestPlugin,
   McpServerToolCallPlugin,
+  McpServerV2ToolCallPlugin,
 ]

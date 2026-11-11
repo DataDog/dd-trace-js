@@ -147,7 +147,7 @@ function wrapProtocol (Protocol) {
       }
 
       wrapAbortControllers(this)
-      const ctx = { request, extra }
+      const ctx = { request, extra, server: this }
       serverRequestCh.start.runStores(ctx, () => {
         let pending = pendingContexts.get(this)
         if (!pending) {

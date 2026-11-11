@@ -117,6 +117,39 @@ describe('integrations', () => {
           })
         })
 
+        it('creates a server tool span under the client tool span', async () => {
+          await client.callTool({ name: 'test-tool', arguments: {} })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const serverApmSpan = apmSpans.find(span => span.meta['span.kind'] === 'server')
+          // The suite shares one client, so the JSON-RPC id depends on the test order.
+          const requestId = JSON.parse(llmobsSpans[1].meta.input.value).id
+          assert.equal(typeof requestId, 'number')
+
+          assertLlmObsSpanEvent(llmobsSpans[1], {
+            span: serverApmSpan,
+            parentId: llmobsSpans[0].span_id,
+            spanKind: 'tool',
+            name: 'test-tool',
+            inputValue: JSON.stringify({
+              method: 'tools/call',
+              params: { name: 'test-tool', arguments: {} },
+              jsonrpc: '2.0',
+              id: requestId,
+            }),
+            outputValue: JSON.stringify({ content: [{ type: 'text', text: 'Result from test-tool' }] }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_method: 'tools/call',
+              mcp_tool: 'test-tool',
+              mcp_tool_kind: 'server',
+              mcp_client_name: 'test-client',
+              mcp_client_version: '1.0.0',
+            },
+          })
+        })
+
         it('creates a tool span with arguments', async () => {
           const result = await client.callTool({
             name: 'test-tool',
