@@ -1,6 +1,7 @@
 'use strict'
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const { TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY } = require('../constants')
 
 /**
  * Durations of the pauses caused by probes, shared between the debugger worker thread and the main thread.
@@ -17,7 +18,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@d
  */
 
 // Created the same way as the sketch of telemetry distributions, so both map durations to the same keys
-const { mapping } = new LogCollapsingLowestDenseDDSketch()
+const { mapping } = new LogCollapsingLowestDenseDDSketch({ relativeAccuracy: TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY })
 
 const MIN_KEY = mapping.key(0.001) // 1 µs
 const MAX_KEY = mapping.key(60 * 60 * 1000) // 1 hour

@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@elevenlabs/elevenlabs-js': () => require('../elevenlabs'),
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
@@ -50,7 +51,7 @@ module.exports = {
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
-  '@opentelemetry/sdk-trace': () => require('../otel-sdk-trace'),
+  '@opentelemetry/sdk-trace': { esmFirst: true, fn: () => require('../otel-sdk-trace') },
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@prisma/client': { esmFirst: true, fn: () => require('../prisma') },
   './runtime/library.js': () => require('../prisma'),
@@ -58,10 +59,6 @@ module.exports = {
   '@smithy/core': () => require('../aws-sdk'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
-  '@wdio/cli': { esmFirst: true, fn: () => require('../webdriverio') },
-  '@wdio/jasmine-framework': { esmFirst: true, fn: () => require('../webdriverio') },
-  '@wdio/local-runner': { esmFirst: true, fn: () => require('../webdriverio') },
-  '@wdio/utils': { esmFirst: true, fn: () => require('../webdriverio') },
   aerospike: () => require('../aerospike'),
   ai: () => require('../ai'),
   amqp10: () => require('../amqp10'),
@@ -87,7 +84,7 @@ module.exports = {
   fastify: () => require('../fastify'),
   'find-my-way': () => require('../find-my-way'),
   'generic-pool': () => require('../generic-pool'),
-  graphql: () => require('../graphql'),
+  graphql: { esmFirst: true, fn: () => require('../graphql') },
   'graphql-jit': { esmFirst: true, fn: () => require('../graphql') },
   grpc: () => require('../grpc'),
   handlebars: () => require('../handlebars'),
@@ -156,7 +153,6 @@ module.exports = {
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },
-  webdriverio: { esmFirst: true, fn: () => require('../webdriverio') },
   when: () => require('../when'),
   winston: () => require('../winston'),
   workerpool: () => require('../mocha'),

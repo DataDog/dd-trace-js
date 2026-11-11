@@ -888,17 +888,19 @@ class Experiment {
     let errorType = null
     let errorMessage = null
 
-    const autoTags = {
+    // Inherited by every span the task creates, so the multi-run rollups count their tokens and cost.
+    // Same key set Python propagates; the record id stays on the experiment span only.
+    const experimentTags = {
       experiment_id: experimentId,
       run_id: runId,
       run_iteration: runIteration,
       project_id: projectId,
       dataset_id: datasetId,
-      dataset_record_id: datasetRecordId,
       dataset_name: this.#dataset.name(),
       experiment_name: this.#name,
     }
-    if (this.#projectName !== undefined) autoTags.project_name = this.#projectName
+    if (this.#projectName !== undefined) experimentTags.project_name = this.#projectName
+    const autoTags = { ...experimentTags, dataset_record_id: datasetRecordId }
     const tags = mergeTags(this.#tags, { ...recordTagsToObject(record.tags), ...autoTags })
 
     const execute = () => this.#runWithRetries(
@@ -912,6 +914,7 @@ class Experiment {
         await this.#llmobs.trace({
           kind: 'experiment',
           name: this.#task.name || this.#name,
+          _experimentTags: experimentTags,
         }, async (span) => {
           spanContext = this.#llmobs.exportSpan(span)
           try {

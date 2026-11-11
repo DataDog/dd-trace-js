@@ -183,41 +183,77 @@ describe('Plugin', () => {
           })
         })
 
-        it('should allow disabling a specific span kind of a service', (done) => {
-          let total = 0
+        it('should allow disabling a specific span kind of a service', async () => {
+          let stopObservation
+          const observationPromise = new Promise((resolve, reject) => {
+            let quietPeriodTimeout
+            let traceReceived = false
+            let settled = false
 
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            assertObjectContains(span, {
-              name: 'aws.request',
-              resource: `putObject ${bucketName}`,
-            })
+            const finish = (error) => {
+              if (settled) return
 
-            assertObjectContains(span.meta, {
-              bucketname: bucketName,
-              aws_service: 'S3',
-              region: 'us-east-1',
-            })
+              settled = true
+              clearTimeout(firstTraceTimeout)
+              clearTimeout(quietPeriodTimeout)
+              agent.unsubscribe(onTrace)
+              error ? reject(error) : resolve()
+            }
+            const onTrace = traces => {
+              if (traceReceived) {
+                finish(new Error('Agent received an unexpected additional trace payload.'))
+                return
+              }
 
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
+              traceReceived = true
+              clearTimeout(firstTraceTimeout)
 
-          s3.putObject({
+              try {
+                const spans = traces.flat()
+                assert.strictEqual(spans.length, 1)
+                const span = spans[0]
+
+                assertObjectContains(span, {
+                  name: 'aws.request',
+                  resource: `putObject ${bucketName}`,
+                })
+
+                assertObjectContains(span.meta, {
+                  bucketname: bucketName,
+                  aws_service: 'S3',
+                  region: 'us-east-1',
+                })
+              } catch (error) {
+                finish(error)
+                return
+              }
+
+              quietPeriodTimeout = setTimeout(finish, 250)
+            }
+
+            agent.subscribe(onTrace)
+            const firstTraceTimeout = setTimeout(() => {
+              finish(new Error('No matching trace received within 1000ms.'))
+            }, 1000)
+            stopObservation = finish
+          })
+
+          const requestPromise = callViaCallback(s3, 'putObject', {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body',
-          }, (err) => {
-            if (err) return done(err)
-
-            setTimeout(() => {
-              try {
-                assert.strictEqual(total, 1)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 250)
+          }).catch(error => {
+            stopObservation()
+            throw error
           })
+
+          const [observationResult, requestResult] = await Promise.allSettled([
+            observationPromise,
+            requestPromise,
+          ])
+
+          if (observationResult.status === 'rejected') throw observationResult.reason
+          if (requestResult.status === 'rejected') throw requestResult.reason
         })
       })
     })
