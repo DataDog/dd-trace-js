@@ -355,9 +355,11 @@ tracer.use('claude-agent-sdk');
 tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-lambda');
+tracer.use('aws-lambda', { serviceRepresentationEnabled: false });
 const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.value, {
   captureLambdaPayload: true,
   enhancedMetrics: false,
+  serviceRepresentationEnabled: false,
 });
 lambdaHandler({ value: 'ok' });
 const synchronousLambdaHandler = lambda.wrap((_event: { value: string }): void => {}, {

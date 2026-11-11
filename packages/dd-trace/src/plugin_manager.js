@@ -49,11 +49,6 @@ require('../../datadog-instrumentations')
 function enableLambdaEnvironment () {
   if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return
 
-  if (DD_TRACE_DISABLED_PLUGINS === undefined) {
-    disabledPlugins.add('fs')
-    maybeEnable(pluginClasses.fs)
-  }
-
   // `DD_TRACE_DISABLED_PLUGINS` is matched against the plugin id below, so the legacy `lambda`
   // spelling would otherwise be ignored. Normalize it to the id before that check runs.
   if (disabledPlugins.has('lambda')) disabledPlugins.add('aws-lambda')

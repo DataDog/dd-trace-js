@@ -98,6 +98,7 @@ describe('Plugin Manager', () => {
       },
       fs: class Fs extends FakePlugin {
         static id = 'fs'
+        static optIn = true
       },
       nine: class Nine extends FakePlugin {
         static id = 'nine'
@@ -224,6 +225,7 @@ describe('Plugin Manager', () => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
     delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
     delete process.env.DD_TRACE_EIGHT_ENABLED
+    delete process.env.DD_TRACE_FS_ENABLED
     pm.destroy()
   })
 
@@ -473,21 +475,58 @@ describe('Plugin Manager', () => {
         })
       })
 
-      it('applies the Lambda fs default when no disabled-plugin list was supplied', () => {
-        pm.configure(makeTracerConfig())
-        loadChannel.publish({ name: 'fs' })
+      describe('filesystem tracing', () => {
+        for (const registerFs of [false, true]) {
+          const timing = registerFs ? 'before' : 'after'
 
-        assert.deepStrictEqual(instantiated, ['aws-lambda'])
-        sinon.assert.notCalled(Fs.prototype.configure)
-      })
+          it(`keeps fs opt-in when registered ${timing} configuration`, () => {
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            loadChannel.publish({ name: 'fs' })
 
-      it('applies the Lambda fs default to a plugin registered before configuration', () => {
-        loadChannel.publish({ name: 'fs' })
-        pm.configure(makeTracerConfig())
-        loadChannel.publish({ name: 'fs' })
+            sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: false })
+          })
 
-        assert.deepStrictEqual(instantiated, ['aws-lambda'])
-        sinon.assert.notCalled(Fs.prototype.configure)
+          it(`honors DD_TRACE_FS_ENABLED=true when registered ${timing} configuration`, () => {
+            process.env.DD_TRACE_FS_ENABLED = 'true'
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            loadChannel.publish({ name: 'fs' })
+
+            sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: true })
+          })
+
+          it(`honors programmatic fs enablement when registered ${timing} configuration`, () => {
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            pm.configurePlugin('fs', { enabled: true })
+            loadChannel.publish({ name: 'fs' })
+
+            sinon.assert.calledWithMatch(Fs.prototype.configure, { enabled: true })
+          })
+        }
+
+        for (const enable of ['environment', 'programmatic']) {
+          describe(`with fs explicitly disabled and a ${enable} opt-in`, () => {
+            before(() => {
+              process.env.DD_TRACE_DISABLED_PLUGINS = 'fs'
+            })
+
+            after(() => {
+              delete process.env.DD_TRACE_DISABLED_PLUGINS
+            })
+
+            it('honors the explicit disabled-plugin list', () => {
+              if (enable === 'environment') process.env.DD_TRACE_FS_ENABLED = 'true'
+              pm.configure(makeTracerConfig())
+              if (enable === 'programmatic') pm.configurePlugin('fs', { enabled: true })
+              loadChannel.publish({ name: 'fs' })
+
+              assert.deepStrictEqual(instantiated, ['aws-lambda'])
+              sinon.assert.notCalled(Fs.prototype.configure)
+            })
+          })
+        }
       })
 
       // Both spellings name one integration. Accepting only one and silently ignoring the other
@@ -549,12 +588,12 @@ describe('Plugin Manager', () => {
               delete process.env.DD_TRACE_DISABLED_PLUGINS
             })
 
-            it('honors the explicit list instead of the Lambda defaults', () => {
+            it('keeps fs opt-in when the explicit list does not disable it', () => {
               if (registerFs) loadChannel.publish({ name: 'fs' })
               pm.configure(makeTracerConfig())
+              loadChannel.publish({ name: 'fs' })
 
-              assert.deepStrictEqual(instantiated, registerFs ? ['fs', 'aws-lambda'] : ['aws-lambda'])
-              if (registerFs) sinon.assert.calledWithMatch(Fs.prototype.configure, { enabled: true })
+              sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: false })
             })
           })
         }

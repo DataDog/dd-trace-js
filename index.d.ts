@@ -2434,6 +2434,8 @@ declare namespace tracer {
 
     /** Configuration for AWS Lambda invocation instrumentation in Lambda runtimes. */
     interface aws_lambda extends Instrumentation {
+      /** @default true @env DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED */
+      serviceRepresentationEnabled?: boolean;
       /** @default true @env DD_ENHANCED_METRICS */
       enhancedMetrics?: boolean;
       /** @default false @env DD_CAPTURE_LAMBDA_PAYLOAD */
