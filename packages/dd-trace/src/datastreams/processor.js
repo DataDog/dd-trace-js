@@ -233,11 +233,35 @@ class DataStreamsProcessor {
     // (agent exporter `export()`); a background timer of `0` would instead fire on every event-loop
     // tick, decoupled from when checkpoints are recorded, and a single tick landing while the agent
     // is unreachable drops the bucket for good (it is cleared on serialize). Push on record instead.
-    if (this.enabled && flushInterval !== 0) {
-      this.timer = setInterval(this.onInterval.bind(this), flushInterval)
-      this.timer.unref?.()
-    }
+    if (this.enabled) this.#startTimer()
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
+  }
+
+  #startTimer () {
+    if (this.flushInterval === 0 || this.timer) return
+    this.timer = setInterval(this.onInterval.bind(this), this.flushInterval)
+    this.timer.unref?.()
+  }
+
+  /**
+   * Starts recording and flushing at runtime. Idempotent; the processor is synchronous
+   * and single-threaded, so concurrent callers cannot create a second timer.
+   */
+  start () {
+    if (this.enabled) return
+    this.enabled = true
+    this.#startTimer()
+  }
+
+  /**
+   * Stops recording at runtime and flushes what was already recorded. Idempotent.
+   */
+  stop () {
+    if (!this.enabled) return
+    this.enabled = false
+    clearInterval(this.timer)
+    this.timer = undefined
+    this.onInterval()
   }
 
   onInterval () {
