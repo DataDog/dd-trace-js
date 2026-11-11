@@ -315,6 +315,7 @@ function isApolloHealthCheckSource (source) {
 
 /**
  * Matches Apollo's parsed health-check operation exactly for cached documents.
+ * GraphQL 17 omits empty `arguments` and `directives` arrays from the AST.
  *
  * @param {import('graphql').OperationDefinitionNode | undefined} operation
  */
@@ -333,8 +334,8 @@ function isApolloHealthCheck (operation) {
     selection.name?.value === '__typename' &&
     selection.alias === undefined &&
     selection.selectionSet === undefined &&
-    selection.arguments?.length === 0 &&
-    selection.directives?.length === 0
+    !selection.arguments?.length &&
+    !selection.directives?.length
 }
 
 /**

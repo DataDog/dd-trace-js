@@ -678,7 +678,7 @@ function wrapResolve (resolve, isJit = false) {
 
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
-    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, info.variableValues)
+    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, coercedVariables(info.variableValues))
 
     /**
      * @param {unknown} error
@@ -1068,6 +1068,19 @@ function wrapFieldType (field, schema) {
   while (unwrapped.ofType) unwrapped = unwrapped.ofType
 
   wrapFields(unwrapped, schema)
+}
+
+/**
+ * GraphQL 17 exposes `info.variableValues` as `{ sources, coerced }` instead of
+ * the coerced map itself.
+ *
+ * @param {Record<string, unknown> | undefined} variableValues
+ * @returns {Record<string, unknown> | undefined}
+ */
+function coercedVariables (variableValues) {
+  return variableValues && 'sources' in variableValues && 'coerced' in variableValues
+    ? /** @type {Record<string, unknown>} */ (variableValues.coerced)
+    : variableValues
 }
 
 /**

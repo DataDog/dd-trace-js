@@ -4207,10 +4207,14 @@ describe('Plugin', () => {
         })
 
         it('should preserve GraphQL errors for a missing health-check document', () => {
+          // GraphQL 17 no longer asserts the document and fails on its own property access.
+          const message = semver.gte(graphqlVersion, '17.0.0')
+            ? "Cannot read properties of undefined (reading 'definitions')"
+            : 'Must provide document.'
           assert.throws(() => graphql.execute({
             schema: createHealthCheckSchema(),
             operationName: '__ApolloServiceHealthCheck__',
-          }), { message: 'Must provide document.' })
+          }), { message })
         })
 
         it('should trace a health-check document changed after parsing', async () => {
