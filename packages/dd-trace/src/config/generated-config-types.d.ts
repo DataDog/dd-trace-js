@@ -481,6 +481,7 @@ export interface GeneratedConfig {
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
     DD_OPENAI_REALTIME_ENABLED: boolean;
+    DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
@@ -795,6 +796,7 @@ export interface GeneratedEnvVarConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
   DD_OPENAI_REALTIME_ENABLED: boolean;
+  DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
