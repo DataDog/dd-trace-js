@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -60,7 +62,16 @@ describe('Tracing Remote Config', () => {
         RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN,
         true
       )
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_DATA_STREAMS_ENABLED,
+        true
+      )
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.SDK_CONFIGURATION, true)
+    })
+
+    it('should report the DSM capability as bit 20', () => {
+      assert.strictEqual(RemoteConfigCapabilities.APM_TRACING_DATA_STREAMS_ENABLED, 1n << 20n)
     })
 
     it('should register a single APM_TRACING batch handler', () => {
