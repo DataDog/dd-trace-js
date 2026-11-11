@@ -17,11 +17,12 @@ const DC_MODULE_REQUIRE = `require(${JSON.stringify(require.resolve('dc-polyfill
  * @param {string} projectDir
  * @param {string} name
  * @param {string} version
+ * @param {string} [moduleEntry]
  */
-function writePackage (projectDir, name, version) {
+function writePackage (projectDir, name, version, moduleEntry) {
   const packageDir = path.join(projectDir, 'node_modules', ...name.split('/'))
   fs.mkdirSync(packageDir, { recursive: true })
-  fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({ name, version }))
+  fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({ name, version, module: moduleEntry }))
   return packageDir
 }
 
@@ -178,6 +179,7 @@ describe('DatadogWebpackPlugin', () => {
       writePackage(projectDir, '@langchain/langgraph', '1.4.19')
       writePackage(projectDir, 'express', '4.22.1')
       writePackage(projectDir, 'left-pad', '1.3.0')
+      writePackage(projectDir, '@opentelemetry/api', '1.9.1', 'build/esm/index.js')
 
       const compiler = {
         options: {},
@@ -233,6 +235,23 @@ describe('DatadogWebpackPlugin', () => {
         pkg: 'express',
         version: '4.22.1',
         path: 'express/lib/express.js',
+        rewriteOnly: false,
+      })
+    })
+
+    it('skips an ESM module entry without a module file extension', () => {
+      assert.equal(resolve('@opentelemetry/api', '@opentelemetry/api/build/esm/index.js'), undefined)
+    })
+
+    it('instruments the CommonJS entry of a package with an ESM module entry', () => {
+      const loaders = resolve('@opentelemetry/api', '@opentelemetry/api/build/src/index.js')
+
+      assert.equal(loaders?.length, 1)
+      assert.equal(loaders[0].loader, require.resolve('../src/loader'))
+      assert.deepEqual(loaders[0].options, {
+        pkg: '@opentelemetry/api',
+        version: '1.9.1',
+        path: '@opentelemetry/api',
         rewriteOnly: false,
       })
     })

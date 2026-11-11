@@ -88,7 +88,7 @@ describe('evaluation telemetry opt-out', () => {
       },
     })
     const MetricsHook = proxyquire('../../src/openfeature/eval-metrics-hook', {
-      '@opentelemetry/api': { metrics: { getMeter: () => ({ createCounter: () => counter }) } },
+      '../opentelemetry/api': { metrics: { getMeter: () => ({ createCounter: () => counter }) } },
     })
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './configuration_source': { create: () => undefined },

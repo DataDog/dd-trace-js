@@ -166,7 +166,11 @@ describe('OpenTelemetry API version compatibility', function () {
       useSandbox(
         [`@opentelemetry/api@${apiVersion}`, '@opentelemetry/sdk-trace-node@2.0.1', 'tsx@4.20.6'],
         false,
-        ['./integration-tests/opentelemetry/basic.js', './integration-tests/opentelemetry/api.{mjs,ts}']
+        [
+          './integration-tests/opentelemetry/basic.js',
+          './integration-tests/opentelemetry/api.mjs',
+          './integration-tests/opentelemetry/api.ts',
+        ]
       )
 
       before(async function () {
@@ -184,14 +188,18 @@ describe('OpenTelemetry API version compatibility', function () {
         await agent?.stop()
       })
 
-      it('preserves the native ESM recording, context and propagation baseline', async () => {
-        proc = fork(join(cwd, 'api.mjs'), ['provider-first'], { cwd, env: { NATIVE_OTEL: '1' } })
-        const [code] = await once(proc, 'exit')
-        assert.strictEqual(code, 0)
-      })
+      for (const order of ['provider-first', 'dependency-api-first']) {
+        it(`preserves the native ESM recording, context and propagation baseline (${order})`, async () => {
+          proc = fork(join(cwd, 'api.mjs'), [order, join(cwd, 'tracer-api/package.json')], {
+            cwd, env: { NATIVE_OTEL: '1' },
+          })
+          const [code] = await once(proc, 'exit')
+          assert.strictEqual(code, 0)
+        })
+      }
 
       for (const format of ['commonjs', 'esm', 'tsx']) {
-        for (const order of ['provider-first', 'api-first', 'cached-api-first', 'diag-first']) {
+        for (const order of ['provider-first', 'api-first', 'cached-api-first', 'diag-first', 'dependency-api-first']) {
           it(`preserves user API span and propagation behavior (${format}, ${order})`, async () => {
             const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
             assert.strictEqual(installedApiVersion, apiVersion)
@@ -199,7 +207,7 @@ describe('OpenTelemetry API version compatibility', function () {
             const fixture = format === 'commonjs' ? 'basic.js' : `api.${format === 'esm' ? 'mjs' : 'ts'}`
             const execArgv = format === 'commonjs' ? [] : ['--import', 'dd-trace/register.js']
             if (format === 'tsx') execArgv.push('--import', 'tsx')
-            proc = fork(join(cwd, fixture), [order], {
+            proc = fork(join(cwd, fixture), [order, join(cwd, 'tracer-api/package.json')], {
               cwd,
               execArgv,
               env: {

@@ -6,6 +6,11 @@ let ot = process.argv[2] === 'cached-api-first' ? require('@opentelemetry/api') 
 const tracer = require('dd-trace').init()
 const assert = require('node:assert/strict')
 
+if (process.argv[2] === 'dependency-api-first') {
+  const dependencyRequire = require('node:module').createRequire(process.argv[3])
+  dependencyRequire('@opentelemetry/api')
+}
+
 if (process.argv[2] === 'api-first' || process.argv[2] === 'diag-first') {
   ot = require('@opentelemetry/api')
   if (process.argv[2] === 'diag-first') {
