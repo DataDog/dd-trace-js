@@ -84,10 +84,10 @@ describe('sdk', () => {
     tracer._tracer.flushAll.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
-    LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
+    LLMObsEvalMetricsWriter.prototype.flush.reset()
 
     LLMObsSpanWriter.prototype.append.resetHistory()
-    LLMObsSpanWriter.prototype.flush.resetHistory()
+    LLMObsSpanWriter.prototype.flush.reset()
 
     removeDestroyHandler()
   })
