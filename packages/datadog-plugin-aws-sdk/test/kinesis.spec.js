@@ -180,8 +180,7 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
       })
 
-      // aws-sdk v2 releases predating the StreamARN request member reject it as an unknown parameter.
-      if (moduleName === '@aws-sdk/smithy-client') {
+      if (helpers.sendsStreamArn(kinesisClientName, version)) {
         it('generates tags for a request addressing the stream by ARN', async () => {
           const { StreamDescription: { StreamARN } } = await callViaPromise(kinesis, 'describeStream', {
             StreamName: streamName,

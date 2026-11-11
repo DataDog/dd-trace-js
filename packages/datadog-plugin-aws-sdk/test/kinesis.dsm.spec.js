@@ -193,8 +193,7 @@ describe('Kinesis', function () {
         })
       }
 
-      // aws-sdk v2 releases predating the StreamARN request member reject it as an unknown parameter.
-      if (moduleName === '@aws-sdk/smithy-client') {
+      if (helpers.sendsStreamArn(kinesisClientName, version)) {
         describe('when the consumer addresses the stream by ARN', () => {
           let streamArn
           let record
