@@ -250,7 +250,8 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
     describe('KafkaJS-compatible API', () => {
       /**
-       * @param {(() => Promise<string>) | undefined} clusterId Stub of `clusterId()`; omitted before 1.11.0.
+       * @param {((options: { timeout: number }) => Promise<string>) | undefined} clusterId Stub of `clusterId()`;
+       *   omitted before 1.11.0.
        * @param {() => Promise<unknown>} [connect]
        */
       function stageKafka (clusterId, connect = async () => 'connected') {
@@ -263,8 +264,11 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
             return value
           }
 
-          async send () {
-            return []
+          /**
+           * @param {{ topic: string, messages: object[] }} payload
+           */
+          async send (payload) {
+            return payload.messages.map(() => ({ topicName: payload.topic, partition: 0, baseOffset: '0' }))
           }
 
           async run ({ eachMessage }) {
@@ -278,14 +282,17 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
             return new Client()
           }
 
-          consumer () {
+          /**
+           * @param {object} config
+           */
+          consumer (config) {
             return new Client()
           }
         }
 
         const module = { KafkaJS: { Kafka } }
         HOOK(module)
-        return new module.KafkaJS.Kafka({ kafkaJS: { brokers: ['127.0.0.1:9092'] } })
+        return new module.KafkaJS.Kafka()
       }
 
       it('reads the cluster id once while connecting a producer', async () => {
