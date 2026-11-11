@@ -4354,6 +4354,16 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "namespace": "stats",
+        "default": "512",
+        "allowed": "[1-9]\\d*",
+        "description": "Distinct peer tag combinations per client-side stats bucket. Further combinations collapse to tracer_blocked_value."
+      }
+    ],
     "DD_TRACE_SUFFIXPLUGIN_ENABLED": [
       {
         "implementation": "A",

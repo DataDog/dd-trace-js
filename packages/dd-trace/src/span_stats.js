@@ -24,6 +24,8 @@ const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) 
 /** @type {string[]} */
 const NO_PEER_TAGS = []
 const BASE_SERVICE_PEER_TAG_KEYS = [BASE_SERVICE]
+// What the Agent's span concentrator collapses over-limit peer tags to on the tracer side.
+const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
 // Span kinds the Agent computes stats for even when a span is neither top-level nor measured.
 const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
 const ZERO_ID = id('0')
@@ -219,13 +221,19 @@ class SpanAggKey {
 
 class SpanBuckets extends Map {
   #includeTraceRoot
+  #peerTagsCardinalityLimit
+  /** @type {Set<string>} */
+  #peerTagCombinations = new Set()
+  #peerTagsLimitReached = false
 
   /**
    * @param {boolean} [includeTraceRoot]
+   * @param {number} [peerTagsCardinalityLimit] Distinct peer tag combinations kept; 0 keeps all.
    */
-  constructor (includeTraceRoot = false) {
+  constructor (includeTraceRoot = false, peerTagsCardinalityLimit = 0) {
     super()
     this.#includeTraceRoot = includeTraceRoot
+    this.#peerTagsCardinalityLimit = peerTagsCardinalityLimit
   }
 
   /**
@@ -234,6 +242,7 @@ class SpanBuckets extends Map {
    */
   forSpan (span, peerTagKeys) {
     const aggKey = new SpanAggKey(span, peerTagKeys)
+    this.#limitPeerTagsCardinality(aggKey)
     const baseKey = aggKey.toString()
     const parentId = span.parent_id
     if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
@@ -247,22 +256,48 @@ class SpanBuckets extends Map {
 
     return this.get(key)
   }
+
+  /**
+   * Collapse the peer tags of a span onto `tracer_blocked_value` once the bucket holds the maximum number of distinct
+   * combinations, like the Agent's span concentrator that dd-trace-go uses. The collapsed entry takes no slot.
+   *
+   * @param {SpanAggKey} aggKey
+   */
+  #limitPeerTagsCardinality (aggKey) {
+    if (this.#peerTagsCardinalityLimit <= 0 || aggKey.peerTags.length === 0) return
+
+    const combination = aggKey.peerTags.join('\0')
+    if (this.#peerTagCombinations.has(combination)) return
+
+    if (this.#peerTagCombinations.size < this.#peerTagsCardinalityLimit) {
+      this.#peerTagCombinations.add(combination)
+      return
+    }
+
+    if (!this.#peerTagsLimitReached) {
+      this.#peerTagsLimitReached = true
+      log.debug('Stats peer tags cardinality limit (%d) reached for this bucket', this.#peerTagsCardinalityLimit)
+    }
+    aggKey.peerTags = BLOCKED_PEER_TAGS
+  }
 }
 
 class TimeBuckets extends Map {
-  #includeTraceRoot
+  /** @type {() => SpanBuckets} */
+  #createSpanBuckets
 
   /**
    * @param {boolean} [includeTraceRoot]
+   * @param {number} [peerTagsCardinalityLimit] See `SpanBuckets`.
    */
-  constructor (includeTraceRoot = false) {
+  constructor (includeTraceRoot = false, peerTagsCardinalityLimit = 0) {
     super()
-    this.#includeTraceRoot = includeTraceRoot
+    this.#createSpanBuckets = () => new SpanBuckets(includeTraceRoot, peerTagsCardinalityLimit)
   }
 
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets(this.#includeTraceRoot))
+      this.set(time, this.#createSpanBuckets())
     }
 
     return this.get(time)
@@ -283,6 +318,7 @@ class SpanStatsProcessor {
     const {
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
+        DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: peerTagsCardinalityLimit,
         interval = 10,
       } = {},
       hostname,
@@ -300,7 +336,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets(Boolean(otlpExporter))
+    this.buckets = new TimeBuckets(Boolean(otlpExporter), peerTagsCardinalityLimit)
     // A non-empty client hostname takes precedence over the agent's own hostname for the resulting
     // metrics, so only send it when explicitly requested.
     this.hostname = reportHostname ? os.hostname() : ''
