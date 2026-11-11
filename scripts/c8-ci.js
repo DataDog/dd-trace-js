@@ -63,7 +63,7 @@ if (warmup !== 0) process.exit(warmup)
 // on the real CI path; direct invocations fall back to npm from PATH.
 const pmExecpath = process.env.npm_execpath
 const runner = pmExecpath ? [process.execPath, pmExecpath] : ['npm']
-const testStatus = runCovered([...runner, 'run', script, ...extraArgs])
+const testStatus = runCovered([...runner, 'run', script, '--', ...extraArgs])
 
 convertV8DirToReport(v8Dir, reportDir)
   .then(({ scripts, profiles, files }) => {
