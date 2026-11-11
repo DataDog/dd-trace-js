@@ -78,7 +78,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   }
 
   bindStart (ctx) {
-    const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs || ctx
+    const { topic, partition, message, groupId, clusterId, bootstrapServers } = ctx.extractedArgs || ctx
 
     let childOf
     const headers = convertToTextMap(message?.headers)
@@ -94,6 +94,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
         [MESSAGING_DESTINATION_KEY]: topic,
+        'messaging.kafka.bootstrap.servers': bootstrapServers,
       },
       metrics: {
         'kafka.partition': partition,

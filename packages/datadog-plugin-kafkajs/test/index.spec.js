@@ -560,6 +560,7 @@ describe('Plugin', () => {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
                 'messaging.destination.name': testTopic,
+                'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
               },
               resource: testTopic,
               error: 0,
@@ -762,6 +763,7 @@ describe('Plugin', () => {
                 'messaging.destination.name': testTopic,
                 'messaging.system': 'kafka',
                 'kafka.cluster_id': testKafkaClusterId,
+                'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
               },
               metrics: {
                 'messaging.batch.message_count': batchMessages.length,
@@ -831,6 +833,7 @@ describe('Plugin', () => {
                 'messaging.destination.name': testTopic,
                 'messaging.system': 'kafka',
                 'kafka.cluster_id': testKafkaClusterId,
+                'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
               },
               resource: testTopic,
               error: 0,

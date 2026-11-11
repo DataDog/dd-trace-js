@@ -281,18 +281,19 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const consumer = createConsumer.apply(this, arguments)
     const cluster = clientToCluster.get(consumer)
     const groupId = arguments[0].groupId
+    const bootstrapServers = this._brokers
 
     const readClusterId = () => cluster?.brokerPool?.metadata?.clusterId
 
     const eachMessageExtractor = (args) => {
       const { topic, partition, message } = args[0]
-      return { topic, partition, message, groupId, clusterId: readClusterId() }
+      return { topic, partition, message, groupId, clusterId: readClusterId(), bootstrapServers }
     }
 
     const eachBatchExtractor = (args) => {
       const { batch } = args[0]
       const { topic, partition, messages } = batch
-      return { topic, partition, messages, groupId, clusterId: readClusterId() }
+      return { topic, partition, messages, groupId, clusterId: readClusterId(), bootstrapServers }
     }
 
     consumer.on(consumer.events.COMMIT_OFFSETS, (event) => {
