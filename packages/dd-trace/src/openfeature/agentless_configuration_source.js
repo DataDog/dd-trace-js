@@ -24,7 +24,7 @@ const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuratio
  * @property {number} requestTimeoutMs
  * @property {string | undefined} apiKey
  * @property {string | undefined} env
- * @property {string | undefined} [service]
+ * @property {string | undefined} service
  */
 
 /**
