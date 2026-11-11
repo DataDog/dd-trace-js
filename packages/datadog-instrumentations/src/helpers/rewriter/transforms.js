@@ -300,7 +300,8 @@ function configureGraphqlJitCompileObject (_state, node, _parent, ancestry) {
   if (query(program, 'FunctionDeclaration[id.name="objectStringify"]').length === 0) {
     const values = queryOne(
       program,
-      'FunctionDeclaration[id.name="compileArguments"] VariableDeclarator[id.name="valuesExpression"]'
+      'FunctionDeclaration[id.name="compileArguments"][params.1.name="args"]' +
+      ':has(VariableDeclarator[id.name="bind"]) VariableDeclarator[id.name="valuesExpression"]'
     )
     assert(values?.init, 'configureGraphqlJitCompileObject: argument serializer not found')
     stringify = parse(`
