@@ -1,8 +1,9 @@
 'use strict'
 
 // Full resource names: https://cloud.google.com/pubsub/docs/pubsub-basics#resource_names
-const TOPIC_NAME = /^projects\/[^/]+\/topics\/[^/]+$/
-const SUBSCRIPTION_NAME = /^projects\/[^/]+\/subscriptions\/[^/]+$/
+// Project IDs never contain braces; the client library uses `{{projectId}}` until it resolved the project.
+const TOPIC_NAME = /^projects\/[^/{}]+\/topics\/[^/]+$/
+const SUBSCRIPTION_NAME = /^projects\/[^/{}]+\/subscriptions\/[^/]+$/
 
 /**
  * @param {unknown} value
