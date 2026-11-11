@@ -4,6 +4,7 @@ const { getHeadersSize, getSizeOrZero } = require('../../dd-trace/src/datastream
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
+const { getSubscriptionName, getTopicName } = require('./resource-names')
 
 /**
  * PULL SUBSCRIPTION: Service explicitly pulls messages from Pub/Sub and processes them.
@@ -128,10 +129,11 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'receive',
     }
 
-    // Without a known topic the resource falls back to the subscription, which is not a destination.
-    if (topic) {
-      meta['messaging.destination.name'] = topicName
-    }
+    // The topic is only known from cached subscription metadata or the name the producer propagated.
+    const topicFullName = getTopicName(topic)
+    if (topicFullName) meta['gcp.pubsub.topic.name'] = topicFullName
+    const subscriptionFullName = getSubscriptionName(subscription.name)
+    if (subscriptionFullName) meta['gcp.pubsub.subscription.name'] = subscriptionFullName
 
     let batchContext
     if (batchRequestTraceId && batchRequestSpanId) {

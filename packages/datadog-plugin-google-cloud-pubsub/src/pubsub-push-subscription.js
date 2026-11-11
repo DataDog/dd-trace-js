@@ -3,6 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
+const { getSubscriptionName, getTopicName } = require('./resource-names')
 
 // WeakMap to track push receive spans by request
 const pushReceiveSpans = new WeakMap()
@@ -102,9 +103,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       publishTime: req.headers['x-goog-pubsub-publish-time'],
     }
 
-    const topic = req.headers['pubsub.topic']
-    const topicName = topic || 'push-subscription-topic'
-    return { message, subscription, attrs: req.headers, topic, topicName }
+    const topicName = req.headers['pubsub.topic'] || 'push-subscription-topic'
+    return { message, subscription, attrs: req.headers, topicName }
   }
 
   #extractContext (messageData) {
@@ -112,7 +112,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   #createPushReceiveSpan (messageData, parentContext, linkContext) {
-    const { message, subscription, topic, topicName, attrs } = messageData
+    const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription?.slice(subscription.lastIndexOf('/') + 1) ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
@@ -139,10 +139,11 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return null
     }
 
-    // The placeholder used without the header is not a destination.
-    if (topic) {
-      span.setTag('messaging.destination.name', topic.slice(topic.lastIndexOf('/') + 1))
-    }
+    // The topic is only known from the name the producer propagated, never from the placeholder.
+    const topicFullName = getTopicName(attrs['pubsub.topic'])
+    if (topicFullName) span.setTag('gcp.pubsub.topic.name', topicFullName)
+    const subscriptionFullName = getSubscriptionName(subscription)
+    if (subscriptionFullName) span.setTag('gcp.pubsub.subscription.name', subscriptionFullName)
 
     span._integrationName = 'google-cloud-pubsub'
     // Calculate delivery latency (queue time from publish to delivery)
