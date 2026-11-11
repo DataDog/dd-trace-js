@@ -181,6 +181,17 @@ describe('test suite', () => {
             )
           })
 
+          for (const param of ['constructor', '__proto__']) {
+            it(`should block an attack in a query parameter named ${param}`, () => {
+              return assertBlocked(
+                httpRequest.get(`http://127.0.0.1:${serverData.port}/api/test?${param}=blockattack`, {
+                  validateStatus: false,
+                }),
+                { 'http.status_code': '403' }
+              )
+            })
+          }
+
           appDirBodyBlockingTest('should block an attack in request body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {

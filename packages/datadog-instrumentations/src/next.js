@@ -227,10 +227,14 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
       const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
-      const query = {}
-      for (const key of searchParams.keys()) {
-        if (!query[key]) {
-          query[key] = searchParams.getAll(key)
+      /** @type {Record<string, string[]>} */
+      const query = Object.create(null)
+      for (const [key, value] of searchParams) {
+        const values = query[key]
+        if (values === undefined) {
+          query[key] = [value]
+        } else {
+          values.push(value)
         }
       }
 
