@@ -1,19 +1,21 @@
 'use strict'
 
-const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const {
+  createEsmResolver,
+  processModule,
+} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { createBundlerRewriter } = require('../datadog-instrumentations/src/helpers/rewriter')
 const { getRewriteTarget, isRewriteTargetName } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
-const { createEsmResolver } = require('./src/resolver')
-const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -82,40 +84,6 @@ function isESMBuild (build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
-function getGitMetadata () {
-  /**
-   * @type {object}
-   * @property {string | null} repositoryURL
-   * @property {string | null} commitSHA
-   */
-  const gitMetadata = {
-    repositoryURL: null,
-    commitSHA: null,
-  }
-
-  try {
-    gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd(),
-    }).trim()
-  } catch (e) {
-    log.warn('failed to get git repository URL:', e.message)
-  }
-
-  try {
-    gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd(),
-    }).trim()
-  } catch (e) {
-    log.warn('failed to get git commit SHA:', e.message)
-  }
-
-  return gitMetadata
-}
-
 module.exports.setup = function (build) {
   if (build.initialOptions.minify && !build.initialOptions.keepNames) {
     throw new Error(
@@ -156,25 +124,10 @@ ${build.initialOptions.banner.js}`
 
   // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
   if (DD_BUNDLER_INJECT_GIT_METADATA) {
-    const gitMetadata = getGitMetadata()
-    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+    const banner = getGitMetadataBanner(log)
+    if (banner) {
       build.initialOptions.banner ??= {}
-      build.initialOptions.banner.js ??= ''
-
-      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
-    process.env !== null && typeof process.env === 'object') {
-  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
-  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
-}
-${build.initialOptions.banner.js}`
-
-      log.debug(
-        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-        gitMetadata.repositoryURL || 'not available',
-        gitMetadata.commitSHA || 'not available'
-      )
-    } else {
-      log.warn('No git metadata available - skipping injection')
+      build.initialOptions.banner.js = `${banner}${build.initialOptions.banner.js ?? ''}`
     }
   } else {
     log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')

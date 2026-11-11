@@ -758,6 +758,7 @@ class LLMObs extends NoopLLMObs {
       mlApp,
       version,
       _decorator,
+      _experimentTags,
       ...spanOptions
     } = options
 
@@ -777,6 +778,7 @@ class LLMObs extends NoopLLMObs {
       sessionId,
       agentVersion,
       _decorator,
+      _experimentTags,
       spanOptions,
     }
   }

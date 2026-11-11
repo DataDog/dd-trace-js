@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { before, describe, it } = require('mocha')
+const { after, before, describe, it } = require('mocha')
 const sinon = require('sinon')
 const SpanWriter = require('../../src/llmobs/writers/spans')
 const { storage } = require('../../src/llmobs/storage')
@@ -180,16 +180,22 @@ describe('conversation billing SDK emission', () => {
 })
 
 describe('conversation billing application selection', () => {
-  const { getEvents } = useLlmObs({
-    tracerConfigOptions: { service: 'voice-agent', llmobs: { agentlessEnabled: false } },
+  const { getEvents } = useLlmObs()
+  let config, originalMlApp
+  before(() => {
+    config = global._ddtrace._tracer._config
+    originalMlApp = config.llmobs.DD_LLMOBS_ML_APP
+    config.llmobs.DD_LLMOBS_ML_APP = undefined
+    assert.ok(config.service)
   })
+  after(() => { config.llmobs.DD_LLMOBS_ML_APP = originalMlApp })
 
   it('uses the service name when no application is configured', async () => {
     const llmobs = global._ddtrace.llmobs
     assert.equal(llmobs.enabled, true)
     assert.equal(llmobs.submitConversationCost(cases[0].response), true)
     const { llmobsSpans } = await getEvents(1, { writerOnly: true })
-    assert.ok(llmobsSpans[0].tags.includes('ml_app:voice-agent'))
+    assert.ok(llmobsSpans[0].tags.includes(`ml_app:${config.service}`))
   })
 
   it('prefers an explicit application over the service name', async () => {

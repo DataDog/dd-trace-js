@@ -118,14 +118,24 @@ function createConnection (emitter) {
     // The URL shape is not guaranteed across SDK versions; the session works without it.
   }
 
+  const connection = { ...createSession({ model, basePath }), socket: emitter.socket }
+  attachSocketClose(emitter, connection.finalize)
+  return connection
+}
+
+/**
+ * Shared session lifecycle for SDK adapters. Only origin/path and non-secret
+ * protocol options cross this boundary.
+ * @param {object} [options]
+ */
+function createSession (options = {}) {
   // Asked per segment rather than snapshotted here: a plugin can be reconfigured while a connection
   // is open, and a session that outlived its consumer would otherwise keep buffering audio nothing
   // reads.
   const session = new RealtimeSession({
     emitTurn,
     captureContext,
-    model,
-    basePath,
+    ...options,
     shouldRetainAudio: () => audioChannel.hasSubscribers,
   })
 
@@ -141,9 +151,7 @@ function createConnection (emitter) {
     session.finishSession(Date.now(), failed)
   }
 
-  const connection = { session, socket: emitter.socket, finalize }
-  attachSocketClose(emitter, finalize)
-  return connection
+  return { session, finalize }
 }
 
 // Close codes that mean the conversation ended on purpose: a normal close, the peer going away, and
@@ -307,6 +315,8 @@ function flushLiveSessions () {
 addBeforeExitFinalizer(flushLiveSessions)
 
 module.exports = {
+  attachSocketClose,
+  createSession,
   flushLiveSessions,
   patchRealtimeEmitter,
   patchRealtimeTransport,

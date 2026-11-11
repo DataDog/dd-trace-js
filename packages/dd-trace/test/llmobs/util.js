@@ -10,6 +10,8 @@ const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
 
+/** @typedef {import('../plugins/agent').SerializedSpan} SerializedSpan */
+
 const tracerVersion = require('../../../../package.json').version
 
 const MOCK_STRING = Symbol('string')
@@ -429,6 +431,18 @@ function useLlmObs ({
   /** @type {ReturnType<typeof agent.assertSomeTraces>} */
   let apmTracesPromise
   const runState = { cancelled: false }
+  /** @type {SerializedSpan[]} */
+  let pendingApmSpans = []
+
+  // An SDK can export several trace chunks before getEvents() is called.
+  /** @param {SerializedSpan[][]} traces */
+  const collectApmTraces = traces => { pendingApmSpans.push(...traces.flat()) }
+  /** @returns {SerializedSpan[]} */
+  const takeApmSpans = () => {
+    const spans = pendingApmSpans
+    pendingApmSpans = []
+    return spans.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
+  }
 
   const resetTracesPromises = () => {
     // LLMObs plugin tests drive real SDK calls through the VCR proxy; the first call in a suite
@@ -456,11 +470,15 @@ function useLlmObs ({
 
   beforeEach(() => {
     runState.cancelled = false
+    pendingApmSpans = []
+    agent.subscribe(collectApmTraces)
     resetTracesPromises()
   })
 
   afterEach(() => {
     runState.cancelled = true
+    agent.unsubscribe(collectApmTraces)
+    pendingApmSpans = []
     apmTracesPromise.cancel()
   })
 
@@ -474,45 +492,54 @@ function useLlmObs ({
       const llmobsSpans = []
       let apmError
       let apmTracesReceived = false
+      let collecting = true
       let apmTraces = waitForApmTraces()
 
-      while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
-        await Promise.race([apmTraces, new Promise(resolve => setImmediate(resolve))])
+      try {
+        while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
+          await Promise.race([apmTraces, new Promise(resolve => setImmediate(resolve))])
 
-        const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
-        llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+          const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
+          llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
 
-        if (apmError && llmobsSpans.length < numLlmObsSpans) throw apmError
+          if (apmError && llmobsSpans.length < numLlmObsSpans) throw apmError
 
-        if (apmTracesReceived && llmobsSpans.length < numLlmObsSpans) {
-          apmTracesReceived = false
-          apmTraces = waitForApmTraces()
+          if (apmTracesReceived && llmobsSpans.length < numLlmObsSpans) {
+            apmTracesReceived = false
+            apmTraces = waitForApmTraces()
+          }
         }
-      }
 
-      if (!writerOnly && apmSpans.length === 0) {
-        await apmTraces
-        if (apmError) throw apmError
-      }
+        if (!writerOnly && apmSpans.length === 0) {
+          await apmTraces
+          if (apmError) throw apmError
+        }
 
-      return {
-        apmSpans,
-        llmobsSpans: llmobsSpans.sort((a, b) => {
-          const startDifference = a.start_ns - b.start_ns
-          if (startDifference) return startDifference
-          if (a.parent_id === b.span_id) return -1
-          if (b.parent_id === a.span_id) return 1
-          return a.duration - b.duration
-        }),
+        return {
+          apmSpans,
+          llmobsSpans: llmobsSpans.sort((a, b) => {
+            const startDifference = a.start_ns - b.start_ns
+            if (startDifference) return startDifference
+            if (a.parent_id === b.span_id) return -1
+            if (b.parent_id === a.span_id) return 1
+            return a.duration - b.duration
+          }),
+        }
+      } finally {
+        collecting = false
       }
 
       function waitForApmTraces () {
-        return apmTracesPromise.then(spans => {
+        return apmTracesPromise.then(() => {
+          // A legacy event can complete this call before the pending APM wait.
+          if (!collecting) return
+          const spans = takeApmSpans()
           apmSpans.push(...spans)
           llmobsSpans.push(...getLlmObsSpansFromApmSpans(spans))
           apmTracesReceived = true
           resetTracesPromises()
         }, error => {
+          if (!collecting) return
           apmError = error
           apmTracesReceived = true
         })
@@ -524,7 +551,8 @@ function useLlmObs ({
      * @returns {Promise<void>}
      */
     assertNoLlmObsSpans: async function (windowMs = 100) {
-      const apmSpans = await apmTracesPromise
+      await apmTracesPromise
+      const apmSpans = takeApmSpans()
       const llmobsSpansFromApm = getLlmObsSpansFromApmSpans(apmSpans)
       assert.equal(llmobsSpansFromApm.length, 0, `expected no LLMObs spans, got ${llmobsSpansFromApm.length}`)
       resetTracesPromises()
@@ -532,7 +560,10 @@ function useLlmObs ({
       const deadline = Date.now() + windowMs
       while (Date.now() < deadline && !runState.cancelled) {
         await new Promise(resolve => setImmediate(resolve))
-        const llmobsSpans = getLlmObsSpansFromRequests(agent.getLlmObsSpanEventsRequests(true))
+        const llmobsSpans = [
+          ...getLlmObsSpansFromApmSpans(takeApmSpans()),
+          ...getLlmObsSpansFromRequests(agent.getLlmObsSpanEventsRequests(true)),
+        ]
         assert.equal(llmobsSpans.length, 0, `expected no LLMObs spans, got ${llmobsSpans.length}`)
       }
     },

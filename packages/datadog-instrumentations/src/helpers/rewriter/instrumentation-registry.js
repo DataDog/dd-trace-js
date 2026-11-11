@@ -42,6 +42,10 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   { instrumentations: require('./instrumentations/openai-agents') },
+  {
+    activate: { setup: () => require('../../openai-agents-realtime') },
+    instrumentations: require('./instrumentations/openai-agents-realtime'),
+  },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
   {
@@ -49,7 +53,13 @@ const registry = [
     instrumentations: require('./instrumentations/react-router'),
   },
   { instrumentations: require('./instrumentations/vitest') },
-  { instrumentations: require('./instrumentations/webdriverio') },
+  {
+    activate: {
+      modules: ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils', 'webdriverio'],
+      setup: activation => require('../../webdriverio').recordLocalRunnerVersion(activation),
+    },
+    instrumentations: require('./instrumentations/webdriverio'),
+  },
   {
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),

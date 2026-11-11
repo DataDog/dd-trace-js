@@ -11,6 +11,7 @@ module.exports = {
       forced: true,
     },
   ],
+  '@openai/agents-realtime': [{ name: 'zod', dep: true }],
   aerospike: [
     {
       name: 'aerospike',
@@ -588,6 +589,11 @@ module.exports = {
     },
   ],
   openai: [
+    {
+      name: '@openai/agents-realtime',
+      versions: ['>=0.20.0'],
+      node: '>=22',
+    },
     {
       // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
       // it is not installed into the version folders by default and `require('ws')` inside

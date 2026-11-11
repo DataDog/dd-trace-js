@@ -378,6 +378,8 @@ tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('electron');
 tracer.use('electron', { net: false, ipc: false });
+tracer.use('elevenlabs');
+tracer.use('elevenlabs', { llmobs: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
@@ -1023,8 +1025,6 @@ aiguard.evaluate([
   replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })
 
-tracer.use('elevenlabs');
-tracer.use('elevenlabs', { llmobs: false });
 
 // Explicit conversation billing accepts completed SDK responses or verified webhook data.
 const conversationCostSubmitted: boolean = llmobs.submitConversationCost({})
