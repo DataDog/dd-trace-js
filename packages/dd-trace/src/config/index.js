@@ -380,6 +380,11 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
+    if (this.isCiVisibility) {
+      setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
+      setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
+    }
+
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {

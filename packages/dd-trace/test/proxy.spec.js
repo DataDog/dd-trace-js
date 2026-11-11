@@ -507,27 +507,75 @@ describe('TracerProxy', () => {
         }
       })
 
-      for (const [name, sdkPath, method] of [
-        ['appsec', '../src/appsec/sdk', 'trackCustomEvent'],
-        ['llmobs', '../src/llmobs/sdk', 'trace'],
-      ]) {
-        it(`defers the ${name} SDK in Test Optimization until first access`, () => {
+      it('defers the LLMObs SDK in Test Optimization until first access', () => {
+        const entrypoint = path.resolve(__dirname, '../../../ci/init')
+        const sdkModule = require.resolve('../src/llmobs/sdk')
+        const script = `
+          const tracer = require(${JSON.stringify(entrypoint)})
+          const sdkModule = ${JSON.stringify(sdkModule)}
+          const loadedBefore = require.cache[sdkModule] !== undefined
+          const sdk = tracer.llmobs
+          const callSucceeded = sdk.trace({ kind: 'workflow', name: 'sdk-test' }, () => 42) === 42
+          process.stdout.write(JSON.stringify({
+            loadedBefore,
+            loadedAfter: require.cache[sdkModule] !== undefined,
+            sameInstance: sdk === tracer.llmobs,
+            method: typeof sdk.trace,
+            callSucceeded,
+          }), () => process.exit(0))
+        `
+        const inherited = Object.fromEntries(Object.entries(process.env)
+          .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
+        const result = spawnSync(process.execPath, ['--eval', script], {
+          encoding: 'utf8',
+          timeout: 10_000,
+          env: {
+            ...inherited,
+            DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+            DD_APPSEC_ENABLED: 'false',
+            DD_LLMOBS_ENABLED: 'false',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_CRASHTRACKING_ENABLED: 'false',
+            JEST_WORKER_ID: '1',
+          },
+        })
+
+        assert.strictEqual(result.status, 0, result.stderr)
+        assert.deepStrictEqual(JSON.parse(result.stdout), {
+          loadedBefore: false,
+          loadedAfter: true,
+          sameInstance: true,
+          method: 'function',
+          callSucceeded: true,
+        })
+      })
+
+      for (const enabled of ['false', 'true']) {
+        it(`keeps AppSec inactive in Test Optimization with security flags set to ${enabled}`, () => {
           const entrypoint = path.resolve(__dirname, '../../../ci/init')
-          const sdkModule = require.resolve(sdkPath)
+          const modules = [
+            require.resolve('../src/appsec'),
+            require.resolve('../src/appsec/sdk'),
+            require.resolve('../src/appsec/blocking'),
+            require.resolve('../src/appsec/iast'),
+            require.resolve('../src/appsec/iast/taint-tracking/rewriter'),
+            require.resolve('../src/otel-thread-ctx'),
+          ]
           const script = `
             const tracer = require(${JSON.stringify(entrypoint)})
-            const sdkModule = ${JSON.stringify(sdkModule)}
-            const loadedBefore = require.cache[sdkModule] !== undefined
-            const sdk = tracer[${JSON.stringify(name)}]
-            const callSucceeded = ${JSON.stringify(name)} === 'llmobs'
-              ? sdk.trace({ kind: 'workflow', name: 'sdk-test' }, () => 42) === 42
-              : sdk.trackCustomEvent('sdk-test', {}) === undefined
+            const appsec = tracer.appsec
+            const result = tracer.trace('test-operation', span => {
+              const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
+              appsec.trackCustomEvent('test-event', {})
+              return {
+                sameTracer,
+                userTagAbsent: span.context().getTag('usr.id') === undefined,
+              }
+            })
             process.stdout.write(JSON.stringify({
-              loadedBefore,
-              loadedAfter: require.cache[sdkModule] !== undefined,
-              sameInstance: sdk === tracer[${JSON.stringify(name)}],
-              method: typeof sdk[${JSON.stringify(method)}],
-              callSucceeded,
+              ...result,
+              sameSdk: appsec === tracer.appsec,
+              loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
             }), () => process.exit(0))
           `
           const inherited = Object.fromEntries(Object.entries(process.env)
@@ -538,7 +586,8 @@ describe('TracerProxy', () => {
             env: {
               ...inherited,
               DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
-              DD_APPSEC_ENABLED: 'false',
+              DD_APPSEC_ENABLED: enabled,
+              DD_IAST_ENABLED: enabled,
               DD_LLMOBS_ENABLED: 'false',
               DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
               DD_CRASHTRACKING_ENABLED: 'false',
@@ -548,29 +597,13 @@ describe('TracerProxy', () => {
 
           assert.strictEqual(result.status, 0, result.stderr)
           assert.deepStrictEqual(JSON.parse(result.stdout), {
-            loadedBefore: false,
-            loadedAfter: true,
-            sameInstance: true,
-            method: 'function',
-            callSucceeded: true,
+            sameTracer: true,
+            userTagAbsent: true,
+            sameSdk: true,
+            loaded: modules.map(() => false),
           })
         })
       }
-
-      it('preserves AppSec SDK calls after deferred Test Optimization initialization', () => {
-        config.isCiVisibility = true
-        config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false }
-        proxy.init()
-        sinon.assert.notCalled(AppsecSdk)
-
-        const metadata = { key: 'value' }
-        proxy.appsec.trackCustomEvent('test-event', metadata)
-        proxy.appsec.trackCustomEvent('second-event', metadata)
-
-        sinon.assert.calledOnceWithExactly(AppsecSdk, tracer, config)
-        sinon.assert.calledWithExactly(appsecSdk.trackCustomEvent, 'test-event', metadata)
-        sinon.assert.calledWithExactly(appsecSdk.trackCustomEvent, 'second-event', metadata)
-      })
 
       it('does not load Dynamic Instrumentation while disabled', () => {
         proxy.init()

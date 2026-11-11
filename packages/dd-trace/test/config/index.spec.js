@@ -3913,6 +3913,21 @@ describe('Config', () => {
     exporters.PLAYWRIGHT_WORKER,
     exporters.VITEST_WORKER,
   ]) {
+    it(`should disable AppSec and IAST for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_IAST_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, false)
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_RESOURCE_RENAMING_ENABLED, false)
+    })
+
     it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
 

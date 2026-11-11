@@ -440,10 +440,11 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        // Test Optimization only needs these SDKs when the application accesses them.
-        const defineSdk = config.isCiVisibility ? defineLazily : lazyProxy
-        defineSdk(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        defineSdk(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+        if (!config.isCiVisibility) {
+          lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        }
+        const defineLlmobs = config.isCiVisibility ? defineLazily : lazyProxy
+        defineLlmobs(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
           () => this.openfeature)
 
         if (aiguardEnabled) {
