@@ -78,6 +78,22 @@ describe('Kinesis plugin stream identification', () => {
     })
   })
 
+  describe('storeStreamName', () => {
+    for (const operation of ['getShardIterator', 'listShards']) {
+      it(`stores the stream name derived from StreamARN for ${operation}`, () => {
+        const store = buildPlugin().storeStreamName({ StreamARN: STREAM_ARN }, operation, { span: 'parent' })
+
+        assert.deepStrictEqual(store, { span: 'parent', streamName: STREAM_NAME })
+      })
+    }
+
+    it('keeps the store when the request names no stream', () => {
+      const store = { span: 'parent' }
+
+      assert.strictEqual(buildPlugin().storeStreamName({ ShardId: 'shard' }, 'getShardIterator', store), store)
+    })
+  })
+
   describe('requestInject DSM topic', () => {
     for (const operation of ['putRecord', 'putRecords']) {
       /**
