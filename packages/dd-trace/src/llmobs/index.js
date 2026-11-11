@@ -37,6 +37,7 @@ const { llmObsTraceIdToWire } = require('./util')
 const spanFinishCh = channel('dd-trace:span:finish')
 const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
+const providerCostAppendCh = channel('llmobs:provider-cost:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 const registerUserSpanProcessorCh = channel('llmobs:register-processor')
@@ -100,6 +101,7 @@ function enable (config) {
 
   if (!isReinitializing) {
     evalMetricAppendCh.subscribe(handleEvalMetricAppend)
+    providerCostAppendCh.subscribe(handleProviderCostAppend)
     flushCh.subscribe(handleFlush)
     registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
     traceSampledCh.subscribe(handleTraceSampled)
@@ -133,6 +135,7 @@ function enable (config) {
 
 function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
+  if (providerCostAppendCh.hasSubscribers) providerCostAppendCh.unsubscribe(handleProviderCostAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
   if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
@@ -282,6 +285,19 @@ function handleSpanProcess (span) {
 
 function handleTraceSampled (trace) {
   spanProcessor.processTrace(trace)
+}
+
+/**
+ * @param {{event: Record<string, unknown>, routing?: {apiKey?: string, site?: string}}} message
+ */
+function handleProviderCostAppend ({ event, routing }) {
+  try {
+    // Subscription lifetime is owned by the currently enabled writer.
+    const currentWriter = /** @type {LLMObsSpanWriter} */ (spanWriter)
+    currentWriter.append(event, routing)
+  } catch (error) {
+    log.warn('Could not append provider conversation billing: %s', error.message)
+  }
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {

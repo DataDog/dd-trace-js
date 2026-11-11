@@ -3892,6 +3892,12 @@ declare namespace tracer {
        */
       exportSpan (span?: tracer.Span): llmobs.ExportedLLMObsSpan
 
+      /**
+       * Submit reported USD billing from a completed ElevenLabs details response or verified webhook data.
+       * Makes no provider requests. Returns false for unfinished, invalid, or disabled billing, or unavailable billing without an override.
+       */
+      submitConversationCost (conversation: object, options?: llmobs.ConversationCostOptions): boolean
+
 
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
@@ -4525,6 +4531,14 @@ declare namespace tracer {
        * @returns The value of the tag, or `undefined` if the tag does not exist.
        */
       getTag (key: string): string | undefined
+    }
+
+    interface ConversationCostOptions {
+      provider?: 'elevenlabs'
+      source?: 'conversation_details' | 'post_call_transcription'
+      /** User total override in USD. An explicit zero is preserved. */
+      totalCost?: number
+      mlApp?: string
     }
 
     interface EvaluationOptions {

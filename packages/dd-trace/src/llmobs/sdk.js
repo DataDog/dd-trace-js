@@ -36,9 +36,11 @@ const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
 const PromptManager = require('./prompts/manager')
+const { buildConversationCostEvent } = require('./provider-cost')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
+const providerCostAppendCh = channel('llmobs:provider-cost:append')
 const flushCh = channel('llmobs:writers:flush')
 const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 const NoopLLMObs = require('./noop')
@@ -82,6 +84,31 @@ class LLMObs extends NoopLLMObs {
    */
   get experiments () {
     return createExperiments(this._config, this)
+  }
+
+  /**
+   * Submit a completed conversation's reported USD costs without provider requests.
+   * Invalid or unfinished billing returns false. Absent provider amounts require an override.
+   * @param {object} conversation SDK conversation-details response or verified webhook data.
+   * @param {import('../../../../index').llmobs.ConversationCostOptions} [options] Billing source and override.
+   */
+  submitConversationCost (conversation, options = {}) {
+    if (!this.enabled) return false
+    try {
+      const event = buildConversationCostEvent(conversation, {
+        ...options,
+        mlApp: options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP || '',
+        service: this._config.service,
+        env: this._config.env,
+        version: this._config.version,
+      })
+      if (!event) return false
+      providerCostAppendCh.publish({ event, routing: storage.getStore()?.routingContext })
+      return true
+    } catch (error) {
+      logger.debug('Could not submit provider conversation billing: %s', error.message)
+      return false
+    }
   }
 
   /**

@@ -1028,3 +1028,22 @@ native Mocha retries and explicit WebdriverIO Jasmine retries remain available a
 are reported as framework retries.
 Both helpers preserve ordinary selection and expected-failure behavior. Management
 property tags retain backend assignments even when their execution policy is overridden.
+
+
+## Conversation billing (unreleased)
+
+`tracer.llmobs.submitConversationCost(conversation, options)` submits an application-obtained, completed ElevenLabs conversation-details response or verified post-call transcription webhook data. It makes no provider requests and returns `false` for invalid or unfinished data, or absent billing without an override.
+
+```javascript
+// details is the response already obtained by your application.
+tracer.llmobs.submitConversationCost(details)
+
+// In an application-verified post-call transcription webhook handler:
+tracer.llmobs.submitConversationCost(verifiedEvent.data, {
+  source: 'post_call_transcription'
+})
+```
+
+Options are `provider` (`'elevenlabs'`), `source` (`'conversation_details'` or `'post_call_transcription'`), `mlApp`, and `totalCost` (a finite, nonnegative USD override, including zero). Supply an override on the first submission. Returns describe local validation/submission; delivery and conflict rejection are asynchronous.
+
+The provider's conversation total includes its reported LLM and platform prices. Datadog records it once on a dedicated workflow, preserves unknown values and per-amount provenance, and rejects changes to accepted amounts. Repeated and late observations use stable IDs. This API does not allocate the total to turns or backfill per-turn token usage. Backend availability and released tracer versions are required before enabling this feature.

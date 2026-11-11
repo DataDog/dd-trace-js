@@ -1025,3 +1025,12 @@ aiguard.evaluate([
 
 tracer.use('elevenlabs');
 tracer.use('elevenlabs', { llmobs: false });
+
+// Explicit conversation billing accepts completed SDK responses or verified webhook data.
+const conversationCostSubmitted: boolean = llmobs.submitConversationCost({})
+llmobs.submitConversationCost({}, {
+  provider: 'elevenlabs', source: 'post_call_transcription', totalCost: 0, mlApp: 'voice-app'
+})
+// @ts-expect-error Only ElevenLabs conversation billing is supported.
+llmobs.submitConversationCost({}, { provider: 'openai' })
+void conversationCostSubmitted
