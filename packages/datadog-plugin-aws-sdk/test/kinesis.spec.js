@@ -180,6 +180,34 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
       })
 
+      // aws-sdk v2 releases predating the StreamARN request member reject it as an unknown parameter.
+      if (moduleName === '@aws-sdk/smithy-client') {
+        it('generates tags for a request addressing the stream by ARN', async () => {
+          const { StreamDescription: { StreamARN } } = await callViaPromise(kinesis, 'describeStream', {
+            StreamName: streamName,
+          })
+
+          const spanPromise = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            assert.strictEqual(span.resource, `putRecord ${streamName}`)
+            assertObjectContains(span.meta, {
+              streamname: streamName,
+              'aws.kinesis.stream_name': streamName,
+              'aws.stream.arn': StreamARN,
+            })
+          })
+
+          await Promise.all([
+            callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamARN,
+            }),
+            spanPromise,
+          ])
+        })
+      }
+
       if (promisesSupported) {
         it('should propagate the tracing context from the producer to the consumer with promises', async () => {
           let parentId

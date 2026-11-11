@@ -7,6 +7,18 @@ function recordDataAsString (data) {
   return Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8')
 }
 
+/**
+ * Resolve the stream a request addresses. Requests may identify it by `StreamARN` alone
+ * (`arn:aws:kinesis:<region>:<account>:stream/<name>`); the name is then its last path segment,
+ * as dd-trace-go derives it.
+ *
+ * @param {{ StreamName?: string, StreamARN?: string }} params
+ * @returns {string | undefined}
+ */
+function getStreamName ({ StreamName, StreamARN }) {
+  return StreamName || StreamARN?.slice(StreamARN.lastIndexOf('/') + 1)
+}
+
 // Caps the promise-path iterator→stream cache so abandoned shard iterators
 // (AWS expires them after 5 minutes) can't grow it without bound. Polling loops
 // delete on consume, so their working set is ~the active shard count.
@@ -134,14 +146,23 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    if (!params || !params.StreamName) return
+    if (!params) return
 
-    return {
-      'resource.name': `${operation} ${params.StreamName}`,
-      'aws.kinesis.stream_name': params.StreamName,
+    const streamName = getStreamName(params)
+    if (!streamName) return
+
+    const tags = {
+      'resource.name': `${operation} ${streamName}`,
+      'aws.kinesis.stream_name': streamName,
       'messaging.system': 'aws_kinesis',
-      streamname: params.StreamName,
+      streamname: streamName,
     }
+
+    if (params.StreamARN) {
+      tags['aws.stream.arn'] = params.StreamARN
+    }
+
+    return tags
   }
 
   storeStreamName (params, operation, store) {
@@ -227,11 +248,11 @@ class Kinesis extends BaseAwsSdkPlugin {
     let stream
     switch (operation) {
       case 'putRecord':
-        stream = params.StreamArn ?? params.StreamName ?? ''
+        stream = getStreamName(params) ?? ''
         this.injectToMessage(span, params, stream, true)
         break
       case 'putRecords':
-        stream = params.StreamArn ?? params.StreamName ?? ''
+        stream = getStreamName(params) ?? ''
         for (let i = 0; i < params.Records.length; i++) {
           this.injectToMessage(
             span,

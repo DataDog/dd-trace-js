@@ -142,6 +142,7 @@ describe('Plugin', () => {
               queuename: queueName,
               'messaging.system': 'aws_sqs',
               'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
+              'aws.sqs.queue.url': QueueUrl,
             })
 
             parentId = span.span_id.toString()

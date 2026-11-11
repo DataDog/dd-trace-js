@@ -174,6 +174,10 @@ class Sqs extends BaseAwsSdkPlugin {
       queuename: queueName,
     }
 
+    if (params.QueueUrl) {
+      tags['aws.sqs.queue.url'] = params.QueueUrl
+    }
+
     if (queueMetadata?.arn) {
       tags['cloud.resource_id'] = queueMetadata.arn
     }
