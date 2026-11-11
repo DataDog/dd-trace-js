@@ -48,6 +48,10 @@ DD_DATA_STREAMS_ENABLED=true KAFKA_TOPIC=bench-apm-plus-dsm TIMEIT_OUTPUT=apm-pl
   node -r dd-trace/init run_timeit.js
 ```
 
+CI: the `dsm-throughput` job (`.gitlab/benchmarks/dsm-throughput.yml`) runs this on
+benchmarking-platform branch `js/data-streams-monitoring` against the pipeline's
+checkout (automatic on `master`, manual elsewhere, never blocking).
+
 ## Environment variables
 
 | Var | Default | Purpose |
