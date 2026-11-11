@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/decisions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 7.53.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.53.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.14.1",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "760"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"image_url\":\"https://example.com/receipt.png\"},{\"type\":\"input_image\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII=\"}}]}],\"questions\":[{\"type\":\"choice\",\"name\":\"department\",\"instructions\":\"Which team should handle this request?\",\"choices\":[{\"value\":\"billing\"},{\"value\":\"technical\"},{\"value\":\"sales\"}]},{\"type\":\"score\",\"name\":\"severity\",\"instructions\":\"How severe is the issue?\",\"levels\":[{\"label\":\"Minor\"},{\"label\":\"Workaround available\"},{\"label\":\"Blocking\"}]},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"instructions\":\"Is the customer asking for a refund?\"}],\"provider_token\":\"secret\"}"
+  },
+  "response": {
+    "status": {
+      "code": 400,
+      "message": "Bad Request"
+    },
+    "headers": {
+      "Date": "Wed, 11 Nov 2026 15:59:39 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "143",
+      "Connection": "keep-alive",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-request-id,retry-after,server-timing-total, CF-Ray",
+      "server-timing-total": "1.152",
+      "openai-processing-ms": "1",
+      "x-request-id": "req_5b71e15d51cc4b2fa71d2ea98c38cc79",
+      "x-openai-proxy-wasm": "v0.1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=rTF9cWra9ZUNSM5nQK8jCSUeaZwuxgOO2dNf6T9N6z8-1794412779.04718-1.0.1.1-PYqX_qZFnzDgI0r_1SQX2DhOOdf0qdd.stFgbDEs8PUiGTQf0ohkXR9CWRT9IcjBi4_vyGC8XVH4fxxUgZrKD.FbLIgEAMSCySQcg4IuFEpW.UJBM1PU2kp5HvHe0Vhx; HttpOnly; SameSite=None; Partitioned; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 11 Nov 2026 16:29:39 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "CF-RAY": "a58e815d0d49da80-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"error\":{\"message\":\"Unknown parameter: 'provider_token'.\",\"type\":\"invalid_request_error\",\"param\":\"provider_token\",\"code\":\"unknown_parameter\"}}"
+  }
+}

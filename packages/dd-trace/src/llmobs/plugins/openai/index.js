@@ -14,6 +14,7 @@ const {
   DECISION_PROVIDER_TAG,
   IMAGE_FALLBACK,
   INPUT_TYPE_IMAGE,
+  INPUT_TYPE_JSON,
 } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
@@ -24,6 +25,18 @@ const {
   getModelProviderAndClient,
   getServerToolUsageMetrics,
 } = require('./utils')
+
+// Other keys are sent in the request body too, but can carry credentials
+const decisionRequestKeys = new Set([
+  'model',
+  'input',
+  'questions',
+  'prompt_cache_key',
+  'prompt_cache_options',
+  'safety_identifier',
+])
+
+const DATA_URL = /^\s*data:/i
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -487,27 +500,22 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   #tagDecision (span, inputs, response, error) {
     this._tagger.tagSpanTags(span, { [DECISION_PROVIDER_TAG]: DECISION_PROVIDER })
 
-    const { input, questions } = inputs
-
-    const inputMessages = typeof input === 'string'
-      ? [{ role: 'user', content: input }]
-      : (Array.isArray(input) ? input : []).map(message => ({
-          role: message.role ?? 'user',
-          content: decisionMessageContent(message.content),
-        }))
-
-    if (Array.isArray(questions)) {
-      this._tagger.tagMetadata(span, { questions })
+    const request = {}
+    if (inputs) {
+      for (const [key, value] of Object.entries(inputs)) {
+        if (decisionRequestKeys.has(key) && value !== undefined) request[key] = decisionBody(value)
+      }
     }
+    const inputMessages = [{ role: 'user', content: JSON.stringify(request) }]
 
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
-    this._tagger.tagLLMIO(span, inputMessages, [
-      { role: 'assistant', content: JSON.stringify(response.answers ?? []) },
-    ])
+    // Token usage is already recorded as metrics
+    const { usage, ...output } = response
+    this._tagger.tagLLMIO(span, inputMessages, [{ role: 'assistant', content: JSON.stringify(output) }])
   }
 }
 
@@ -539,14 +547,33 @@ function normalizeOpenAIResourceName (resource) {
   }
 }
 
-// Decision images must be inline data URLs, so they are replaced with a marker instead of copied onto the span
-function decisionMessageContent (content) {
-  if (!Array.isArray(content)) return content ?? ''
+/**
+ * The decisions request as sent, with inline images in input_image parts replaced by a marker. input_json data is the
+ * caller's own JSON, so it is kept as sent.
+ *
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function decisionBody (value) {
+  if (Array.isArray(value)) return value.map(decisionBody)
+  if (value === null || typeof value !== 'object' || value.type === INPUT_TYPE_JSON) return value
 
-  return content
-    .map(part => (part?.type === INPUT_TYPE_IMAGE ? IMAGE_FALLBACK : part?.text ?? ''))
-    .filter(Boolean)
-    .join('\n')
+  const body = {}
+  for (const [key, item] of Object.entries(value)) {
+    body[key] = value.type === INPUT_TYPE_IMAGE && key === 'image_url' ? decisionImageUrl(item) : decisionBody(item)
+  }
+  return body
+}
+
+/**
+ * The SDK does not enforce the string shape at runtime, so a chat-shaped { url } object is checked too.
+ *
+ * @param {unknown} imageUrl
+ * @returns {unknown}
+ */
+function decisionImageUrl (imageUrl) {
+  const url = imageUrl?.url ?? imageUrl
+  return typeof url === 'string' && !DATA_URL.test(url) ? imageUrl : IMAGE_FALLBACK
 }
 
 function gateResource (resource) {

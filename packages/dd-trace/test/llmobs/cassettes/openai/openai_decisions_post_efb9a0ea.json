@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/decisions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 7.53.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.53.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.14.1",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1100"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"input\":[{\"role\":\"developer\",\"content\":\"Route support tickets.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"data: customer reports a duplicate charge\"},{\"type\":\"input_json\",\"data\":{\"plan\":\"pro\",\"seats\":50}},{\"type\":\"input_json\",\"data\":{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII=\"}}]},{\"type\":\"custom_tool_call\",\"call_id\":\"call_1\",\"name\":\"lookup\",\"input\":\"acct 42\"},{\"type\":\"custom_tool_call_output\",\"call_id\":\"call_1\",\"output\":\"two charges on 2026-10-01\"}],\"questions\":[{\"type\":\"choice\",\"name\":\"department\",\"instructions\":\"Which team should handle this request?\",\"choices\":[{\"value\":\"billing\"},{\"value\":\"technical\"},{\"value\":\"sales\"}]},{\"type\":\"score\",\"name\":\"severity\",\"instructions\":\"How severe is the issue?\",\"levels\":[{\"label\":\"Minor\"},{\"label\":\"Workaround available\"},{\"label\":\"Blocking\"}]},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"instructions\":\"Is the customer asking for a refund?\"}],\"prompt_cache_key\":\"tickets\",\"safety_identifier\":\"user-1\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 11 Nov 2026 15:59:38 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "180000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "179999499",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-request-id,retry-after,server-timing-total, CF-Ray",
+      "server-timing-total": "169.186",
+      "openai-processing-ms": "169",
+      "x-request-id": "req_684acd4805074debbb92f5695c1cb59e",
+      "x-openai-proxy-wasm": "v0.1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=5drlkNpvLL6UsPWfOVEtValLbDlpw8zAyTKbl1jrTZc-1794412778.6925986-1.0.1.1-7vp1seMhMZXNHxubETGQI2oN1jEPFwD4SyZFtnSVM3VkwqXdrclWJM_wPQh_QTrahQEakekJNy6C3_BkHo7xSkj3oNtmRqX7HHQbrkSCcMpalMV.cRDxt._3fXviAuSP; HttpOnly; SameSite=None; Partitioned; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 11 Nov 2026 16:29:38 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a58e815ada576b90-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"answers\":[{\"type\":\"choice\",\"name\":\"department\",\"choice\":\"billing\",\"probabilities\":[{\"value\":\"billing\",\"probability\":1.0},{\"value\":\"technical\",\"probability\":0.0},{\"value\":\"sales\",\"probability\":0.0}],\"confidence\":1.0},{\"type\":\"score\",\"name\":\"severity\",\"score\":0.75,\"probabilities\":[{\"value\":0,\"label\":\"Minor\",\"probability\":0.32},{\"value\":1,\"label\":\"Workaround available\",\"probability\":0.61},{\"value\":2,\"label\":\"Blocking\",\"probability\":0.07}],\"confidence\":0.41},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"probability\":0.14}],\"usage\":{\"input_tokens\":499,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":499}}"
+  }
+}
