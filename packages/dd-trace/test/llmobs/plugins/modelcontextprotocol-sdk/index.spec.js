@@ -89,6 +89,54 @@ describe('integrations', () => {
         if (server) await server.close()
       })
 
+      describe('server request context', () => {
+        it('restores the LLM Obs context after the server starts handling a request', async () => {
+          const tracer = require('../../../../../..')
+          const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+          const { Client } = versionModule.get('@modelcontextprotocol/sdk/client')
+          const { McpServer } = versionModule.get('@modelcontextprotocol/sdk/server/mcp.js')
+          const { InMemoryTransport } = versionModule.get('@modelcontextprotocol/sdk/inMemory.js')
+
+          const contextServer = new McpServer({ name: 'context-server', version: '1.0.0' })
+          contextServer.registerTool('context-tool', { description: 'A tool', inputSchema: {} }, async () => ({
+            content: [{ type: 'text', text: 'ok' }],
+          }))
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          await contextServer.connect(serverTransport)
+
+          // Code that runs after the transport hands a request to the server must not inherit the server span.
+          const onmessage = serverTransport.onmessage
+          serverTransport.onmessage = function (message) {
+            const result = onmessage.apply(this, arguments)
+            if (message?.method === 'tools/call') {
+              tracer.llmobs.trace({ kind: 'task', name: 'after-onrequest' }, () => {})
+            }
+            return result
+          }
+
+          const contextClient = new Client({ name: 'context-client', version: '1.0.0' })
+          await contextClient.connect(clientTransport)
+
+          try {
+            await contextClient.callTool({ name: 'context-tool', arguments: {} })
+
+            const { llmobsSpans } = await getEvents()
+            const clientSpan = llmobsSpans.find(span => span.name === 'MCP Client Tool Call: context-tool')
+            const serverSpan = llmobsSpans.find(span => span.name === 'context-tool')
+            const afterSpan = llmobsSpans.find(span => span.name === 'after-onrequest')
+
+            assert.ok(clientSpan)
+            assert.ok(serverSpan)
+            assert.ok(afterSpan)
+            assert.equal(serverSpan.parent_id, clientSpan.span_id)
+            assert.equal(afterSpan.parent_id, clientSpan.span_id)
+          } finally {
+            await contextClient.close()
+            await contextServer.close()
+          }
+        })
+      })
+
       describe('Client.callTool', () => {
         it('creates a tool span for a basic tool call', async () => {
           const result = await client.callTool({ name: 'test-tool', arguments: {} })

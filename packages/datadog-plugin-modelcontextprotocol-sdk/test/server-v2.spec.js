@@ -97,9 +97,7 @@ describe('Plugin', () => {
             assert.equal(toolSpan.parent_id.toString(), requestSpan.span_id.toString())
           })
 
-          await client.callTool({ name: 'test-tool', arguments: {} })
-
-          return traceAssertion
+          await Promise.all([traceAssertion, client.callTool({ name: 'test-tool', arguments: {} })])
         })
 
         it('tags an isError tool result as an error', async () => {
@@ -110,10 +108,8 @@ describe('Plugin', () => {
             meta: { ...SERVER_REQUEST_META, 'error.message': 'Intentional test error' },
           })
 
-          const result = await client.callTool({ name: 'error-tool', arguments: {} })
+          const [, result] = await Promise.all([traceAssertion, client.callTool({ name: 'error-tool', arguments: {} })])
           assert.equal(result.isError, true)
-
-          return traceAssertion
         })
 
         it('tags a handler that rejects as an error', async () => {
@@ -124,9 +120,7 @@ describe('Plugin', () => {
             meta: { ...SERVER_REQUEST_META, 'error.message': 'Resource read failed' },
           })
 
-          await assert.rejects(client.readResource({ uri: 'file:///broken.txt' }))
-
-          return traceAssertion
+          await Promise.all([traceAssertion, assert.rejects(client.readResource({ uri: 'file:///broken.txt' }))])
         })
 
         it('traces tools/list', async () => {
@@ -137,9 +131,7 @@ describe('Plugin', () => {
             meta: SERVER_REQUEST_META,
           })
 
-          await client.listTools()
-
-          return traceAssertion
+          await Promise.all([traceAssertion, client.listTools()])
         })
 
         it('follows a tool rename in the tool span resource', async () => {
@@ -150,9 +142,7 @@ describe('Plugin', () => {
 
           const traceAssertion = expectSomeSpan(agent, { name: 'mcp.server.tool.call', resource: 'new-name' })
 
-          await client.callTool({ name: 'new-name', arguments: {} })
-
-          return traceAssertion
+          await Promise.all([traceAssertion, client.callTool({ name: 'new-name', arguments: {} })])
         })
 
         it('tags a request whose connection closed before the handler settled', async () => {
@@ -173,13 +163,13 @@ describe('Plugin', () => {
             meta: { ...SERVER_REQUEST_META, 'error.message': 'Connection closed' },
           })
 
-          const call = client.callTool({ name: 'slow-tool', arguments: {} }).catch(() => {})
-          await started
-          await mcpServer.close()
-          resume()
-          await call
-
-          return traceAssertion
+          await Promise.all([traceAssertion, (async () => {
+            const call = client.callTool({ name: 'slow-tool', arguments: {} }).catch(() => {})
+            await started
+            await mcpServer.close()
+            resume()
+            await call
+          })()])
         })
       })
 
@@ -223,9 +213,7 @@ describe('Plugin', () => {
             assert.equal(toolSpan.parent_id.toString(), requestSpan.span_id.toString())
           })
 
-          await client.callTool({ name: 'test-tool', arguments: {} })
-
-          return traceAssertion
+          await Promise.all([traceAssertion, client.callTool({ name: 'test-tool', arguments: {} })])
         })
 
         it('tags an input_required result without an error', async () => {
@@ -239,10 +227,11 @@ describe('Plugin', () => {
             assert.equal(pending.error, 0)
           })
 
-          const result = await client.callTool({ name: 'confirm-tool', arguments: {} })
+          const [, result] = await Promise.all([
+            traceAssertion,
+            client.callTool({ name: 'confirm-tool', arguments: {} }),
+          ])
           assert.equal(result.content[0].text, 'confirmed')
-
-          return traceAssertion
         })
 
         it('parents the server request span to the trace context in _meta', async () => {
@@ -259,9 +248,10 @@ describe('Plugin', () => {
             assert.equal(requestSpan.parent_id.toString(), parent.context().toSpanId())
           })
 
-          await client.callTool({ name: 'test-tool', arguments: {}, _meta: { _dd_trace_context: traceContext } })
-
-          return traceAssertion
+          await Promise.all([
+            traceAssertion,
+            client.callTool({ name: 'test-tool', arguments: {}, _meta: { _dd_trace_context: traceContext } }),
+          ])
         })
       })
     })
