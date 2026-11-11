@@ -3006,7 +3006,7 @@
     "DD_TRACE_DISABLED_INSTRUMENTATIONS": [
       {
         "implementation": "A",
-        "type": "string",
+        "type": "array",
         "default": ""
       }
     ],

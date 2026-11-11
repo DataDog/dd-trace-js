@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -67,6 +68,34 @@ describe('Lambda timeout monitor', () => {
     const forced = other.wrapLambdaHandler(handler, { forceWrap: true })
     assert.notStrictEqual(forced, wrapped)
     assert.strictEqual(withTimeoutMonitor(handler), forced)
+  })
+
+  it('preserves pre-bootstrap Lambda cache identity without adding root symbols', () => {
+    const instrumentationPath = require.resolve('../../../datadog-instrumentations/src/aws-lambda')
+    const script = `
+      const assert = require('node:assert/strict')
+      const { withTimeoutMonitor } = require(${JSON.stringify(require.resolve('../../src/lambda/wrap'))})
+      const { wrapHandler } = require(${JSON.stringify(instrumentationPath)})
+      const monitoredHandler = Object.freeze(() => 'monitored')
+      const invocationHandler = Object.freeze(() => 'invocation')
+      const monitored = Object.freeze(withTimeoutMonitor(monitoredHandler))
+      const invocation = Object.freeze(wrapHandler(invocationHandler))
+      const { wrap } = require(${JSON.stringify(require.resolve('../../../../lambda'))})
+      const wrapped = wrap(monitored)
+      assert.strictEqual(wrap(monitoredHandler), wrapped)
+      assert.strictEqual(withTimeoutMonitor(monitoredHandler), wrapped)
+      assert.strictEqual(withTimeoutMonitor(monitored), wrapped)
+      assert.strictEqual(wrap(invocationHandler), invocation)
+      assert.strictEqual(wrapHandler(invocationHandler), invocation)
+      assert.deepStrictEqual(Object.getOwnPropertySymbols(globalThis).filter(symbol =>
+        Symbol.keyFor(symbol)?.startsWith('dd-trace.lambda.')
+      ), [])
+    `
+    const result = spawnSync(process.execPath, ['--eval', script], {
+      encoding: 'utf8',
+      env: { ...process.env, DD_TRACE_ENABLED: 'true' },
+    })
+    assert.strictEqual(result.status, 0, result.stderr)
   })
 
   it('preserves callback arity, receiver, arguments, and the raw return value', () => {

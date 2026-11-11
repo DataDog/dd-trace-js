@@ -239,7 +239,7 @@ export interface GeneratedConfig {
   DD_TRACE_CUCUMBER_ENABLED: boolean;
   DD_TRACE_CYPRESS_ENABLED: boolean;
   DD_TRACE_DEBUG: boolean;
-  DD_TRACE_DISABLED_INSTRUMENTATIONS: string;
+  DD_TRACE_DISABLED_INSTRUMENTATIONS: string[];
   DD_TRACE_DISABLED_PLUGINS: string | undefined;
   DD_TRACE_DNS_ENABLED: boolean;
   DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: string | undefined;
@@ -985,7 +985,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_CUCUMBER_ENABLED: boolean;
   DD_TRACE_CYPRESS_ENABLED: boolean;
   DD_TRACE_DEBUG: boolean;
-  DD_TRACE_DISABLED_INSTRUMENTATIONS: string;
+  DD_TRACE_DISABLED_INSTRUMENTATIONS: string[];
   DD_TRACE_DISABLED_PLUGINS: string | undefined;
   DD_TRACE_DNS_ENABLED: boolean;
   DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS: string | undefined;

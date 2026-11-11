@@ -21,7 +21,7 @@ class AwsLambdaPlugin extends TracingPlugin {
    */
   bindStart (context) {
     const functionName = context.context?.functionName ||
-      getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') || ''
+      getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
     // TODO(migration PR 8): the extracted upstream context becomes the parent. Until the context
     // extractors land, pinning `childOf` keeps the span from adopting a stale active span left
     // behind by a previous invocation in the same warm container.
@@ -80,17 +80,18 @@ class AwsLambdaPlugin extends TracingPlugin {
  * for the same reason. Customers key dashboards and monitors off this value.
  *
  * @param {string} functionName Lambda function name.
- * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} config Plugin configuration.
- * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} [overrides] Per-handler configuration.
+ * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} pluginConfig Plugin-specific configuration.
+ * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} [handlerConfig] Per-handler overrides.
  */
-function resolveServiceName (functionName, config, overrides) {
-  const service = overrides?.service ?? config.service
+function resolveServiceName (functionName, pluginConfig, handlerConfig) {
+  const service = handlerConfig?.service ?? pluginConfig.service
   if (service) return service
 
   const envService = getEnvironmentVariable('DD_SERVICE')
   if (envService && envService.trim().length > 0) return envService.trim()
 
-  const serviceRepresentationEnabled = overrides?.serviceRepresentationEnabled ?? config.serviceRepresentationEnabled
+  const serviceRepresentationEnabled = handlerConfig?.serviceRepresentationEnabled ??
+    pluginConfig.serviceRepresentationEnabled
   if (serviceRepresentationEnabled === false) return 'aws.lambda'
 
   return functionName || 'aws.lambda'

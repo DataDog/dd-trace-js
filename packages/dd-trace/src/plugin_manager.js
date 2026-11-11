@@ -21,7 +21,6 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
 ])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
-const { listDisablesLambda } = require('./lambda/integration-names')
 
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
@@ -54,30 +53,32 @@ function enableLambdaEnvironment () {
     const { disabledPlugins: lambdaDisabledPlugins } = require('../../datadog-plugin-aws-lambda/src/defaults')
     for (const plugin of lambdaDisabledPlugins) {
       disabledPlugins.add(plugin)
-      if (pluginClasses[plugin]) pluginClasses[plugin] = null
+      maybeEnable(pluginClasses[plugin])
     }
   }
 
   // `DD_TRACE_DISABLED_PLUGINS` is matched against the plugin id below, so the legacy `lambda`
   // spelling would otherwise be ignored. Normalize it to the id before that check runs.
-  if (listDisablesLambda(DD_TRACE_DISABLED_PLUGINS)) disabledPlugins.add('aws-lambda')
+  if (disabledPlugins.has('lambda')) disabledPlugins.add('aws-lambda')
 
   // Register the handler hook only after Config observes the Lambda environment.
   // This also avoids freezing the decision when dd-trace is imported for its facade.
   require('./lambda')
   // Disabling the instrumentation disables the span too: there is no hook left to carry it.
-  if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))) {
+  const disabledInstrumentations = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
+  if (!disabledInstrumentations.includes('lambda') && !disabledInstrumentations.includes('aws-lambda')) {
     maybeEnable(plugins['aws-lambda'])
   }
 }
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
-  if (!pluginClasses[Plugin.id]) {
+  const disabled = disabledPlugins.has(Plugin.id)
+  if (!pluginClasses[Plugin.id] || disabled) {
     const enabled = getEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
-    if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
+    if (isFalse(enabled) || disabled) {
       log.debug('Plugin "%s" was disabled via configuration option.', Plugin.id)
 
       pluginClasses[Plugin.id] = null

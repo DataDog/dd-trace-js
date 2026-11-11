@@ -4126,7 +4126,7 @@ const JEST_LOGGING_LIBRARIES = new Set([
   'winston',
 ])
 const disabledJestInstrumentations = new Set(
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
 )
 
 addHook({

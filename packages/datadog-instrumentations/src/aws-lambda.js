@@ -17,10 +17,6 @@ const {
 // same marker. The value is the wrapper itself, so a second wrap of the same handler returns the
 // instrumented function rather than the raw one.
 const WRAPPED = Symbol.for('dd-trace.lambda.wrapped')
-// Customer functions (and wrappers handed back to us) may be frozen. Share weak keys across
-// tracer copies without adding properties to those functions or retaining them indefinitely.
-const wrappersKey = Symbol.for('dd-trace.lambda.invocation-wrappers')
-const wrappers = globalThis[wrappersKey] ??= new WeakMap()
 const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
 
 /**
@@ -81,6 +77,10 @@ function wrapHandler (handler, config, monitor) {
     })
   }
 
+  // Frozen customer handlers cannot carry markers; share their identity through the tracer registry.
+  const ddGlobal = globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
+  const lambda = ddGlobal.lambda ??= {}
+  const wrappers = lambda.wrappers ??= new WeakMap()
   wrappers.set(handler, wrappedHandler)
   wrappers.set(wrappedHandler, wrappedHandler)
   Object.defineProperty(wrappedHandler, WRAPPED, { value: wrappedHandler })
@@ -164,7 +164,8 @@ function findContextIndex (args) {
  * @returns {Function|undefined} Existing invocation wrapper.
  */
 function getWrappedHandler (handler) {
-  return wrappers.get(handler) || getDataProperty(handler, WRAPPED)
+  const wrappers = globalThis[Symbol.for('dd-trace')]?.lambda?.wrappers
+  return wrappers?.get(handler) || getDataProperty(handler, WRAPPED)
 }
 
 module.exports = {

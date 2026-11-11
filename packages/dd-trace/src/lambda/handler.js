@@ -98,12 +98,12 @@ exports.datadog = function datadog (lambdaHandler, normalized = false, observe) 
     const contextIndex = args.indexOf(context)
     const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
     const observer = observe?.(this, clear, callbackObservable)
-    const clearOnHandlerCompletion = (error, result, failed = false) => {
+    const clearOnHandlerCompletion = (value, failed = false) => {
       // Old normalized shim adapters retain their selected-Promise policy. Native forwarding keeps
       // monitoring while the runtime waits for event-loop drain, even if the adapter Promise settles.
       if ((normalized && !observer) || !callbackPending) {
         clear()
-        observer?.complete(error, result, failed)
+        observer?.complete(failed ? value : undefined, failed ? undefined : value, failed)
       }
     }
     if (!normalized) {
@@ -168,10 +168,10 @@ exports.datadog = function datadog (lambdaHandler, normalized = false, observe) 
       const result = Reflect.apply(lambdaHandler, this, args)
       if (result && typeof result.then === 'function') {
         return result.then(value => {
-          clearOnHandlerCompletion(undefined, value)
+          clearOnHandlerCompletion(value)
           return value
         }, error => {
-          clearOnHandlerCompletion(error, undefined, true)
+          clearOnHandlerCompletion(error, true)
           throw error
         })
       }
@@ -179,7 +179,7 @@ exports.datadog = function datadog (lambdaHandler, normalized = false, observe) 
       if (!callbackObservable) clear()
       return result
     } catch (error) {
-      clearOnHandlerCompletion(error, undefined, true)
+      clearOnHandlerCompletion(error, true)
       throw error
     } finally {
       monitoredContexts.delete(context)

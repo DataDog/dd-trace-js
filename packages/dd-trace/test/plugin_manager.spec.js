@@ -15,6 +15,7 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 const partialChannel = channel('dd-trace:test:partial-plugin-activation')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const log = require('../src/log')
+const { parsers } = require('../src/config/parsers')
 const CompositePlugin = require('../src/plugins/composite')
 
 describe('Plugin Manager', () => {
@@ -204,6 +205,7 @@ describe('Plugin Manager', () => {
           return process.env[name]
         },
         getValueFromEnvSources (name, skipDefault) {
+          if (name === 'DD_TRACE_DISABLED_INSTRUMENTATIONS') return parsers.ARRAY(process.env[name])
           if (name === 'DD_TRACE_NINE_ENABLED') {
             throw new Error(`${name} is not registered`)
           }
@@ -481,9 +483,20 @@ describe('Plugin Manager', () => {
         sinon.assert.notCalled(Fs.prototype.configure)
       })
 
+      it('applies the Lambda fs default to a plugin registered before configuration', () => {
+        loadChannel.publish({ name: 'fs' })
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'fs' })
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.notCalled(Fs.prototype.configure)
+      })
+
       // Both spellings name one integration. Accepting only one and silently ignoring the other
       // leaves a customer who asked for it to be off with tracing still on.
-      for (const value of ['http, lambda', 'lambda', 'aws-lambda', 'http,aws-lambda', ' lambda ']) {
+      for (const value of [
+        'http, lambda', 'lambda', 'aws-lambda', 'http,aws-lambda', ' lambda ', 'fs,\tlambda', ', aws-lambda,,',
+      ]) {
         it(`disables the plugin for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
           process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
           pm.configure(makeTracerConfig())
@@ -494,13 +507,15 @@ describe('Plugin Manager', () => {
         })
       }
 
-      it('leaves the plugin enabled when another integration is named', () => {
-        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,express'
-        pm.configure(makeTracerConfig())
+      for (const value of ['', 'http,express', 'aws-sdk', 'lambda-something', 'not-lambda', 'aws-lambda-extra']) {
+        it(`leaves the plugin enabled for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+          process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+          pm.configure(makeTracerConfig())
 
-        assert.deepStrictEqual(instantiated, ['aws-lambda'])
-        delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
-      })
+          assert.deepStrictEqual(instantiated, ['aws-lambda'])
+          delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+        })
+      }
 
       // DD_TRACE_DISABLED_PLUGINS is captured when plugin_manager is required, so the value has
       // to exist before the outer `beforeEach` loads it — setting it inside the test is too late.
@@ -525,21 +540,27 @@ describe('Plugin Manager', () => {
         })
       }
 
-      describe('with DD_TRACE_DISABLED_PLUGINS naming a different plugin', () => {
-        before(() => {
-          process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six'
-        })
+      for (const value of ['', 'five,six']) {
+        for (const registerFs of [false, true]) {
+          describe(`with DD_TRACE_DISABLED_PLUGINS=${JSON.stringify(value)} and fs registered ${registerFs}`, () => {
+            before(() => {
+              process.env.DD_TRACE_DISABLED_PLUGINS = value
+            })
 
-        after(() => {
-          delete process.env.DD_TRACE_DISABLED_PLUGINS
-        })
+            after(() => {
+              delete process.env.DD_TRACE_DISABLED_PLUGINS
+            })
 
-        it('leaves the aws-lambda plugin enabled', () => {
-          pm.configure(makeTracerConfig())
+            it('honors the explicit list instead of the Lambda defaults', () => {
+              if (registerFs) loadChannel.publish({ name: 'fs' })
+              pm.configure(makeTracerConfig())
 
-          assert.deepStrictEqual(instantiated, ['aws-lambda'])
-        })
-      })
+              assert.deepStrictEqual(instantiated, registerFs ? ['fs', 'aws-lambda'] : ['aws-lambda'])
+              if (registerFs) sinon.assert.calledWithMatch(Fs.prototype.configure, { enabled: true })
+            })
+          })
+        }
+      }
     })
 
     describe('without the load event', () => {

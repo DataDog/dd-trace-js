@@ -8,6 +8,8 @@ if (!global._ddtrace) {
   Object.defineProperty(globalThis, ddTraceSymbol, {
     value: {
       beforeExitHandlers: new Set(),
+      // Handler hooks may have populated Lambda caches before the tracer was initialized.
+      lambda: globalThis[ddTraceSymbol]?.lambda,
     },
     enumerable: false,
     configurable: true,

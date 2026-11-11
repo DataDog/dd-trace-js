@@ -15,9 +15,9 @@ const {
   extractModuleRootAndHandler,
   getLambdaFilePaths,
 } = require('./handler-paths')
-const { listDisablesLambda } = require('./integration-names')
+const disabledInstrumentations = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
 
-if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))) {
+if (!disabledInstrumentations.includes('lambda') && !disabledInstrumentations.includes('aws-lambda')) {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
   const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 

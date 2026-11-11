@@ -3,12 +3,6 @@
 const { getWrappedHandler, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
 const { datadog: monitor } = require('./handler')
 
-// Share identity across bundled/layer tracer copies without mutating customer functions.
-const monitorsKey = Symbol.for('dd-trace.lambda.timeout-monitors')
-const originalsKey = Symbol.for('dd-trace.lambda.monitored-originals')
-const monitors = globalThis[monitorsKey] ??= new WeakMap()
-const originals = globalThis[originalsKey] ??= new WeakMap()
-
 /**
  * Reuses a raw timeout monitor, or its invocation wrapper after facade promotion.
  *
@@ -17,6 +11,11 @@ const originals = globalThis[originalsKey] ??= new WeakMap()
  */
 function withTimeoutMonitor (handler) {
   if (typeof handler !== 'function') throw new TypeError('AWS Lambda handler must be a function')
+  // Share handler identity across tracer copies without modifying customer functions.
+  const ddGlobal = globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
+  const lambda = ddGlobal.lambda ??= {}
+  const monitors = lambda.monitors ??= new WeakMap()
+  const originals = lambda.originals ??= new WeakMap()
   const original = originals.get(handler) || handler
   const wrapped = getWrappedHandler(original)
   if (wrapped) return wrapped
@@ -38,7 +37,8 @@ function withTimeoutMonitor (handler) {
 function wrapLambdaHandler (handler, config) {
   // Normalize the original so a hook-first call has the same completion boundary as facade-first.
   // forceWrap(raw) replaces its wrapper; explicitly force-wrapping a span wrapper still nests it.
-  return wrapHandler(originals.get(handler) || handler, config, monitor)
+  const originals = globalThis[Symbol.for('dd-trace')]?.lambda?.originals
+  return wrapHandler(originals?.get(handler) || handler, config, monitor)
 }
 
 module.exports = { withTimeoutMonitor, wrapLambdaHandler }

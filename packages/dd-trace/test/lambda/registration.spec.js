@@ -100,9 +100,10 @@ describe('lambda', () => {
     })
 
     // The hook check and the plugin check previously disagreed: this one matched `lambda` with no
-    // trim, the other trimmed but rejected `aws-lambda`. Both now share one helper, so the same
-    // spelling has the same effect on both.
-    for (const value of ['http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ']) {
+    // trim, the other trimmed but rejected `aws-lambda`. Central array parsing now trims both checks.
+    for (const value of [
+      'http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ', 'fs,\tlambda', ', aws-lambda,,',
+    ]) {
       it(`does not register a hook for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
         process.env.LAMBDA_TASK_ROOT = '/var/task'
         process.env.DD_LAMBDA_HANDLER = 'handler.handler'
@@ -114,16 +115,18 @@ describe('lambda', () => {
       })
     }
 
-    it('still registers both hooks when another integration is disabled', () => {
-      process.env.LAMBDA_TASK_ROOT = '/var/task'
-      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,express'
+    for (const value of ['', 'http,express', 'aws-sdk', 'lambda-something', 'not-lambda', 'aws-lambda-extra']) {
+      it(`still registers both hooks for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
 
-      const { hookCalls } = loadLambdaWithHookSpy()
+        const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 2)
-      assert.deepStrictEqual(hookCalls[1].modules, ['datadog-lambda-js'])
-    })
+        assert.strictEqual(hookCalls.length, 2)
+        assert.deepStrictEqual(hookCalls[1].modules, ['datadog-lambda-js'])
+      })
+    }
 
     it('wraps the registered handler key when the lambda Hook callback fires', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
