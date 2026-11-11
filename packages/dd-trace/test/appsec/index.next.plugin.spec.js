@@ -151,6 +151,7 @@ describe('test suite', () => {
 
         describe('with a blocking rule', () => {
           const appDirTest = appName === 'app-dir' ? it : it.skip
+          const appDirBodyBlockingTest = appName === 'app-dir' && satisfies(realVersion, '>=13.3') ? it : it.skip
 
           async function assertBlocked (request, spanMeta) {
             const [response] = await Promise.all([
@@ -180,7 +181,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack in request body', () => {
+          appDirBodyBlockingTest('should block an attack in request body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
                 key: 'blockattack',
@@ -188,7 +189,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack in form data body', () => {
+          appDirBodyBlockingTest('should block an attack in form data body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-formdata`, new URLSearchParams({
                 key: 'blockattack',
@@ -196,7 +197,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack in request body with .text() function', () => {
+          appDirBodyBlockingTest('should block an attack in request body with .text() function', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
                 key: 'blockattack',
@@ -204,7 +205,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack in a cloned request body', () => {
+          appDirBodyBlockingTest('should block an attack in a cloned request body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone`, {
                 key: 'blockattack',
@@ -212,7 +213,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack read from a clone before the request body', () => {
+          appDirBodyBlockingTest('should block an attack read from a clone before the request body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone-peek`, {
                 key: 'blockattack',
@@ -220,7 +221,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should block an attack in the body of a clone of a cloned request', () => {
+          appDirBodyBlockingTest('should block an attack in the body of a clone of a cloned request', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone-chain`, {
                 key: 'blockattack',
@@ -228,7 +229,7 @@ describe('test suite', () => {
             )
           })
 
-          appDirTest('should let Next.js error handling report a blocked request body', async () => {
+          appDirBodyBlockingTest('should let Next.js error handling report a blocked request body', async () => {
             await assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
                 key: 'blockattack',
@@ -240,6 +241,13 @@ describe('test suite', () => {
 
           appDirTest('should not block an attack in a request created by the route handler', async () => {
             const response = await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/internal-request`)
+
+            assert.strictEqual(response.status, 200)
+            assert.deepStrictEqual(response.data.data, { key: 'blockattack' })
+          })
+
+          appDirTest('should not block an attack in a NextRequest created by the route handler', async () => {
+            const response = await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/internal-next-request`)
 
             assert.strictEqual(response.status, 200)
             assert.deepStrictEqual(response.data.data, { key: 'blockattack' })

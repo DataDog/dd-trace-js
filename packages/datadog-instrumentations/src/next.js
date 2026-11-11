@@ -61,7 +61,7 @@ const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
 const abortReasons = new WeakSet()
-const incomingRequestClones = new WeakSet()
+const incomingRequests = new WeakSet()
 
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -332,6 +332,7 @@ addHook({
     return function (nodeNextRequest) {
       const nextRequest = fromNodeNextRequest.apply(this, arguments)
       nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
+      if (bodyParsedChannel.hasSubscribers) incomingRequests.add(nextRequest)
       return nextRequest
     }
   })
@@ -399,6 +400,7 @@ function wrapAppRouteHandle (handle) {
         nodeNextRequestsToNextRequests.set(nodeRequest, req)
       }
     }
+    if (bodyParsedChannel.hasSubscribers) incomingRequests.add(req)
 
     return handle.apply(this, arguments)
   }
@@ -637,19 +639,12 @@ addHook({
 
 /**
  * @param {Request} request
- */
-function isIncomingRequest (request) {
-  return 'nextUrl' in request || incomingRequestClones.has(request)
-}
-
-/**
- * @param {Request} request
  * @param {unknown} body
  */
 function publishBodyParsed (request, body) {
   if (!bodyParsedChannel.hasSubscribers) return
 
-  const abortController = isIncomingRequest(request) ? new AbortController() : undefined
+  const abortController = incomingRequests.has(request) ? new AbortController() : undefined
   bodyParsedChannel.publish({ body, abortController })
 
   if (abortController?.signal.aborted) {
@@ -694,8 +689,8 @@ addHook({
     return function wrappedClone () {
       const clone = originalClone.apply(this, arguments)
 
-      if (bodyParsedChannel.hasSubscribers && isIncomingRequest(this)) {
-        incomingRequestClones.add(clone)
+      if (bodyParsedChannel.hasSubscribers && incomingRequests.has(this)) {
+        incomingRequests.add(clone)
       }
 
       return clone
