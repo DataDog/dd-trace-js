@@ -312,6 +312,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -2752,6 +2753,12 @@ declare namespace tracer {
        */
       net?: boolean;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
