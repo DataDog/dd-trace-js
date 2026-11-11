@@ -1,5 +1,6 @@
 'use strict'
 
+const { normalizeService } = require('../config/normalize-service')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
@@ -13,8 +14,8 @@ const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is r
 // The CDN attributes configuration requests to the DD-Service header only when it matches this, and drops any other
 // value.
 const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
-const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s does not match the format the CDN attributes ' +
-  'usage to; DD-Service header not sent'
+const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has nothing left the CDN can attribute usage to ' +
+  'once cleaned up; DD-Service header not sent'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
@@ -114,15 +115,18 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Selects the service sent as DD-Service. A value the CDN would drop is not sent: besides being wasted, a header
- * value with characters outside Latin-1 makes Node.js throw, which would end the polling loop.
+ * Selects the service sent as DD-Service. The name is cleaned up the way the Agent cleans up span service names, so
+ * `My Service` is attributed as `my_service`, as in APM, instead of being dropped by the CDN. Only this header value is
+ * cleaned up; the tracer's service stays as configured. A name with nothing left once cleaned up is not sent. Cleaning
+ * up also removes characters outside Latin-1, which make Node.js throw and would end the polling loop.
  *
  * @param {string | undefined} service - Tracer service name.
  */
 function usageService (service) {
-  const accepted = service !== undefined && USAGE_SERVICE_PATTERN.test(service)
+  const cleaned = normalizeService(service)
+  const accepted = cleaned !== undefined && USAGE_SERVICE_PATTERN.test(cleaned)
   if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
-  return accepted ? service : undefined
+  return accepted ? cleaned : undefined
 }
 
 /**

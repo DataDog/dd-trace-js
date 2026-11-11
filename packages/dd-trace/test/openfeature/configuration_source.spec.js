@@ -279,7 +279,7 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  it('passes a service at the edges of the format the CDN accepts', () => {
+  it('passes a service at the edges of the format the CDN accepts unchanged', () => {
     for (const service of ['a', 'svc_name.v2:api/edge-1', `a${'b'.repeat(99)}`]) {
       AgentlessConfigurationSource.resetHistory()
       config.service = service
@@ -288,9 +288,33 @@ describe('OpenFeature configuration source', () => {
     }
   })
 
-  // The CDN drops any other value, and Node.js throws on header characters outside Latin-1, which would end polling.
-  it('does not pass a service the CDN would drop or Node.js cannot send', () => {
-    for (const service of [`a${'b'.repeat(100)}`, '_svc', 'my service', '支付', 'bad\nvalue']) {
+  // The CDN drops any name outside its format, so the usage would bill without a service.
+  it('cleans up a service the CDN would drop the way the Agent does for APM', () => {
+    const cases = [
+      ['My Service', 'my_service'],
+      ['My-API', 'my-api'],
+      ['_svc', 'svc'],
+      ['bad\nvalue', 'bad_value'],
+      [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
+    ]
+    for (const [service, cleaned] of cases) {
+      AgentlessConfigurationSource.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, cleaned, service)
+    }
+  })
+
+  it('cleans up only the service it sends, not the tracer service', () => {
+    config.service = 'My Service'
+
+    assert.strictEqual(createSourceConfig().service, 'my_service')
+    assert.strictEqual(config.service, 'My Service')
+  })
+
+  // Node.js throws on header characters outside Latin-1, which would end polling.
+  it('does not pass a service with nothing left once cleaned up', () => {
+    for (const service of ['支付', '___']) {
       AgentlessConfigurationSource.resetHistory()
       log.debug.resetHistory()
       config.service = service
@@ -298,7 +322,8 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(createSourceConfig().service, undefined, service)
       sinon.assert.calledWithExactly(
         log.debug,
-        'Feature Flags: service %s does not match the format the CDN attributes usage to; DD-Service header not sent',
+        'Feature Flags: service %s has nothing left the CDN can attribute usage to once cleaned up; ' +
+          'DD-Service header not sent',
         service
       )
     }
