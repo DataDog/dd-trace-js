@@ -298,36 +298,36 @@ describe('Plugin', () => {
       assert.strictEqual(calls[0].ctx.resourceName, 'serialize')
     })
 
-    it('runInChildSpan should bypass tracing when there are no subscribers', () => {
-      /** @type {Array<{ type: string }>} */
-      const calls = []
-      const DatadogTracingHelper = getHelperClass({
-        hasSubscribers: false,
-        tracePromise: () => { calls.push({ type: 'promise' }) },
-        traceSync: () => { calls.push({ type: 'sync' }) },
+    for (const hasSubscribers of [false, true]) {
+      const condition = hasSubscribers ? 'client is disabled' : 'there are no subscribers'
+      it(`runInChildSpan should bypass tracing when ${condition}`, () => {
+        /** @type {Array<{ type: string }>} */
+        const calls = []
+        const DatadogTracingHelper = getHelperClass({
+          hasSubscribers,
+          tracePromise: () => { calls.push({ type: 'promise' }) },
+          traceSync: () => { calls.push({ type: 'sync' }) },
+        })
+
+        const config = hasSubscribers ? { client: false } : {}
+        const helper = new DatadogTracingHelper(undefined, { config })
+
+        for (const options of ['operation', { name: 'operation' }, { name: 'serialize' }, { name: 'middleware' }]) {
+          for (const result of ['ok', Promise.resolve('ok')]) {
+            let callbackCalls = 0
+            const actual = helper.runInChildSpan(options, function () {
+              assert.strictEqual(arguments.length, 0)
+              callbackCalls++
+              return result
+            })
+
+            assert.strictEqual(calls.length, 0)
+            assert.strictEqual(callbackCalls, 1)
+            assert.strictEqual(actual, result)
+          }
+        }
       })
-
-      const helper = new DatadogTracingHelper(undefined, {})
-      const result = helper.runInChildSpan({ name: 'operation' }, () => 'ok')
-
-      assert.strictEqual(result, 'ok')
-      assert.strictEqual(calls.length, 0)
-    })
-
-    it('runInChildSpan should bypass tracing when client is disabled', () => {
-      /** @type {Array<{ type: string }>} */
-      const calls = []
-      const DatadogTracingHelper = getHelperClass({
-        tracePromise: () => { calls.push({ type: 'promise' }) },
-        traceSync: () => { calls.push({ type: 'sync' }) },
-      })
-
-      const helper = new DatadogTracingHelper(undefined, { config: { client: false } })
-
-      assert.strictEqual(helper.runInChildSpan({ name: 'operation' }, () => 'ok'), 'ok')
-      assert.strictEqual(helper.runInChildSpan({ name: 'serialize' }, () => 'ok'), 'ok')
-      assert.strictEqual(calls.length, 0)
-    })
+    }
 
     it('getTraceParent should still return a sampled traceparent when engine and client are disabled', () => {
       const DatadogTracingHelper = getHelperClass()
@@ -716,6 +716,28 @@ describe('Plugin', () => {
                 databaseSpan,
                 noClientSpans,
               ])
+            })
+
+            it('should support query middleware without client spans', async function () {
+              if (typeof prismaClient.$use !== 'function') this.skip()
+
+              prismaClient.$use((params, next) => next(params))
+
+              const noClientSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.client.opName)
+              })
+              const databaseSpan = agent.assertFirstTraceSpan({
+                name: expectedSchema.engine.opName,
+                resource: 'SELECT 1 AS value',
+              }, { spanResourceMatch: /^SELECT 1 AS value$/ })
+
+              const [rows] = await Promise.all([
+                prismaClient.$queryRaw`SELECT 1 AS value`,
+                noClientSpans,
+                databaseSpan,
+              ])
+
+              assert.deepStrictEqual(rows, [{ value: 1 }])
             })
           })
 

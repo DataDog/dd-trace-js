@@ -93,7 +93,7 @@ class DatadogTracingHelper {
     // Skipping here rather than in the plugin's `bindStart` avoids finishing the parent span, which
     // `finish()` would fall back to when no client span was started.
     if (!clientCH.start?.hasSubscribers || this.#prismaClient.config?.client === false) {
-      return callback.apply(this, arguments)
+      return callback()
     }
     if (typeof options === 'string') {
       options = {
