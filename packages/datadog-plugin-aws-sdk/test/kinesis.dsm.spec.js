@@ -239,9 +239,9 @@ describe('Kinesis', function () {
               ShardIteratorType: 'AT_SEQUENCE_NUMBER',
               StartingSequenceNumber: record.SequenceNumber,
               StreamARN: streamArn,
-            }, (err, { ShardIterator } = {}) => {
+            }, (err, data) => {
               if (err) return done(err)
-              kinesis.getRecords({ ShardIterator, Limit: 1 }, () => {})
+              kinesis.getRecords({ ShardIterator: data.ShardIterator, Limit: 1 }, () => {})
             })
           })
         })
