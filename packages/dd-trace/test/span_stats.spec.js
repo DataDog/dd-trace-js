@@ -590,6 +590,73 @@ describe('SpanBuckets', () => {
   })
 })
 
+describe('SpanBuckets peer tags cardinality limit', () => {
+  const peerTagKeys = ['peer.service']
+
+  /**
+   * @param {string} [peerService]
+   */
+  function clientSpan (peerService) {
+    const meta = { ...basicSpan.meta, [SPAN_KIND]: 'client' }
+    if (peerService !== undefined) meta['peer.service'] = peerService
+    return { ...basicSpan, meta }
+  }
+
+  /**
+   * @param {SpanBuckets} buckets
+   */
+  function peerTagsOf (buckets) {
+    return [...buckets.values()].map(stats => stats.aggKey.peerTags)
+  }
+
+  it('should keep the first combinations up to the limit and collapse the rest', () => {
+    const buckets = new SpanBuckets(false, 2)
+
+    for (const peerService of ['a', 'b', 'c', 'a', 'd', 'b']) {
+      buckets.forSpan(clientSpan(peerService), peerTagKeys).record(clientSpan(peerService))
+    }
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [
+      ['peer.service:a'],
+      ['peer.service:b'],
+      ['tracer_blocked_value'],
+    ])
+    const hits = [...buckets.values()].map(stats => stats.hits)
+    assert.deepStrictEqual(hits, [2, 2, 2])
+  })
+
+  it('should not count spans without peer tags', () => {
+    const buckets = new SpanBuckets(false, 1)
+
+    buckets.forSpan(clientSpan(), peerTagKeys)
+    buckets.forSpan({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }, peerTagKeys)
+    buckets.forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [[], [], ['peer.service:a'], ['tracer_blocked_value']])
+  })
+
+  it('should keep every combination without a limit', () => {
+    const buckets = new SpanBuckets()
+
+    buckets.forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [['peer.service:a'], ['peer.service:b']])
+  })
+
+  it('should apply the limit per time bucket', () => {
+    const buckets = new TimeBuckets(false, 1)
+
+    buckets.forTime(0).forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forTime(0).forSpan(clientSpan('b'), peerTagKeys)
+    buckets.forTime(1).forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets.forTime(0)), [['peer.service:a'], ['tracer_blocked_value']])
+    assert.deepStrictEqual(peerTagsOf(buckets.forTime(1)), [['peer.service:b']])
+  })
+})
+
 describe('TimeBuckets', () => {
   it('should acquire a span agg bucket for the given time', () => {
     const buckets = new TimeBuckets()
@@ -1076,6 +1143,20 @@ describe('SpanStatsProcessor', () => {
       p.onSpanFinished(clientSpan)
 
       assert.deepStrictEqual(exportedPeerTags(p), [[]])
+    })
+
+    it('should apply DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT', () => {
+      fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
+
+      const p = new SpanStatsProcessor({
+        ...config,
+        stats: { ...config.stats, DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: 1 },
+      })
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+      p.onSpanFinished({ ...clientSpan, meta: { ...clientSpan.meta, 'peer.service': 'payments' } })
+
+      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing'], ['tracer_blocked_value']])
     })
 
     it('should not read /info when agent stats are disabled', () => {

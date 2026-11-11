@@ -2053,6 +2053,7 @@ describe('Config', () => {
       { name: 'DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE', value: 1.0, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_STATS_COMPUTATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT', value: 512, origin: 'default' },
     ].sort(comparator))
   })
 
@@ -2691,6 +2692,21 @@ describe('Config', () => {
     sinon.assert.calledOnceWithExactly(
       log.warn,
       'Invalid value: -1 for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+  })
+
+  it('should read DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT and pick the default for non-positive values', () => {
+    assert.strictEqual(getConfig().stats.DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT, 512)
+
+    process.env.DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT = '1'
+    assert.strictEqual(getConfig().stats.DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT, 1)
+    sinon.assert.notCalled(log.warn)
+
+    process.env.DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT = '0'
+    assert.strictEqual(getConfig().stats.DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT, 512)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT (source: env_var), picked default'
     )
   })
 
