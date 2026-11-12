@@ -91,7 +91,7 @@ cases:
       - Assumes a leaked handle without inspecting one.
       - Recommends increasing the timeout without investigating the earlier error.
 
-  # AGENTS.md — Cross-Cutting Configuration Changes: steps 1, 2, 4, 5, and unit suffixes.
+  # AGENTS.md — Cross-Cutting Configuration Changes: registry, generated types, telemetry, and unit suffixes.
   - id: dd-trace-js-new-configuration-010
     files: [AGENTS.md]
     input: |
@@ -99,17 +99,25 @@ cases:
       Which core configuration files must change, when does telemetry change, and how should the option be named?
       Answer in at most 5 bullets.
     expected_criteria:
-      - Adds the default in packages/dd-trace/src/config/defaults.js.
-      - Maps the environment variable in packages/dd-trace/src/config/index.js.
-      - Updates packages/dd-trace/src/config/supported-configurations.json.
-      - Adds the telemetry mapping when applicable.
-      - Uses a unit suffix, such as maxBytes.
+      - >-
+        Recommends registering the DD_ variable in packages/dd-trace/src/config/supported-configurations.json
+        with its default, type and programmatic name (configurationNames) for tracer.init().
+      - >-
+        Explains that defaults and environment/programmatic parsing are derived from the registry by
+        config/defaults.js and config/index.js; manual edits are needed only for behavior the registry cannot express.
+      - >-
+        Explains that canonical configuration telemetry is registry-derived, without a required per-option name
+        mapping in telemetry/telemetry.js. Recommends telemetry tests when adding or changing a configuration source
+        and implementation changes only for custom telemetry behavior.
+      - >-
+        Recommends running npm run generate:config:types and committing the generated configuration types.
+      - Recommends a unit suffix, such as maxBytes.
     bad_signals:
-      - Adds the environment variable without a default.
-      - Omits the environment-variable mapping in packages/dd-trace/src/config/index.js.
+      - Recommends adding the environment variable without specifying a default in its registry entry.
+      - Omits the registry mapping that exposes the option through tracer.init().
       - Omits packages/dd-trace/src/config/supported-configurations.json.
-      - Treats telemetry as mandatory even when it is not applicable.
-      - Uses a size option name without a unit suffix.
+      - Recommends manual defaults, env mapping or telemetry name mapping for every ordinary registry-backed option.
+      - Recommends a size option name without a unit suffix.
 
   # AGENTS.md — Production Safety and Performance: performance-motivated complexity.
   - id: dd-trace-js-hot-path-review-011
@@ -169,9 +177,13 @@ cases:
     expected_criteria:
       - Rejects adding promise machinery to the synchronous request path regardless of async syntax.
       - >
-        Allows inherently asynchronous APIs, control-plane code, and worker threads to follow their upstream
-        asynchronous contract.
-      - Keeps inactive paths cheap.
+        Explains that inherently asynchronous APIs, control-plane code, and worker threads may follow their upstream
+        asynchronous contract. Cover all three categories; grouping control-plane code and worker threads together
+        is valid, provided the upstream-contract condition still applies.
+      - Recommends keeping inactive paths cheap.
+      - >-
+        Uses at most three top-level bullets. A brief introduction or nested explanation does not add a top-level
+        bullet. Assess equivalent grouping consistently; missing safety conditions are substantive errors.
     bad_signals:
       - Accepts the promise-returning helper because it avoids async syntax.
       - Treats the exceptions as permission to add promise machinery to arbitrary production paths.
