@@ -107,6 +107,9 @@ class Tracer extends NoopProxy {
   /** @type {boolean} */
   #configPublished = false
 
+  /** @type {boolean} */
+  #iastUnavailable = false
+
   constructor () {
     super()
 
@@ -280,7 +283,7 @@ class Tracer extends NoopProxy {
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
 
-      if (config.iast.DD_IAST_ENABLED) {
+      if (config.iast.DD_IAST_ENABLED && !this.#iastUnavailable) {
         this._modules.rewriter.enable(config)
       }
 
@@ -431,8 +434,15 @@ class Tracer extends NoopProxy {
       if (aiguardEnabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
-      if (config.iast.DD_IAST_ENABLED) {
-        this._modules.iast.enable(config, this._tracer)
+      if (config.iast.DD_IAST_ENABLED && !this.#iastUnavailable) {
+        // IAST loads optional native addons that can be missing (e.g. installs without optional
+        // dependencies). Disable it for the process lifetime instead of aborting tracer setup.
+        try {
+          this._modules.iast.enable(config, this._tracer)
+        } catch (error) {
+          this.#iastUnavailable = true
+          log.error('[IAST] Unable to start IAST, it stays disabled', error)
+        }
       }
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
