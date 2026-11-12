@@ -12,6 +12,7 @@ const appMountedRouters = new WeakSet() // to track routers mounted via app.use(
  * @property {string} [name]
  * @property {string} [captureRoute]
  * @property {boolean} [needMultiMatch]
+ * @property {string} [matchedPath] Last matched path, for hosts whose `Layer.prototype.match` returns the match.
  * @property {Array<{ path?: string, regex?: RegExp }> & {
  *   hasStarPath?: boolean,
  *   hasSlashPath?: boolean

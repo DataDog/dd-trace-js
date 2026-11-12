@@ -56,10 +56,12 @@ function annotateLayer (layer, matchers) {
 
 /**
  * Resolve the route for a dispatched layer. Single-pattern layers carry a
- * constant route; only multi-pattern stacks need the per-request `layer.path`
- * match the host already computed.
+ * constant route; only multi-pattern stacks need the per-request path match
+ * the host already computed. Hosts that keep it on the layer expose it as
+ * `layer.path`; hosts that return it from `Layer.prototype.match` have it
+ * recorded as `meta.matchedPath` by `wrapLayerMatch`.
  *
- * @param {{ captureRoute?: string, needMultiMatch: boolean,
+ * @param {{ captureRoute?: string, needMultiMatch: boolean, matchedPath?: string,
  *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
  * @param {{ path?: string }} layer
  * @returns {string | undefined}
@@ -67,8 +69,33 @@ function annotateLayer (layer, matchers) {
 function resolveLayerRoute (meta, layer) {
   if (!meta.needMultiMatch) return meta.captureRoute
 
+  const matchedPath = layer.path ?? meta.matchedPath
+
   for (const matcher of meta.matchers) {
-    if (matcher.regex?.test(layer.path)) return matcher.path
+    if (matcher.regex?.test(matchedPath)) return matcher.path
+  }
+}
+
+/**
+ * Newer router releases return the match (`{ params, path, keys, pattern }`)
+ * from `Layer.prototype.match` instead of storing it on the shared layer, so
+ * `layer.path` is no longer available at dispatch. Record the matched path for
+ * multi-pattern layers, the only ones that resolve their route per request.
+ * Releases that return a boolean keep `layer.path` and skip the bookkeeping.
+ *
+ * @param {Function} originalMatch
+ * @returns {Function}
+ */
+function wrapLayerMatch (originalMatch) {
+  return function match () {
+    const result = Reflect.apply(originalMatch, this, arguments)
+
+    if (result !== null && typeof result === 'object') {
+      const meta = getLayerMeta(this)
+      if (meta?.needMultiMatch) meta.matchedPath = result.path
+    }
+
+    return result
   }
 }
 
@@ -656,6 +683,7 @@ addHook({
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapLayerRequest)
   shimmer.wrap(Layer.prototype, 'handleError', wrapLayerError)
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Layer.prototype, 'match', wrapLayerMatch)
   return Layer
 })
 
@@ -695,4 +723,4 @@ addHook({
   return router
 })
 
-module.exports = { createWrapRouterMethod, createLayerDispatchWrappers }
+module.exports = { createWrapRouterMethod, createLayerDispatchWrappers, wrapLayerMatch }
