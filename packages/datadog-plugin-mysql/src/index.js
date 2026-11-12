@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const SQLDatabasePlugin = require('../../dd-trace/src/plugins/sql-database')
 
 /**
  * @typedef {{
@@ -13,7 +13,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
  * }} ConnectionConfig
  */
 
-class MySQLPlugin extends DatabasePlugin {
+class MySQLPlugin extends SQLDatabasePlugin {
   static id = 'mysql'
   static system = 'mysql'
 
@@ -73,6 +73,8 @@ class MySQLPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
+    if (this.shouldIgnoreTransaction(ctx.sql)) return this.skipTransaction(ctx)
+
     const service = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
     const span = this.startSpan(this.operationName(), {
       service,

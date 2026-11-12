@@ -40,8 +40,8 @@ const poolAcquireChannels = {
   acquireFinishCh: poolAcquireFinishCh,
 }
 
-// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
-// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+// Drivers like pg-promise reuse prepared-statement query objects. Cache the original text only
+// while a DBM comment is installed, so later changes to an untouched query remain visible.
 const originalTextCache = new WeakMap()
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
@@ -194,15 +194,13 @@ function wrapQuery (query) {
     const pgQuery = args[0] !== null && typeof args[0] === 'object'
       ? args[0]
       : { text: args[0] }
+    const isCallerQuery = pgQuery === args[0]
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const stream = typeof textPropObj.read === 'function'
 
-    let originalText = originalTextCache.get(textPropObj)
-    if (originalText === undefined) {
-      originalText = textPropObj.text
-      originalTextCache.set(textPropObj, originalText)
-    }
+    const cachedText = isCallerQuery ? originalTextCache.get(textPropObj) : undefined
+    const originalText = cachedText === undefined ? textPropObj.text : cachedText
 
     const abortController = new AbortController()
     const ctx = {
@@ -263,23 +261,23 @@ function wrapQuery (query) {
       }
 
       const injected = ctx.injected
-      if (injected !== undefined) {
-        // Skip the per-read getter trampoline when `text` is a configurable, writable data
-        // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
-        // still go through `defineProperty(get)` so `get text ()` query objects keep working.
-        const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
-        if (textProp?.configurable === true && textProp.writable === true) {
+      if (injected !== undefined && (injected !== originalText || cachedText !== undefined)) {
+        if (isCallerQuery) {
+          const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+          if (textProp?.configurable === true && textProp.writable === true) {
+            textPropObj.text = injected
+            if (injected === originalText) {
+              originalTextCache.delete(textPropObj)
+            } else {
+              originalTextCache.set(textPropObj, originalText)
+            }
+          }
+        } else {
           textPropObj.text = injected
-        } else if (textProp === undefined || textProp.configurable === true) {
-          Object.defineProperty(textPropObj, 'text', {
-            configurable: true,
-            get () { return injected },
-          })
         }
       }
 
       args[0] = pgQuery
-
       const retval = query.apply(this, args)
 
       const deperecated = Object.hasOwn(this, '_activeQuery')

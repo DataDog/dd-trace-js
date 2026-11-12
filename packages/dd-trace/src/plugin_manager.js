@@ -188,6 +188,7 @@ module.exports = class PluginManager {
       headerTags,
       codeOriginForSpans,
       dbmPropagationMode,
+      ignoredTransactionOperations,
       dsmEnabled,
       DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
       DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
@@ -267,6 +268,8 @@ module.exports = class PluginManager {
       sharedConfig.depth = DD_TRACE_GRAPHQL_DEPTH
       sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
       sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+    } else if (name === 'pg' || name === 'mysql' || name === 'mysql2' || name === 'mariadb') {
+      sharedConfig.ignoredTransactionOperations = ignoredTransactionOperations
     }
 
     return sharedConfig
