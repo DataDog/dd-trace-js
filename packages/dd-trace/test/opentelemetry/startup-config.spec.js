@@ -198,7 +198,7 @@ describe('effective OTel startup configuration', () => {
     })
   }
 
-  it('excludes span metrics disabled by default when checking shared resources', () => {
+  it('excludes span metrics by default when checking shared resources', () => {
     const result = run({
       OTEL_TRACES_EXPORTER: 'otlp', DD_LOGS_OTEL_ENABLED: 'true', DD_METRICS_OTEL_ENABLED: 'true',
     }, { service: 'configured-service', tags: { 'service.name': 'resource-service' } })
