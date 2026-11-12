@@ -803,11 +803,10 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = usesOtlpTraceExporter(this) && this.DD_METRICS_OTEL_ENABLED === true
-    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? false)
 
-    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    if (usesOtlpTraceExporter(this) || this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED)
     }
 
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
