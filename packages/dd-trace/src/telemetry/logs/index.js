@@ -5,8 +5,14 @@ const { sendData } = require('../send-data')
 const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
-const errorLog = dc.channel('datadog:log:error')
+const errorLog = dc.channel('datadog:log:error:record')
 
+/**
+ * @typedef {object} TelemetryLogOptions
+ * @property {string} [tags] Default tags appended to every outgoing log.
+ */
+
+let logOptions
 let enabled = false
 
 /**
@@ -15,7 +21,6 @@ let enabled = false
  * - DEBUG level will be possible to activate with an env var or telemetry config property
  *
  * @param {string | undefined} level
- * @returns {boolean}
  */
 function isLevelEnabled (level) {
   return isValidLevel(level)
@@ -46,21 +51,38 @@ function onErrorLog (msg) {
     count: 1,
 
     // existing log.error(err) without message will be reported as 'Generic Error'
-    message: message ?? 'Generic Error',
+    message: message || 'Generic Error',
   }
 
   if (cause) {
-    telLog.stack_trace = cause.stack
-    telLog.errorType = cause.constructor.name
+    try {
+      telLog.stack_trace = cause.stack
+    } catch {
+      return
+    }
+    telLog.errorType = getErrorType(cause)
   }
 
   onLog(telLog)
 }
 
-function start (config) {
+function getErrorType (cause) {
+  try {
+    return cause.constructor?.name || 'Error'
+  } catch {
+    return 'Error'
+  }
+}
+
+/**
+ * @param {import('../../config/config-base')} config
+ * @param {TelemetryLogOptions} [options]
+ */
+function start (config, options) {
   if (!config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED || enabled) return
 
   enabled = true
+  logOptions = options
 
   telemetryLog.subscribe(onLog)
 
@@ -69,6 +91,7 @@ function start (config) {
 
 function stop () {
   enabled = false
+  logOptions = undefined
 
   if (telemetryLog.hasSubscribers) {
     telemetryLog.unsubscribe(onLog)
@@ -80,8 +103,15 @@ function stop () {
 function send (config, application, host) {
   if (!enabled) return
 
-  const logs = logCollector.drain()
+  let logs = logCollector.drain()
   if (logs) {
+    const tags = logOptions?.tags
+    if (tags) {
+      logs = logs.map(entry => ({
+        ...entry,
+        tags: entry.tags ? `${entry.tags},${tags}` : tags,
+      }))
+    }
     sendData(config, application, host, 'logs', { logs })
   }
 }

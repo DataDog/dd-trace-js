@@ -23,6 +23,13 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractMetrics(ctx.result) }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -180,9 +187,17 @@ function extractMetrics (result) {
   const tokenCounts = response.usageMetadata
   const metrics = {}
   if (tokenCounts) {
-    metrics.inputTokens = tokenCounts.promptTokenCount
-    metrics.outputTokens = tokenCounts.candidatesTokenCount
+    const { thoughtsTokenCount, toolUsePromptTokenCount, cachedContentTokenCount } = tokenCounts
+    // Gemini reports thinking and tool-use prompt tokens outside the prompt/candidates counts.
+    metrics.inputTokens = toolUsePromptTokenCount
+      ? (tokenCounts.promptTokenCount || 0) + toolUsePromptTokenCount
+      : tokenCounts.promptTokenCount
+    metrics.outputTokens = thoughtsTokenCount
+      ? (tokenCounts.candidatesTokenCount || 0) + thoughtsTokenCount
+      : tokenCounts.candidatesTokenCount
     metrics.totalTokens = tokenCounts.totalTokenCount
+    if (cachedContentTokenCount) metrics.cacheReadTokens = cachedContentTokenCount
+    if (thoughtsTokenCount) metrics.reasoningOutputTokens = thoughtsTokenCount
   }
 
   return metrics

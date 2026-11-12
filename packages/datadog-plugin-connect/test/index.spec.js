@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const http = require('node:http')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -13,6 +12,7 @@ const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -75,7 +75,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -107,7 +107,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -132,7 +132,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
@@ -161,7 +161,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/parent/child`)
               .catch(done)
           })
@@ -189,7 +189,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -219,7 +219,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -253,7 +253,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -276,7 +276,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -309,7 +309,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -333,7 +333,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/app/user/123`)
+            httpRequest.get(`http://localhost:${port}/app/user/123`)
               .catch(done)
           })
         })
@@ -357,7 +357,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 headers: {
                   'x-datadog-trace-id': '1234',
@@ -400,7 +400,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -439,7 +439,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 400,
               })
@@ -474,7 +474,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -505,7 +505,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -550,7 +550,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -595,7 +595,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -621,7 +621,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 400,
               })
@@ -648,7 +648,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 headers: { 'User-Agent': 'test' },
               })
@@ -687,7 +687,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -732,7 +732,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -767,7 +767,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -811,7 +811,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -843,7 +843,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -879,7 +879,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -914,7 +914,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })

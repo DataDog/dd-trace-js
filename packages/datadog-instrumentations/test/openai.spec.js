@@ -261,7 +261,7 @@ describe('openai interception', () => {
         })
     })
 
-    it('leaves a stream to the native call when only interception is subscribed', () => {
+    it('publishes streamed calls to an interceptor without changing the stream', () => {
       const chunks = [{ choices: [{ index: 0, delta: { content: 'Hello' } }] }]
       const { calls, unsubscribe } = subscribeIntercept(chatCompletionsInterceptChannel)
       const completions = new Completions()
@@ -271,9 +271,50 @@ describe('openai interception', () => {
         .then(stream => readAll(stream))
         .then(received => {
           assert.deepStrictEqual(received, chunks)
-          assert.deepStrictEqual(calls, [])
+          assert.strictEqual(calls.length, 1)
+          assert.strictEqual(calls[0].arguments[0].stream, true)
         })
         .finally(unsubscribe)
+    })
+
+    it('delivers the stream returned by the interceptor', () => {
+      const original = [{ choices: [{ index: 0, delta: { content: 'original' } }] }]
+      const replacement = [{ choices: [{ index: 0, delta: { content: 'replacement' } }] }]
+      const { unsubscribe } = subscribeIntercept(chatCompletionsInterceptChannel, ctx => {
+        ctx.onResult = () => new FakeStream(replacement)
+      })
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise(new FakeStream(original))
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse()
+        .then(stream => readAll(stream))
+        .then(received => assert.deepStrictEqual(received, replacement))
+        .finally(unsubscribe)
+    })
+
+    it('rejects the streamed call and marks the span errored when onResult rejects', () => {
+      const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const { unsubscribe } = subscribeIntercept(chatCompletionsInterceptChannel, ctx => {
+        ctx.onResult = () => Promise.reject(error)
+      })
+      const apmChannel = tracingChannel('apm:openai:request')
+      let erroredCtx
+      const apmHandlers = { start () {}, error (ctx) { erroredCtx = ctx } }
+      apmChannel.subscribe(apmHandlers)
+
+      const chunks = [{ choices: [{ index: 0, delta: { content: 'blocked output' } }] }]
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise(new FakeStream(chunks))
+
+      return assert.rejects(
+        () => completions.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse(),
+        candidate => candidate === error
+      )
+        .then(() => assert.strictEqual(erroredCtx?.error, error))
+        .finally(() => {
+          apmChannel.unsubscribe(apmHandlers)
+          unsubscribe()
+        })
     })
 
     it('applies both callbacks on the structured-output (_thenUnwrap) path', () => {

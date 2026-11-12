@@ -1,15 +1,28 @@
 'use strict'
 
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
 const MAX_POLL_INTERVAL_SECONDS = 60 * 60
+const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration source at %s ' +
+  '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)'
+const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
+  'Configuration is disabled; flag evaluations will return their default values. Set ' +
+  'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
+const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
+  'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
+  'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
  */
 
 /**
+ * Creates the agentless source when it is the selected configuration source.
+ *
+ * Throws when the agentless source is selected but cannot start, so the provider can fail initialization.
+ *
  * @param {import('../config/config-base')} config
  * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
  */
@@ -22,27 +35,40 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
+  if (!enabled) return
+
+  if (source !== 'agentless') {
+    log.debug('Feature Flags: configuration source is %s, not agentless; skipping agentless setup', source)
+    if (source === 'remote_config' && !config.remoteConfig?.DD_REMOTE_CONFIGURATION_ENABLED) {
+      log.warn(REMOTE_CONFIG_DISABLED_WARNING)
+    }
     return
   }
 
   const hasCustomEndpoint = Boolean(baseUrl?.trim())
 
-  try {
-    if (!hasCustomEndpoint && !config.DD_API_KEY) {
-      throw new Error('DD_API_KEY is required for the default Datadog Feature Flagging endpoint')
-    }
-
-    const AgentlessConfigurationSource = require('./agentless_configuration_source')
-    return new AgentlessConfigurationSource({
-      endpoint: endpoint(config, baseUrl),
-      pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
-      requestTimeoutMs: requestTimeoutSeconds * 1000,
-      apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
-    }, applyConfiguration)
-  } catch (error) {
-    log.error('Unable to configure Feature Flagging configuration source', error)
+  if (!hasCustomEndpoint && !config.DD_API_KEY?.trim()) {
+    throw new Error(MISSING_API_KEY_MESSAGE)
   }
+
+  const AgentlessConfigurationSource = require('./agentless_configuration_source')
+  const resolvedEndpoint = endpoint(config, baseUrl)
+  const effectivePollIntervalSeconds = Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS)
+  log.debug(
+    AGENTLESS_START_MESSAGE,
+    redactedUrl(resolvedEndpoint),
+    hasCustomEndpoint ? 'custom' : 'default',
+    effectivePollIntervalSeconds,
+    requestTimeoutSeconds,
+    hasCustomEndpoint ? 'not sent' : 'sent'
+  )
+  return new AgentlessConfigurationSource({
+    endpoint: resolvedEndpoint,
+    pollIntervalMs: effectivePollIntervalSeconds * 1000,
+    requestTimeoutMs: requestTimeoutSeconds * 1000,
+    apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
+    env: config.env,
+  }, applyConfiguration)
 }
 
 /**
@@ -60,7 +86,9 @@ function endpoint (config, configuredBaseUrl) {
   const configured = configuredBaseUrl?.trim()
 
   if (!configured) {
-    const url = new URL(`https://ufc-server.ff-cdn.${config.site.toLowerCase()}${DEFAULT_AGENTLESS_PATH}`)
+    const url = createSiteUrl(config.site, 'ufc-server.ff-cdn')
+    if (url === undefined) throw new Error('Invalid DD_SITE for Feature Flagging agentless configuration')
+    url.pathname = DEFAULT_AGENTLESS_PATH
     if (config.env) url.searchParams.set('dd_env', config.env)
     return url
   }
@@ -80,6 +108,15 @@ function endpoint (config, configuredBaseUrl) {
   }
 
   return url
+}
+
+/**
+ * Drops everything but the origin; a custom base URL may embed a signed token in its path.
+ *
+ * @param {URL} url
+ */
+function redactedUrl (url) {
+  return `${url.protocol}//${url.host}`
 }
 
 module.exports = {

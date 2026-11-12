@@ -51,11 +51,7 @@ const supportedProxies = {
 }
 
 function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
-  if (!headers) {
-    return null
-  }
-
-  if (!tracer._config?.inferredProxyServicesEnabled) {
+  if (!headers || !tracer._config?.inferredProxyServicesEnabled) {
     return null
   }
 

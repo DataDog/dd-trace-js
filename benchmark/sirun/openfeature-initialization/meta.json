@@ -1,0 +1,20 @@
+{
+  "name": "openfeature-initialization",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 11,
+  "instructions": true,
+  "env": { "DD_TRACE_DEBUG": "false" },
+  "variants": {
+    "preloaded": {
+      "env": { "SCENARIO": "preloaded", "OPERATIONS": "1000000" }
+    },
+    "configuration": {
+      "env": { "SCENARIO": "configuration", "OPERATIONS": "1000000" }
+    },
+    "error": {
+      "env": { "SCENARIO": "error", "OPERATIONS": "1000000" }
+    }
+  }
+}

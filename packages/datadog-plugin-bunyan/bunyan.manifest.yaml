@@ -1,0 +1,11 @@
+_v: 1
+name: bunyan
+display_name: Bunyan
+description: Instruments Bunyan log emission to inject trace-correlation identifiers and service metadata and optionally
+  submit logs directly to Datadog.
+packages:
+- name: bunyan
+category:
+- log.emission
+systems: []
+creation_date: '2019-02-06'

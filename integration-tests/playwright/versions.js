@@ -9,7 +9,6 @@ const latestSupportedByNode18 = '1.61.0'
 
 /**
  * @param {number} [nodeMajor]
- * @returns {string}
  */
 function getLatestPlaywrightSpecifier (nodeMajor = NODE_MAJOR) {
   return nodeMajor < 20 ? latestSupportedByNode18 : 'latest'

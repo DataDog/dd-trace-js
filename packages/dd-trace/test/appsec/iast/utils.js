@@ -7,7 +7,6 @@ const path = require('node:path')
 const { inspect } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
-const axios = require('axios')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -19,6 +18,7 @@ const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { getWebSpan } = require('../utils')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const httpRequest = require('../../setup/helpers/http-client')
 
 function testInRequest (app, tests) {
   let http
@@ -186,7 +186,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
   if (makeRequest) {
     makeRequest(done, config)
   } else {
-    axios.get(`http://localhost:${config.port}/`).catch(done)
+    httpRequest.get(`http://localhost:${config.port}/`).catch(done)
   }
 }
 
@@ -263,7 +263,7 @@ function checkVulnerabilityInRequest (
   if (makeRequest) {
     makeRequest(done, config)
   } else {
-    axios.get(`http://localhost:${config.port}/`).catch(done)
+    httpRequest.get(`http://localhost:${config.port}/`).catch(done)
   }
 }
 

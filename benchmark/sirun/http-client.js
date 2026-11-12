@@ -12,7 +12,6 @@ const timeout = 30_000
  * @param {number} warmupCount
  * @param {number} measuredCount
  * @param {number} concurrency
- * @returns {void}
  */
 module.exports = function runRequests (options, warmupCount, measuredCount, concurrency) {
   const agent = new http.Agent({ keepAlive: true, maxSockets: concurrency })

@@ -2,8 +2,11 @@
 
 const util = require('node:util')
 
+const { AUTO_REJECT } = require('../../../../ext/priority')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const LLMObsExporter = require('../exporters/llmobs')
+const { getEnvironmentVariable } = require('../config/helper')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
@@ -13,9 +16,15 @@ const {
   SPAN_KIND,
   MODEL_NAME,
   MODEL_PROVIDER,
+  EXPERIMENT_EXPECTED_OUTPUT,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
+  AGENT_VERSION,
+  AGENT_VERSION_TAG_KEY,
   TOOL_DEFINITIONS,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -29,6 +38,7 @@ const {
   PARENT_ID_KEY,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
   SESSION_ID,
   NAME,
   INPUT_PROMPT,
@@ -38,8 +48,12 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
+  LLMOBS_META_STRUCT_KEY,
+  DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { MANUAL_FRAMEWORK_NAME } = require('./agent-manifest')
+const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -63,6 +77,11 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  /** @type {Map<import('../opentracing/span'), object>} */
+  #cachedEvents = new Map()
+
+  #destroyer
+
   /** @type {import('../config/config-base')} */
   #config
 
@@ -74,6 +93,9 @@ class LLMObsSpanProcessor {
 
   constructor (config) {
     this.#config = config
+
+    this.#destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUserSpanProcessor (userSpanProcessor) {
@@ -86,9 +108,14 @@ class LLMObsSpanProcessor {
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process (span) {
-    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     // if the span is not in our private tagger map, it is not an llmobs span
-    if (!LLMObsTagger.tagMap.has(span)) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED || !LLMObsTagger.tagMap.has(span)) return
+
+    try {
+      this.#setGenAiApmTags(span)
+    } catch (e) {
+      logger.debug('Failed to set gen_ai APM tags:', e.message)
+    }
 
     try {
       const formattedEvent = this.format(span)
@@ -101,18 +128,18 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      const enqueued = this.#writer.append(formattedEvent, routing)
+      const metaStructTags = {
+        mlApp: mlObsTags[ML_APP],
+        sampleRate: mlObsTags[SAMPLE_RATE],
+        samplingDecision: mlObsTags[SAMPLING_DECISION],
+      }
 
-      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-      // tag, preserving this span as the immediate LLMObs parent. Set only
-      // when the writer actually buffered the event — format may have dropped
-      // it (user processor returned null), thrown, or the writer may have
-      // dropped it silently when its buffer is full. Leaving this tag off in
-      // those cases avoids dd-go reparenting OTel children under a span that
-      // has no corresponding LLMObs event.
-      if (enqueued) {
-        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+      const trace = span.context()._trace
+      const useApmIntake = span.tracer()._exporter instanceof LLMObsExporter
+      if (!useApmIntake || this.#config.DD_TRACE_ENABLED === false || !trace || trace.record === false) {
+        this.#appendToWriter(span, formattedEvent, routing)
+      } else {
+        this.#cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
       }
     } catch (e) {
       // this should be a rare case
@@ -123,6 +150,59 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Routes cached events once the APM processor has finalized whether the trace chunk can be exported.
+   * @param {{
+   *   spans: import('../opentracing/span')[],
+   *   willExport: boolean,
+   * }} trace
+   */
+  processTrace ({ spans, willExport }) {
+    for (const span of spans) {
+      const cached = this.#cachedEvents.get(span)
+      if (!cached) continue
+
+      try {
+        const { event, metaStructTags, routing } = cached
+        if (this.#shouldAttachMetaStruct(span, routing, event, willExport)) {
+          this.#attachMetaStruct(span, event, metaStructTags)
+          this.#cachedEvents.delete(span)
+        } else {
+          this.#cachedEvents.delete(span)
+          this.#appendToWriter(span, event, routing)
+        }
+      } catch {
+        this.#cachedEvents.delete(span)
+        try {
+          this.#appendToWriter(span, cached.event, cached.routing)
+        } catch (appendError) {
+          this.#logAppendError(appendError)
+        }
+      }
+    }
+  }
+
+  /** Routes events still awaiting an APM decision through the traditional LLMObs writer. */
+  processPending () {
+    for (const [span, cached] of this.#cachedEvents) {
+      this.#cachedEvents.delete(span)
+
+      try {
+        this.#appendToWriter(span, cached.event, cached.routing)
+      } catch (error) {
+        this.#logAppendError(error)
+      }
+    }
+  }
+
+  destroy () {
+    if (!this.#destroyer) return
+
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    this.processPending()
+    this.#destroyer = undefined
   }
 
   format (span) {
@@ -138,18 +218,29 @@ class LLMObsSpanProcessor {
     const output = {}
 
     if (['llm', 'embedding'].includes(spanKind)) {
-      meta.model_name = mlObsTags[MODEL_NAME] || 'custom'
-      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
+      meta.model_name = mlObsTags[MODEL_NAME] || DEFAULT_MODEL
+      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || DEFAULT_MODEL).toLowerCase()
     }
 
-    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
+    const name = mlObsTags[NAME] || span._name
+    const agentManifest = spanKind === 'agent' ? mlObsTags[AGENT_MANIFEST] : undefined
+
+    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS] || agentManifest) {
+      /** @type {Record<string, unknown>} */
       const metadata = {}
       if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
-      // Only seed `metadata._dd` when there's something to put in it (currently cost_tags). Mirrors
-      // dd-trace-py and the cross-language wire format enforced by system-tests — metadata-only
-      // spans must not carry an empty `_dd: {}` block.
+      // Only seed `metadata._dd` when there's something to put in it. Mirrors dd-trace-py and the
+      // cross-language wire format enforced by system-tests, so metadata-only spans must not carry
+      // an empty `_dd: {}` block.
       if (mlObsTags[COST_TAGS]) {
         this.#getDdMetadata(metadata).cost_tags = mlObsTags[COST_TAGS]
+      }
+      if (agentManifest) {
+        this.#getDdMetadata(metadata).agent_manifest = {
+          framework: MANUAL_FRAMEWORK_NAME,
+          ...agentManifest,
+          name: agentManifest.name ?? name,
+        }
       }
       meta.metadata = metadata
     }
@@ -174,8 +265,18 @@ class LLMObsSpanProcessor {
     }
 
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
+    const isExperiment = spanKind === 'experiment'
+    const hasExperimentInput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)
+    const hasExperimentOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)
+    const hasExperimentExpectedOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_EXPECTED_OUTPUT)
 
-    if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
+    if (hasExperimentExpectedOutput) {
+      llmObsSpan.expectedOutput = mlObsTags[EXPERIMENT_EXPECTED_OUTPUT]
+    }
+
+    if (hasExperimentInput) {
+      llmObsSpan.input = [{ role: '', content: mlObsTags[EXPERIMENT_INPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
@@ -186,7 +287,9 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
+    if (hasExperimentOutput) {
+      llmObsSpan.output = [{ role: '', content: mlObsTags[EXPERIMENT_OUTPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
@@ -210,42 +313,50 @@ class LLMObsSpanProcessor {
     const sessionId = mlObsTags[SESSION_ID]
     const parentId = mlObsTags[PARENT_ID_KEY]
 
-    const name = mlObsTags[NAME] || span._name
-
     const tags = this.#getTags(span, mlApp, sessionId, error)
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
 
-    if (processedSpan.input) {
-      if (inputType === 'messages') {
-        input.messages = processedSpan.input
-      } else if (inputType === 'value') {
-        input.value = processedSpan.input[0].content
-      } else if (inputType === 'documents') {
-        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    if (isExperiment) {
+      const [processedInput] = processedSpan.input
+      const [processedOutput] = processedSpan.output
+      if (hasExperimentInput && processedInput !== undefined) meta.input = processedInput.content
+      if (hasExperimentOutput && processedOutput !== undefined) meta.output = processedOutput.content
+      if (Object.hasOwn(processedSpan, 'expectedOutput') && processedSpan.expectedOutput !== undefined) {
+        meta.expected_output = processedSpan.expectedOutput
       }
-    }
-
-    if (processedSpan.output) {
-      if (outputType === 'messages') {
-        output.messages = processedSpan.output
-      } else if (outputType === 'value') {
-        output.value = processedSpan.output[0].content
-      } else if (outputType === 'documents') {
-        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    } else {
+      if (processedSpan.input) {
+        if (inputType === 'messages') {
+          input.messages = processedSpan.input
+        } else if (inputType === 'value') {
+          input.value = processedSpan.input[0].content
+        } else if (inputType === 'documents') {
+          input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
+      if (processedSpan.output) {
+        if (outputType === 'messages') {
+          output.messages = processedSpan.output
+        } else if (outputType === 'value') {
+          output.value = processedSpan.output[0].content
+        } else if (outputType === 'documents') {
+          output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
+      }
+
+      meta.input = input
+      meta.output = output
+    }
 
     const prompt = mlObsTags[INPUT_PROMPT]
     if (prompt && spanKind === 'llm') {
@@ -281,6 +392,140 @@ class LLMObsSpanProcessor {
     if (sessionId) llmObsSpanEvent.session_id = sessionId
 
     return llmObsSpanEvent
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {{ apiKey?: string, site?: string }} routing
+   * @param {object} event
+   * @param {boolean} willExport
+   */
+  #shouldAttachMetaStruct (span, routing, event, willExport) {
+    const priority = span.context()._sampling?.priority
+    const predictedDrop = priority != null && priority <= AUTO_REJECT
+
+    return willExport &&
+      !predictedDrop &&
+      !routing.apiKey &&
+      !routing.site &&
+      !getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') &&
+      // TODO(sabrenner): remove below check once upstream ingestion allows array of "k:v" tags
+      !this.#hasCollidingTagKeys(event.tags)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ apiKey?: string, site?: string }} routing
+   */
+  #appendToWriter (span, event, routing) {
+    const enqueued = this.#writer.append(event, routing)
+    if (enqueued) span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+  }
+
+  /** @param {Error} error */
+  #logAppendError (error) {
+    logger.warn(`
+      Failed to append span to LLM Observability writer, likely due to an unserializable property.
+      Span won't be sent to LLM Observability: ${error.message}
+    `)
+  }
+
+  /**
+   * The meta_struct tag map cannot losslessly represent repeated keys or keys
+   * that collide after agentless normalization.
+   * @param {string[]} tags
+   */
+  #hasCollidingTagKeys (tags) {
+    const keys = new Set()
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const key = tag.slice(0, separatorIndex).replaceAll('.', '_')
+      if (keys.has(key)) return true
+      keys.add(key)
+    }
+    return false
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   */
+  #attachMetaStruct (span, event, metaStructTags) {
+    span.meta_struct ??= {}
+    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, metaStructTags)
+  }
+
+  /**
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   */
+  #formatMetaStruct (event, metaStructTags) {
+    const dd = {}
+    if (metaStructTags.sampleRate !== undefined) dd.sample_rate = metaStructTags.sampleRate
+    if (metaStructTags.samplingDecision !== undefined) dd.sampling_decision = metaStructTags.samplingDecision
+    if (event._dd?.scope !== undefined) dd.scope = event._dd.scope
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      tags: this.#stringArrayTagsToObjectTags(event.tags),
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (event.name !== undefined) metaStruct.name = event.name
+    if (metaStructTags.mlApp) metaStruct.ml_app = metaStructTags.mlApp
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /** @param {object} eventMeta */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /** @param {object} meta */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   */
+  #setGenAiApmTags (span) {
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+
+    setGenAiApmTags(span, {
+      spanKind: mlObsTags[SPAN_KIND],
+      modelName: mlObsTags[MODEL_NAME],
+      modelProvider: mlObsTags[MODEL_PROVIDER],
+      mlApp: mlObsTags[ML_APP],
+      sessionId: mlObsTags[SESSION_ID],
+      metrics: mlObsTags[METRICS],
+    })
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object
@@ -356,6 +601,15 @@ class LLMObsSpanProcessor {
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
 
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+    // Resolved here because a span can become an agent after registration. An agent without its own version, and
+    // any other span, reports the version inherited at registration. Either wins over a user
+    // tag of the same name.
+    const agentVersion = mlObsTags?.[SPAN_KIND] === 'agent'
+      ? mlObsTags[AGENT_VERSION] || mlObsTags[PARENT_AGENT_VERSION]
+      : mlObsTags?.[PARENT_AGENT_VERSION]
+    if (agentVersion) tags[AGENT_VERSION_TAG_KEY] = agentVersion
+
     return tags
   }
 
@@ -375,6 +629,21 @@ class LLMObsSpanProcessor {
       } else {
         out.push(`${key}:${value ?? ''}`)
       }
+    }
+    return out
+  }
+
+  /**
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #stringArrayTagsToObjectTags (tags) {
+    const out = {}
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      out[tag.slice(0, separatorIndex)] = tag.slice(separatorIndex + 1)
     }
     return out
   }

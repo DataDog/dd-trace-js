@@ -3,8 +3,10 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { truncateString } = require('../../dd-trace/src/util')
 
 const MAX_ARG_LENGTH = 100
+const MAX_ARG_LENGTH_WITHOUT_COPY = 256
 const MAX_COMMAND_LENGTH = 1000
 
 class RedisPlugin extends CachePlugin {
@@ -95,13 +97,25 @@ function formatCommand (command, args, argsStartIndex = 0) {
   return result
 }
 
+/**
+ * @param {unknown} arg
+ */
 function formatArg (arg) {
   if (typeof arg === 'string') {
-    return arg.length > MAX_ARG_LENGTH ? arg.slice(0, MAX_ARG_LENGTH - 3) + '...' : arg
+    return arg.length > MAX_ARG_LENGTH ? truncateArg(arg) : arg
   }
   // Number stringification is bounded (~23 chars max), so it never hits MAX_ARG_LENGTH.
   if (typeof arg === 'number') return String(arg)
   return '?'
+}
+
+/**
+ * @param {string} arg
+ */
+function truncateArg (arg) {
+  return arg.length > MAX_ARG_LENGTH_WITHOUT_COPY
+    ? truncateString(arg, MAX_ARG_LENGTH, '...')
+    : arg.slice(0, MAX_ARG_LENGTH - 3) + '...'
 }
 
 function normalizeConfig (config) {

@@ -10,7 +10,7 @@ const sinon = require('sinon')
 const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 const iastEnabledConfig = {
   iast: {
-    enabled: true,
+    DD_IAST_ENABLED: true,
   },
 }
 
@@ -210,6 +210,7 @@ describe('IAST Rewriter', () => {
         delete Error.prepareStackTrace
 
         sinon.assert.calledOnce(Module.register)
+        assert.strictEqual(Module.register.firstCall.args[1].data.iastEnabled, true)
       })
 
       it('Should enable esm rewriter when ESM is configured with --experimental-loader exec arg', () => {

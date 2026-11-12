@@ -83,7 +83,7 @@ addHook({
 
         let callbackWrapped = false
 
-        const wrapCallbackIfExist = (args, ctx) => {
+        const wrapCallbackIfExist = (args) => {
           const lastArgumentIndex = args.length - 1
 
           if (typeof args[lastArgumentIndex] === 'function') {
@@ -106,7 +106,7 @@ addHook({
         }
 
         return startCh.runStores(ctx, () => {
-          wrapCallbackIfExist(args, ctx)
+          wrapCallbackIfExist(args)
 
           // A callback query executes synchronously inside `method.apply`, so the
           // exec scope (and the deferred driver call it spawns) must be entered
@@ -121,7 +121,7 @@ addHook({
             shimmer.wrap(res, 'exec', originalExec => {
               return function wrappedExec (...args) {
                 if (!callbackWrapped) {
-                  wrapCallbackIfExist(args, ctx)
+                  wrapCallbackIfExist(args)
                 }
 
                 const execResult = execCh.runStores(ctx, () => originalExec.apply(this, args))

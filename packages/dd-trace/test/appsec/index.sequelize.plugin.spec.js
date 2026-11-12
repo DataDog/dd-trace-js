@@ -2,12 +2,11 @@
 
 const path = require('path')
 
-const axios = require('axios')
-
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
+const httpRequest = require('../setup/helpers/http-client')
 
 describe('sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
@@ -83,7 +82,7 @@ describe('sequelize', () => {
       })
 
       it('Should complete the request on time', async () => {
-        await axios.get(`http://localhost:${port}/users`)
+        await httpRequest.get(`http://localhost:${port}/users`)
       })
     })
   })

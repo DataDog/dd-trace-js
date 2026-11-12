@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -11,81 +12,67 @@ describe('Dynamic Instrumentation', function () {
 
   describe('input messages', function () {
     describe('with snapshot', function () {
-      beforeEach(() => { t.triggerBreakpoint() })
+      it('should respect global max snapshot sampling rate', async function () {
+        const maxSnapshotsPerSecond = 25
+        const probeConfig = {
+          captureSnapshot: true,
+          sampling: { snapshotsPerSecond: maxSnapshotsPerSecond * 2 },
+        }
+        const rcConfig1 = t.breakpoints[0].generateRemoteConfig(probeConfig)
+        const rcConfig2 = t.breakpoints[1].generateRemoteConfig(probeConfig)
+        const probeIds = [rcConfig1.config.id, rcConfig2.config.id]
+        const probesInstalled = t.waitForProbeStatus(probeIds, 'INSTALLED')
+        const timestamps = []
+        let rejectSnapshots
+        let resolveSnapshots
+        const snapshotsReceived = new Promise((resolve, reject) => {
+          rejectSnapshots = reject
+          resolveSnapshots = resolve
+        })
 
-      it('should respect global max snapshot sampling rate', function (_done) {
-        const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
-        const snapshotsPerSecond = MAX_SNAPSHOTS_PER_SECOND_GLOBALLY * 2
-        const probeConf = { captureSnapshot: true, sampling: { snapshotsPerSecond } }
-        let start = 0
-        let hitBreakpoints = 0
-        let isDone = false
-        let prevTimestamp
-
-        const rcConfig1 = t.breakpoints[0].generateRemoteConfig(probeConf)
-        const rcConfig2 = t.breakpoints[1].generateRemoteConfig(probeConf)
-
-        // Two breakpoints, each triggering a request every 10ms, so we should get 200 requests per second
-        const state = {
-          [rcConfig1.config.id]: {
-            triggerBreakpointContinuously () {
-              t.request(t.breakpoints[0].url).catch(done)
-              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
-            },
-          },
-          [rcConfig2.config.id]: {
-            triggerBreakpointContinuously () {
-              t.request(t.breakpoints[1].url).catch(done)
-              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
-            },
-          },
+        /** @param {{ payload: Array<{ debugger: { snapshot: { timestamp: number } } }> }} event */
+        function handleSnapshots ({ payload }) {
+          try {
+            for (const { debugger: { snapshot } } of payload) {
+              if (timestamps.length === maxSnapshotsPerSecond + 1) return
+              timestamps.push(snapshot.timestamp)
+              if (timestamps.length === maxSnapshotsPerSecond + 1) resolveSnapshots()
+            }
+          } catch (error) {
+            rejectSnapshots(error)
+          }
         }
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          payload.forEach((event) => {
-            const { probeId, status } = event.debugger.diagnostics
-            if (status === 'INSTALLED') {
-              state[probeId].triggerBreakpointContinuously()
-            }
-          })
-        })
-
-        t.agent.on('debugger-input', ({ payload }) => {
-          payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
-            if (isDone) return
-            if (start === 0) start = timestamp
-            if (++hitBreakpoints <= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
-              prevTimestamp = timestamp
-            } else {
-              const duration = timestamp - start
-              const timeSincePrevTimestamp = timestamp - prevTimestamp
-
-              // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
-              assert.ok(duration >= 925, `Expected ${duration} >= 925`)
-              assert.ok(duration < 1050, `Expected ${duration} < 1050`)
-
-              // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be
-              // sampled in the beginning of the sample window and then once the threshold is hit, we expect a "quiet"
-              // period until the end of the window. If there's no "quiet" period, then we're saturating the event loop
-              // and this test isn't really testing anything.
-              assert.ok(timeSincePrevTimestamp >= 250, `Expected ${timeSincePrevTimestamp} >= 250`)
-
-              clearTimeout(state[rcConfig1.config.id].timer)
-              clearTimeout(state[rcConfig2.config.id].timer)
-
-              done()
-            }
-          })
-        })
-
+        t.agent.on('debugger-input', handleSnapshots)
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
+        await probesInstalled
 
-        function done (error) {
-          if (isDone) return
-          isDone = true
-          _done(error)
+        const requestsPerInterval = 4
+        const timers = [t.breakpoints[0].url, t.breakpoints[1].url].map(url => setInterval(() => {
+          for (let i = 0; i < requestsPerInterval; i++) {
+            t.request(url).catch(rejectSnapshots)
+          }
+        }, 10))
+
+        try {
+          await snapshotsReceived
+        } finally {
+          for (const timer of timers) clearInterval(timer)
+          t.agent.removeListener('debugger-input', handleSnapshots)
         }
+
+        assert.strictEqual(timestamps.length, maxSnapshotsPerSecond + 1)
+        const duration = timestamps[maxSnapshotsPerSecond] - timestamps[0]
+        const quietPeriod = timestamps[maxSnapshotsPerSecond] - timestamps[maxSnapshotsPerSecond - 1]
+
+        assert.ok(
+          duration >= 925 && duration < 1050,
+          `Expected duration (${duration}ms) to be at least 925 and less than 1050`
+        )
+
+        // A quiet period proves the global limit was exhausted before the window reset instead of saturating the loop.
+        assert.ok(quietPeriod >= 250, `Expected ${quietPeriod} >= 250`)
       })
     })
   })

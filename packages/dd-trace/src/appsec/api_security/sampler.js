@@ -58,9 +58,7 @@ function disable () {
  * @returns {'sample' | 'missing_route' | 'skip'}
  */
 function sampleRootSpanRequest (rootSpan, request, record = false) {
-  if (!enabled) return SamplingDecision.SKIP
-
-  if (!rootSpan) return SamplingDecision.SKIP
+  if (!enabled || !rootSpan) return SamplingDecision.SKIP
 
   const { method, statusCode, route, blocked = false } = request ?? {}
 
@@ -102,9 +100,7 @@ function sampleRequest (req, res, record = false) {
   if (!enabled) return SamplingDecision.SKIP
 
   const rootSpan = web.root(req)
-  if (!rootSpan) return SamplingDecision.SKIP
-
-  if (isRejected(rootSpan)) return SamplingDecision.SKIP
+  if (!rootSpan || isRejected(rootSpan)) return SamplingDecision.SKIP
 
   const statusCode = res.statusCode
   const route = getRouteOrEndpoint(web.getContext(req), statusCode)
@@ -122,7 +118,6 @@ function sampleRequest (req, res, record = false) {
  *
  * @param {string|undefined} route
  * @param {boolean} record
- * @returns {boolean}
  */
 function isRoutelessRecord (route, record) {
   return record && route === undefined
@@ -130,7 +125,6 @@ function isRoutelessRecord (route, record) {
 
 /**
  * @param {number|string} statusCode
- * @returns {boolean}
  */
 function isNotFound (statusCode) {
   return Number(statusCode) === 404
@@ -141,7 +135,6 @@ function isNotFound (statusCode) {
  * @param {string|undefined} route A route string, an empty string (still a valid route), or
  *   `undefined`
  * @param {number|string} statusCode
- * @returns {string}
  */
 function buildSamplingKey (method, route, statusCode) {
   return method + (route ?? '') + statusCode
@@ -176,7 +169,6 @@ function getRouteOrEndpoint (context, statusCode) {
  * regardless of the APM sampling decision.
  *
  * @param {DatadogSpan} rootSpan
- * @returns {boolean}
  */
 function isRejected (rootSpan) {
   if (asmStandaloneEnabled) return false

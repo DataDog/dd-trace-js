@@ -53,8 +53,7 @@ function getRequestCache (owner, configuredLimit) {
 
 /**
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
- * @returns {string}
+ * @param {boolean | undefined} calculateSignature
  */
 function operationCacheKey (operationName, calculateSignature) {
   return `${calculateSignature === false ? 0 : 1}\n${operationName ?? ''}`
@@ -63,7 +62,7 @@ function operationCacheKey (operationName, calculateSignature) {
 /**
  * @param {unknown} source
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {RequestCache | undefined} requestCache
  * @returns {RequestOperation | undefined}
  */
@@ -157,7 +156,7 @@ function refineRequestSpanMetadata (requestSpan, signature, type, name) {
  * @param {import('graphql').DocumentNode | undefined} document
  * @param {unknown} requestSource
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {boolean} validated
  * @param {RequestCache | undefined} requestCache
  */
@@ -194,7 +193,7 @@ function refineRequestSpan (
  * @param {RequestCache} requestCache
  * @param {string | object} source
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {RequestOperation} operation
  * @param {import('graphql').DocumentNode} document
  */
@@ -230,7 +229,7 @@ function cacheRequestOperation (
 /**
  * @param {import('graphql').DocumentNode} document
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @returns {RequestOperation | undefined}
  */
 function getRequestOperation (document, operationName, calculateSignature) {
@@ -309,7 +308,6 @@ const HEALTH_CHECK_QUERY = 'query __ApolloServiceHealthCheck__ { __typename }'
  * Matches the raw query string before it is parsed (the only input parse has).
  *
  * @param {unknown} source Raw query string or a graphql `Source` body.
- * @returns {boolean}
  */
 function isApolloHealthCheckSource (source) {
   return source === HEALTH_CHECK_QUERY
@@ -319,7 +317,6 @@ function isApolloHealthCheckSource (source) {
  * Matches Apollo's parsed health-check operation exactly for cached documents.
  *
  * @param {import('graphql').OperationDefinitionNode | undefined} operation
- * @returns {boolean}
  */
 function isApolloHealthCheck (operation) {
   const selections = operation?.selectionSet?.selections
@@ -342,7 +339,6 @@ function isApolloHealthCheck (operation) {
 
 /**
  * @param {import('graphql').GraphQLOutputType} type
- * @returns {string}
  */
 function getBaseTypeName (type) {
   let current = type
@@ -357,7 +353,6 @@ let tools
  * @param {string | undefined} operationName
  * @param {import('graphql').OperationTypeNode} operationType
  * @param {boolean} [calculate]
- * @returns {string}
  */
 function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {

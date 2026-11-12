@@ -2,6 +2,16 @@ import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import {
+  canPropagateCancellation,
+  getAllGreenOutcome,
+  shouldRetryConclusion,
+} from './all-green-outcome.mjs'
+import {
+  hasPendingWorkflowRuns,
+  markWorkflowRunsForRetry,
+  mergeWorkflowRuns,
+} from './all-green-runs.mjs'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
@@ -54,7 +64,6 @@ const conclusionEmojis = {
 }
 
 const failureConclusions = new Set(['failure', 'timed_out', 'cancelled'])
-const pollingRetryConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
 const retriedRunIds = new Set()
@@ -68,6 +77,7 @@ const staleFailureRunIds = new Set()
 // limit. workflow_runs are sorted newest first, so an unchanged first page is
 // a reliable proxy for "no changes since last poll".
 let runsCache
+let observedRuns = []
 
 async function getRuns () {
   try {
@@ -96,8 +106,9 @@ async function getRuns () {
       r.event === context.eventName &&
       (myPR == null || r.pull_requests?.some(pr => pr.number === myPR))
     )
-    runsCache = { etag, runs: filtered }
-    return filtered
+    observedRuns = mergeWorkflowRuns(observedRuns, filtered)
+    runsCache = { etag, runs: observedRuns }
+    return observedRuns
   } catch (err) {
     if (err.status === 304 && runsCache) return runsCache.runs
     throw err
@@ -143,8 +154,8 @@ async function processRun (run) {
 
 /**
  * Kick off processing for any run that just reached a final state and hasn't been processed yet.
- * A run is final once it's completed and either isn't retried (its conclusion isn't in
- * `pollingRetryConclusions`) or already went through a retry attempt.
+ * A run is final once it's completed and either isn't retried or already went through a retry
+ * attempt.
  *
  * @param {Array<{ id: number, name: string, status: string, conclusion: string }>} runs
  */
@@ -153,7 +164,7 @@ function scheduleProcessing (runs) {
 
   const settled = runs.filter(r =>
     r.status === 'completed' &&
-    (!pollingRetryConclusions.has(r.conclusion) || retriedRunIds.has(r.id)) &&
+    (!shouldRetryConclusion(r.conclusion) || retriedRunIds.has(r.id)) &&
     !dispatchedRunIds.has(r.id)
   )
 
@@ -191,12 +202,12 @@ async function pollUntilDone () {
 
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
-    pollingRetryConclusions.has(r.conclusion) &&
+    shouldRetryConclusion(r.conclusion) &&
     !retriedRunIds.has(r.id)
   )
 
-  const pending = runs.filter(r => r.status !== 'completed').length
-  if (pending === 0 && toRetry.length === 0) return { runs, done: true }
+  const pending = hasPendingWorkflowRuns(runs)
+  if (!pending && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
@@ -204,8 +215,7 @@ async function pollUntilDone () {
 
   if (toRetry.length > 0) {
     await rerunFailedWorkflows(toRetry)
-    for (const run of toRetry) retriedRunIds.add(run.id)
-    runsCache = undefined
+    trackWorkflowRetries(toRetry)
   }
 
   console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
@@ -239,18 +249,25 @@ async function rerunFailedWorkflows (workflowRuns) {
   )
 }
 
+/** @param {Array<{ id: number }>} runs */
+function trackWorkflowRetries (runs) {
+  const startedRetryIds = new Set(runs.filter(run => !staleFailureRunIds.has(run.id)).map(run => run.id))
+  observedRuns = markWorkflowRunsForRetry(observedRuns, startedRetryIds)
+  for (const run of runs) retriedRunIds.add(run.id)
+  runsCache = undefined
+}
+
 async function rerunOnStartup () {
   if (RUN_ATTEMPT <= 1) return
   const runs = await getRuns()
   const toRerun = runs.filter(r =>
     r.status === 'completed' &&
-    failureConclusions.has(r.conclusion)
+    shouldRetryConclusion(r.conclusion, true)
   )
   if (toRerun.length > 0) {
     console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)
     await rerunFailedWorkflows(toRerun)
-    for (const run of toRerun) retriedRunIds.add(run.id)
-    runsCache = undefined
+    trackWorkflowRetries(toRerun)
     console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
   }
@@ -268,6 +285,15 @@ async function cancelRunningWorkflows (runs) {
   )
 }
 
+async function cancelAllGreen (cancelledRuns) {
+  for (const run of cancelledRuns) {
+    console.log(`Workflow run ${run.id} (${run.name}) was cancelled.`)
+  }
+  console.log('Cancelling All Green instead of reporting a failure.')
+  // Exit codes can only report success or failure, so cancel this workflow run through GitHub.
+  await octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: context.runId })
+}
+
 async function checkAllGreen () {
   await rerunOnStartup()
 
@@ -281,9 +307,23 @@ async function checkAllGreen () {
   const [junitResults, coverageResults] = await Promise.all([uploadAllJunit(), uploadAllCoverageToDatadog()])
   logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
 
+  const outcome = getAllGreenOutcome(runs, staleFailureRunIds)
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
     await cancelRunningWorkflows(runs)
+  }
+
+  if (outcome === 'cancelled') {
+    if (!canPropagateCancellation(process.exitCode)) {
+      console.error('Report processing or upload failed, preserving the failure instead of propagating cancellation.')
+      return
+    }
+    const cancelledRuns = runs.filter(r => r.conclusion === 'cancelled')
+    await cancelAllGreen(cancelledRuns)
+    return
+  }
+
+  if (!done) {
     process.exitCode = 1
     return
   }
@@ -311,8 +351,12 @@ async function checkAllGreen () {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 
-  if (failedRuns.length === 0) {
-    console.log('All jobs were successful.')
+  if (outcome === 'success') {
+    if (process.exitCode) {
+      console.error('All workflows passed, but report processing failed. See the errors above.')
+    } else {
+      console.log('All jobs were successful.')
+    }
   } else {
     console.log('One or more jobs failed.')
     process.exitCode = 1

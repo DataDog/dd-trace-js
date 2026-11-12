@@ -70,7 +70,6 @@ function getCommonRequestOptions (url) {
  *
  * @param {GitUploadTarget & { latestCommits: string[] }} options
  * @param {(error: Error | null, commitsToUpload?: string[]) => void} callback
- * @returns {void}
  */
 function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
@@ -139,7 +138,6 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
  *
  * @param {GitUploadTarget & { packFileToUpload: string, headCommit: string }} options
  * @param {(error: Error | null, uploadSize?: number) => void} callback
- * @returns {void}
  */
 function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
@@ -263,7 +261,6 @@ function generateAndUploadPackFiles ({
  * @param {EvpProxyConfiguration} evpProxyConfiguration
  * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
  * @param {(error?: Error | null) => void} callback
- * @returns {void}
  */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   if (!isGitAvailable()) {

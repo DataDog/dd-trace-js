@@ -52,7 +52,6 @@ class MeterProvider {
 
   /**
    * @param {(error: Error | null) => void} [done] Called after shutdown completes
-   * @returns {void}
    */
   shutdown (done) {
     if (this.reader) this.reader.shutdown(done)

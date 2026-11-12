@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -18,6 +17,7 @@ const {
   HTTP_REQUEST_URI,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../../helpers/config')
+const httpRequest = require('../../../../setup/helpers/http-client')
 
 describe('URI sourcing with express', () => {
   let express
@@ -71,7 +71,7 @@ describe('URI sourcing with express', () => {
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/path/vulnerable`)
           .then(() => done())
           .catch(done)
@@ -152,7 +152,7 @@ describe('Path params sourcing with express', () => {
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
           .catch(done)
@@ -187,7 +187,7 @@ describe('Path params sourcing with express', () => {
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
           .catch(done)
@@ -206,7 +206,7 @@ describe('Path params sourcing with express', () => {
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
           .catch(done)
@@ -233,7 +233,7 @@ describe('Path params sourcing with express', () => {
       appListener = app.listen(0, 'localhost', () => {
         const port = appListener.address().port
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
           .catch(done)

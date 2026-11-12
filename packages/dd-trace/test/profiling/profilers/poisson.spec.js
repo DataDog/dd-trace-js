@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 
 const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 
 require('../../setup/core')
 const PoissonProcessSamplingFilter = require('../../../src/profiling/profilers/poisson')
@@ -183,17 +184,31 @@ describe('PoissonProcessSamplingFilter', () => {
   })
 
   it('should increment samplingInstantCount on each sampling instant', () => {
-    const filter = new PoissonProcessSamplingFilter({
-      samplingInterval: 10,
-      resetInterval: 100,
-      now,
-    })
-    const initialCount = filter.samplingInstantCount
-    for (let i = 0; i < 5; i++) {
-      nowValue += 20
-      const event = { startTime: 0, duration: filter.nextSamplingInstant }
-      filter.filter(event)
+    // Sampling instants are drawn from an exponential distribution with mean samplingInterval, so a
+    // live Math.random() makes "does any instant fall inside the window advanced below" a property
+    // of the draw rather than of the counter under test here. Pin the draw so the assertion depends
+    // only on the counter. The stub must be installed before the constructor, which draws the first
+    // instant.
+    const randomStub = sinon.stub(Math, 'random').returns(0.5)
+
+    try {
+      const filter = new PoissonProcessSamplingFilter({
+        samplingInterval: 10,
+        resetInterval: 100,
+        now,
+      })
+      const initialCount = filter.samplingInstantCount
+      for (let i = 0; i < 5; i++) {
+        nowValue += 20
+        const event = { startTime: 0, duration: filter.nextSamplingInstant }
+        filter.filter(event)
+      }
+      assert.ok(
+        filter.samplingInstantCount > initialCount,
+        `Expected ${filter.samplingInstantCount} > ${initialCount}`
+      )
+    } finally {
+      randomStub.restore()
     }
-    assert.ok(filter.samplingInstantCount > initialCount, `Expected ${filter.samplingInstantCount} > ${initialCount}`)
   })
 })

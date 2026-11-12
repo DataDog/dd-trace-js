@@ -75,6 +75,16 @@ function distributionMetric (name, tags, measure) {
   ciVisibilityMetrics.distribution(name, formatMetricTags(tags)).track(measure)
 }
 
+/**
+ * Records that dynamic, duration-based ATR retries are enabled for this session.
+ *
+ * @param {boolean} hasCustomBuckets
+ */
+function recordDynamicAtrRetries (hasCustomBuckets) {
+  const tags = hasCustomBuckets ? { has_custom_buckets: 'true' } : {}
+  incrementCountMetric(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, tags)
+}
+
 // CI Visibility telemetry events
 const TELEMETRY_TEST_SESSION = 'test_session'
 const TELEMETRY_EVENT_CREATED = 'event_created'
@@ -123,6 +133,9 @@ const TELEMETRY_KNOWN_TESTS_MS = 'early_flake_detection.request_ms'
 const TELEMETRY_KNOWN_TESTS_ERRORS = 'early_flake_detection.request_errors'
 const TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS = 'early_flake_detection.response_tests'
 const TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES = 'early_flake_detection.response_bytes'
+const TELEMETRY_KNOWN_TESTS_PAGES_FETCHED = 'known_tests.pages_fetched'
+const TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS = 'known_tests.total_fetch_ms'
+const TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS = 'known_tests.total_request_ms'
 // coverage upload
 const TELEMETRY_COVERAGE_UPLOAD = 'coverage_upload.request'
 const TELEMETRY_COVERAGE_UPLOAD_MS = 'coverage_upload.request_ms'
@@ -134,6 +147,7 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_MS = 'test_management_tests.request_ms'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_errors'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
+const TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED = 'dynamic_atr_retries.enabled'
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (typeof statusCode !== 'number') return 'network'
@@ -149,6 +163,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  recordDynamicAtrRetries,
   TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
@@ -195,6 +210,9 @@ module.exports = {
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
+  TELEMETRY_KNOWN_TESTS_PAGES_FETCHED,
+  TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS,
+  TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS,
   TELEMETRY_COVERAGE_UPLOAD,
   TELEMETRY_COVERAGE_UPLOAD_MS,
   TELEMETRY_COVERAGE_UPLOAD_ERRORS,
@@ -204,4 +222,5 @@ module.exports = {
   TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
+  TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
 }

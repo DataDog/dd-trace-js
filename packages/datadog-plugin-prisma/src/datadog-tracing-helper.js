@@ -31,7 +31,6 @@ class DatadogTracingHelper {
    * Needs a sampled tracecontext to generate engine spans
    *
    * @param {object} [context]
-   * @returns {string}
    */
   getTraceParent (context) {
     const store = storage('legacy').getStore()
@@ -57,7 +56,7 @@ class DatadogTracingHelper {
    * @param {object[]} spans
    */
   dispatchEngineSpans (spans) {
-    if (!spans?.length) {
+    if (!spans?.length || this.#prismaClient.config?.engine === false) {
       return
     }
     const childrenByParent = new Map()
@@ -91,8 +90,10 @@ class DatadogTracingHelper {
    * @returns {unknown}
    */
   runInChildSpan (options, callback) {
-    if (!clientCH.start?.hasSubscribers) {
-      return callback.apply(this, arguments)
+    // Skipping here rather than in the plugin's `bindStart` avoids finishing the parent span, which
+    // `finish()` would fall back to when no client span was started.
+    if (!clientCH.start?.hasSubscribers || this.#prismaClient.config?.client === false) {
+      return callback()
     }
     if (typeof options === 'string') {
       options = {

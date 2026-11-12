@@ -35,6 +35,11 @@ jobs:
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/datadog-ci
+      - name: Exclude All Green from Green CI metrics
+        run: datadog-ci tag --level pipeline --tags green_ci.excluded:true
+        env:
+          DATADOG_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DATADOG_SITE: datadoghq.com
       - run: pip install --quiet codecov-cli
       # Polls sibling workflows and, as soon as each one reaches a final state, downloads its
       # artifacts, merges its reports, and uploads its junit/coverage to Datadog and Codecov —
@@ -51,7 +56,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-          DELAY: ${{ github.run_attempt == 1 && '2.5' || '0' }} # 2.5 minutes on first attempt, no delay on reruns
+          DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}

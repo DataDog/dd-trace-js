@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 const { storage } = require('../../../../datadog-core')
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
-const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
+const { APPSEC_FS_STORAGE, RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { withRequest } = require('../../../src/appsec/store')
 
 describe('RASP - lfi.js', () => {
@@ -41,11 +41,9 @@ describe('RASP - lfi.js', () => {
 
     config = {
       appsec: {
-        stackTrace: {
-          enabled: true,
-          maxStackTraces: 2,
-          maxDepth: 42,
-        },
+        DD_APPSEC_STACK_TRACE_ENABLED: true,
+        DD_APPSEC_MAX_STACK_TRACES: 2,
+        DD_APPSEC_MAX_STACK_TRACE_DEPTH: 42,
       },
     }
   })
@@ -54,6 +52,7 @@ describe('RASP - lfi.js', () => {
     sinon.restore()
     lfi.disable()
     storage('legacy').enterWith({})
+    storage(APPSEC_FS_STORAGE).enterWith(undefined)
   })
 
   describe('enable', () => {
@@ -105,7 +104,8 @@ describe('RASP - lfi.js', () => {
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
-      storage('legacy').enterWith(withRequest({ fs }, req))
+      storage('legacy').enterWith(withRequest({}, req))
+      storage(APPSEC_FS_STORAGE).enterWith(fs)
 
       fsOperationStart.publish(ctx)
 
@@ -113,9 +113,19 @@ describe('RASP - lfi.js', () => {
       sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'lfi' })
     })
 
+    it('should NOT analyze lfi for root fs operations outside of a request', () => {
+      storage('legacy').enterWith({})
+      storage(APPSEC_FS_STORAGE).enterWith({ root: true })
+
+      fsOperationStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
     it('should NOT analyze lfi for child fs operations', () => {
-      const fs = {}
-      storage('legacy').enterWith(withRequest({ fs }, req))
+      const fs = { root: false }
+      storage('legacy').enterWith(withRequest({}, req))
+      storage(APPSEC_FS_STORAGE).enterWith(fs)
 
       fsOperationStart.publish(ctx)
 
@@ -124,7 +134,8 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
       const fs = undefined
-      storage('legacy').enterWith(withRequest({ fs }, req))
+      storage('legacy').enterWith(withRequest({}, req))
+      storage(APPSEC_FS_STORAGE).enterWith(fs)
 
       fsOperationStart.publish(ctx)
 
@@ -133,7 +144,8 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for excluded operations', () => {
       const fs = { opExcluded: true, root: true }
-      storage('legacy').enterWith(withRequest({ fs }, req))
+      storage('legacy').enterWith(withRequest({}, req))
+      storage(APPSEC_FS_STORAGE).enterWith(fs)
 
       fsOperationStart.publish(ctx)
 

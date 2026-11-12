@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 
 describe('IAST - code_injection - integration', () => {
-  let axios, cwd, agent, proc
+  let httpRequest, cwd, agent, proc
 
   useSandbox(
     ['express'],
@@ -30,7 +30,7 @@ describe('IAST - code_injection - integration', () => {
   })
 
   async function testVulnerabilityRepoting (url) {
-    await axios.get(url)
+    await httpRequest.get(url)
 
     let iastTelemetryReceived = false
     const checkTelemetry = agent.assertTelemetryReceived({
@@ -86,7 +86,7 @@ describe('IAST - code_injection - integration', () => {
         },
         execArgv: ['--experimental-vm-modules'],
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     it('should report Code injection vulnerability', async () => {
@@ -105,7 +105,7 @@ describe('IAST - code_injection - integration', () => {
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     it('should report Code injection vulnerability', async () => {

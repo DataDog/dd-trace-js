@@ -7,22 +7,20 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox,
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
+  withVersions('grpc', '@grpc/grpc-js', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
-      './packages/datadog-plugin-grpc/test/integration-test/*',
-      './packages/datadog-plugin-grpc/test/*'])
+      './packages/datadog-plugin-grpc/test/integration-test/server.mjs',
+      './packages/datadog-plugin-grpc/test/test.proto'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -32,7 +30,7 @@ describe('esm', () => {
       bindingName: 'grpc',
       packageName: '@grpc/grpc-js',
       defaultExport: true,
-      namedExports: ['loadPackageDefinition', 'Server', 'ServerCredentials', 'credentials'],
+      namedExports: ['loadPackageDefinition', 'Server', 'ServerCredentials', 'credentials', 'Client'],
       namedExportBinding: 'namespace',
     })
 
@@ -46,7 +44,9 @@ describe('esm', () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
+          const clientSpans = payload.flat().filter(s => s.name === 'grpc.client')
+          assert.strictEqual(clientSpans.length, 1,
+            `expected 1 grpc.client span, got ${clientSpans.length} — possible double-patch`)
         })
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

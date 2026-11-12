@@ -24,7 +24,7 @@ jobs:
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo "/binaries/$(npm pack --silent --pack-destination ./binaries ./dd-trace-js)" > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: system_tests_binaries
           path: ./binaries/**/*
@@ -40,7 +40,7 @@ jobs:
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      desired_execution_time: 180 # 3 minutes
+      desired_execution_time: 120 # 2 minutes
       scenarios_groups: tracer-release
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN # require AWS and datadog credentials
       parametric_job_count: 8

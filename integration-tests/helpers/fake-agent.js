@@ -32,6 +32,8 @@ module.exports = class FakeAgent extends EventEmitter {
   port = 0
   advertiseDebuggerV2IntakeSupport = true
   debuggerV2IntakeStatusCode = 202
+  // When set, debugger input requests are received but never answered, simulating a stalled intake
+  stallDebuggerIntake = false
   evpProxyVersions = [2]
   /** @type {Set<import('net').Socket>} */
   #sockets = new Set()
@@ -51,6 +53,9 @@ module.exports = class FakeAgent extends EventEmitter {
     }
     if (options.debuggerV2IntakeStatusCode !== undefined) {
       this.debuggerV2IntakeStatusCode = options.debuggerV2IntakeStatusCode
+    }
+    if (options.stallDebuggerIntake !== undefined) {
+      this.stallDebuggerIntake = options.stallDebuggerIntake
     }
     if (options.evpProxyVersions !== undefined) {
       this.evpProxyVersions = [...options.evpProxyVersions]
@@ -95,6 +100,8 @@ module.exports = class FakeAgent extends EventEmitter {
     }
     this.#sockets.clear()
     this.server.close()
+    // Subclasses can create their own HTTP server without installing the socket tracker in start().
+    this.server.closeAllConnections?.()
 
     return once(this.server, 'close')
   }
@@ -391,14 +398,18 @@ function buildExpressServer (agent) {
     res.json({ endpoints })
   })
 
-  app.put('/v0.4/traces', (req, res) => {
+  const handleV04Traces = (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
       payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
-  })
+  }
+  // Both methods the Agent accepts for trace intake: the legacy writer sends
+  // PUT, and a writer built on libdatadog sends POST.
+  app.put('/v0.4/traces', handleV04Traces)
+  app.post('/v0.4/traces', handleV04Traces)
 
   app.post('/v0.7/config', (req, res) => {
     const {
@@ -495,6 +506,10 @@ function buildExpressServer (agent) {
   })
 
   app.post('/debugger/v2/input', (req, res) => {
+    if (agent.stallDebuggerIntake) {
+      agent.emit('debugger-input-stalled', { headers: req.headers, query: req.query, payload: req.body })
+      return
+    }
     res.status(agent.debuggerV2IntakeStatusCode).send()
     if (agent.debuggerV2IntakeStatusCode === 404) {
       agent.emit('debugger-input-v2-404')

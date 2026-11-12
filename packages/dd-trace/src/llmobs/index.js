@@ -35,6 +35,7 @@ const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -80,9 +81,13 @@ function enable (config) {
   const retiredEvalWriter = evalWriter
   const isReinitializing = Boolean(retiredSpanWriter || retiredEvalWriter)
   unregisterTelemetryFlusher?.()
+  spanProcessor?.destroy()
   retireWriters(retiredSpanWriter, retiredEvalWriter)
 
   const startTime = performance.now()
+  // Register the processor lifecycle first so pending events reach the writers before they shut down.
+  spanProcessor = new LLMObsSpanProcessor(config)
+
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
@@ -97,10 +102,9 @@ function enable (config) {
     evalMetricAppendCh.subscribe(handleEvalMetricAppend)
     flushCh.subscribe(handleFlush)
     registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+    traceSampledCh.subscribe(handleTraceSampled)
   }
 
-  // span processing
-  spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
   if (!isReinitializing) spanFinishCh.subscribe(handleSpanProcess)
 
@@ -131,11 +135,13 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
+  if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   const retiredSpanWriter = spanWriter
   const retiredEvalWriter = evalWriter
+  spanProcessor?.destroy()
   spanProcessor?.setWriter(null)
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = undefined
@@ -152,7 +158,6 @@ function disable () {
  * Keeps retired writers reachable until their destroy-triggered deliveries complete.
  * @param {LLMObsSpanWriter | null} retiredSpanWriter
  * @param {LLMObsEvalMetricsWriter | null} retiredEvalWriter
- * @returns {void}
  */
 function retireWriters (retiredSpanWriter, retiredEvalWriter) {
   const retiredWriters = [retiredSpanWriter, retiredEvalWriter].filter(Boolean)
@@ -183,7 +188,7 @@ function handleLLMObsInjection (injection) {
   const mlApp =
     mlObsSpanTags?.[ML_APP] ||
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
-    globalTracerConfig.llmobs.mlApp
+    globalTracerConfig.llmobs.DD_LLMOBS_ML_APP
 
   const sampleRate =
     mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
@@ -239,7 +244,6 @@ function handleLLMObsInjection (injection) {
  * @param {Function} [done]
  * @param {LLMObsSpanWriter | null} [currentSpanWriter]
  * @param {LLMObsEvalMetricsWriter | null} [currentEvalWriter]
- * @returns {boolean} `true` when a writer throws synchronously.
  */
 function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter = evalWriter) {
   let failed = false
@@ -263,6 +267,7 @@ function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter =
 }
 
 function handleFlush () {
+  spanProcessor.processPending()
   const err = flushWriters() ? 'writer_flush_error' : ''
   telemetry.recordUserFlush(err)
 }
@@ -273,6 +278,10 @@ function handleRegisterProcessor (userSpanProcessor) {
 
 function handleSpanProcess (span) {
   spanProcessor.process(span)
+}
+
+function handleTraceSampled (trace) {
+  spanProcessor.processTrace(trace)
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {

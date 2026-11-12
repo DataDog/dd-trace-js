@@ -1,0 +1,11 @@
+_v: 1
+name: playwright
+display_name: Playwright
+description: Instruments Playwright test sessions, suites, cases, and steps for Test Optimization, including retries,
+  test management, failure screenshot and video uploads, and browser RUM correlation.
+packages:
+- name: playwright
+category:
+- test.execution
+systems: []
+creation_date: '2023-01-27'

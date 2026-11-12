@@ -221,7 +221,6 @@ describe('dogstatsd', () => {
   /**
    * @param {number} start - First UDP call to include
    * @param {number} [end] - First UDP call to exclude
-   * @returns {string} Concatenated UDP payload
    */
   function getUdpPayload (start, end = udp4.send.callCount) {
     let payload = ''

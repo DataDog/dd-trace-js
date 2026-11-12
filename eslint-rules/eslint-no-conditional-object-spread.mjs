@@ -39,7 +39,6 @@ export default {
 
 /**
  * @param {import('estree').Expression} node
- * @returns {boolean}
  */
 function hasSafeConditionalObject (node) {
   if (node.type === 'ConditionalExpression') {
@@ -57,7 +56,6 @@ function hasSafeConditionalObject (node) {
 
 /**
  * @param {import('estree').Expression} node
- * @returns {boolean}
  */
 function hasSafeObjectProperties (node) {
   if (node.type !== 'ObjectExpression') return true
@@ -77,7 +75,6 @@ function hasSafeObjectProperties (node) {
 
 /**
  * @param {import('estree').ObjectExpression} node
- * @returns {boolean}
  */
 function hasSafeAssignmentTarget (node) {
   for (const property of node.properties) {
@@ -90,7 +87,6 @@ function hasSafeAssignmentTarget (node) {
 
 /**
  * @param {import('estree').Property} property
- * @returns {boolean}
  */
 function hasProtoKey (property) {
   return !property.computed && (
@@ -101,7 +97,6 @@ function hasProtoKey (property) {
 
 /**
  * @param {import('estree').Property} property
- * @returns {boolean}
  */
 function isPrototypeSetter (property) {
   return !property.method && !property.shorthand && hasProtoKey(property)

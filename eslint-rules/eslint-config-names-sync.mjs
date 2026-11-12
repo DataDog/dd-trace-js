@@ -90,7 +90,6 @@ function createInspectionResult (overrides) {
 
 /**
  * @param {string} name
- * @returns {boolean}
  */
 function isIgnoredConfigurationName (name) {
   return IGNORED_CONFIGURATION_NAMES.has(name) ||
@@ -169,7 +168,6 @@ function getSupportedConfigurationInfo (filePath) {
 
 /**
  * @param {import('typescript').EntityName} entityName
- * @returns {string}
  */
 function getEntityNameText (entityName) {
   if (ts.isIdentifier(entityName)) {
@@ -323,7 +321,6 @@ function getInterfaceProperty (declaration, propertyName) {
 /**
  * @param {string} fullPath
  * @param {Set<string>} envTagNames
- * @returns {boolean}
  */
 function hasSupportedDirectEnvTag (fullPath, envTagNames) {
   const { primaryEnvTargets, knownAliasEnvNames } = currentInspectionState
@@ -526,7 +523,6 @@ function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
  * @param {Set<string>} sourceNames
  * @param {Set<string>} targetNames
  * @param {string} messageId
- * @returns {void}
  */
 function reportMissingConfigurations (context, node, sourceNames, targetNames, messageId) {
   const missing = []

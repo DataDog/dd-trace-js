@@ -10,14 +10,15 @@ const MAX_FLAG_LENGTH = 45
  * distinguishable in Codecov's per-flag breakdown instead of every upload sharing one flag.
  *
  * @param {string} workflowName
- * @returns {string}
  */
 function flagOf (workflowName) {
-  return workflowName
+  const normalizedName = workflowName
     .toLowerCase()
     .replaceAll(/[^\w.-]+/g, '-')
-    .replaceAll(/^-+|-+$/g, '')
-    .slice(0, MAX_FLAG_LENGTH)
+    .replace(/^-+/, '')
+  let end = normalizedName.length
+  while (end > 0 && normalizedName[end - 1] === '-') end--
+  return normalizedName.slice(0, Math.min(end, MAX_FLAG_LENGTH))
 }
 
 /**
@@ -74,7 +75,6 @@ function ensureCodecovCommit (options) {
 }
 
 /**
- * @returns {boolean} whether any run has registered a Codecov commit/report for this ref. False
  * on Dependabot PRs, whose coverage artifacts are skipped, so no run ever calls `uploadCoverage`
  * with a non-empty coverage dir.
  */
@@ -129,7 +129,6 @@ export async function uploadAllCoverageToDatadog () {
  * @param {boolean} options.uploadFailed
  * @param {boolean} options.processingFailed
  * @param {boolean} options.hasCommit
- * @returns {boolean}
  */
 export function shouldNotifyCodecov ({
   isGitHubActions, failedRunCount, uploadFailed, processingFailed, hasCommit,

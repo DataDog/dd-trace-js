@@ -7,10 +7,10 @@ const {
   flushFrameworkWarnings,
   flushLoadOrderWarnings,
 } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+const shimmer = require('../../datadog-shimmer')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
-const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
 const { flushServerlessTelemetry } = require('./flush')
@@ -32,7 +32,6 @@ class DatadogTracer extends Tracer {
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
-    setStartupLogConfig(config)
     flushStartupLogs(log)
     // Curated frameworks (e.g. Next.js) silently no-op when loaded first and their users enable
     // no logging (#5430 / #5432), so surface those unconditionally.
@@ -119,7 +118,7 @@ class DatadogTracer extends Tracer {
   wrap (name, options, fn) {
     const tracer = this
 
-    return function (...args) {
+    return shimmer.wrapFunction(fn, original => function (...args) {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, args)
@@ -136,11 +135,11 @@ class DatadogTracer extends Tracer {
             return scopeBoundCb.apply(this, arguments)
           }
 
-          return fn.apply(this, args)
+          return original.apply(this, args)
         })
       }
-      return tracer.trace(name, optionsObj, () => fn.apply(this, args))
-    }
+      return tracer.trace(name, optionsObj, () => original.apply(this, args))
+    })
   }
 
   setUrl (url) {

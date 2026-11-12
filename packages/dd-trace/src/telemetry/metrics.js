@@ -1,5 +1,6 @@
 'use strict'
 
+const { TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY } = require('../constants')
 const { sendData } = require('./send-data')
 
 let LogCollapsingLowestDenseDDSketch
@@ -33,7 +34,6 @@ function mapToJsonArray (map, filter) {
 
 /**
  * @param {Metric} metric
- * @returns {boolean}
  */
 function hasPoints (metric) {
   return metric.hasPoints()
@@ -43,7 +43,7 @@ function createSketch () {
   if (LogCollapsingLowestDenseDDSketch === undefined) {
     ({ LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js'))
   }
-  return new LogCollapsingLowestDenseDDSketch()
+  return new LogCollapsingLowestDenseDDSketch({ relativeAccuracy: TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY })
 }
 
 class Metric {
@@ -138,17 +138,17 @@ class DistributionMetric extends Metric {
 
   /**
    * @param {number} [value]
-   * @returns {void}
+   * @param {number} [count] - The number of times the value was observed, which must be a positive integer
    */
-  track (value = 1) {
+  track (value = 1, count = 1) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return
 
     if (this.sketch === undefined) {
       this.sketch = createSketch()
     }
 
-    this.sketch.accept(value)
-    this.pointCount++
+    this.sketch.accept(value, count)
+    this.pointCount += count
   }
 
   /**

@@ -76,7 +76,8 @@ describe('Test Optimization exporter agents', () => {
   })
 
   it('opens sixteen same-origin connections and queues the seventeenth', async () => {
-    const agent = new httpAgent.constructor()
+    const Agent = httpAgent.constructor
+    const agent = new Agent()
     const lookupCallbacks = []
     const lookup = (hostname, options, callback) => lookupCallbacks.push(callback)
     const requests = new Array(17)

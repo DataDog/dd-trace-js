@@ -41,7 +41,7 @@ describe('AIGuard Vercel AI integration', () => {
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-    vercelAi.enable({ evaluate }, true)
+    vercelAi.enable({ evaluate }, true, true)
   })
 
   afterEach(() => {
@@ -149,6 +149,16 @@ describe('AIGuard Vercel AI integration', () => {
   })
 
   describe('doStream', () => {
+    it('does not install output handling by default', () => {
+      vercelAi.disable()
+      vercelAi.enable({ evaluate }, true)
+
+      const ctx = modelCall('doStream')
+
+      assert.strictEqual(typeof ctx.beforeResult, 'function')
+      assert.strictEqual(ctx.onResult, undefined)
+    })
+
     it('drains, evaluates the accumulated text and replays every chunk', async () => {
       const chunks = [
         { type: 'text-delta', textDelta: 'Hello' },

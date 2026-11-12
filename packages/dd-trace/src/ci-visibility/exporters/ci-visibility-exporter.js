@@ -6,6 +6,10 @@ const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
+const {
+  getDynamicAtrBuckets,
+  isDynamicAtrEnabled,
+} = require('../dynamic-atr-retries')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
@@ -23,6 +27,7 @@ const {
 } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const telemetry = require('../../telemetry')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -31,7 +36,7 @@ const {
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
-const { incrementCountMetric, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
+const { incrementCountMetric, recordDynamicAtrRetries, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const buildSettingsCacheKey = require('./settings-cache-key')
 
@@ -108,13 +113,16 @@ function isValidRetryCount (value) {
  * Checks whether a cached EFD retry policy has the complete parsed shape.
  *
  * @param {unknown} retryPolicy - Candidate retry policy.
- * @returns {boolean}
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
-  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
-  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
-  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
-    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
+  if (
+    retryPolicy === null ||
+    typeof retryPolicy !== 'object' ||
+    Array.isArray(retryPolicy) ||
+    !isValidRetryCount(retryPolicy.schedulingRetryCount) ||
+    !Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length
+  ) {
     return false
   }
 
@@ -149,9 +157,11 @@ function isValidCachedSettings (settings) {
   }
   if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
   if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
-  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
-  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
-    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+  if (
+    !isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy) ||
+    !isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100
+  ) {
     return false
   }
   return settings.testManagementAttemptToFixRetries === undefined ||
@@ -202,14 +212,18 @@ class CiVisibilityExporter extends BufferingExporter {
   #deferredTestSuiteSpans = new Map()
   #gitUploadTimeoutId
 
-  constructor (config, options = {}) {
+  constructor (config) {
     super(config)
     this._timer = undefined
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
-    this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
-    this._isTestOptimizationCacheOnly = options.cacheOnly === true
+    const dynamicAtrEnabled = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED
+    const dynamicAtrBuckets = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS
+    this._dynamicAtrEnabled = isDynamicAtrEnabled(dynamicAtrEnabled)
+    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets(dynamicAtrBuckets) ?? undefined : undefined
+    this._hasRecordedDynamicAtrTelemetry = false
+    this._testOptimizationHttpCache = new TestOptimizationHttpCache()
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
     if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
       log.warn(
@@ -250,7 +264,8 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
+    // Final upload errors are recorded after telemetry's initial app-closing drain.
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => telemetry.flush()))
   }
 
   shouldRequestSkippableSuites () {
@@ -311,10 +326,6 @@ class CiVisibilityExporter extends BufferingExporter {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
       return callback(null, skippableSuites, correlationId, coverage)
     }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('skippable tests'), [])
-    }
-
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
         return callback(gitUploadError, [])
@@ -331,9 +342,6 @@ class CiVisibilityExporter extends BufferingExporter {
     if (cachedKnownTests !== CACHE_MISS) {
       return callback(null, cachedKnownTests)
     }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('known tests'))
-    }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
@@ -345,9 +353,6 @@ class CiVisibilityExporter extends BufferingExporter {
     if (cachedTestManagementTests !== CACHE_MISS) {
       return callback(null, cachedTestManagementTests)
     }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('test management tests'))
-    }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
@@ -357,7 +362,6 @@ class CiVisibilityExporter extends BufferingExporter {
    *
    * @param {TestConfiguration} testConfiguration
    * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
-   * @returns {void}
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
@@ -370,10 +374,6 @@ class CiVisibilityExporter extends BufferingExporter {
       if (cachedLibraryConfig !== CACHE_MISS) {
         log.debug('Test Optimization HTTP cache settings found, skipping settings request')
         return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, false, callback)
-      }
-
-      if (this._isTestOptimizationCacheOnly) {
-        return callback(this._getCacheOnlyError('settings'), {})
       }
 
       // The settings request has a two-phase shape: when the backend returns
@@ -410,6 +410,7 @@ class CiVisibilityExporter extends BufferingExporter {
           // `_gitUploadPromise` itself. Do not call `_resolveGit()`.
           writeSettingsToCache(libraryConfig)
           this._libraryConfig = this.filterConfiguration(libraryConfig)
+          this._recordDynamicAtrTelemetry()
           return callback(null, this._libraryConfig)
         }
         // Filesystem cache hit: no git upload was started in this process.
@@ -444,11 +445,11 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {boolean} isFilesystemCache - Whether settings came from the cross-process cache.
    * @param {Function} callback - Completion callback.
-   * @returns {void}
    */
   _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
     writeSettingsToCache(settings)
     this._libraryConfig = this.filterConfiguration(settings)
+    this._recordDynamicAtrTelemetry()
     const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
       this._testOptimizationHttpCache.hasValidSkippableSuites({
         testLevel: configuration.testLevel,
@@ -471,7 +472,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {string|null} cacheKey - Filesystem cache key when this process owns the lock, null otherwise.
    * @param {Function} done - Completion callback.
-   * @returns {void}
    */
   _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
     this.sendGitMetadata(repositoryUrl)
@@ -508,17 +508,6 @@ class CiVisibilityExporter extends BufferingExporter {
     })
   }
 
-  /**
-   * Returns the deterministic cache error for offline exporters.
-   *
-   * @param {string} input required cache input
-   * @returns {Error} cache error
-   */
-  _getCacheOnlyError (input) {
-    return this._testOptimizationHttpCache.getLastError?.() ||
-      new Error(`Offline Test Optimization validation requires a valid ${input} cache fixture.`)
-  }
-
   // Takes into account potential kill switches
   filterConfiguration (remoteConfiguration = EMPTY_SETTINGS) {
     const { testOptimization } = this._config
@@ -532,6 +521,7 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
+
     const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
       ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
       : createEfdRetryPolicy({
@@ -543,6 +533,20 @@ class CiVisibilityExporter extends BufferingExporter {
     const testManagementAttemptToFixRetries =
       remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
 
+    const isFlakyTestRetriesEnabled =
+      remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true
+    // Dynamic ATR only replaces the flat ATR policy when backend ATR is enabled.
+    const isDynamicAtrEnabled = isFlakyTestRetriesEnabled && this._dynamicAtrEnabled
+    let dynamicAtrBuckets
+    if (isDynamicAtrEnabled) {
+      // Resolve the backend fallback before local EFD overrides can reach any runner.
+      const backendPolicy = remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+      dynamicAtrBuckets = this._dynamicAtrBuckets ?? Object.freeze([
+        ...backendPolicy.durationRetryCounts.map(({ retryCount }) => Math.max(1, retryCount)),
+        1,
+      ])
+    }
+
     return Object.freeze({
       isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
       isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
@@ -552,9 +556,10 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
       earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
-      isFlakyTestRetriesEnabled:
-        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      isFlakyTestRetriesEnabled,
       flakyTestRetriesCount,
+      isDynamicAtrEnabled,
+      dynamicAtrBuckets,
       isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
       isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
       isTestManagementEnabled:
@@ -564,6 +569,13 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isImpactedTestsEnabled === true && isImpactedTestsAllowed === true,
       isCoverageReportUploadEnabled: remoteConfiguration.isCoverageReportUploadEnabled === true,
     })
+  }
+
+  _recordDynamicAtrTelemetry () {
+    if (!this._hasRecordedDynamicAtrTelemetry && this._libraryConfig?.isDynamicAtrEnabled) {
+      this._hasRecordedDynamicAtrTelemetry = true
+      recordDynamicAtrRetries(this._dynamicAtrBuckets !== undefined)
+    }
   }
 
   sendGitMetadata (repositoryUrl) {
@@ -588,7 +600,7 @@ class CiVisibilityExporter extends BufferingExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error('Error uploading git metadata: %s', err.message)
+            log.error('Error uploading git metadata', err)
           } else {
             log.debug('Successfully uploaded git metadata')
           }
@@ -607,7 +619,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Exports spans that are not retained for late updates to session, module, or suite events.
    *
    * @param {Array<object>} trace
-   * @returns {void}
    */
   #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
@@ -633,7 +644,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Retries session, module, and suite traces rejected by writer backpressure within the final deadline.
    *
    * @param {{ deadline?: number }} options final-flush options
-   * @returns {void}
    */
   #exportDeferredTestSessionTraces (options) {
     if (!this._writer || !this.canReportSessionTraces()) return
@@ -859,7 +869,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Allows later test activity to establish a new finalization boundary.
    *
-   * @returns {void}
    */
   #resetFinalFlush () {
     this.#finalFlush = undefined
@@ -933,7 +942,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Returns whether the exporter can upload test failure screenshots.
    *
-   * @returns {boolean}
    */
   canUploadTestScreenshots () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
@@ -942,7 +950,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Returns whether the exporter can upload test failure videos.
    *
-   * @returns {boolean}
    */
   canUploadTestVideos () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
@@ -985,7 +992,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
-   * @returns {void}
    */
   uploadTestVideo (options, callback) {
     if (!this._testScreenshotUploadUrl) {
@@ -1006,7 +1012,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
-   * @returns {void}
    */
   uploadTestSuiteVideo (options, callback) {
     if (!this._testScreenshotUploadUrl) {
@@ -1024,7 +1029,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {AbortSignal} [uploadOptions.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    * @param {number} [timeoutMs] - Maximum background upload duration
-   * @returns {void}
    */
   #uploadTestMedia (uploadRequest, uploadOptions, callback, timeoutMs = FINAL_FLUSH_TIMEOUT) {
     const { signal } = uploadOptions

@@ -4,33 +4,56 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { activate, loadChannel, registeredBuiltinNames } = require('./register.js')
 const {
   filename,
-  loadChannel,
+  getDisabledInstrumentations,
   matchVersion,
-} = require('./register.js')
+  matchesInstrumentation,
+} = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isRewriteActivationEnabled } = require('./rewriter/targets')
+const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
-// environments (webpack, esbuild), Node.js built-in modules required by
-// dd-trace internal modules (e.g. http from request.js) may have been loaded
-// before ritm was active. The bundler's module cache then returns those
-// pre-loaded modules for any subsequent require() calls, bypassing ritm.
-// Re-requiring them via the real Module.prototype.require ensures ritm applies
-// their instrumentation hooks.
+// environments (webpack, esbuild, Turbopack), Node.js built-ins required by the
+// application or by dd-trace itself may have been loaded and cached by the
+// bundle before ritm was active, bypassing it. Re-requiring them via the real
+// Module.prototype.require lets ritm apply their hooks to the shared exports.
 //
 // In regular Node.js, `module` is an instance of Module. In bundlers, the
 // module wrapper object is a plain object (not a Module instance), so we use
 // that to detect a bundled context and avoid unintended side-effects in
 // normal Node.js (e.g. shimmer-wrapping http before ESM modules load).
 if (!(module instanceof Module)) {
-  for (const name of ['http', 'https']) {
+  patchLoadedBuiltins()
+}
+
+function patchLoadedBuiltins () {
+  // A built-in nobody has loaded cannot be cached by the bundle yet, and a later require reaches ritm, so it is
+  // skipped. moduleLoadList is undocumented: if it ever disappears, every registered built-in is loaded instead.
+  // @ts-expect-error - process.moduleLoadList is not typed
+  const { moduleLoadList } = process
+  const loadedBuiltins = Array.isArray(moduleLoadList) ? moduleLoadList : undefined
+
+  let patched = false
+  for (const name of registeredBuiltinNames) {
+    if (loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
+
     try {
       Module.prototype.require.call(module, name)
+      patched = true
     } catch {
       // Built-in not available in this environment, skip
     }
+  }
+
+  if (!patched) return
+  try {
+    Module.syncBuiltinESMExports()
+  } catch (error) {
+    log.error('Error synchronizing bundled built-in ESM exports: %s', String(error?.message ?? error), error)
   }
 }
 
@@ -69,21 +92,34 @@ function doHook (name) {
 
   try {
     hookFn()
-  } catch {
-    log.error('esbuild-wrapped %s hook failed', name)
+  } catch (error) {
+    log.error('esbuild-wrapped %s hook failed: %s', name, String(error?.message ?? error), error)
   }
 }
+
+/**
+ * @typedef {object} Payload
+ * @property {boolean} [activate]
+ * @property {string} package
+ * @property {unknown} [module]
+ * @property {string} [version]
+ * @property {string} [path]
+ */
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
+  if (disabledInstrumentations.has(name)) return
+
+  if (payload.activate && isRewriteActivationEnabled(name)) {
+    activate(name, payload.version)
+    return
+  }
 
   const isPrefixedWithNode = name.startsWith('node:')
-
   const isNodeModule = isPrefixedWithNode || !hooks[name]
 
   if (isNodeModule) {
@@ -100,20 +136,34 @@ dc.subscribe(CHANNEL, (message) => {
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
 
   if (!instrumentation) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
+    if (!payload.activate) log.error('esbuild-wrapped %s missing in list of instrumentations', name)
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
-      continue
+  if (payload.activate) {
+    for (const { sourceRewrite, versions, hook } of instrumentation) {
+      if (!sourceRewrite || payload.path !== filename(name, sourceRewrite) ||
+        !matchVersion(payload.version, versions)) continue
+
+      try {
+        loadChannel.publish({ name })
+        hook(undefined, payload.version)
+      } catch (error) {
+        log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
+      }
+      return
     }
+    return
+  }
+
+  for (const entry of instrumentation) {
+    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
 
     try {
-      loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
+      loadChannel.publish({ name })
+      payload.module = entry.hook(payload.module, payload.version) ?? payload.module
+    } catch (error) {
+      log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }
   }
 })

@@ -22,6 +22,12 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  /**
+   * @readonly
+   * @type {Readonly<Record<string, unknown>>}
+   */
+  #startupResourceAttributes
+
   #transport = https
   #serverlessDeliveryTracker
 
@@ -34,23 +40,21 @@ class OtlpHttpExporterBase {
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
+   * @param {import('@opentelemetry/api').Attributes} [resourceAttributes] - Resource passed to the transformer
    */
-  constructor (url, headers, timeout, protocol, signalType) {
+  constructor (url, headers, timeout, protocol, signalType, resourceAttributes = {}) {
+    this.#startupResourceAttributes = Object.fromEntries(Object.entries(resourceAttributes).map(([key, value]) => [
+      key, Array.isArray(value) ? [...value] : value,
+    ]))
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
     const isJson = protocol === 'http/json'
 
-    const parsedUrl = new URL(url)
-    this.#transport = parsedUrl.protocol === 'http:' ? http : https
     this.options = {
       method: 'POST',
       timeout,
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: parsedUrl.pathname + parsedUrl.search,
-      agent: parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
         'User-Agent': `dd-trace-js/${tracerVersion}`,
@@ -59,9 +63,18 @@ class OtlpHttpExporterBase {
     }
 
     this.telemetryTags = [
-      `protocol:${this.#transport === https ? 'https' : 'http'}`,
+      '',
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
+    this.#applyUrl(url)
+  }
+
+  /**
+   * Returns the resource captured at construction, before later identity refreshes.
+   * @returns {Readonly<Record<string, unknown>>}
+   */
+  getStartupResourceAttributes () {
+    return this.#startupResourceAttributes
   }
 
   /**
@@ -164,22 +177,44 @@ class OtlpHttpExporterBase {
   }
 
   /**
+   * @param {string} url
+   */
+  #applyUrl (url) {
+    const parsedUrl = new URL(url)
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new TypeError(`Unsupported OTLP endpoint protocol: ${parsedUrl.protocol}`)
+    }
+
+    const transport = parsedUrl.protocol === 'http:' ? http : https
+    const agent = transport === https ? getHttpsProxyAgent(parsedUrl) : undefined
+
+    this.#transport = transport
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = parsedUrl.pathname + parsedUrl.search
+    this.options.agent = agent
+    this.telemetryTags[0] = `protocol:${transport === https ? 'https' : 'http'}`
+  }
+
+  /**
    * Re-targets the exporter to a different URL, updating transport, hostname, port, and path.
    * @param {string} url
    */
   setUrl (url) {
-    const parsedUrl = new URL(url)
-    this.#transport = parsedUrl.protocol === 'http:' ? http : https
-    this.options.hostname = parsedUrl.hostname
-    this.options.port = parsedUrl.port
-    this.options.path = parsedUrl.pathname + parsedUrl.search
-    this.options.agent = parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined
-    this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
+    try {
+      this.#applyUrl(url)
+    } catch (error) {
+      log.error(
+        'Invalid OTLP %s URL: %s. Using previous URL. Error: %s',
+        this.signalType,
+        url,
+        error.message
+      )
+    }
   }
 
   /**
    * @param {() => void} [done]
-   * @returns {void}
    */
   shutdown (done) {
     done?.()

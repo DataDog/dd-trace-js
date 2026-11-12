@@ -30,6 +30,10 @@ const Runner = class {
     return failures
   }
 
+  async _startSession (config, caps) {
+    return caps
+  }
+
   emit (event, code) {
     this.onEvent?.(event, code)
   }

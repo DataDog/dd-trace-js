@@ -171,7 +171,6 @@ class OtlpTransformerBase {
  * Supports string keys with primitive values or arrays of primitives.
  *
  * @param {Attributes} attributes - Attributes object to stringify
- * @returns {string} Stable string representation
  */
 function stableStringify (attributes) {
   if (attributes == null) {

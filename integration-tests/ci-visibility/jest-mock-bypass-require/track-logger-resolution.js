@@ -8,7 +8,6 @@ const resolveFilename = Module._resolveFilename
 /**
  * @param {string} request
  * @param {{ filename?: string }} [parent]
- * @returns {string}
  */
 Module._resolveFilename = function (request, parent) {
   if (loggerNames.has(request) && parent?.filename?.endsWith('esm-unrelated-cjs-test.mjs')) {

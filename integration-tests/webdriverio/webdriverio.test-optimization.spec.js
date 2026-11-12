@@ -7,6 +7,8 @@ const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
 
+const { satisfies } = require('semver')
+
 const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
@@ -25,6 +27,8 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -36,6 +40,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
   TEST_NAME,
   TEST_RETRY_REASON,
   TEST_RETRY_REASON_TYPES,
@@ -43,12 +49,11 @@ const {
   TEST_STATUS,
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-
-const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
+const { getWebdriverioVersions, resolveWebdriverioVersion } = require('./versions')
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
-const versions = requestedVersion
-  ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
-  : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const versions = getWebdriverioVersions(requestedVersion)
+// CI runs each adapter in its own job; together they exceed the CI time budget.
+const frameworks = process.env.WEBDRIVERIO_ADAPTER ? [process.env.WEBDRIVERIO_ADAPTER] : ['mocha', 'jasmine']
 
 const SETTINGS_PATH = '/api/v2/libraries/tests/services/setting'
 const KNOWN_TESTS_PATH = '/api/v2/ci/libraries/tests'
@@ -98,8 +103,12 @@ function startWebDriverServer () {
             browserVersion: 'test',
             'goog:chromeOptions': {},
             platformName: process.platform,
+            unhandledPromptBehavior: body.capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
+      } else if (request.method === 'GET' && request.url?.endsWith('/screenshot')) {
+        value = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII='
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
       } else if (request.method === 'GET' && request.url?.endsWith('/window')) {
@@ -181,6 +190,13 @@ function getEvents (payloads) {
   return payloads
     .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
     .flatMap(({ payload }) => payload.events)
+    // Screenshot uploads can reorder exports; trace clocks can also overlap for very short attempts.
+    // Use retry/final-status tags to keep initial and final attempts at the ends of each test's sequence.
+    .sort(({ content: a }, { content: b }) => {
+      const retryOrder = Number(a.meta[TEST_IS_RETRY] === 'true') - Number(b.meta[TEST_IS_RETRY] === 'true')
+      const finalOrder = Number(TEST_FINAL_STATUS in a.meta) - Number(TEST_FINAL_STATUS in b.meta)
+      return retryOrder || finalOrder || (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+    })
 }
 
 /**
@@ -188,7 +204,6 @@ function getEvents (payloads) {
  *
  * @param {object[]} payloads
  * @param {string} requestPath
- * @returns {number}
  */
 function countRequests (payloads, requestPath) {
   return payloads.filter(({ url }) => url.endsWith(requestPath)).length
@@ -204,6 +219,21 @@ function getLogRequests (payloads) {
   return payloads.filter(({ url }) => url.startsWith('/api/v2/logs?'))
 }
 
+/** @param {object[]} payloads - Events and media received from a managed retry run */
+function assertFailureVideos (payloads) {
+  const videos = payloads.filter(({ media }) => media?.contentType === 'video/webm')
+  const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+  const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+  assert.ok(failedTests.length > 0)
+  assert.strictEqual(videos.length, failedTests.length)
+  for (const test of tests) {
+    const failed = test.meta[TEST_STATUS] === 'fail'
+    assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED], failed ? 'true' : undefined)
+    assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+    assert.strictEqual(videos.filter(({ media }) => media.traceId === test.trace_id.toString()).length, failed ? 1 : 0)
+  }
+}
+
 for (const version of versions) {
   describe(`webdriverio@${version} Test Optimization`, function () {
     this.timeout(90_000)
@@ -213,6 +243,9 @@ for (const version of versions) {
     let receiver
     let testOutput = ''
     let webDriver
+
+    const resolvedWebdriverioVersion = resolveWebdriverioVersion(version)
+    const jasmineSuiteHookFailureExitCode = satisfies(resolvedWebdriverioVersion, '>=10.2.0') ? 1 : 0
 
     const dependencies = [
       `@wdio/cli@${version}`,
@@ -278,6 +311,8 @@ for (const version of versions) {
       expectedExitCode = 0,
       workingDirectory = cwd
     ) {
+      const exclusionLedger = path.join(cwd, 'exclusion-executions.jsonl')
+      if (scenario.startsWith('exclusions')) fs.rmSync(exclusionLedger, { force: true })
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialWebDriverRequestCount = webDriver.getRequests().length
       const executable = path.join(cwd, 'node_modules', '.bin', 'wdio')
@@ -291,6 +326,7 @@ for (const version of versions) {
           GITHUB_BASE_REF: '',
           WEBDRIVERIO_FRAMEWORK: framework,
           WEBDRIVERIO_SCENARIO: scenario,
+          ...(scenario.startsWith('exclusions') && { WEBDRIVERIO_EXCLUSIONS_LEDGER: exclusionLedger }),
           WEBDRIVER_PORT: String(webDriver.port),
           ...extraEnvironment,
         },
@@ -336,7 +372,7 @@ for (const version of versions) {
       )
     }
 
-    for (const framework of ['mocha', 'jasmine']) {
+    for (const framework of frameworks) {
       describe(`${framework} adapter`, function () {
         /**
          * Runs one optimization scenario for this adapter.
@@ -368,6 +404,230 @@ for (const version of versions) {
           )
         }
 
+        describe('automation exclusions', () => {
+          const protectedFile = 'test-exclusions-protected.e2e.js'
+          const protectedName = 'WebdriverIO protected exclusion critical check'
+          const passingFile = 'test-exclusions-passing.e2e.js'
+          const passingNames = ['WebdriverIO passing exclusions excluded', 'WebdriverIO passing exclusions control']
+
+          /** @param {object[]} payloads */
+          function getTests (payloads) {
+            const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+            const ledgerFile = path.join(cwd, 'exclusion-executions.jsonl')
+            const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').trim().split('\n') : []
+            const expected = {}
+            for (const test of tests) {
+              if (test.meta[TEST_STATUS] !== 'skip') {
+                expected[test.meta[TEST_NAME]] = (expected[test.meta[TEST_NAME]] || 0) + 1
+              }
+            }
+            const actual = {}
+            for (const name of ledger) actual[name] = (actual[name] || 0) + 1
+            assert.deepStrictEqual(actual, expected,
+              'native callback ledger must match the separately asserted events')
+            return tests
+          }
+
+          /** @param {Record<string, Record<string, {properties: object}>>} suites */
+          function setProperties (suites) {
+            receiver.setTestManagementTests({
+              webdriverio: {
+                suites: Object.fromEntries(Object.entries(suites).map(([file, tests]) => [file, { tests }])),
+              },
+            })
+          }
+
+          it('preserves assignments, skips and generated cases with combined exclusions', async () => {
+            const file = 'test-exclusions.e2e.js'
+            const names = [
+              'protected failure', 'excluded failure', 'retry control', 'disabled control', 'quarantined control',
+              'developer skipped', 'pending suite inherited skip', 'parameter case 1', 'parameter case 2',
+            ]
+            const protectedNames = ['protected failure', 'parameter case 1', 'parameter case 2']
+            receiver.setSettings({
+              flaky_test_retries_enabled: true,
+              known_tests_enabled: true,
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            })
+            receiver.setKnownTests({ webdriverio: { [file]: names.map(name => `WebdriverIO exclusions ${name}`) } })
+            setProperties({
+              [file]: Object.fromEntries([
+                ...protectedNames.map(name => [`WebdriverIO exclusions ${name}`, {
+                  properties: { disabled: true, quarantined: true, attempt_to_fix: true },
+                }]),
+                ['WebdriverIO exclusions disabled control', { properties: { disabled: true, attempt_to_fix: true } }],
+                ['WebdriverIO exclusions quarantined control', {
+                  properties: { quarantined: true, attempt_to_fix: true },
+                }],
+              ]),
+            })
+            await runScenario('exclusions', 1, payloads => {
+              const tests = getTests(payloads)
+              assert.strictEqual(tests.length, 11)
+              for (const name of names) {
+                const runs = tests.filter(test => test.meta[TEST_NAME] === `WebdriverIO exclusions ${name}`)
+                assert.strictEqual(runs.length, name === 'retry control' ? 3 : 1, name)
+                for (const run of runs) {
+                  const protectedTest = protectedNames.includes(name) ||
+                    ['developer skipped', 'pending suite inherited skip'].includes(name)
+                  assert.strictEqual(run.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION],
+                    protectedTest ? 'true' : undefined, name)
+                  assert.strictEqual(run.meta[TEST_MANAGEMENT_NO_AUTO_RETRY],
+                    name === 'retry control' ? undefined : 'true', name)
+                  if (name !== 'retry control') {
+                    assert.strictEqual(run.meta[TEST_IS_RETRY], undefined, name)
+                    assert.strictEqual(run.meta[TEST_RETRY_REASON], undefined, name)
+                    assert.strictEqual(run.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined, name)
+                  }
+                  const skipped = ['disabled control', 'developer skipped', 'pending suite inherited skip']
+                    .includes(name)
+                  assert.strictEqual(run.meta[TEST_STATUS], skipped ? 'skip' : 'fail', name)
+                  if (protectedNames.includes(name)) {
+                    for (const tag of [TEST_MANAGEMENT_IS_DISABLED, TEST_MANAGEMENT_IS_QUARANTINED,
+                      TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]) assert.strictEqual(run.meta[tag], 'true', name)
+                  }
+                }
+              }
+              const quarantined = tests.find(test => test.meta[TEST_NAME].endsWith('quarantined control'))
+              assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
+            }, { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' }, 1)
+          })
+
+          it('keeps new-test discovery while excluding EFD', async () => {
+            receiver.setSettings({
+              early_flake_detection: { enabled: true, faulty_session_threshold: 100, slow_test_retries: { '5s': 2 } },
+              known_tests_enabled: true,
+            })
+            receiver.setKnownTests({ webdriverio: { [passingFile]: ['unrelated known test'] } })
+            await runScenario('exclusionsPassing', 1, payloads => {
+              const tests = getTests(payloads)
+              const excluded = tests.filter(test => test.meta[TEST_NAME] === passingNames[0])
+              const control = tests.filter(test => test.meta[TEST_NAME] === passingNames[1])
+              assert.strictEqual(excluded.length, 1)
+              assert.strictEqual(control.length, 3)
+              assert.strictEqual(excluded[0].meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(excluded[0].meta[TEST_MANAGEMENT_NO_AUTO_RETRY], 'true')
+              assert.strictEqual(excluded[0].meta[TEST_IS_RETRY], undefined)
+              assert.ok(control.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
+            })
+          })
+
+          it('excludes Attempt to Fix while preserving its assignment', async () => {
+            receiver.setSettings({
+              known_tests_enabled: true,
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            })
+            receiver.setKnownTests({ webdriverio: { [passingFile]: passingNames } })
+            setProperties({
+              [passingFile]: Object.fromEntries(passingNames.map(name => [name, {
+                properties: { attempt_to_fix: true },
+              }])),
+            })
+            await runScenario('exclusionsPassing', 1, payloads => {
+              const tests = getTests(payloads)
+              const [excluded] = tests.filter(test => test.meta[TEST_NAME] === passingNames[0])
+              assert.strictEqual(tests.length, 4)
+              assert.ok(excluded)
+              assert.strictEqual(excluded.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(excluded.meta[TEST_MANAGEMENT_NO_AUTO_RETRY], 'true')
+              assert.strictEqual(excluded.meta[TEST_IS_RETRY], undefined)
+              assert.strictEqual(excluded.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+              const control = tests.filter(test => test.meta[TEST_NAME] === passingNames[1])
+              assert.strictEqual(control.length, 3)
+              assert.ok(control.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf))
+            })
+          })
+
+          it('preserves native retries without attributing them to Datadog', async () => {
+            receiver.setSettings({ flaky_test_retries_enabled: true })
+            await runScenario('exclusionsNative', 1, payloads => {
+              const tests = getTests(payloads)
+              assert.strictEqual(tests.length, 2)
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+              assert.ok(tests.every(test => test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true'))
+              assert.strictEqual(tests[0].meta[TEST_RETRY_REASON], undefined)
+              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+            })
+          })
+
+          for (const [passing, retryExcluded] of [[false, false], [true, false], [false, true], [true, true]]) {
+            const outcome = passing ? 'passing' : 'failing'
+            it(`protects a sole ${outcome} test (retryExcluded=${retryExcluded})`, async () => {
+              receiver.setSettings({ known_tests_enabled: true, test_management: { enabled: true } })
+              receiver.setKnownTests({ webdriverio: { [protectedFile]: [protectedName] } })
+              setProperties({
+                [protectedFile]: {
+                  [protectedName]: {
+                    properties: { disabled: true, quarantined: true },
+                  },
+                },
+              })
+              await runScenario('exclusionsProtected', 1, payloads => {
+                const tests = getTests(payloads)
+                assert.strictEqual(tests.length, 1)
+                const [test] = tests
+                assert.strictEqual(test.meta[TEST_STATUS], passing ? 'pass' : 'fail')
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], passing ? 'pass' : 'fail')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION], 'true')
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY], retryExcluded ? 'true' : undefined)
+              }, {
+                WEBDRIVERIO_EXCLUSIONS_PASS: String(passing),
+                WEBDRIVERIO_EXCLUSIONS_ALLOW_RETRIES: String(!retryExcluded),
+              }, passing ? 0 : 1)
+            })
+          }
+
+          it('lets failure protection recover through ATR', async () => {
+            receiver.setSettings({
+              flaky_test_retries_enabled: true,
+              known_tests_enabled: true,
+              test_management: { enabled: true },
+            })
+            receiver.setKnownTests({ webdriverio: { [protectedFile]: [protectedName] } })
+            setProperties({
+              [protectedFile]: {
+                [protectedName]: {
+                  properties: { disabled: true, quarantined: true },
+                },
+              },
+            })
+            await runScenario('exclusionsProtected', 1, payloads => {
+              const tests = getTests(payloads)
+              assert.strictEqual(tests.length, 2)
+              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+              assert.ok(tests.every(test => test.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true'))
+              assert.ok(tests.every(test => test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === undefined))
+              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            }, { WEBDRIVERIO_EXCLUSIONS_ALLOW_RETRIES: 'true', WEBDRIVERIO_EXCLUSIONS_RECOVER: 'true' })
+          })
+
+          it('restores quarantine and ATR eligibility after annotations are removed', async () => {
+            receiver.setSettings({
+              flaky_test_retries_enabled: true,
+              known_tests_enabled: true,
+              test_management: { enabled: true },
+            })
+            receiver.setKnownTests({ webdriverio: { [protectedFile]: [protectedName] } })
+            setProperties({ [protectedFile]: { [protectedName]: { properties: { quarantined: true } } } })
+            for (const annotated of [true, false]) {
+              await runScenario('exclusionsProtected', 1, payloads => {
+                const tests = getTests(payloads)
+                assert.strictEqual(tests.length, annotated ? 1 : 3)
+                for (const test of tests) {
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION],
+                    annotated ? 'true' : undefined)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY], annotated ? 'true' : undefined)
+                }
+              }, { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2', WEBDRIVERIO_EXCLUSIONS_APPLY: String(annotated) },
+              annotated ? 1 : 0)
+            }
+          })
+        })
+
         if (version === 'latest') {
           describe('automatic log submission', () => {
             const loggers = {
@@ -379,7 +639,6 @@ for (const version of versions) {
 
             /**
              * @param {boolean} [includesTraceIds]
-             * @returns {void}
              */
             function assertLoggerOutput (includesTraceIds = false) {
               const lines = testOutput.split('\n')
@@ -438,6 +697,28 @@ for (const version of versions) {
               assertLoggerOutput()
             })
 
+            it('submits correlated logs from the global console', async () => {
+              await runScenario('automaticConsoleLogSubmission', 1, payloads => {
+                const logRequests = getLogRequests(payloads).filter(({ url }) =>
+                  url === '/api/v2/logs?ddsource=nodejs&service=my-service')
+                const messages = logRequests.flatMap(({ logMessage }) => logMessage)
+                const message = messages.find(({ message }) =>
+                  message === 'WebdriverIO console warning: details')
+                const test = getEvents(payloads).find(event => event.type === 'test').content
+
+                assert.ok(message)
+                assert.strictEqual(message.status, 'warn')
+                assert.deepStrictEqual(Object.keys(message.dd).sort(), ['service', 'span_id', 'trace_id'])
+                assert.strictEqual(message.dd.service, 'my-service')
+                assert.strictEqual(message.dd.span_id, test.span_id.toString())
+                assert.strictEqual(message.dd.trace_id, test.trace_id.toString())
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+            })
+
             it('does not submit logs when automatic submission is disabled', async () => {
               await runScenario('automaticLogSubmission', 1, payloads => {
                 assert.strictEqual(getLogRequests(payloads).length, 0)
@@ -466,21 +747,32 @@ for (const version of versions) {
           })
         }
 
-        it('does not correlate or retain classic WebDriver tests with RUM sessions', async () => {
-          await runScenario('rum', 1, (payloads, requests) => {
+        it('does not correlate classic WebDriver tests with RUM sessions', async () => {
+          const scenario = framework === 'jasmine' ? 'jasmineRumAndRetry' : 'rum'
+          await runScenario(scenario, 1, (payloads, requests) => {
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
-            const navigatedTest = tests.find(test =>
+            const rumTests = tests.filter(test => test.meta[TEST_SUITE].startsWith('rum'))
+            const navigatedTest = rumTests.find(test =>
               test.meta[TEST_NAME].endsWith('correlates the RUM session with the test execution'))
 
-            assert.strictEqual(tests.length, 3)
-            assert.ok(tests.every(test => test.meta[TEST_IS_RUM_ACTIVE] === undefined))
+            assert.strictEqual(rumTests.length, 3)
+            assert.ok(rumTests.every(test => test.meta[TEST_IS_RUM_ACTIVE] === undefined))
             assert.strictEqual(navigatedTest.meta[TEST_BROWSER_NAME], 'chrome')
             assert.strictEqual(navigatedTest.meta[TEST_BROWSER_VERSION], 'test')
             assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
             assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
             assert.strictEqual(requests.some(({ url }) => url?.endsWith('/chromium/send_command')), false)
+
+            if (framework === 'jasmine') {
+              const retryTests = tests.filter(test => test.meta[TEST_SUITE] === 'jasmine-retry.e2e.js')
+              assert.strictEqual(retryTests.length, 2)
+              assert.deepStrictEqual(retryTests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+              assert.strictEqual(retryTests[0].meta[TEST_IS_RETRY], undefined)
+              assert.strictEqual(retryTests[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retryTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+            }
           })
         })
 
@@ -515,7 +807,7 @@ for (const version of versions) {
           })
         })
 
-        it('retries new tests with EFD', async () => {
+        it('retries new tests and reports passing EFD statuses', async () => {
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
@@ -526,107 +818,41 @@ for (const version of versions) {
           })
           receiver.setKnownTests({ webdriverio: {} })
 
-          await runScenario('efd', 1, payloads => {
+          const scenario = framework === 'jasmine' ? 'jasmineEfdPassing' : 'efd'
+          await runScenario(scenario, 1, payloads => {
+            assertFailureVideos(payloads)
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
-            const suite = events.find(event => event.type === 'test_suite_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const efdSuite = suites.find(suite => suite.meta[TEST_SUITE] === 'efd.e2e.js')
+            const efdTests = tests.filter(test => test.meta[TEST_NAME].endsWith('retries a new test'))
 
             assert.strictEqual(countRequests(payloads, KNOWN_TESTS_PATH), 1)
             assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
             assert.strictEqual(
               session.meta[TEST_STATUS],
               'pass',
-              JSON.stringify(tests.map(test => test.meta))
+              JSON.stringify(efdTests.map(test => test.meta))
             )
-            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(tests.length, 3)
-            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass', 'fail'])
-            assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
-            for (const test of tests) {
+            assert.strictEqual(efdSuite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(efdTests.length, 3)
+            assert.deepStrictEqual(efdTests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass', 'fail'])
+            assert.strictEqual(efdTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            for (const test of efdTests) {
               assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
             }
-            for (const test of tests.slice(1)) {
+            for (const test of efdTests.slice(1)) {
               assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
             }
-          })
-        })
-
-        it('keeps quarantine metadata on EFD retries of a new test', async () => {
-          const numRetries = 2
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              faulty_session_threshold: 100,
-              slow_test_retries: { '5s': numRetries },
-            },
-            known_tests_enabled: true,
-            test_management: { enabled: true },
-          })
-          receiver.setKnownTests({ webdriverio: {} })
-          receiver.setTestManagementTests({
-            webdriverio: {
-              suites: {
-                'atr-always-fail.e2e.js': {
-                  tests: {
-                    'WebdriverIO ATR fails every retry': {
-                      properties: { quarantined: true },
-                    },
-                  },
-                },
-              },
-            },
-          })
-
-          await runScenario('atrAlwaysFails', 1, payloads => {
-            const events = getEvents(payloads)
-            const session = events.find(event => event.type === 'test_session_end').content
-            const suite = events.find(event => event.type === 'test_suite_end').content
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(tests.length, numRetries + 1)
-            for (const test of tests) {
-              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            }
-
-            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retries.length, numRetries)
-            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
-
-            const finalAttempt = tests.find(test => TEST_FINAL_STATUS in test.meta)
-            assert.ok(finalAttempt)
-            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'skip')
-            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-          })
-        })
-
-        {
-          const jasmineTest = framework === 'jasmine' ? it : it.skip
-          jasmineTest('keeps skipped tests and their suite and session successful with EFD', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('jasmineEfdSkipped', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            if (framework === 'jasmine') {
               const passingTests = tests.filter(test => test.meta[TEST_NAME].endsWith('passes'))
               const skippedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays skipped'))
+              const selectedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('runs selected test'))
+              const filteredTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays filtered'))
 
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(suites.length, 3)
+              assert.ok(suites.every(suite => suite.meta[TEST_STATUS] === 'pass'))
               assert.strictEqual(passingTests.length, 3)
               assert.ok(passingTests.every(test => test.meta[TEST_STATUS] === 'pass'))
               assert.strictEqual(
@@ -639,42 +865,15 @@ for (const version of versions) {
               assert.strictEqual(skippedTests[0].meta[TEST_IS_NEW], 'true')
               assert.strictEqual(skippedTests[0].meta[TEST_IS_RETRY], undefined)
               assert.strictEqual(skippedTests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-            })
-          })
-        }
-
-        {
-          const jasmineTest = framework === 'jasmine' ? it : it.skip
-          jasmineTest('keeps tests filtered by jasmineOpts.grep skipped with EFD', async () => {
-            receiver.setSettings({
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('jasmineFiltered', 1, payloads => {
-              const events = getEvents(payloads)
-              const session = events.find(event => event.type === 'test_session_end').content
-              const suite = events.find(event => event.type === 'test_suite_end').content
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const selectedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('runs selected test'))
-              const filteredTests = tests.filter(test => test.meta[TEST_NAME].endsWith('stays filtered'))
-
-              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
               assert.strictEqual(selectedTests.length, 3)
               assert.ok(selectedTests.every(test => test.meta[TEST_STATUS] === 'pass'))
               assert.strictEqual(filteredTests.length, 1)
               assert.strictEqual(filteredTests[0].meta[TEST_STATUS], 'skip')
               assert.strictEqual(filteredTests[0].meta[TEST_FINAL_STATUS], 'skip')
               assert.strictEqual(filteredTests[0].meta[TEST_IS_RETRY], undefined)
-            })
-          })
-        }
+            }
+          }, { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' })
+        })
 
         it('uses the first attempt duration to select the EFD retry count', async () => {
           receiver.setSettings({
@@ -704,7 +903,7 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        it('does not retry EFD tests when locally disabled', async () => {
+        it('does not apply locally disabled EFD or Test Management policies', async () => {
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
@@ -712,20 +911,55 @@ for (const version of versions) {
               slow_test_retries: { '5s': 2 },
             },
             known_tests_enabled: true,
+            test_management: {
+              attempt_to_fix_retries: 2,
+              enabled: true,
+            },
           })
           receiver.setKnownTests({ webdriverio: {} })
+          receiver.setTestManagementTests({
+            webdriverio: {
+              suites: {
+                'test-management.e2e.js': {
+                  tests: {
+                    'WebdriverIO Test Management is disabled': {
+                      properties: { disabled: true },
+                    },
+                    'WebdriverIO Test Management is quarantined': {
+                      properties: { quarantined: true },
+                    },
+                    'WebdriverIO Test Management passes every attempt to fix': {
+                      properties: { attempt_to_fix: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
 
-          await runScenario('efd', 1, payloads => {
+          await runScenario('locallyDisabledFailures', 1, payloads => {
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const efdTests = tests.filter(test => test.meta[TEST_SUITE] === 'efd.e2e.js')
+            const managedTests = tests.filter(test => test.meta[TEST_SUITE] === 'test-management.e2e.js')
 
             assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ENABLED], undefined)
-            assert.strictEqual(tests.length, 1)
-            assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
-            assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(session.meta[TEST_MANAGEMENT_ENABLED], undefined)
+            assert.strictEqual(countRequests(payloads, TEST_MANAGEMENT_PATH), 0)
+            assert.strictEqual(efdTests.length, 1)
+            assert.strictEqual(efdTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(efdTests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(managedTests.length, 5)
+            for (const test of managedTests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], undefined)
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], undefined)
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], undefined)
+              assert.strictEqual(test.meta[TEST_IS_RETRY], undefined)
+            }
           }, {
             DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
+            DD_TEST_MANAGEMENT_ENABLED: '0',
           }, 1)
         })
 
@@ -873,24 +1107,80 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        it('retries failures with ATR', async () => {
+        it('retries recoverable and exhausted ATR failures', async () => {
           receiver.setSettings({
             flaky_test_retries_count: 2,
             flaky_test_retries_enabled: true,
           })
 
-          await runScenario('atr', 1, payloads => {
-            const tests = getEvents(payloads)
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
+          await runScenario('atrBoth', 1, payloads => {
+            assertFailureVideos(payloads)
+            const events = getEvents(payloads)
+            const session = events.find(event => event.type === 'test_session_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const recoveredTests = tests.filter(test => test.meta[TEST_SUITE] === 'atr.e2e.js')
+            const exhaustedTests = tests.filter(test => test.meta[TEST_SUITE] === 'atr-always-fail.e2e.js')
 
-            assert.strictEqual(tests.length, 2)
-            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
-            const retry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(recoveredTests.length, 2)
+            assert.deepStrictEqual(recoveredTests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
+            const retry = recoveredTests.find(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.ok(retry)
             assert.strictEqual(retry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-          })
+            assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(suites.find(suite =>
+              suite.meta[TEST_SUITE] === 'atr-always-fail.e2e.js').meta[TEST_STATUS], 'fail')
+            assert.strictEqual(exhaustedTests.length, 3)
+            assert.ok(exhaustedTests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(exhaustedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            for (const test of exhaustedTests.slice(1)) {
+              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            }
+            const finalAttempt = exhaustedTests.find(test => TEST_FINAL_STATUS in test.meta)
+            assert.ok(finalAttempt)
+            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
+            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          }, 1)
         })
+
+        for (const enabled of [true, false]) {
+          it(`uses the worker retry budget with dynamic ATR enabled=${enabled}`, async () => {
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: false,
+                slow_test_retries: { '5s': 3, '10s': 3, '30s': 3, '5m': 3 },
+              },
+              flaky_test_retries_enabled: true,
+            })
+
+            await runScenario('atrAlwaysFails', 1, payloads => {
+              const events = getEvents(payloads)
+              const session = events.find(event => event.type === 'test_session_end').content
+              const suite = events.find(event => event.type === 'test_suite_end').content
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              const retryCount = enabled ? 1 : 5
+
+              assert.strictEqual(countRequests(payloads, SETTINGS_PATH), 1)
+              assert.strictEqual(tests.length, retryCount + 1)
+              assert.strictEqual(retries.length, retryCount)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+              assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            }, {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(enabled),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            }, 1)
+          })
+        }
 
         {
           const jasmineTest = framework === 'jasmine' ? it : it.skip
@@ -1002,35 +1292,6 @@ for (const version of versions) {
           })
         }
 
-        it('reports exhausted ATR retries', async () => {
-          receiver.setSettings({
-            flaky_test_retries_count: 2,
-            flaky_test_retries_enabled: true,
-          })
-
-          await runScenario('atrAlwaysFails', 1, payloads => {
-            const events = getEvents(payloads)
-            const session = events.find(event => event.type === 'test_session_end').content
-            const suite = events.find(event => event.type === 'test_suite_end').content
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(session.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(tests.length, 3)
-            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
-            assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
-            for (const test of tests.slice(1)) {
-              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-            }
-            const finalAttempt = tests.find(test => TEST_FINAL_STATUS in test.meta)
-            assert.ok(finalAttempt)
-            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
-            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-          }, {
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
-          }, 1)
-        })
-
         it('does not retry ATR failures when locally disabled', async () => {
           receiver.setSettings({
             flaky_test_retries_count: 2,
@@ -1051,23 +1312,6 @@ for (const version of versions) {
           }, 1)
         })
 
-        {
-          const jasmineTest = framework === 'jasmine' ? it : it.skip
-          jasmineTest('reports user-configured Jasmine retries as external retries', async () => {
-            await runScenario('jasmineRetry', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-
-              assert.strictEqual(tests.length, 2)
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
-              assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
-              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
-              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-            })
-          })
-        }
-
         it('applies disabled, quarantined, and attempt-to-fix policies', async () => {
           receiver.setSettings({
             test_management: {
@@ -1081,7 +1325,7 @@ for (const version of versions) {
                 'test-management.e2e.js': {
                   tests: {
                     'WebdriverIO Test Management fails every attempt to fix': {
-                      properties: { attempt_to_fix: true },
+                      properties: { attempt_to_fix: true, disabled: true },
                     },
                     'WebdriverIO Test Management has mixed attempt to fix results': {
                       properties: { attempt_to_fix: true },
@@ -1102,6 +1346,7 @@ for (const version of versions) {
           })
 
           await runScenario('testManagement', 1, payloads => {
+            assertFailureVideos(payloads)
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -1142,7 +1387,7 @@ for (const version of versions) {
             assert.strictEqual(finalMixed.meta[TEST_FINAL_STATUS], 'fail')
             assert.strictEqual(finalMixed.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
             assert.strictEqual(finalMixed.meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-          }, {}, 1)
+          }, { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' }, 1)
         })
 
         {
@@ -1222,58 +1467,13 @@ for (const version of versions) {
           })
         }
 
-        it('does not apply Test Management policies when locally disabled', async () => {
-          receiver.setSettings({
-            test_management: {
-              attempt_to_fix_retries: 2,
-              enabled: true,
-            },
-          })
-          receiver.setTestManagementTests({
-            webdriverio: {
-              suites: {
-                'test-management.e2e.js': {
-                  tests: {
-                    'WebdriverIO Test Management is disabled': {
-                      properties: { disabled: true },
-                    },
-                    'WebdriverIO Test Management is quarantined': {
-                      properties: { quarantined: true },
-                    },
-                    'WebdriverIO Test Management passes every attempt to fix': {
-                      properties: { attempt_to_fix: true },
-                    },
-                  },
-                },
-              },
-            },
-          })
-
-          await runScenario('testManagement', 1, payloads => {
-            const events = getEvents(payloads)
-            const session = events.find(event => event.type === 'test_session_end').content
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(countRequests(payloads, TEST_MANAGEMENT_PATH), 0)
-            assert.strictEqual(session.meta[TEST_MANAGEMENT_ENABLED], undefined)
-            assert.strictEqual(tests.length, 5)
-            for (const test of tests) {
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], undefined)
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], undefined)
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], undefined)
-              assert.strictEqual(test.meta[TEST_IS_RETRY], undefined)
-            }
-          }, {
-            DD_TEST_MANAGEMENT_ENABLED: '0',
-          }, 1)
-        })
-
-        it('suppresses quarantined and recovered EFD hook failures', async () => {
+        it('preserves quarantine metadata and suppresses recovered EFD hook failures', async () => {
+          const numRetries = 2
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
               faulty_session_threshold: 100,
-              slow_test_retries: { '5s': 2 },
+              slow_test_retries: { '5s': numRetries },
             },
             known_tests_enabled: true,
             test_management: { enabled: true },
@@ -1286,6 +1486,16 @@ for (const version of versions) {
           receiver.setTestManagementTests({
             webdriverio: {
               suites: {
+                'atr-always-fail.e2e.js': {
+                  tests: {
+                    'WebdriverIO ATR fails every retry': {
+                      properties: { quarantined: true },
+                    },
+                    'WebdriverIO ATR always fails fails every retry': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
                 'managed-hook-fail.e2e.js': {
                   tests: {
                     'WebdriverIO quarantined hook failure is quarantined': {
@@ -1297,17 +1507,32 @@ for (const version of versions) {
             },
           })
 
-          await runScenario('managedHookFailures', 1, payloads => {
+          await runScenario('managedEfdPassing', 1, payloads => {
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
-            const suite = events.find(event => event.type === 'test_suite_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const quarantined = tests.find(test => test.meta[TEST_NAME].endsWith('is quarantined'))
+            const newQuarantinedTests = tests.filter(test => test.meta[TEST_NAME].endsWith('fails every retry'))
             const earlyFlakeDetectionTests = tests.filter(test =>
               test.meta[TEST_NAME].endsWith('passes an EFD retry'))
 
             assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(suites.length, 2)
+            assert.ok(suites.every(suite => suite.meta[TEST_STATUS] === 'pass'))
+            assert.strictEqual(newQuarantinedTests.length, numRetries + 1)
+            for (const test of newQuarantinedTests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+            const retries = newQuarantinedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, numRetries)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd))
+            const finalAttempt = newQuarantinedTests.find(test => TEST_FINAL_STATUS in test.meta)
+            assert.ok(finalAttempt)
+            assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
             assert.strictEqual(quarantined.meta[TEST_STATUS], 'fail')
             assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
             assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
@@ -1403,6 +1628,11 @@ for (const version of versions) {
               },
             })
 
+            let expectedExitCode = 1
+            if (framework === 'jasmine') {
+              expectedExitCode = jasmineSuiteHookFailureExitCode
+            }
+
             await runScenario('suiteHookFailure', 1, payloads => {
               const events = getEvents(payloads)
               const session = events.find(event => event.type === 'test_session_end').content
@@ -1412,7 +1642,7 @@ for (const version of versions) {
               assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
             }, {
               WEBDRIVERIO_SUITE_HOOK: hookType,
-            }, framework === 'jasmine' ? 0 : 1)
+            }, expectedExitCode)
           })
         }
 
@@ -1436,23 +1666,7 @@ for (const version of versions) {
             assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
           }, {
             WEBDRIVERIO_SUITE_HOOK: 'afterAll',
-          }, framework === 'jasmine' ? 0 : 1)
-        })
-
-        it('marks tests from modified files as impacted', async () => {
-          receiver.setSettings({ impacted_tests_enabled: true })
-
-          await runScenario('impacted', 1, payloads => {
-            const tests = getEvents(payloads)
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-            const impacted = tests.find(test => test.meta[TEST_SUITE] === 'impacted.e2e.js')
-            const unmodified = tests.find(test => test.meta[TEST_SUITE] === 'first.e2e.js')
-
-            assert.strictEqual(tests.length, 2)
-            assert.strictEqual(impacted.meta[TEST_IS_MODIFIED], 'true')
-            assert.strictEqual(unmodified.meta[TEST_IS_MODIFIED], undefined)
-          })
+          }, framework === 'jasmine' ? jasmineSuiteHookFailureExitCode : 1)
         })
 
         {
@@ -1475,109 +1689,126 @@ for (const version of versions) {
           })
         }
 
-        it('does not mark impacted tests when locally disabled', async () => {
-          receiver.setSettings({ impacted_tests_enabled: true })
-
-          await runScenario('impacted', 1, payloads => {
-            const tests = getEvents(payloads)
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-
-            assert.strictEqual(tests.length, 2)
-            assert.ok(tests.every(test => test.meta[TEST_IS_MODIFIED] === undefined))
-          }, {
-            DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0',
-          })
-        })
-
-        it('captures Failed Test Replay snapshots in workers', async () => {
+        it('does not apply locally disabled impacted detection or Failed Test Replay', async () => {
           receiver.setSettings({
             di_enabled: true,
             flaky_test_retries_count: 1,
             flaky_test_retries_enabled: true,
+            impacted_tests_enabled: true,
           })
 
-          await runScenario('failedTestReplay', 1, payloads => {
+          await runScenario('locallyDisabledPassing', 1, payloads => {
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SUITE] === 'impacted.e2e.js' || test.meta[TEST_SUITE] === 'first.e2e.js')
             const retriedTest = tests.find(test =>
               test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
             const logPayload = payloads.find(({ url }) => url.endsWith('/api/v2/logs'))
 
-            assert.ok(retriedTest)
-            assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
-            assert.ok(Object.keys(retriedTest.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
-            assert.ok(logPayload)
-            assert.strictEqual(logPayload.logMessage[0].ddsource, 'dd_debugger')
-          }, {
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-          })
-        })
-
-        {
-          const jasmineTest = framework === 'jasmine' ? it : it.skip
-          jasmineTest('captures Failed Test Replay when the first EFD attempt passes', async () => {
-            receiver.setSettings({
-              di_enabled: true,
-              early_flake_detection: {
-                enabled: true,
-                faulty_session_threshold: 100,
-                slow_test_retries: { '5s': 2 },
-              },
-              flaky_test_retries_count: 1,
-              flaky_test_retries_enabled: true,
-              known_tests_enabled: true,
-            })
-            receiver.setKnownTests({ webdriverio: {} })
-
-            await runScenario('efdFailedTestReplay', 1, payloads => {
-              const tests = getEvents(payloads)
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-              const finalRetry = tests[2]
-              const logPayload = payloads.find(({ url }) => url.endsWith('/api/v2/logs'))
-
-              assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail', 'pass'])
-              assert.strictEqual(finalRetry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
-              assert.strictEqual(
-                finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED],
-                'true',
-                JSON.stringify(tests.map(test => test.meta))
-              )
-              assert.ok(Object.keys(finalRetry.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
-              assert.ok(logPayload)
-              assert.strictEqual(logPayload.logMessage[0].ddsource, 'dd_debugger')
-            }, {
-              _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-            })
-          })
-        }
-
-        it('does not capture Failed Test Replay snapshots when locally disabled', async () => {
-          receiver.setSettings({
-            di_enabled: true,
-            flaky_test_retries_count: 1,
-            flaky_test_retries_enabled: true,
-          })
-
-          await runScenario('failedTestReplay', 1, payloads => {
-            const tests = getEvents(payloads)
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-            const retriedTest = tests.find(test =>
-              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
-            const logPayload = payloads.find(({ url }) => url.endsWith('/api/v2/logs'))
-
+            assert.strictEqual(impactedTests.length, 2)
+            assert.ok(impactedTests.every(test => test.meta[TEST_IS_MODIFIED] === undefined))
             assert.ok(retriedTest)
             assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], undefined)
             assert.ok(!Object.keys(retriedTest.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
             assert.strictEqual(logPayload, undefined)
           }, {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0',
             DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
           })
+        })
+
+        it('captures Failed Test Replay snapshots on ATR and EFD retries', async () => {
+          receiver.setSettings({
+            di_enabled: true,
+            ...(framework === 'jasmine' && {
+              early_flake_detection: {
+                enabled: true,
+                faulty_session_threshold: 100,
+                slow_test_retries: { '5s': 2 },
+              },
+              known_tests_enabled: true,
+            }),
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+            impacted_tests_enabled: true,
+          })
+          if (framework === 'jasmine') {
+            receiver.setKnownTests({
+              webdriverio: {
+                'failed-test-replay.e2e.js': [
+                  'WebdriverIO Failed Test Replay captures the failure on retry',
+                ],
+                'first.e2e.js': ['WebdriverIO first worker runs with an active Test Optimization span'],
+                'impacted.e2e.js': ['WebdriverIO impacted tests marks a modified test'],
+              },
+            })
+          }
+
+          const scenario = framework === 'jasmine' ? 'failedTestReplayBothAndImpacted' : 'failedTestReplayAndImpacted'
+          await runScenario(scenario, 1, payloads => {
+            assertFailureVideos(payloads)
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+            const retriedTest = tests.find(test =>
+              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SUITE] === 'impacted.e2e.js' || test.meta[TEST_SUITE] === 'first.e2e.js')
+            const impacted = impactedTests.filter(test => test.meta[TEST_SUITE] === 'impacted.e2e.js')
+            const unmodified = impactedTests.filter(test => test.meta[TEST_SUITE] === 'first.e2e.js')
+            const logPayloads = payloads.filter(({ url }) => url.endsWith('/api/v2/logs'))
+
+            assert.ok(retriedTest)
+            assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+            assert.ok(Object.keys(retriedTest.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
+            assert.strictEqual(impacted.length, framework === 'jasmine' ? 3 : 1)
+            assert.ok(impacted.every(test => test.meta[TEST_IS_MODIFIED] === 'true'))
+            assert.strictEqual(unmodified.length, 1)
+            assert.strictEqual(unmodified[0].meta[TEST_IS_MODIFIED], undefined)
+            assert.ok(logPayloads.length > 0)
+            assert.ok(logPayloads.every(payload => payload.logMessage[0].ddsource === 'dd_debugger'))
+            if (framework === 'jasmine') {
+              const efdTests = tests.filter(test => test.meta[TEST_SUITE] === 'efd-failed-test-replay.e2e.js')
+              const finalRetry = efdTests[2]
+
+              assert.deepStrictEqual(efdTests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail', 'pass'])
+              assert.strictEqual(finalRetry.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              assert.strictEqual(
+                finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED],
+                'true',
+                JSON.stringify(efdTests.map(test => test.meta))
+              )
+              assert.ok(Object.keys(finalRetry.meta).some(tag => tag.startsWith(DI_DEBUG_ERROR_PREFIX)))
+            }
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          })
+        })
+
+        it('uploads the terminal failure video with Failed Test Replay and no teardown hooks', async () => {
+          receiver.setSettings({
+            di_enabled: true,
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+          })
+          await runScenario('atrAlwaysFails', 1, payloads => {
+            assertFailureVideos(payloads)
+            const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            const finalRetry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(finalRetry.meta[TEST_FINAL_STATUS], 'fail')
+            assert.strictEqual(finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          }, 1)
         })
 
         it('falls back safely when policy requests fail', async () => {
@@ -1605,7 +1836,9 @@ for (const version of versions) {
               assert.strictEqual(event.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true')
               assert.strictEqual(event.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true')
             }
-          }, {}, 1)
+          }, {
+            WEBDRIVERIO_RUNNER_INSTANCE: `policy-failures-${framework}`,
+          }, 1)
         })
       })
     }

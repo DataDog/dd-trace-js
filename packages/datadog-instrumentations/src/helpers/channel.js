@@ -20,7 +20,6 @@ function getCompletion (onDone) {
  * @param {import('node:diagnostics_channel').Channel} channel
  * @param {Record<string, unknown>} payload
  * @param {(...args: T) => void} onDone
- * @returns {void}
  */
 function publishWithCompletion (channel, payload, onDone) {
   const complete = getCompletion(onDone)
@@ -33,7 +32,6 @@ function publishWithCompletion (channel, payload, onDone) {
  * @param {import('node:diagnostics_channel').Channel} channel
  * @param {Record<string, unknown> & { onDone?: (...args: T) => void }} payload
  * @param {(...args: T) => void} onDone
- * @returns {void}
  */
 function runStoresWithCompletion (channel, payload, onDone) {
   const complete = getCompletion(onDone)

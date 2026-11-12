@@ -19,8 +19,7 @@ function startOpenAIMock () {
       const wantsToolCall = req.body?.messages?.some(m => m.content?.includes?.('use tool'))
       const denyResponse = req.body?.metadata?.mock_response === 'deny'
 
-      // Streaming branch: respond with a minimal SSE stream of two text deltas
-      // followed by [DONE]. This is enough for the openai SDK's stream consumer.
+      // Streaming branch: emit either text or split tool-call deltas followed by [DONE].
       if (req.body?.stream) {
         res.status(200)
           .set({
@@ -32,13 +31,61 @@ function startOpenAIMock () {
         const created = Math.floor(Date.now() / 1000)
         const send = chunk => res.write(`data: ${JSON.stringify(chunk)}\n\n`)
         const chunkBase = { id, object: 'chat.completion.chunk', created, model }
+
+        if (wantsToolCall) {
+          send({
+            ...chunkBase,
+            choices: [{
+              index: 0,
+              delta: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{
+                  index: 0,
+                  id: 'call_mock',
+                  type: 'function',
+                  function: { name: 'search', arguments: '' },
+                }],
+              },
+              finish_reason: null,
+            }],
+          })
+          send({
+            ...chunkBase,
+            choices: [{
+              index: 0,
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  function: { arguments: denyResponse ? '{"q":"[deny]"}' : '{"q":"example"}' },
+                }],
+              },
+              finish_reason: null,
+            }],
+          })
+          send({
+            ...chunkBase,
+            choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+          })
+          res.write('data: [DONE]\n\n')
+          return res.end()
+        }
+
         send({
           ...chunkBase,
-          choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello' }, finish_reason: null }],
+          choices: [{
+            index: 0,
+            delta: { role: 'assistant', content: denyResponse ? 'Unsafe streamed output ' : 'Hello' },
+            finish_reason: null,
+          }],
         })
         send({
           ...chunkBase,
-          choices: [{ index: 0, delta: { content: ' world' }, finish_reason: null }],
+          choices: [{
+            index: 0,
+            delta: { content: denyResponse ? '[deny]' : ' world' },
+            finish_reason: null,
+          }],
         })
         send({
           ...chunkBase,
@@ -94,7 +141,7 @@ function startOpenAIMock () {
       const text = req.body?.metadata?.mock_response === 'deny'
         ? 'Unsafe mock responses output [deny]'
         : 'Hello from mock responses!'
-      res.status(200).json({
+      const response = {
         id: 'resp_mock',
         object: 'response',
         created_at: Math.floor(Date.now() / 1000),
@@ -108,7 +155,30 @@ function startOpenAIMock () {
           content: [{ type: 'output_text', text, annotations: [] }],
         }],
         usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
-      })
+      }
+
+      if (req.body?.stream) {
+        res.status(200)
+          .set({
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          })
+        const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        send('response.created', {
+          type: 'response.created',
+          response: { ...response, status: 'in_progress', output: [], usage: null },
+          sequence_number: 0,
+        })
+        send('response.completed', {
+          type: 'response.completed',
+          response,
+          sequence_number: 1,
+        })
+        return res.end()
+      }
+
+      res.status(200).json(response)
     })
 
     const server = app.listen(() => resolve(server))

@@ -403,6 +403,22 @@ describe('config', () => {
     )
   })
 
+  it('should not duplicate the wall profiler when the cpu alias meets DD_PROFILING_WALLTIME_ENABLED', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'cpu',
+      DD_PROFILING_WALLTIME_ENABLED: '1',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(
+      config.profilers.map(profiler => profiler.constructor),
+      samplingContextsAvailable
+        ? [WallProfiler, EventsProfiler]
+        : [WallProfiler]
+    )
+  })
+
   it('should prioritize non-experimental env variables and warn about experimental ones', function () {
     if (!samplingContextsAvailable) {
       this.skip()
@@ -545,7 +561,7 @@ describe('config', () => {
     // runtime concern and is covered in profilers/space.spec.js.
     assert.deepStrictEqual(config.oomMonitoring, {
       enabled: false,
-      heapLimitExtensionSize: 0,
+      heapLimitExtensionSize: 'auto',
       maxHeapExtensionCount: 0,
       exportStrategies: [],
     })
@@ -557,7 +573,7 @@ describe('config', () => {
     if (oomMonitoringSupported) {
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
-        heapLimitExtensionSize: 0,
+        heapLimitExtensionSize: 'auto',
         maxHeapExtensionCount: 0,
         exportStrategies: ['process'],
       })
@@ -612,7 +628,7 @@ describe('config', () => {
     it('should support OOM heap profiler configuration', function () {
       process.env = {
         DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
-        DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
+        DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 'auto',
         DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process',
       }
@@ -622,7 +638,7 @@ describe('config', () => {
       // Duplicate strategies collapse to a validated, de-duplicated list.
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
-        heapLimitExtensionSize: 1000000,
+        heapLimitExtensionSize: 'auto',
         maxHeapExtensionCount: 2,
         exportStrategies: ['process', 'async'],
       })

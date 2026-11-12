@@ -30,7 +30,6 @@ function getTestsuiteAttr (openTag, name) {
 
 /**
  * @param {string|number|undefined} value
- * @returns {string}
  */
 function escapeXmlAttribute (value) {
   return String(value)
@@ -42,7 +41,6 @@ function escapeXmlAttribute (value) {
 
 /**
  * @param {Record<string, string|number|undefined>} properties
- * @returns {string}
  */
 function formatXunitProperties (properties) {
   let xml = '<properties>'
@@ -291,8 +289,7 @@ async function main () {
    * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
-    if (!error || error.code !== 'EPIPE') return
-    if (interrupted) return
+    if (!error || error.code !== 'EPIPE' || interrupted) return
     interrupted = true
     for (const child of liveChildren) {
       child.kill('SIGTERM')
@@ -783,7 +780,7 @@ async function main () {
   if (failed.length) {
     process.stdout.write('\n=== Failed files ===\n')
     for (const { file, code, signal } of failed) {
-      process.stdout.write(`- ${file} (exit=${code ?? 'null'} signal=${signal ?? 'null'})\n`)
+      process.stdout.write(`- ${file} (exit=${code} signal=${signal})\n`)
     }
     process.stdout.write(
       'Legend: [n] = global failure index across all files; n) = local failure index within a file.\n'

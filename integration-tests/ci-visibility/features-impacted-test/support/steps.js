@@ -10,3 +10,8 @@ Then('I should have heard {string}', function (expectedResponse) {
 When('the greeter says impacted test', function () {
   this.whatIHeard = 'impacted test'
 })
+
+When('the greeter says impacted test with an argument', function (argument) {
+  assert.ok(argument)
+  this.whatIHeard = 'impacted test'
+})

@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 
@@ -116,14 +115,25 @@ describe('id', () => {
     }
   })
 
-  it('should match Buffer#readBigUInt64BE on the underlying buffer', () => {
-    const cases = ['abcd', '12293a8527e70a7f27c8d624ace0f559', '7f00ff00ff00ff00']
+  it('should convert the lower 64 bits to BigInt without changing the full ID', () => {
+    const cases = [
+      ['0', 0n],
+      ['ffffffffffffffff', 0xffffffffffffffffn],
+      ['10000000000000000', 0n],
+      ['00000000000000000000000000000002', 2n],
+      ['6af1eb93000000000000000000000002', 2n],
+      ['ffffffffffffffffffffffffffffffff', 0xffffffffffffffffn],
+      ['100000000000000000000000000000002', 2n],
+    ]
 
-    for (const hex of cases) {
-      const spanId = id(hex, 16)
-      const expected = Buffer.from(spanId.toBuffer()).readBigUInt64BE(0)
+    for (const [hex, expected] of cases) {
+      const identifier = id(hex, 16)
+      const fullId = Buffer.from(identifier.toBuffer()).toString('hex')
 
-      assert.strictEqual(spanId.toBigInt(), expected)
+      assert.strictEqual(identifier.toBigInt(), expected)
+      assert.strictEqual(identifier.toBigInt(), expected)
+      assert.strictEqual(identifier.toString(10), expected.toString())
+      assert.strictEqual(identifier.toString(16), fullId)
     }
   })
 
@@ -157,6 +167,23 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(10), '43981')
   })
 
+  it('should render hex ids up to and beyond 128 bits', () => {
+    assert.strictEqual(id('f'.repeat(32)).toString(16), 'f'.repeat(32))
+    assert.strictEqual(id('1'.repeat(33)).toString(16), '1'.repeat(33).padStart(48, '0'))
+  })
+
+  it('should not carry bytes over between hex renders of different lengths', () => {
+    assert.strictEqual(id('12293a8527e70a7f27c8d624ace0f559').toString(16), '12293a8527e70a7f27c8d624ace0f559')
+    assert.strictEqual(id('abcd').toString(16), '000000000000abcd')
+    assert.strictEqual(id('e'.repeat(48)).toString(16), 'e'.repeat(48))
+    assert.strictEqual(id('1').toString(16), '0000000000000001')
+  })
+
+  it('should render out-of-range bytes as their low 8 bits in hex', () => {
+    // A hex value like '-1' parses to a -1 byte, which Buffer.from() has always rendered as 'ff'.
+    assert.strictEqual(id('-1').toString(16), '00000000000000ff')
+  })
+
   describe('reseed()', () => {
     let freshId
     let randomFillSyncStub
@@ -178,7 +205,7 @@ describe('id', () => {
     it('should generate a different id after reseed', () => {
       const before = freshId().toString()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       const after = freshId().toString()
 
       assert.notStrictEqual(after, before)
@@ -191,7 +218,7 @@ describe('id', () => {
       freshId()
       randomFillSyncStub.resetHistory()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       // After reseed, batch = 0, so the next call must refill from randomFillSync
       freshId()
 
@@ -199,7 +226,7 @@ describe('id', () => {
     })
 
     it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       randomFillSyncStub.resetHistory()
 
       freshId()
@@ -208,8 +235,8 @@ describe('id', () => {
     })
 
     it('should be safe to call repeatedly', () => {
-      channel('datadog:identity:update').publish({ tags: {} })
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
+      freshId.reseed()
       randomFillSyncStub.resetHistory()
 
       freshId()
@@ -217,14 +244,15 @@ describe('id', () => {
       sinon.assert.calledOnce(randomFillSyncStub)
     })
 
-    it('should reseed when datadog:identity:update is published', () => {
-      freshId()
-      randomFillSyncStub.resetHistory()
+    it('should preserve existing identifiers after reseeding', () => {
+      const existing = freshId()
+      const before = existing.toString()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       freshId()
 
-      sinon.assert.calledOnce(randomFillSyncStub)
+      assert.strictEqual(existing.toString(), before)
+      assert.strictEqual(Buffer.from(existing.toBuffer()).toString('hex'), before)
     })
   })
 })

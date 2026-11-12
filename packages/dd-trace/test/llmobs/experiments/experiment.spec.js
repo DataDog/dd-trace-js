@@ -6,7 +6,17 @@ const { describe, it } = require('mocha')
 
 const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
+const {
+  RemoteEvaluator,
+  RemoteEvaluatorError,
+} = require('../../../src/llmobs/experiments/remote-evaluator')
 
 function client () {
   return new ExperimentsClient({
@@ -69,6 +79,11 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
+    const structuredOutput = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
     const llmobs = {
       enabled: true,
       trace: (options, fn) => {
@@ -76,7 +91,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         return fn({ name: 'span' })
       },
       exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
-      annotate: (_span, options) => callsToLlmobs.push(['annotate', options]),
+      _annotateExperimentSpan: (_span, options) => callsToLlmobs.push(['annotate', options]),
       flush: () => callsToLlmobs.push(['flush']),
     }
 
@@ -84,7 +99,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       name: 'exp-demo',
       projectName: 'demo-project',
       dataset,
-      task: (input) => input.q,
+      task: () => structuredOutput,
       evaluators: { ok: () => true },
       config: { temperature: 0 },
     }, llmobs).run()
@@ -92,16 +107,272 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][0], 'trace')
     assert.equal(callsToLlmobs[0][1].kind, 'experiment')
     assert.equal(callsToLlmobs[0][1].name, 'task')
+    assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
+    assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
+    assert.equal(callsToLlmobs[1][1].expectedOutput, 'apple')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
     assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
     assert.equal(callsToLlmobs[1][1].tags.run_iteration, 1)
+    // Passed at span start so every span the task creates inherits the experiment identity,
+    // but not the record id or the record's own tags.
+    const spanTags = callsToLlmobs[1][1].tags
+    assert.deepEqual(callsToLlmobs[0][1]._experimentTags, {
+      experiment_id: 'exp',
+      run_id: spanTags.run_id,
+      run_iteration: 1,
+      project_id: spanTags.project_id,
+      dataset_id: spanTags.dataset_id,
+      dataset_name: spanTags.dataset_name,
+      experiment_name: 'exp-demo',
+      project_name: 'demo-project',
+    })
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
     assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
       temperature: 0,
     })
+  })
+
+  it('runs class evaluators with contexts and serializes rich results', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input', 'expected', { source: 'test' })
+    let recordContext
+    let summaryContext
+
+    class ExactMatchEvaluator extends BaseEvaluator {
+      constructor () {
+        super('exact_match')
+      }
+
+      async evaluate (context) {
+        recordContext = context
+        return new EvaluatorResult(context.outputData === context.expectedOutput, {
+          reasoning: 'The output matches the expected value.',
+          assessment: 'pass',
+          metadata: { source: 'class' },
+          tags: { evaluator: 'exact', project_name: 'wrong-project' },
+        })
+      }
+    }
+
+    class CountEvaluator extends BaseSummaryEvaluator {
+      constructor () {
+        super('match_count')
+      }
+
+      async evaluate (context) {
+        summaryContext = context
+        return new EvaluatorResult(context.evaluationResults.exact_match.filter(Boolean).length, {
+          reasoning: 'Counted the matching rows.',
+          assessment: 'pass',
+          metadata: { source: 'summary' },
+          tags: { evaluator: 'summary', project_name: 'wrong-project' },
+        })
+      }
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      projectName: 'demo-project',
+      dataset,
+      task: input => input,
+      evaluators: [new ExactMatchEvaluator()],
+      summaryEvaluators: [new CountEvaluator()],
+    }).run()
+
+    assert.deepEqual({
+      inputData: recordContext.inputData,
+      outputData: recordContext.outputData,
+      expectedOutput: recordContext.expectedOutput,
+      metadata: recordContext.metadata,
+      spanId: recordContext.spanId,
+      traceId: recordContext.traceId,
+    }, {
+      inputData: 'input',
+      outputData: 'input',
+      expectedOutput: 'expected',
+      metadata: { source: 'test', experiment_config: {} },
+      spanId: result.rows[0].spanId,
+      traceId: result.rows[0].traceId,
+    })
+    assert.deepEqual(summaryContext.evaluationResults, { exact_match: [false] })
+    assert.equal(result.rows[0].evaluations.exact_match, false)
+    const expectedSummary = {
+      value: 0,
+      error: null,
+      reasoning: 'Counted the matching rows.',
+      assessment: 'pass',
+      metadata: { source: 'summary' },
+      tags: { evaluator: 'summary', project_name: 'wrong-project' },
+    }
+    assert.deepEqual(result.summaryEvaluations.match_count, expectedSummary)
+    assert.deepEqual(result.runs[0].summaryEvaluations.match_count, expectedSummary)
+
+    const events = requests.find(request => request.method === 'postExperimentEvents').attributes
+    const metric = events.metrics.find(item => item.label === 'exact_match')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.reasoning, 'The output matches the expected value.')
+    assert.deepEqual(metric.metadata, { source: 'class' })
+    assert.deepEqual(metric.tags.filter(tag => tag === 'evaluator:exact'), ['evaluator:exact'])
+    for (const emittedMetric of events.metrics) {
+      assert.deepEqual(
+        emittedMetric.tags.filter(tag => tag.startsWith('project_name:')),
+        ['project_name:demo-project']
+      )
+    }
+    assert.equal(events.spans[0].tags.includes('project_name:demo-project'), true)
+  })
+
+  it('runs managed evaluators with experiment context', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question', 'answer', { difficulty: 'easy' })
+    c.evaluatorInfer = (evalName, context) => {
+      requests.push({ method: 'evaluatorInfer', evalName, context })
+      return Promise.resolve({
+        value: 0.9,
+        reasoning: 'The answer is correct.',
+        assessment: 'pass',
+        status: 'OK',
+      })
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      config: { model: 'test-model' },
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    const inference = requests.find(request => request.method === 'evaluatorInfer')
+    assert.deepEqual(inference, {
+      method: 'evaluatorInfer',
+      evalName: 'managed-judge',
+      context: {
+        span_input: 'question',
+        span_output: 'answer',
+        meta: {
+          expected_output: 'answer',
+          metadata: {
+            difficulty: 'easy',
+            experiment_config: { model: 'test-model' },
+          },
+        },
+        span_id: result.rows[0].spanId,
+        trace_id: result.rows[0].traceId,
+      },
+    })
+    assert.equal(result.rows[0].evaluations['managed-judge'], 0.9)
+
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.equal(metric.score_value, 0.9)
+    assert.equal(metric.reasoning, 'The answer is correct.')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.status, 'OK')
+    assert.equal(metric.eval_source_type, 'managed')
+  })
+
+  it('preserves managed evaluator error details in metrics', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question')
+    c.evaluatorInfer = () => Promise.reject(new RemoteEvaluatorError('Managed evaluation failed', {
+      status: 'WARN',
+      backendError: {
+        type: 'RATE_LIMIT_EXCEEDED',
+        message: 'Rate limit exceeded',
+        recommended_resolution: 'Wait before retrying',
+      },
+    }))
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    assert.equal(result.rows[0].evaluationErrors['managed-judge'], 'Rate limit exceeded')
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.deepEqual(metric.error, {
+      type: 'RATE_LIMIT_EXCEEDED',
+      message: 'Rate limit exceeded',
+      recommended_resolution: 'Wait before retrying',
+    })
+    assert.equal(metric.status, 'WARN')
+    assert.equal(metric.eval_source_type, 'managed')
+  })
+
+  it('supports multiple metrics from a class evaluator without a phantom base result', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    let summaryEvaluatorResults
+
+    class DetailsEvaluator extends BaseEvaluator {
+      evaluate () {
+        return new MultiEvaluatorResult({
+          length: 5,
+          valid: new EvaluatorResult(true),
+        })
+      }
+    }
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+      evaluators: [new DetailsEvaluator()],
+      summaryEvaluators: {
+        inspect: (_inputs, _outputs, _expectedOutputs, evaluatorResults) => {
+          summaryEvaluatorResults = evaluatorResults
+          return true
+        },
+      },
+    }).run()
+
+    assert.deepEqual(summaryEvaluatorResults, {
+      'DetailsEvaluator-length': [5],
+      'DetailsEvaluator-valid': [true],
+    })
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(
+      metrics.filter(metric => metric.metric_source === 'custom').map(metric => metric.label),
+      ['DetailsEvaluator-length', 'DetailsEvaluator-valid']
+    )
+  })
+
+  it('rejects colliding generated evaluator labels', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'row-collision',
+        dataset,
+        task: input => input,
+        evaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Evaluator metric label 'details-length' was emitted more than once/
+    )
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'summary-collision',
+        dataset,
+        task: input => input,
+        summaryEvaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Summary evaluator metric label 'details-length' was emitted more than once/
+    )
   })
 
   it('preserves repeated record tags in fallback experiment spans', async () => {
@@ -867,6 +1138,33 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(events[1].attributes.metrics[0].tags.includes('run_iteration:2'), true)
     assert.equal(events[0].attributes.metrics[0].tags.includes(`run_id:${result.runs[0].runId}`), true)
     assert.equal(events[1].attributes.metrics[0].tags.includes(`run_id:${result.runs[1].runId}`), true)
+  })
+
+  it('passes each run its own experiment tags for the spans its task creates', async () => {
+    const { client: c } = clientWithMockBackend()
+    const traceOptions = []
+    const llmobs = {
+      enabled: true,
+      trace: (options, fn) => {
+        traceOptions.push(options)
+        return fn({ name: 'span' })
+      },
+      exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
+      annotate: () => {},
+      flush: () => {},
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a'),
+      runs: 2,
+      task: input => input,
+    }, llmobs).run()
+
+    assert.deepEqual(
+      traceOptions.map(({ _experimentTags }) => [_experimentTags.run_iteration, _experimentTags.run_id]),
+      result.runs.map(run => [run.runIteration, run.runId])
+    )
   })
 
   it('uploads each run before starting the next iteration', async () => {

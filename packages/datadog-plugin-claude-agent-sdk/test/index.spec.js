@@ -161,6 +161,7 @@ describe('Plugin', () => {
 
         for await (const message of stream) {
           assert.ok(message.type)
+          if (message.type === 'result') break
         }
 
         assert.deepEqual(userPromptSubmissions, [PROMPT])

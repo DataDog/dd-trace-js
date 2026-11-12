@@ -7,11 +7,10 @@ const { fetchAgentInfo } = require('../../agent/info')
 
 /**
  * @param {import('../../config/config-base')} config
- * @param {(agentless: boolean) => void} setWritersAgentlessValue
- * @returns {void}
+ * @param {(agentless: boolean, agentAvailable?: boolean) => void} setWritersAgentlessValue
  */
 function setAgentStrategy (config, setWritersAgentlessValue) {
-  const agentlessEnabled = config.llmobs.agentlessEnabled
+  const agentlessEnabled = config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
 
   if (agentlessEnabled != null) {
     setWritersAgentlessValue(agentlessEnabled)
@@ -20,14 +19,16 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
 
   fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
-      setWritersAgentlessValue(true)
+      setWritersAgentlessValue(true, false)
       return
     }
 
     const endpoints = agentInfo.endpoints
-    const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
+    // The Lambda extension lists full proxy paths (e.g. /evp_proxy/v2/api/v2/llmobs), not the bare prefix.
+    const hasEndpoint = Array.isArray(endpoints) &&
+      endpoints.some(endpoint => typeof endpoint === 'string' && endpoint.startsWith(EVP_PROXY_AGENT_BASE_PATH))
     setWritersAgentlessValue(!hasEndpoint)
-  })
+  }, { keepProcessAlive: true })
 }
 
 function parseResponseAndLog (err, code, eventsLength, url, eventType) {

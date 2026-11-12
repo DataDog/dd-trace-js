@@ -136,7 +136,6 @@ function formatSpanWithLegacyEvents (span) {
  * replacer hooks).
  *
  * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
- * @returns {string}
  */
 function stringifySpanEvents (spanEvents) {
   let result = '['
@@ -200,7 +199,6 @@ function stringifyAttributeValue (value) {
  * conversion (which is what `JSON.stringify` calls internally).
  *
  * @param {number} value
- * @returns {string}
  */
 function jsonNumber (value) {
   if (Number.isFinite(value)) return String(value)
@@ -215,7 +213,6 @@ function jsonNumber (value) {
  * lone surrogates, etc.).
  *
  * @param {string} value
- * @returns {string}
  */
 function escapeJsonString (value) {
   for (let index = 0; index < value.length; index++) {
@@ -649,7 +646,6 @@ class AgentEncoder {
    * @param {number} offset
    * @param {Buffer} keyPrefix Precomputed `[key, 0xCF]`.
    * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
-   * @returns {number}
    */
   #writeIdAt (target, offset, keyPrefix, identifier) {
     target.set(keyPrefix, offset)
@@ -698,7 +694,7 @@ class AgentEncoder {
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' ||
+      if (typeof entryValue === 'string' || typeof entryValue === 'number' || typeof entryValue === 'boolean' ||
         (entryValue !== null && typeof entryValue === 'object')) {
         this._encodeString(bytes, key)
         this.#encodeObjectAsByteArray(bytes, entryValue)
@@ -772,7 +768,7 @@ class AgentEncoder {
 
     let count = 0
     for (const item of value) {
-      if (typeof item === 'string' || typeof item === 'number' ||
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' ||
         (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item))) {
         this.#encodeObject(bytes, item, circularReferencesDetector)
         count++
@@ -871,7 +867,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {unknown} value
-   * @returns {boolean}
    */
   #emitAttribute (bytes, key, value) {
     if (typeof value === 'string') {
@@ -911,7 +906,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {Array<unknown>} array
-   * @returns {boolean}
    */
   #emitArrayAttribute (bytes, key, array) {
     const sectionStart = bytes.length
@@ -946,7 +940,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {unknown} value
-   * @returns {boolean}
    */
   #emitArrayItem (bytes, key, value) {
     if (typeof value === 'string') {

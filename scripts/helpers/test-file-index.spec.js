@@ -139,7 +139,10 @@ function globTokensFromScripts (scripts) {
     if (typeof command !== 'string') continue
 
     for (const raw of command.split(/\s+/)) {
-      const unquoted = raw.replaceAll(/^["']+|["']+$/g, '')
+      let unquoted = raw.replace(/^["']+/, '')
+      let end = unquoted.length
+      while (end > 0 && (unquoted[end - 1] === '"' || unquoted[end - 1] === "'")) end--
+      unquoted = unquoted.slice(0, end)
       if (!unquoted.includes('/') || !/[*?[\]{}()]/.test(unquoted)) continue
 
       tokens.add(unquoted.replaceAll(/\$\{[^}]+\}/g, '*').replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*'))

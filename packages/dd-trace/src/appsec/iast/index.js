@@ -31,7 +31,7 @@ let isEnabled = false
 function enable (config, _tracer) {
   if (isEnabled) return
 
-  iastTelemetry.configure(config, config.iast?.telemetryVerbosity)
+  iastTelemetry.configure(config, config.iast?.DD_IAST_TELEMETRY_VERBOSITY)
   enableFsPlugin(IAST_MODULE)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)

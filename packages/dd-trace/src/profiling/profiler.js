@@ -64,6 +64,8 @@ class Profiler extends EventEmitter {
   #profileSeq = 0
   #profilers
   #spanFinishListener
+  #startFailed = false
+  #stopping
   #systemInfoReport
   #currentSnapshotTags
   #timer
@@ -82,6 +84,14 @@ class Profiler extends EventEmitter {
 
   get enabled () {
     return this.#enabled
+  }
+
+  /**
+   * True while a stop()'s final collection is still encoding and exporting. The profiler no
+   * longer samples, but it also can not be started again until that settles and 'stopped' fires.
+   */
+  isStopping () {
+    return this.#stopping !== undefined
   }
 
   /**
@@ -175,48 +185,72 @@ class Profiler extends EventEmitter {
    */
   start (config) {
     if (this.enabled) return true
-    this.#enabled = true
+    // Initialization failures such as an unavailable native pprof binding are not expected to
+    // recover within the lifetime of this process. Preserve that decision without pretending the
+    // profiler is running or retrying setup on every subsequent config publication.
+    if (this.#startFailed) return false
 
-    const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
-      buildProfilingRuntime(config)
-    this.#config = config
-    this.#exporters = exporters
-    this.#flushInterval = flushInterval
-    this.#profilers = profilers
-    this.#currentSnapshotTags = snapshotTags
-    this.#uploadCompression = uploadCompression
-    this.#systemInfoReport = systemInfoReport
-    if (this.#customLabelKeys.size > 0) {
-      this.#applyCustomLabelKeys()
-    }
-
-    this._setInterval()
-    // Log errors if the source map finder fails, but don't prevent the rest
-    // of the profiler from running without source maps.
-    let mapper
-    const { setLogger, SourceMapper } = require('@datadog/pprof')
-    setLogger(pprofLogger)
-
-    if (config.DD_PROFILING_SOURCE_MAP) {
-      mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
-      mapper.loadDirectory(process.cwd())
-        .then(() => {
-          if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
-            const count = mapper.infoMap.size
-            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-            log.debug(() => {
-              return count === 0
-                ? 'Found no source maps'
-                : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-            })
-          }
-        })
-        .catch((error) => {
-          log.error(error)
-        })
+    // A prior stop()'s shutdown collection may still be encoding/exporting via #tags,
+    // #exporters and #endpointCounts, which this start() would overwrite out from under it.
+    // Refuse rather than queue: the caller owns the decision of what to do once the shutdown
+    // settles, and by then its configuration may no longer be the one requested here. This is
+    // thrown outside the setup try/catch below so it does not count as a permanent start failure.
+    if (this.#stopping) {
+      throw new Error('Cannot start the profiler while a shutdown collection is still in flight')
     }
 
     try {
+      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+        buildProfilingRuntime(config)
+      this.#config = config
+      this.#exporters = exporters
+      this.#flushInterval = flushInterval
+      this.#profilers = profilers
+      this.#currentSnapshotTags = snapshotTags
+      // A restart is installed only after the prior shutdown collection settles, so any endpoint
+      // counts left behind by a collection that produced no encodable profiles belong to the old run.
+      this.#endpointCounts.clear()
+      // Compression is initialized lazily and cached for a profiling run. A restarted profiler
+      // must derive it again from the newly built runtime instead of retaining the prior method
+      // or options.
+      this.#compressionFn = undefined
+      this.#compressionFnInitialized = false
+      this.#compressionOptions = undefined
+      this.#uploadCompression = uploadCompression
+      this.#systemInfoReport = systemInfoReport
+      if (this.#customLabelKeys.size > 0) {
+        this.#applyCustomLabelKeys()
+      }
+
+      this._setInterval()
+      // Log errors if the source map finder fails, but don't prevent the rest
+      // of the profiler from running without source maps.
+      let mapper
+      const { setLogger, SourceMapper } = require('@datadog/pprof')
+      setLogger(pprofLogger)
+
+      if (config.DD_PROFILING_SOURCE_MAP) {
+        mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
+        mapper.loadDirectory(process.cwd())
+          .then(() => {
+            if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
+              const count = mapper.infoMap.size
+              // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+              log.debug(() => {
+                return count === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
+          })
+          .catch((error) => {
+            log.error(error)
+          })
+      }
+
+      // Setup above does not start any sampler runtime resources. From this point onward, #stop()
+      // can safely clean up a partial start because #profilers and the rest of the runtime exist.
+      this.#enabled = true
       const start = new Date()
       const nearOOMCallback = this.#nearOOMExport.bind(this)
       for (const profiler of profilers) {
@@ -236,7 +270,17 @@ class Profiler extends EventEmitter {
       this._capture(this._timeoutInterval, start)
     } catch (error) {
       log.error(error)
-      this.#stop()
+      this.#startFailed = true
+      if (this.enabled) {
+        try {
+          this.#stop()
+        } catch (stopError) {
+          // A cleanup failure must not leave the public running state stuck at true or escape into
+          // the customer application.
+          this.#enabled = false
+          log.error(stopError)
+        }
+      }
       return false
     }
 
@@ -257,12 +301,32 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this.#flushInterval
   }
 
+  /**
+   * Stops the profiler after collecting and exporting one final profile. That export outlives
+   * this call: {@link isStopping} returns true and start() throws until it settles, at which
+   * point a 'stopped' event is emitted.
+   */
   stop () {
     if (!this.enabled) return
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
-    this._collect(snapshotKinds.ON_SHUTDOWN, false)
+    this.#stopping = this._collect(snapshotKinds.ON_SHUTDOWN, false)
+      .catch(error => {
+        // _collect() contains its own failures, but its cleanup can still throw. Nothing awaits
+        // this shutdown chain, so consume and log that failure instead of leaking a rejection.
+        log.error(error)
+      })
+      .finally(() => {
+        this.#stopping = undefined
+        // Nothing awaits this promise, so a listener throwing here would become an unhandled
+        // rejection instead of reaching whoever requested the stop.
+        try {
+          this.emit('stopped')
+        } catch (error) {
+          log.error(error)
+        }
+      })
     this.#stop()
   }
 
@@ -288,11 +352,11 @@ class Profiler extends EventEmitter {
   _capture (timeout, start) {
     if (!this.enabled) return
     this.#lastStart = start
-    if (!this.#timer || timeout !== this._timeoutInterval) {
+    if (this.#timer && timeout === this._timeoutInterval) {
+      this.#timer.refresh()
+    } else {
       this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
       this.#timer.unref?.()
-    } else {
-      this.#timer.refresh()
     }
   }
 
@@ -302,10 +366,8 @@ class Profiler extends EventEmitter {
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)
-    if (!endpointName) return
-
     // Make sure this is the outermost web span, just in case so we don't overcount
-    if (findWebSpan(getStartedSpans(context), context._parentId)) return
+    if (!endpointName || findWebSpan(getStartedSpans(context), context._parentId)) return
 
     let counter = this.#endpointCounts.get(endpointName)
     if (counter === undefined) {

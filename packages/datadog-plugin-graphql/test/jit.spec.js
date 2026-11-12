@@ -65,7 +65,7 @@ async function waitForCollection (reference) {
  * @returns {Promise<void>}
  */
 async function assertGeneratedArgumentFactory (compilation, expectedStatements) {
-  const declaration = /^function (ddTraceArguments\d+) \(variableValues, cloneValue\) \{$/m.exec(compilation)
+  const declaration = /^function (ddTraceArguments\d+) \(variableValues, cloneValue(?:, __context)?\) \{$/m.exec(compilation)
   assert.ok(declaration, 'expected a named generated argument factory')
 
   const end = compilation.indexOf('\n}\n', declaration.index)
@@ -199,7 +199,6 @@ describe('Plugin', () => {
 
     /**
      * @param {{ __typename: string }} value
-     * @returns {string}
      */
     function resolveType (value) {
       return value.__typename
@@ -403,6 +402,25 @@ void generatedResolver
             `${filePath} retained its compilation context as ${format}`
           )
           assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
+
+          const ast = parse(content, { range: true, isModule: format === 'module' })
+          const [compileArguments] = query(ast,
+            'FunctionDeclaration[id.name="compileArguments"]:has(VariableDeclarator[id.name="valuesExpression"])')
+          if (compileArguments === undefined) continue
+
+          const [start, end] = compileArguments.range
+          const original = content.slice(start, end)
+          for (const binding of ['args', 'bind']) {
+            const renamed = original.replace(new RegExp(`\\b${binding}\\b`, 'g'), `renamed${binding}`)
+            assert.notStrictEqual(renamed, original, `${filePath} did not contain ${binding}`)
+            const unsupported = content.slice(0, start) + renamed + content.slice(end)
+
+            assert.strictEqual(
+              rewrite(unsupported, filename, format),
+              unsupported,
+              `${filePath} was rewritten with a renamed ${binding} binding as ${format}`
+            )
+          }
         }
       })
 
@@ -647,7 +665,7 @@ void generatedResolver
         delete nested.arguments
         delete nested.directives
 
-        const compiled = compileQuery(nestedSchema, document, undefined, { debug: true })
+        const compiled = compileQuery(nestedSchema, document, undefined, { debug: { enabled: true } })
         assert.strictEqual(
           typeof compiled.query,
           'function',
@@ -727,7 +745,6 @@ void generatedResolver
               createThenable: () => ({
                 /**
                  * @param {(value: string) => void} resolve
-                 * @returns {string}
                  */
                 then (resolve) {
                   queueMicrotask(() => {
@@ -1393,7 +1410,7 @@ void generatedResolver
               errorSchema,
               graphql.parse(`query ${operationName} { items { value } }`),
               undefined,
-              { debug: true }
+              { debug: { enabled: true } }
             )
             const compilation = compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation
             assert.match(compilation, /jitRuntime\.resolveField/)
@@ -1587,7 +1604,6 @@ void generatedResolver
                  * @param {object} _args
                  * @param {unknown} _context
                  * @param {{ __datadogGraphqlJitField?: unknown, dynamic?: string, enriched?: string }} info
-                 * @returns {string}
                  */
                 resolve (_source, _args, _context, info) {
                   enrichedValues.push({
@@ -2220,7 +2236,7 @@ void generatedResolver
             }
           `),
           undefined,
-          { debug: true }
+          { debug: { enabled: true } }
         )
         const { query } = compiled
         await assertGeneratedArgumentFactory(
@@ -2273,7 +2289,9 @@ void generatedResolver
             count: 42,
             empty: null,
             emptyFilter: {},
-            filter: { name: null, size: 7, exact: true },
+            filter: semifies(graphqlJit.version(), '>=0.9.4')
+              ? { size: 7, exact: true }
+              : { name: null, size: 7, exact: true },
             flag: true,
             fixedFilter: { name: 'fixed', size: 8, exact: false },
             fixedTags: ['fixed'],
@@ -2857,7 +2875,6 @@ void generatedResolver
               resolve: source => ({
                 /**
                  * @param {(value: string) => void} resolve
-                 * @returns {string}
                  */
                 then (resolve) {
                   queueMicrotask(() => resolve(source.nickname))
@@ -2980,6 +2997,89 @@ void generatedResolver
       }
 
       assert.deepStrictEqual(resolverInfos, [{ user: {} }, { name: {} }])
+    })
+
+    it('preserves opaque scalar defaults and isolates mutable resolver arguments', async () => {
+      class OpaqueValue {
+        value = 'original'
+      }
+      const defaults = [
+        42n,
+        Symbol('default'),
+        identity,
+        Object.freeze(new OpaqueValue()),
+        Object.freeze(new Map([['value', 'original']])),
+      ]
+      const Opaque = new graphql.GraphQLScalarType({
+        name: 'OpaqueDefault',
+        serialize: identity,
+        parseValue: identity,
+        parseLiteral: () => undefined,
+      })
+      for (const defaultValue of defaults) {
+        const User = new graphql.GraphQLObjectType({
+          name: 'OpaqueUser',
+          fields: {
+            name: {
+              type: graphql.GraphQLString,
+              args: { value: { type: Opaque, defaultValue } },
+            },
+          },
+        })
+        const schema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'OpaqueQuery',
+            fields: { user: { type: User, resolve: () => ({ name: 'Ada' }) } },
+          }),
+        })
+        const document = graphql.parse('query OpaqueDefaults($value: OpaqueDefault) { user { name(value: $value) } }')
+        agent.reload('graphql', { enabled: false })
+        const native = compileQuery(schema, document)
+        assert.strictEqual(typeof native.query, 'function')
+        const expected = await native.query({}, {}, {})
+        agent.reload('graphql', { enabled: true })
+        const compiled = compileQuery(schema, document, undefined, { debug: { enabled: true } })
+        assert.strictEqual(typeof compiled.query, 'function')
+        await assertGeneratedArgumentFactory(compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation, [
+          '__context.literals.literal0',
+          'cloneValue === undefined',
+        ])
+
+        const resolverArguments = []
+        const mutableArguments = []
+        const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
+        const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = message => {
+          const info = materializeResolverInfo(message)
+          if (info.name) resolverArguments.push(info.name)
+        }
+        /** @param {{ args: { value?: OpaqueValue } }} message */
+        const onResolveStart = ({ args }) => {
+          if (!Object.hasOwn(args, 'value')) return
+          mutableArguments.push(args)
+          if (args.value?.value === 'original') args.value.value = 'mutated'
+        }
+        resolverStartChannel.subscribe(onResolverStart)
+        resolveStartChannel.subscribe(onResolveStart)
+        try {
+          for (let execution = 0; execution < 2; execution++) {
+            const result = await executeWithTrace(() => compiled.query({}, {}, {}), /OpaqueDefaults/)
+            assert.deepStrictEqual(result, expected)
+          }
+        } finally {
+          resolverStartChannel.unsubscribe(onResolverStart)
+          resolveStartChannel.unsubscribe(onResolveStart)
+        }
+        assert.strictEqual(resolverArguments.length, 2)
+        assert.strictEqual(mutableArguments.length, 2)
+        for (const args of resolverArguments) assert.strictEqual(args.value, defaultValue)
+        if (defaultValue instanceof OpaqueValue) {
+          assert.strictEqual(defaultValue.value, 'original')
+          assert.notStrictEqual(mutableArguments[0].value, defaultValue)
+          assert.notStrictEqual(mutableArguments[0].value, mutableArguments[1].value)
+        }
+      }
     })
   })
 })

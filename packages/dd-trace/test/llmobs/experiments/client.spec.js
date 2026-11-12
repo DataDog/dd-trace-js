@@ -4,7 +4,13 @@ const assert = require('node:assert/strict')
 const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
+const {
+  EVALUATOR_INFERENCE_API_BASE_PATH,
+  ExperimentsClient,
+  apiHost,
+  appHost,
+} = require('../../../src/llmobs/experiments/client')
+const { RemoteEvaluatorError } = require('../../../src/llmobs/experiments/remote-evaluator')
 
 const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
 const EXPERIMENTS_VCR_TIMEOUT_MS = 20_000
@@ -93,6 +99,106 @@ describe('LLMObs Experiments control-plane client', function () {
     assert.equal(new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 's' }).configured, true)
     assert.equal(new ExperimentsClient({ apiKey: 'k', site: 's' }).configured, false)
     assert.equal(new ExperimentsClient({}).configured, false)
+  })
+
+  it('calls a managed evaluator and parses its result', async () => {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: true,
+      text: async () => JSON.stringify({
+        data: {
+          type: 'evaluator_inference',
+          attributes: {
+            value: 0.9,
+            reasoning: 'The answer is correct.',
+            assessment: 'pass',
+            status: 'OK',
+          },
+        },
+      }),
+    })
+
+    try {
+      const result = await client.evaluatorInfer('managed-judge', { span_input: 'question', span_output: 'answer' })
+
+      assert.deepEqual(result, {
+        value: 0.9,
+        reasoning: 'The answer is correct.',
+        assessment: 'pass',
+        status: 'OK',
+      })
+      const [url, options] = fetchStub.firstCall.args
+      assert.equal(
+        url,
+        `https://api.datadoghq.com${EVALUATOR_INFERENCE_API_BASE_PATH}/evaluators/managed-judge/infer`
+      )
+      assert.equal(options.method, 'POST')
+      assert.deepEqual(JSON.parse(options.body), {
+        data: {
+          type: 'evaluator_inference',
+          attributes: { context: { span_input: 'question', span_output: 'answer' } },
+        },
+      })
+    } finally {
+      fetchStub.restore()
+    }
+  })
+
+  it('preserves structured managed evaluator errors', async () => {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({
+        data: {
+          type: 'evaluator_inference',
+          attributes: {
+            status: 'WARN',
+            error: {
+              type: 'RATE_LIMIT_EXCEEDED',
+              message: 'Rate limit exceeded',
+              recommended_resolution: 'Wait before retrying',
+            },
+          },
+        },
+      }),
+    })
+
+    try {
+      await assert.rejects(
+        client.evaluatorInfer('managed-judge', {}),
+        err => {
+          assert.ok(err instanceof RemoteEvaluatorError)
+          assert.equal(err.status, 'WARN')
+          assert.deepEqual(err.backendError, {
+            type: 'RATE_LIMIT_EXCEEDED',
+            message: 'Rate limit exceeded',
+            recommended_resolution: 'Wait before retrying',
+          })
+          return true
+        }
+      )
+    } finally {
+      fetchStub.restore()
+    }
+  })
+
+  it('uses JSON:API details for unstructured managed evaluator errors', async () => {
+    const client = new ExperimentsClient({ apiKey: 'api-key', appKey: 'app-key', site: 'datadoghq.com' })
+    const fetchStub = sinon.stub(global, 'fetch').resolves({
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ errors: [{ detail: 'Evaluator not found in organization' }] }),
+    })
+
+    try {
+      await assert.rejects(
+        client.evaluatorInfer('missing-judge', {}),
+        /Failed to call evaluator 'missing-judge': Evaluator not found in organization/
+      )
+    } finally {
+      fetchStub.restore()
+    }
   })
 
   it('serializes all dataset batch mutations and parses JSON:API records', async function () {

@@ -37,7 +37,6 @@ function optionServiceSource ({ pluginConfig }) {
  * @param {{ service?: string | ((params?: object) => unknown) }} [pluginConfig]
  * @param {object} [params]
  * @param {string} defaultService
- * @returns {string}
  */
 function configServiceName (pluginConfig, params, defaultService) {
   const service = pluginConfig?.service

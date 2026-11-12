@@ -3,11 +3,11 @@
 const { rspack } = require('@rspack/core')
 const config = require('./rspack.config')
 
-rspack(config, (err, stats) => {
-  if (err) {
-    console.error(err)
-    if (err.details) {
-      console.error(err.details)
+rspack(config, (error, stats) => {
+  if (error) {
+    console.error(error)
+    if (error.details) {
+      console.error(error.details)
     }
     process.exit(1)
   }

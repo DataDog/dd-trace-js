@@ -16,18 +16,21 @@ const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
 let isEnabled = false
 let aiguard
 let opts
+let analyzeStreamResponses
 
 /**
  * Subscribes AI Guard to the Vercel AI model call channel.
  *
  * @param {object} aiguardInstance
  * @param {boolean} block
+ * @param {boolean} analyzeStreams
  */
-function enable (aiguardInstance, block) {
+function enable (aiguardInstance, block, analyzeStreams) {
   if (isEnabled) return
 
   aiguard = aiguardInstance
   opts = { block, source: SOURCE_AUTO, integration: 'ai' }
+  analyzeStreamResponses = analyzeStreams
 
   modelInterceptChannel.subscribe(onModelIntercept)
 
@@ -41,6 +44,7 @@ function disable () {
 
   aiguard = undefined
   opts = undefined
+  analyzeStreamResponses = undefined
   isEnabled = false
 }
 
@@ -53,6 +57,8 @@ function onModelIntercept (ctx) {
     if (!isEnabled) return
     return evaluate(ctx, aiguard, [inputMessages], opts)
   }
+
+  if (ctx.method === 'doStream' && !analyzeStreamResponses) return
 
   ctx.onResult = ctx.method === 'doStream'
     ? result => {
@@ -67,8 +73,7 @@ function onModelIntercept (ctx) {
         null,
         'AIGuard: unable to decode the model result: %s'
       )
-      if (outputMessages === null) return result
-      if (!outputMessages.length) return result
+      if (outputMessages === null || !outputMessages.length) return result
 
       return evaluate(ctx, aiguard, [outputMessages], opts).then(() => result)
     }
@@ -106,8 +111,7 @@ function interceptStreamedResult (ctx, result, inputMessages) {
       null,
       'AIGuard: unable to decode the streamed model result: %s'
     )
-    if (outputMessages === null) return replayed
-    if (!outputMessages.length) return replayed
+    if (outputMessages === null || !outputMessages.length) return replayed
 
     return evaluate(ctx, aiguard, [outputMessages], opts).then(() => replayed)
   })

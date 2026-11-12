@@ -10,7 +10,6 @@ const { timeOrigin } = performance
  * the value on the epoch while `performance.now()` keeps it monotonic, so a
  * backward wall-clock jump can't make `timeUnixNano` precede `startTimeUnixNano`.
  *
- * @returns {number} Nanoseconds since the UNIX epoch
  */
 function nowUnixNano () {
   return Math.round((timeOrigin + performance.now()) * 1e6)

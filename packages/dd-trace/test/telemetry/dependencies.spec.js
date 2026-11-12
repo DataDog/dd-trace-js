@@ -36,6 +36,36 @@ describe('dependencies', () => {
     })
   })
 
+  describe('with ESM module loads published before start', () => {
+    const filename = 'file://c/Users/user/project/node_modules/esm-only/index.js'
+    let dependencies
+    let sendData
+
+    beforeEach(() => {
+      sendData = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './send-data': { sendData },
+        '../require-package-json': sinon.stub().returns({ version: '1.0.0' }),
+        '../esm-module-load': { getPublishedModuleLoads: () => [filename] },
+      })
+      global.setImmediate = setImmediate2
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      global.setImmediate = originalSetImmediate
+    })
+
+    it('should send them along with the cached requires', () => {
+      dependencies.start({}, 'test', 'host', sinon.stub(), sinon.stub())
+      moduleLoadStartChannel.publish({})
+
+      sinon.assert.calledWithMatch(sendData, {}, 'test', 'host', 'app-dependencies-loaded', {
+        dependencies: [{ name: 'esm-only', version: '1.0.0' }],
+      })
+    })
+  })
+
   describe('on event', () => {
     const config = {}
     const application = 'test'

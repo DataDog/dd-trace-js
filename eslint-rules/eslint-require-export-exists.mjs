@@ -53,7 +53,6 @@ const exportCache = new Map()
 
 /**
  * @param {string} specifier
- * @returns {boolean}
  */
 function isFirstPartySpecifier (specifier) {
   return specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')
@@ -122,7 +121,6 @@ function getFileStats (filePath) {
 
 /**
  * @param {string} filePath
- * @returns {boolean}
  */
 function isDirectory (filePath) {
   try {
@@ -148,7 +146,6 @@ function getPropertyName (keyNode, computed) {
 
 /**
  * @param {LooseNode | undefined} node
- * @returns {boolean}
  */
 function isModuleExportsReference (node) {
   return Boolean(
@@ -164,7 +161,6 @@ function isModuleExportsReference (node) {
 
 /**
  * @param {LooseNode | undefined} node
- * @returns {boolean}
  */
 function isExportsIdentifier (node) {
   return Boolean(node && node.type === 'Identifier' && node.name === 'exports')

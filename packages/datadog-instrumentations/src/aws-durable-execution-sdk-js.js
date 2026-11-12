@@ -2,7 +2,6 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const LAZY_DURABLE_PROMISE_METHODS = require('./aws-durable-execution-sdk-js-context-methods')
 
 for (const method of LAZY_DURABLE_PROMISE_METHODS) {
@@ -70,7 +69,6 @@ const instrumentedProtos = new WeakSet()
  * observer attaches at most once (a promise settles only once). Instances we don't observe
  * never set `ON_SETTLE`, so for them the wrappers are a single property read and a passthrough.
  * @param {object} proto - The DurablePromise prototype (`Object.getPrototypeOf(dp)`).
- * @returns {void}
  */
 function instrumentDurablePromiseProto (proto) {
   if (instrumentedProtos.has(proto)) return
@@ -97,15 +95,9 @@ function instrumentDurablePromiseProto (proto) {
  * @param {object} dp - The returned DurablePromise instance.
  * @param {(err: unknown) => void} onSettle - Called once with `undefined` on success or the
  *   rejection reason on failure.
- * @returns {void}
  */
 function observeDurablePromise (dp, onSettle) {
   if (!dp || typeof dp.then !== 'function') return
   instrumentDurablePromiseProto(Object.getPrototypeOf(dp))
   dp[ON_SETTLE] = onSettle
-}
-
-for (const hook of getHooks('@aws/durable-execution-sdk-js')) {
-  hook.file = null
-  addHook(hook, exports => exports)
 }

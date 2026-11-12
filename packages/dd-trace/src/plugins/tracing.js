@@ -29,6 +29,7 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
+   * @param {object} [opts.pluginConfig]
    * @returns {{ name: string, source: string | undefined }}
    */
   serviceName (opts = {}) {
@@ -46,7 +47,6 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
    */
   operationName (opts = {}) {
     const {
@@ -203,7 +203,7 @@ class TracingPlugin extends Plugin {
    * @param {import('../tracer')} [options.tracer] - The tracer.
    * @param {object} [options.config] - The config for the span.
    *
-   * @param {boolean} enterOrCtx - Whether to enter the span context into the storage.
+   * @param {boolean | object} enterOrCtx - Whether to enter the span context, or the context to populate with stores.
    */
   startSpan (name, options = {}, enterOrCtx = true) {
     // TODO: modularize this code to a helper function
@@ -267,7 +267,6 @@ class TracingPlugin extends Plugin {
     analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
-    // eslint-disable-next-line unicorn/no-unnecessary-boolean-comparison -- Context objects use the other branch.
     if (enterOrCtx === true) {
       legacyStorage.enterWith({ ...store, span })
     } else if (enterOrCtx) {

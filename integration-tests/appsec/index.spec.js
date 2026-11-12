@@ -4,12 +4,12 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
+const HttpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
 describe('RASP', () => {
-  let axios, cwd, appFile, agent, proc, stdioHandler
+  let httpRequest, cwd, appFile, agent, proc, stdioHandler
 
   function stdOutputHandler (data) {
     stdioHandler && stdioHandler(data)
@@ -41,7 +41,7 @@ describe('RASP', () => {
           DD_TRACE_STARTUP_LOGS: 'false',
         },
       }, stdOutputHandler, stdOutputHandler)
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -87,7 +87,7 @@ describe('RASP', () => {
       }
 
       try {
-        await axios.get(`${path}?host=localhost/ifconfig.pro`)
+        await httpRequest.get(`${path}?host=localhost/ifconfig.pro`)
 
         assert.fail('Request should have failed')
       } catch (e) {
@@ -117,7 +117,7 @@ describe('RASP', () => {
           hasOutput = true
         }
 
-        await axios.get(`${path}?host=localhost/ifconfig.pro`)
+        await httpRequest.get(`${path}?host=localhost/ifconfig.pro`)
 
         assert.fail('Request should have failed')
       } catch (e) {
@@ -147,7 +147,7 @@ describe('RASP', () => {
       }
 
       try {
-        await axios.get('/crash')
+        await httpRequest.get('/crash')
       } catch {
         return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           setTimeout(() => {
@@ -175,7 +175,7 @@ describe('RASP', () => {
         }
 
         try {
-          await axios.get('/crash-and-recovery-A')
+          await httpRequest.get('/crash-and-recovery-A')
         } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
@@ -198,7 +198,7 @@ describe('RASP', () => {
         }
 
         try {
-          await axios.get('/crash-and-recovery-B')
+          await httpRequest.get('/crash-and-recovery-B')
         } catch {
           return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
@@ -218,7 +218,7 @@ describe('RASP', () => {
         let response
 
         try {
-          response = await axios.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
+          response = await httpRequest.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -235,7 +235,7 @@ describe('RASP', () => {
         let response
 
         try {
-          response = await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
+          response = await httpRequest.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -250,7 +250,7 @@ describe('RASP', () => {
 
       it('should crash as expected after block in domain request', async () => {
         try {
-          await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
+          await httpRequest.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
         } catch {
           return await testAppCrashesAsExpected()
         }
@@ -260,7 +260,7 @@ describe('RASP', () => {
 
       it('should block when error is unhandled', async () => {
         try {
-          await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
+          await httpRequest.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -275,7 +275,7 @@ describe('RASP', () => {
 
       it('should crash as expected after a requiest block when error is unhandled', async () => {
         try {
-          await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
+          await httpRequest.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
         } catch {
           return await testAppCrashesAsExpected()
         }
@@ -341,7 +341,7 @@ describe('RASP', () => {
         let response
 
         try {
-          response = await axios.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
+          response = await httpRequest.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -364,7 +364,7 @@ describe('RASP', () => {
       it('should report body request', async () => {
         const requestBody = { host: 'localhost/ifconfig.pro' }
         try {
-          await axios.post('/ssrf', requestBody)
+          await httpRequest.post('/ssrf', requestBody)
         } catch (e) {
           if (!e.response) {
             throw e
@@ -381,7 +381,7 @@ describe('RASP', () => {
           arr: Array(300).fill('foo'),
         }
         try {
-          await axios.post('/ssrf', requestBody)
+          await httpRequest.post('/ssrf', requestBody)
         } catch (e) {
           if (!e.response) {
             throw e
@@ -404,7 +404,7 @@ describe('RASP', () => {
       it('should not report body request', async () => {
         const requestBody = { host: 'localhost/ifconfig.pro' }
         try {
-          await axios.post('/ssrf', requestBody)
+          await httpRequest.post('/ssrf', requestBody)
         } catch (e) {
           if (!e.response) {
             throw e

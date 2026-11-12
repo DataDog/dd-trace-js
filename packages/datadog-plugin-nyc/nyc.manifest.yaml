@@ -1,0 +1,11 @@
+_v: 1
+name: nyc
+display_name: nyc
+description: Instruments nyc coverage collection and reporting for Test Optimization, including untested files,
+  skipped-suite coverage backfill, and coverage report uploads.
+packages:
+- name: nyc
+category:
+- other
+systems: []
+creation_date: '2024-08-06'
