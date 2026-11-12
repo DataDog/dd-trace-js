@@ -2950,7 +2950,10 @@ describe('Plugin', () => {
           assert.strictEqual(result.errors.length, 1)
         })
 
-        it('should honor resolver abort for fields gated by depth', async () => {
+        it('should honor resolver abort for fields gated by depth', async function () {
+          // GraphQL 17's resolve channel cannot stop a resolver, and the plugin leaves the schema untouched.
+          if (nativeChannels) this.skip()
+
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
           /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */

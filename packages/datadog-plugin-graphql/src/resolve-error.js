@@ -69,26 +69,6 @@ function recordResolveErrorForPath (error, path, fieldNodes) {
 }
 
 /**
- * Records a GraphQL 17 resolver error, reported by its `graphql:resolve` channel, on its collapsed field.
- *
- * @param {unknown} error
- * @param {string} fieldPath Dotted response path.
- * @param {string} parentTypeName
- */
-function recordFieldError (error, fieldPath, parentTypeName) {
-  const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
-  if (!rootCtx?.config?.collapse || !rootCtx.fields) return
-
-  // Like locatedError(), an error that already carries a path belongs to that path.
-  const errorPath = /** @type {{ path?: unknown } | undefined} */ (error)?.path
-  const path = Array.isArray(errorPath)
-    ? errorPath
-    : fieldPath.split('.').map(key => (key.charCodeAt(0) <= 57 ? Number(key) : key))
-  const field = findResolveField(rootCtx.fields, getPathString(path), undefined, parentTypeName)
-  if (field) recordResolveError(field, error)
-}
-
-/**
  * @param {(string | number)[]} path
  */
 function getPathString (path) {
@@ -104,27 +84,24 @@ function getPathString (path) {
  * @param {Map<unknown, object>} fields
  * @param {string} pathString
  * @param {object} [fieldNode]
- * @param {string} [parentTypeName]
  * @returns {object | undefined}
  */
-function findResolveField (fields, pathString, fieldNode, parentTypeName) {
+function findResolveField (fields, pathString, fieldNode) {
   const field = fields.get(pathString)
   if (field === undefined) return
 
-  const matches = candidate => (fieldNode === undefined || candidate.fieldNode === fieldNode) &&
-    (parentTypeName === undefined || candidate.parentTypeName === parentTypeName)
   const parentTypeFields = field.parentTypeFields
   if (parentTypeFields === undefined) {
-    return matches(field) ? field : undefined
+    return fieldNode === undefined || field.fieldNode === fieldNode ? field : undefined
   }
   if (parentTypeFields.parentTypeName !== undefined) {
-    if (matches(parentTypeFields)) return parentTypeFields
-    return matches(field) ? field : undefined
+    if (fieldNode === undefined || parentTypeFields.fieldNode === fieldNode) return parentTypeFields
+    return field.fieldNode === fieldNode ? field : undefined
   }
 
   let matchingField
   for (const candidate of parentTypeFields.values()) {
-    if (matches(candidate)) matchingField = candidate
+    if (fieldNode === undefined || candidate.fieldNode === fieldNode) matchingField = candidate
   }
   return matchingField
 }
@@ -148,6 +125,5 @@ function recordResolveError (field, error) {
 module.exports = {
   GraphQLResolveErrorPlugin,
   GraphQLToolsResolveErrorPlugin,
-  recordFieldError,
   recordResolveError,
 }
