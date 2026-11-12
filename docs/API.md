@@ -272,6 +272,7 @@ tracer.use('openai', {
 <h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
+<h5 id="aws-lambda"></h5>
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the
@@ -424,6 +425,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [async-mutex](./interfaces/plugins.async_mutex.html)
 * [avsc](./interfaces/plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-lambda](./interfaces/plugins.aws_lambda.html)
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)

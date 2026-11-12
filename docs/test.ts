@@ -28,6 +28,7 @@ import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
 import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
+import * as lambda from '../lambda';
 import {
   configurationToString,
   ConfigurationFetchError,
@@ -380,6 +381,86 @@ tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('async-mutex');
 tracer.use('async-mutex', { service: 'mutex' });
 tracer.use('avsc');
+tracer.use('aws-lambda');
+tracer.use('aws-lambda', { serviceRepresentationEnabled: false });
+const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.value, {
+  captureLambdaPayload: true,
+  enhancedMetrics: false,
+  serviceRepresentationEnabled: false,
+});
+lambdaHandler({ value: 'ok' }, { getRemainingTimeInMillis: () => 1000 });
+// Compile-only checks: wrappers require Lambda invocation arguments and preserve results and metadata.
+function checkLambdaWrapperTypes() {
+  const context = { getRemainingTimeInMillis: () => 1000 };
+  const sync = lambda.wrap((event: { value: number }) => event.value);
+  const syncResult: Promise<number> = sync({ value: 42 }, context);
+  // @ts-expect-error Wrapped event-only handlers still require the runtime context.
+  sync({ value: 42 });
+  // @ts-expect-error Context must be an object.
+  sync({ value: 42 }, undefined);
+  // @ts-expect-error Context must be an object.
+  sync({ value: 42 }, null);
+  // @ts-expect-error Context must be an object.
+  sync({ value: 42 }, 'context');
+  // @ts-expect-error The invocation result is a Promise, not the handler's synchronous number.
+  sync({ value: 42 }, context).toFixed();
+  // @ts-expect-error Handler event types are preserved.
+  sync({ value: 'invalid' }, context);
+  const noArgs = lambda.wrap(() => 42);
+  const noArgsResult: Promise<number> = noArgs({}, context);
+  // @ts-expect-error Wrapped zero-argument handlers require event and context.
+  noArgs();
+  // @ts-expect-error Wrapped zero-argument handlers still require context.
+  noArgs({});
+  // @ts-expect-error Context must be an object for zero-argument handlers too.
+  noArgs({}, undefined);
+  const asyncResult: Promise<string> = lambda.wrap(async (value: string) => value)('result', context);
+  const thenableResult: Promise<number> =
+    lambda.wrap((): PromiseLike<number> => Promise.resolve(42))({}, context);
+  const contextual = lambda.wrap((event: string, ctx: { requestId: string }) => ctx.requestId);
+  const contextualResult: Promise<string> = contextual('event', { requestId: 'request' });
+  // @ts-expect-error Declared context fields are preserved.
+  contextual('event', context);
+  // @ts-expect-error Declared context is required.
+  contextual('event');
+  const optionalContext = lambda.wrap((event: string, ctx?: { requestId: string }) => ctx?.requestId);
+  const optionalResult: Promise<string | undefined> = optionalContext('event', { requestId: 'request' });
+  // @ts-expect-error The wrapper requires context even if the customer declares it optional.
+  optionalContext('event');
+  // @ts-expect-error Optional customer context fields are preserved.
+  optionalContext('event', context);
+  const callbackResult: Promise<void> = lambda.wrap((_event: object, _context: object,
+    callback: (error: Error | null, value: number) => void): void => { callback(null, 42); })({}, context, () => {});
+  const stream = { write(value: string) {} };
+  const streaming = lambda.wrap(async (_event: object, responseStream: typeof stream, ctx: { requestId: string }) =>
+    ctx.requestId);
+  const streamingResult: Promise<string> = streaming({}, stream, { requestId: 'request' });
+  // @ts-expect-error Streaming retains its third-position context.
+  streaming({}, stream);
+  // @ts-expect-error Streaming retains its stream argument type.
+  streaming({}, context, { requestId: 'request' });
+  const withMetadata = Object.assign((event: { value: number }) => event.value, { version: 1 });
+  const wrapped = lambda.wrap(withMetadata);
+  const metadataResult: Promise<number> = wrapped({ value: 2 }, context);
+  const version: number = wrapped.version;
+  // @ts-expect-error Completion mode overrides are not part of the Lambda facade.
+  lambda.wrap(() => 'result', { handlerCompletion: 'return' });
+  void [syncResult, noArgsResult, asyncResult, thenableResult, contextualResult, optionalResult,
+    callbackResult, streamingResult, metadataResult, version];
+}
+void checkLambdaWrapperTypes;
+
+const lambdaTraceHeaders: Record<string, string> = lambda.getTraceHeaders();
+// Type-check the reserved APIs without executing their migration stubs.
+function checkLambdaMetricsTypes () {
+  lambda.sendDistributionMetric('example.metric', 1, 'tag:value');
+  lambda.sendDistributionMetricWithDate('example.metric', 1, new Date(), 'tag:value');
+  const initFailureReported: Promise<void> = lambda.reportInitFailure({
+    error: new Error('load failed'),
+    functionName: 'my-function',
+    startTime: Date.now(),
+  });
+}
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);

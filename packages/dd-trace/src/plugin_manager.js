@@ -3,7 +3,6 @@
 const { channel } = require('dc-polyfill')
 
 const {
-  getEnvironmentVariable,
   getValueFromEnvSources,
   isSupportedConfiguration,
 } = require('./config/helper')
@@ -45,18 +44,15 @@ loadChannel.subscribe(({ name }) => {
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
-  require('./lambda')
-}
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
-  if (!pluginClasses[Plugin.id]) {
+  const disabled = disabledPlugins.has(Plugin.id)
+  if (!pluginClasses[Plugin.id] || disabled) {
     const enabled = getEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
-    if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
+    if (isFalse(enabled) || disabled) {
       log.debug('Plugin "%s" was disabled via configuration option.', Plugin.id)
 
       pluginClasses[Plugin.id] = null
@@ -159,6 +155,10 @@ module.exports = class PluginManager {
     for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
+
+    // Initialization can publish load events that configure plugins immediately; use the current settings.
+    const initializeLambda = require('./lambda')
+    initializeLambda()
   }
 
   // This is basically just for testing. like intrumenter.disable()
@@ -181,6 +181,7 @@ module.exports = class PluginManager {
   #getSharedConfig (name) {
     const {
       logInjection,
+      lambda,
       serviceMapping,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
@@ -209,6 +210,9 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
+      DD_APM_FLUSH_DEADLINE_MILLISECONDS,
+      DD_API_KEY,
+      DD_TRACE_AWS_ADD_SPAN_POINTERS,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -267,6 +271,29 @@ module.exports = class PluginManager {
       sharedConfig.depth = DD_TRACE_GRAPHQL_DEPTH
       sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
       sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+    } else if (name === 'aws-lambda') {
+      Object.assign(sharedConfig, {
+        addSpanPointers: DD_TRACE_AWS_ADD_SPAN_POINTERS,
+        apiKey: DD_API_KEY,
+        apiKeyKms: lambda?.DD_KMS_API_KEY,
+        apiKeySecretArn: lambda?.DD_API_KEY_SECRET_ARN,
+        apmFlushDeadlineMs: DD_APM_FLUSH_DEADLINE_MILLISECONDS,
+        captureLambdaPayload: lambda?.DD_CAPTURE_LAMBDA_PAYLOAD,
+        captureLambdaPayloadMaxDepth: lambda?.DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH,
+        coldStartTraceSkipLib: lambda?.DD_COLD_START_TRACE_SKIP_LIB,
+        coldStartTracing: lambda?.DD_COLD_START_TRACING,
+        createInferredSpan: lambda?.DD_TRACE_MANAGED_SERVICES,
+        dataStreamsEnabled: dsmEnabled,
+        decodeAuthorizerContext: lambda?.DD_DECODE_AUTHORIZER_CONTEXT,
+        encodeAuthorizerContext: lambda?.DD_ENCODE_AUTHORIZER_CONTEXT,
+        enhancedMetrics: lambda?.DD_ENHANCED_METRICS,
+        fipsMode: lambda?.DD_LAMBDA_FIPS_MODE,
+        logForwarding: lambda?.DD_FLUSH_TO_LOG,
+        logInjection,
+        mergeXrayTraces: lambda?.DD_MERGE_XRAY_TRACES,
+        minColdStartTraceDurationMs: lambda?.DD_MIN_COLD_START_DURATION,
+        serviceRepresentationEnabled: lambda?.DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED,
+      })
     }
 
     return sharedConfig
