@@ -9,19 +9,82 @@ describe('Hook', () => {
   let Hook
   let iitm
   let ritm
+  let requirePackageJson
 
   beforeEach(() => {
     iitm = sinon.stub()
     ritm = sinon.stub()
+    requirePackageJson = sinon.stub().returns({ version: '1.0.0' })
     Hook = proxyquire('../../src/helpers/hook', {
       '../../../dd-trace/src/iitm': iitm,
-      '../../../dd-trace/src/require-package-json': sinon.stub().returns({ version: '1.0.0' }),
+      '../../../dd-trace/src/require-package-json': requirePackageJson,
       '../../../dd-trace/src/ritm': ritm,
     })
   })
 
   afterEach(() => {
     sinon.restore()
+  })
+
+  it('reuses a package version across CommonJS files and ESM views', () => {
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    const cjsHook = ritm.args[0][2]
+    const esmHook = iitm.args[0][2]
+
+    const first = {}
+    const second = {}
+    const namespace = { default: first }
+    assert.strictEqual(cjsHook(first, 'test-package/first', '/test-package'), first)
+    assert.strictEqual(cjsHook(second, 'test-package/second', '/test-package'), second)
+    assert.strictEqual(esmHook(namespace, 'test-package/first', '/test-package'), namespace)
+
+    sinon.assert.calledOnce(requirePackageJson)
+    for (const call of onrequire.getCalls()) assert.strictEqual(call.args[3], '1.0.0')
+  })
+
+  it('keeps versions separate for different package installations', () => {
+    requirePackageJson.withArgs('/first/test-package').returns({ version: '1.0.0' })
+    requirePackageJson.withArgs('/second/test-package').returns({ version: '2.0.0' })
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    const hook = ritm.args[0][2]
+
+    hook({}, 'test-package/first', '/first/test-package')
+    hook({}, 'test-package/first', '/second/test-package')
+    hook({}, 'test-package/second', '/first/test-package')
+    hook({}, 'test-package/second', '/second/test-package')
+
+    assert.deepStrictEqual(onrequire.getCalls().map(call => call.args[3]), ['1.0.0', '2.0.0', '1.0.0', '2.0.0'])
+    sinon.assert.calledTwice(requirePackageJson)
+  })
+
+  it('retries version lookup after a package metadata read fails', () => {
+    requirePackageJson.onFirstCall().throws(new Error('metadata unavailable'))
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    const hook = ritm.args[0][2]
+    const first = {}
+
+    assert.strictEqual(hook(first, 'test-package/first', '/test-package'), first)
+    sinon.assert.notCalled(onrequire)
+    hook({}, 'test-package/second', '/test-package')
+    hook({}, 'test-package/third', '/test-package')
+
+    sinon.assert.calledTwice(requirePackageJson)
+    assert.deepStrictEqual(onrequire.getCalls().map(call => call.args[3]), ['1.0.0', '1.0.0'])
+  })
+
+  it('resolves package versions again for a new hook', () => {
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    ritm.args[0][2]({}, 'test-package/first', '/test-package')
+    requirePackageJson.returns({ version: '2.0.0' })
+    Hook(['test-package'], onrequire)
+    ritm.args[1][2]({}, 'test-package/first', '/test-package')
+
+    assert.deepStrictEqual(onrequire.getCalls().map(call => call.args[3]), ['1.0.0', '2.0.0'])
+    sinon.assert.calledTwice(requirePackageJson)
   })
 
   it('does not read ESM exports from a CommonJS hook result', () => {

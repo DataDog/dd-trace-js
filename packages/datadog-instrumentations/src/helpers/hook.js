@@ -49,6 +49,8 @@ function Hook (modules, hookOptions, onrequire) {
 
   this._patched = Object.create(null)
   const patched = new WeakMap()
+  /** @type {Map<string|undefined, string|undefined>} */
+  const versions = new Map()
 
   /**
    * @param {object|Function|undefined} moduleExports
@@ -80,7 +82,11 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     try {
-      moduleVersion ||= getVersion(moduleBaseDir)
+      moduleVersion ||= versions.get(moduleBaseDir)
+      if (!moduleVersion) {
+        moduleVersion = getVersion(moduleBaseDir)
+        versions.set(moduleBaseDir, moduleVersion)
+      }
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
       return moduleExports
