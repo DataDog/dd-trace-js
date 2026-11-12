@@ -650,7 +650,7 @@ describe('Plugin', () => {
               this.timeout(10000)
               await agent.load(['prisma', 'pg'], { engine: false })
               prisma = loadPrismaModule(config, range)
-              prismaClient = createPrismaClient(prisma, config)
+              prismaClient = createPrismaClient(prisma, config, range)
               tracingHelper = prismaClient._tracingHelper
             })
 
@@ -687,7 +687,7 @@ describe('Plugin', () => {
               this.timeout(10000)
               await agent.load(['prisma', 'pg'], { client: false })
               prisma = loadPrismaModule(config, range)
-              prismaClient = createPrismaClient(prisma, config)
+              prismaClient = createPrismaClient(prisma, config, range)
             })
 
             after(() => { return agent.close() })
