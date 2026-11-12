@@ -30,6 +30,10 @@ const registry = [
     activate: { setup: () => require('../../claude-agent-sdk') },
     instrumentations: require('./instrumentations/claude-agent-sdk'),
   },
+  {
+    activate: { setup: () => require('../../elevenlabs') },
+    instrumentations: require('./instrumentations/elevenlabs'),
+  },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { instrumentations: require('./instrumentations/jest') },

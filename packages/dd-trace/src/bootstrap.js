@@ -1,5 +1,7 @@
 'use strict'
 
+const { runBeforeExitHandlers } = require('./before-exit')
+
 if (!global._ddtrace) {
   const ddTraceSymbol = Symbol.for('dd-trace')
 
@@ -16,9 +18,7 @@ if (!global._ddtrace) {
 
   process.once('beforeExit', function mainBeforeExit () {
     if (globalThis[ddTraceSymbol]?.beforeExitHandlers) {
-      for (const handler of globalThis[ddTraceSymbol].beforeExitHandlers) {
-        handler()
-      }
+      runBeforeExitHandlers(globalThis[ddTraceSymbol].beforeExitHandlers)
     }
   })
 

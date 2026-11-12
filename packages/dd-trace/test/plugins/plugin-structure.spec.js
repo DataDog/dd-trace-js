@@ -118,7 +118,7 @@ describe('Plugin Structure Validation', () => {
 
   const instrumentationFiles = new Set(
     fs.readdirSync(instrumentationsDir)
-      .filter(file => file.endsWith('.js'))
+      .filter(file => file.endsWith('.js') || fs.existsSync(path.join(instrumentationsDir, file, 'index.js')))
       .map(file => file.replace('.js', ''))
   )
 
@@ -144,7 +144,7 @@ describe('Plugin Structure Validation', () => {
           return
         }
 
-        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation entry point: ${pluginId}`)
       })
     })
   })
@@ -233,7 +233,8 @@ describe('Plugin Structure Validation', () => {
       assert.equal(isRewriteActivationEnabled(name), false)
     }
     assert.equal(isRewriteActivationEnabled('graphql'), false)
-    assert.equal(typeof hooks.graphql, 'function')
+    assert.equal(hooks.graphql.esmFirst, true)
+    assert.equal(typeof hooks.graphql.fn, 'function')
   })
 
   it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
