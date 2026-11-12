@@ -133,7 +133,7 @@ async function checkReactivatedSpans (resolved) {
       }
     }
   })
-  await collectReleasedRecords()
+  await collectReleasedRecords(refs)
   assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
   root.setTag('resource.name', 'GET /refined')
   root.finish()
@@ -161,7 +161,7 @@ async function checkRetainedCallbacks (resolved) {
         callback()
       }
     })
-    await collectReleasedRecords()
+    await collectReleasedRecords(refs)
     assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
     if (batch === 0) {
       live[0].finish()
@@ -206,13 +206,14 @@ async function checkRetainedCallbacks (resolved) {
   root.finish()
 }
 
-async function collectReleasedRecords () {
-  await setImmediate()
-  global.gc()
-  // Finalizers remove registry entries before a second collection releases their records.
-  await setImmediate()
-  await setImmediate()
-  global.gc()
+/** @param {Array<WeakRef<object>>} refs */
+async function collectReleasedRecords (refs) {
+  // Finalizer cleanup has no fixed GC-cycle deadline. Use the same bound as Node's gcUntil helper.
+  for (let cycle = 0; cycle < 10; cycle++) {
+    await setImmediate()
+    await global.gc({ execution: 'async', flavor: 'last-resort' })
+    if (refs.every(ref => ref.deref() === undefined)) return
+  }
 }
 
 async function checkRouteRefinements () {
