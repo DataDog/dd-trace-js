@@ -770,7 +770,7 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
-When exporting traces over OTLP, the tracing library delegates APM RED metrics computation
+When exporting traces over OTLP, the tracing library delegates span metrics computation
 to the OpenTelemetry Collector or Datadog intake by default.
 
 dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
