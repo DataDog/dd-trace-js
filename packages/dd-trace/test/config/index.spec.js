@@ -1614,31 +1614,68 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.5)
   })
 
-  it('auto-enables OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED', () => {
+  it('should leave span metrics disabled when OTLP traces and OTel metrics are enabled', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER is not otlp', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'env_var')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'env_var',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when DD_METRICS_OTEL_ENABLED is false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
   })
 
-  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED over auto-enable', () => {
+  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED=false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
+  })
+
+  it('should enable stats computation when OTLP span metrics are explicitly enabled', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'false'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'false'
+    process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'calculated',
+    })
   })
 
   describe('HTTP server error statuses', () => {
