@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
+const Module = require('node:module')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
@@ -208,7 +209,19 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions('graphql', 'graphql', (version, moduleName, graphqlVersion) => {
-      before(() => {
+      before(function () {
+        // GraphQL 17 serves require() its ESM build when require(esm) is enabled. ESM needs the loader
+        // hooks, so register them here as `--import dd-trace/register.js` would.
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection for require(esm).
+        if (semver.gte(graphqlVersion, '17.0.0') && process.features.require_module) {
+          // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection.
+          if (typeof Module.registerHooks !== 'function') {
+            // Earlier loaders cannot observe GraphQL's ESM internals loaded through require().
+            this.skip()
+          }
+          require('../../../register.js')
+        }
+
         sort = spans => spans.sort((a, b) => {
           const order = [
             'graphql.query',

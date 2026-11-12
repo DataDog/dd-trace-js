@@ -1,8 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 const path = require('path')
 const { inspect } = require('node:util')
+
+const semver = require('semver')
 
 const {
   FakeAgent,
@@ -13,19 +16,32 @@ const {
 } = require('../helpers')
 
 describe('graphql', () => {
-  let cwd, agent, webFile, proc
+  let cwd, agent, webFile, proc, execArgv
 
   useSandbox(['@apollo/server', 'graphql'])
 
   before(function () {
     cwd = sandboxCwd()
     webFile = path.join(cwd, 'graphql/index.js')
+
+    // GraphQL 17 serves require() its ESM build when require(esm) is enabled, and ESM needs the loader.
+    const { version } = require(path.join(cwd, 'node_modules/graphql/package.json'))
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection for require(esm).
+    if (semver.gte(version, '17.0.0') && process.features.require_module) {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection.
+      if (typeof Module.registerHooks !== 'function') {
+        // Earlier loaders cannot observe GraphQL's ESM internals loaded through require().
+        this.skip()
+      }
+      execArgv = ['--import', 'dd-trace/register.js']
+    }
   })
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
     proc = await spawnProc(webFile, {
       cwd,
+      execArgv,
       env: {
         AGENT_PORT: agent.port,
       },
