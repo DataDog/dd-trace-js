@@ -4,8 +4,6 @@ const assert = require('node:assert/strict')
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('node:path')
-const http = require('node:http')
 const { execFileSync, execSync, spawn } = require('node:child_process')
 const { once } = require('node:events')
 const { mkdirSync, writeFileSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
