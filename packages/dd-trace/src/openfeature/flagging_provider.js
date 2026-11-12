@@ -40,6 +40,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   #sdkTelemetry
 
+  /** @type {Promise<void> | undefined} */
+  #initializationPromise
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
@@ -113,13 +116,23 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     if (!sdkTelemetry) return promise
-    return promise.then(
-      () => { sdkTelemetry.finish('ready') },
+    if (hasConfiguration) {
+      // Upstream returns immediately when rules are already available.
+      sdkTelemetry.finish('ready')
+      return promise
+    }
+    this.#initializationPromise = promise.then(
+      () => {
+        this.#initializationPromise = undefined
+        sdkTelemetry.finish('ready')
+      },
       error => {
+        this.#initializationPromise = undefined
         sdkTelemetry.finish('failed')
         throw error
       }
     )
+    return this.#initializationPromise
   }
 
   /**
@@ -179,7 +192,16 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
-    this.#sdkTelemetry?.close()
+    const sdkTelemetry = this.#sdkTelemetry
+    let closing
+    if (sdkTelemetry && this.#initializationPromise && this.initController?.isInitializing() === false) {
+      // Rules or an error arrived, but upstream still has promise continuations to run.
+      // Preserve their actual outcome, including a failure during cache initialization.
+      const close = () => sdkTelemetry.close()
+      closing = this.#initializationPromise.then(close, close)
+    } else {
+      sdkTelemetry?.close()
+    }
     this.#configurationSource?.stop()
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
@@ -187,6 +209,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#flagEvalEVPHook?.destroy()
     this.#flagEvalEVPHook = undefined
     log.debug('Feature Flags: provider closed')
+    return closing
   }
 }
 

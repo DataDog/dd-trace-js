@@ -135,6 +135,55 @@ describe('Feature Flags SDK diagnostics', () => {
     }])
   })
 
+  for (const outcome of ['preloaded', 'ready', 'failed', 'rules removed']) {
+    it(`preserves ${outcome} initialization when closed in the same turn`, async () => {
+      create()
+      if (outcome === 'preloaded') provider.setConfiguration(configuration)
+      const pending = provider.initialize()
+      const failed = outcome === 'failed' || outcome === 'rules removed'
+      const error = new Error('initialization failed')
+      const settled = failed
+        ? assert.rejects(pending, outcome === 'failed' ? actual => actual === error : /configuration is unavailable/)
+        : pending
+      if (outcome === 'failed') provider.setError(error)
+      else if (outcome !== 'preloaded') provider.setConfiguration(configuration)
+      if (outcome === 'rules removed') provider.setConfiguration(undefined)
+      provider.onClose()
+      await settled
+      assert.deepStrictEqual(events().map(event => event.initialization.outcome), [failed ? 'failed' : 'ready'])
+      sinon.assert.calledOnce(stopDelivery)
+    })
+  }
+
+  it('preserves a cache initialization failure when closed after receiving rules', async () => {
+    const error = new Error('cache initialization failed')
+    create()
+    sinon.stub(provider.exposureCache, 'init').rejects(error)
+    const pending = provider.initialize()
+    const rejected = assert.rejects(pending, actual => actual === error)
+    provider.setConfiguration(configuration)
+    provider.onClose()
+    await rejected
+    assert.deepStrictEqual(events().map(event => event.initialization.outcome), ['failed'])
+    sinon.assert.calledOnce(stopDelivery)
+  })
+
+  it('keeps a rate-limited outage suppressed after the cooldown expires', async () => {
+    await ready()
+    onFetchResult(false)
+    await clock.tickAsync(59_999)
+    onFetchResult(true)
+    onFetchResult(false)
+    await clock.tickAsync(1)
+    onFetchResult(false)
+    await clock.tickAsync(1000)
+    assert.strictEqual(events().length, 2)
+    onFetchResult(true)
+    onFetchResult(false)
+    provider.onClose()
+    assert.strictEqual(events().length, 3)
+  })
+
   it('reports the existing timeout once and never reports late configuration as recovery', async () => {
     const rejected = assert.rejects(create().initialize(), /Initialization timeout/)
     onFetchResult(false)

@@ -96,9 +96,9 @@ class SDKTelemetry {
     }
     // Startup failures are represented by the initialization result.
     if (!this.#finished || this.#fetchFailed) return
+    this.#fetchFailed = true
     const now = performance.now()
     if (now - this.#lastErrorAt < ERROR_INTERVAL_MS) return
-    this.#fetchFailed = true
     this.#lastErrorAt = now
     this.#emit({ event_type: 'provider_error', error_code: 'CONFIG_FETCH_FAILED' })
   }
