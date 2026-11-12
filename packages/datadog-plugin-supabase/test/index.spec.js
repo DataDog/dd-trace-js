@@ -1003,15 +1003,24 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
 
 describe('with OpenTelemetry HTTP semantics', () => {
   const otelTestSetup = new TestSetup()
+  let originalEnv
 
   before(() => {
-    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = 'width=[^&]*'
+    originalEnv = process.env
+    process.env = {
+      ...originalEnv,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+      DD_TRACE_SAMPLING_RULES: JSON.stringify([
+        { resource: 'GET', sample_rate: 1 },
+        { resource: 'POST', sample_rate: 1 },
+        { resource: 'HTTP', sample_rate: 1 },
+        { sample_rate: 0 },
+      ]),
+    }
   })
 
   after(() => {
-    delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    delete process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    process.env = originalEnv
   })
 
   createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
@@ -1025,19 +1034,28 @@ describe('with OpenTelemetry HTTP semantics', () => {
       await otelTestSetup.teardown()
     })
 
-    it('preserves an obfuscated Storage query in url.full', async () => {
-      const assertion = meta.agent.assertFirstTraceSpan({
-        name: 'supabase.storage.request',
-        meta: {
-          'url.full': 'https://project.supabase.co/storage/v1/render/image/authenticated/files/avatar.png' +
-            '?<redacted>&height=200',
-        },
-      })
+    for (const { queryStringObfuscation, query } of [
+      { queryStringObfuscation: 'width=[^&]*', query: '?<redacted>&height=200' },
+      { queryStringObfuscation: '', query: '?width=100&height=200' },
+      { queryStringObfuscation: '.*', query: '' },
+    ]) {
+      it(`applies Storage query obfuscation ${JSON.stringify(queryStringObfuscation)} to url.full`, async () => {
+        meta.tracer.use('supabase', { queryStringObfuscation })
+        const assertion = meta.agent.assertFirstTraceSpan({
+          name: 'GET',
+          meta: {
+            'url.full': 'https://project.supabase.co/storage/v1/render/image/authenticated/files/avatar.png' + query,
+          },
+        })
 
-      const result = await otelTestSetup.storageFileDownloadWithTransform()
-      assert.ifError(result.error)
-      await assertion
-    })
+        try {
+          const [, result] = await Promise.all([assertion, otelTestSetup.storageFileDownloadWithTransform()])
+          assert.ifError(result.error)
+        } finally {
+          meta.tracer.use('supabase')
+        }
+      })
+    }
 
     for (const { operationName, resource, method, run } of [
       {
@@ -1054,23 +1072,34 @@ describe('with OpenTelemetry HTTP semantics', () => {
       },
       {
         operationName: 'supabase.http.invoke',
+        resource: 'POST',
+        method: 'POST',
+        run: () => otelTestSetup.functionsClientInvoke(),
+      },
+      {
+        operationName: 'supabase.http.invoke',
         resource: 'HTTP',
         method: '_OTHER',
         run: () => otelTestSetup.functionsClientInvokeUnknownMethod(),
       },
     ]) {
-      it(`uses the OTel HTTP resource for ${operationName}`, async () => {
+      it(`uses the OTel ${resource} resource before sampling ${operationName}`, async () => {
         const assertion = meta.agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(Object.hasOwn(span.meta, 'http.method'), false)
+          assert.strictEqual(Object.hasOwn(span.meta, '_dd.otel.instrumentation_http_resource'), false)
           assertObjectContains(span, {
-            name: operationName,
+            name: resource,
             resource,
             meta: { 'http.request.method': method },
+            metrics: { _sampling_priority_v1: 2, '_dd.rule_psr': 1 },
           })
+          if (method === '_OTHER') {
+            assert.strictEqual(span.meta['http.request.method_original'], 'PROPFIND')
+          }
         })
 
-        const result = await run()
+        const [, result] = await Promise.all([assertion, run()])
         assert.ifError(result.error)
-        await assertion
       })
     }
   })
