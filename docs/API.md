@@ -181,6 +181,45 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
+<h3 id="feature-flag-selection">Flag Selection</h3>
+
+Load only the flags a service needs by passing a flag selection before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
+Tags and key patterns are case-sensitive. Tags match exactly. A key pattern matches the whole key: `*` matches any run
+of characters, including none, and every other character, including `?`, is literal.
+Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
+Without a selection, the provider loads every flag.
+
+Values are trimmed, deduplicated and sorted before they are sent. Each list accepts at most 31 values, each value is
+at most 200 UTF-8 bytes, and the request URL is at most 8192 bytes. A selection over these limits, or one that is not an
+object with optional `tags` and `keyPatterns` string arrays, is not sent: the provider logs an error and loads every
+flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
+logs, these errors are written only when `DD_TRACE_DEBUG=true`.
+
+Flag selection has no environment variable. `node --require dd-trace/init` and `node --import dd-trace/initialize.mjs`
+call `init()` without options, and later `init()` calls are ignored, so they cannot set a selection; call `init()` with
+the option in your application or in your own preload file instead. With Single Step Instrumentation, an application
+that installs `dd-trace` and calls `init()` with the option can set a selection, because the injected tracer then skips
+its own `init()`. An application that relies only on the injected tracer cannot set one.
+
+Flag selection applies to agentless delivery only. When flags are delivered through Remote Config
+(`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, or `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true` without a
+configuration source), the provider logs a warning and loads every flag.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
