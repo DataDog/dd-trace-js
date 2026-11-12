@@ -259,6 +259,9 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
+/packages/dd-trace/src/before-exit.js @DataDog/lang-platform-js @DataDog/ml-observability
+/packages/dd-trace/test/before-exit.spec.js @DataDog/lang-platform-js @DataDog/ml-observability
+/benchmark/elevenlabs.js @DataDog/ml-observability
 /.agents/skills/llmobs-integration/ @DataDog/ml-observability
 /.agents/skills/llmobs-testing/ @DataDog/ml-observability
 /.claude/skills/llmobs-integration @DataDog/ml-observability
@@ -273,6 +276,9 @@
 /packages/datadog-instrumentations/src/claude-agent-sdk.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/elevenlabs/ @DataDog/ml-observability
+/packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/elevenlabs.js @DataDog/ml-observability
+/packages/datadog-plugin-elevenlabs/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-plugin-ai/ @DataDog/ml-observability
 /packages/datadog-plugin-anthropic/ @DataDog/ml-observability
@@ -330,6 +336,7 @@
 /packages/dd-trace/test/log-submission/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/fixtures/otel-startup.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities
@@ -363,6 +370,7 @@
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
+/scripts/test/vendor-licenses.spec.js @DataDog/lang-platform-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk

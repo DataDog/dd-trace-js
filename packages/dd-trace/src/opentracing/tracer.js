@@ -21,6 +21,12 @@ const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
+  /**
+   * @readonly
+   * @type {import('../opentelemetry/startup-config').Pipelines}
+   */
+  #startupConfig
+
   constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
@@ -33,9 +39,14 @@ class DatadogTracer {
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
 
     const exportOtlpTraces = getExporter.usesOtlpTraceExporter(config)
+    let traces
     if (exportOtlpTraces) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
+      traces = {
+        protocol: this._exporter.protocol,
+        resourceAttributes: this._exporter.getStartupResourceAttributes(),
+      }
     } else {
       let exporterName = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
       if (config.llmobs?.DD_LLMOBS_ENABLED && !config.isCiVisibility &&
@@ -67,9 +78,22 @@ class DatadogTracer {
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
+    this.#startupConfig = {
+      tracing: true,
+      traces,
+      spanMetrics: this._processor.getSpanMetricsStartupConfig(),
+    }
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+  }
+
+  /**
+   * Returns the configuration captured when tracing initialized.
+   * @returns {import('../opentelemetry/startup-config').Pipelines}
+   */
+  getStartupConfig () {
+    return this.#startupConfig
   }
 
   startSpan (name, options = {}) {

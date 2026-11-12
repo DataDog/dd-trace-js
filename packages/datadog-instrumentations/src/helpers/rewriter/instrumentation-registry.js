@@ -30,6 +30,10 @@ const registry = [
     activate: { setup: () => require('../../claude-agent-sdk') },
     instrumentations: require('./instrumentations/claude-agent-sdk'),
   },
+  {
+    activate: { setup: () => require('../../elevenlabs') },
+    instrumentations: require('./instrumentations/elevenlabs'),
+  },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { instrumentations: require('./instrumentations/jest') },
@@ -38,6 +42,10 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   { instrumentations: require('./instrumentations/openai-agents') },
+  {
+    activate: { setup: () => require('../../openai-agents-realtime') },
+    instrumentations: require('./instrumentations/openai-agents-realtime'),
+  },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
   {
