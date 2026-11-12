@@ -6,6 +6,12 @@ const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLJitExecutePlugin = require('./jit')
+const {
+  GraphQLNativeExecutePlugin,
+  GraphQLNativeParsePlugin,
+  GraphQLNativeResolvePlugin,
+  GraphQLNativeValidatePlugin,
+} = require('./native')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLRequestPlugin = require('./request')
 const { GraphQLResolveErrorPlugin, GraphQLToolsResolveErrorPlugin } = require('./resolve-error')
@@ -17,6 +23,10 @@ class GraphQLPlugin extends CompositePlugin {
     return {
       execute: GraphQLExecutePlugin,
       jit: GraphQLJitExecutePlugin,
+      nativeExecute: GraphQLNativeExecutePlugin,
+      nativeParse: GraphQLNativeParsePlugin,
+      nativeResolve: GraphQLNativeResolvePlugin,
+      nativeValidate: GraphQLNativeValidatePlugin,
       parse: GraphQLParsePlugin,
       // Top-level request span for drivers (mercurius) that funnel through a
       // single entry point and parse/execute internally. graphql-js, apollo,

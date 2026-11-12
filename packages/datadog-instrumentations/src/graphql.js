@@ -53,3 +53,18 @@ for (const extension of ['js', 'mjs']) {
     return utilities
   })
 }
+
+// GraphQL 17 traces itself through its `graphql:*` tracing channels, which the plugin subscribes to.
+// A require() of its ES module build shows module hooks only the entry, so this hook loads the plugin
+// and captures the printer, visitor and utilities functions the entry re-exports.
+for (const file of ['index.js', 'index.mjs']) {
+  addHook({ name: 'graphql', file, versions: ['>=17'] }, graphql => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) {
+      ddGlobal.graphql_printer ??= graphql
+      ddGlobal.graphql_visitor ??= graphql
+      ddGlobal.graphql_utilities ??= graphql
+    }
+    return graphql
+  })
+}

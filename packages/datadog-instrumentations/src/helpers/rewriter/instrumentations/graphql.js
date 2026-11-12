@@ -1,10 +1,11 @@
 'use strict'
 
+// GraphQL 17 publishes its own `graphql:*` tracing channels, which the plugin subscribes to.
 const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'execution/execute.js',
     },
     functionQuery: {
@@ -16,7 +17,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'execution/execute.mjs',
     },
     functionQuery: {
@@ -52,7 +53,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'error/locatedError.js',
     },
     functionQuery: {
@@ -64,7 +65,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'error/locatedError.mjs',
     },
     functionQuery: {
@@ -76,7 +77,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'language/parser.js',
     },
     functionQuery: {
@@ -88,7 +89,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'language/parser.mjs',
     },
     functionQuery: {
@@ -100,7 +101,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'validation/validate.js',
     },
     functionQuery: {
@@ -112,7 +113,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10',
+      versionRange: '>=0.10 <17',
       filePath: 'validation/validate.mjs',
     },
     functionQuery: {

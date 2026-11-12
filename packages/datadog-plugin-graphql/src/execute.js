@@ -609,24 +609,11 @@ function wrapResolve (resolve, isJit = false) {
     // Compilations performed while tracing is disabled have no static JIT
     // descriptor. Their resolver-info path nodes are recreated for each
     // resolver, so use the stable path string to preserve span parenting.
-    const useStringKey = config.collapse || isJit
+    const useStringKey = config.collapse || isJit || rootCtx.native
     const fieldKey = useStringKey ? pathString : infoPath
     const parentTypeName = info.parentType.name
-    let field = rootCtx.fields.get(fieldKey)
-    const collapsedField = field
-    if (config.collapse && field !== undefined && field.parentTypeName !== parentTypeName) {
-      const parentTypeFields = field.parentTypeFields
-      if (parentTypeFields?.parentTypeName === undefined) {
-        field = parentTypeFields?.get(parentTypeName)
-      } else if (parentTypeFields.parentTypeName === parentTypeName) {
-        field = parentTypeFields
-      } else {
-        field = undefined
-      }
-      if (field && infoPath.typename === undefined) {
-        cacheFieldByPath(rootCtx, infoPath, field)
-      }
-    }
+    const collapsedField = rootCtx.fields.get(fieldKey)
+    let field = findCollapsedField(rootCtx, collapsedField, parentTypeName, infoPath)
     const isFirst = !field
 
     if (isFirst) {
@@ -646,25 +633,7 @@ function wrapResolve (resolve, isJit = false) {
         parentStore: null,
         currentStore: null,
       }
-      if (config.collapse && collapsedField) {
-        const parentTypeFields = collapsedField.parentTypeFields
-        if (parentTypeFields === undefined) {
-          collapsedField.parentTypeFields = field
-        } else if (parentTypeFields.parentTypeName === undefined) {
-          parentTypeFields.set(parentTypeName, field)
-        } else {
-          const fieldsByParentType = new Map()
-            .set(collapsedField.parentTypeName, collapsedField)
-            .set(parentTypeFields.parentTypeName, parentTypeFields)
-            .set(parentTypeName, field)
-          collapsedField.parentTypeFields = fieldsByParentType
-        }
-        if (infoPath.typename === undefined) {
-          cacheFieldByPath(rootCtx, infoPath, field)
-        }
-      } else {
-        rootCtx.fields.set(fieldKey, field)
-      }
+      addField(rootCtx, fieldKey, field, collapsedField, infoPath)
     } else {
       field.endTime = REUSED_FIELD_END_TIME
       return callInCollapsedScope(
@@ -698,6 +667,63 @@ function wrapResolve (resolve, isJit = false) {
   }
   originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
+}
+
+/**
+ * Collapsed fields share a path across parent types, so each parent type keeps its own field.
+ *
+ * @param {object} rootCtx
+ * @param {object | undefined} field The field stored for the path.
+ * @param {string} parentTypeName
+ * @param {object} [infoPath]
+ * @returns {object | undefined}
+ */
+function findCollapsedField (rootCtx, field, parentTypeName, infoPath) {
+  if (!rootCtx.config.collapse || field === undefined || field.parentTypeName === parentTypeName) return field
+
+  const parentTypeFields = field.parentTypeFields
+  if (parentTypeFields?.parentTypeName === undefined) {
+    field = parentTypeFields?.get(parentTypeName)
+  } else if (parentTypeFields.parentTypeName === parentTypeName) {
+    field = parentTypeFields
+  } else {
+    field = undefined
+  }
+  if (field && infoPath !== undefined && infoPath.typename === undefined) {
+    cacheFieldByPath(rootCtx, infoPath, field)
+  }
+  return field
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {unknown} fieldKey
+ * @param {object} field
+ * @param {object | undefined} collapsedField The field already stored for the path.
+ * @param {object} [infoPath]
+ */
+function addField (rootCtx, fieldKey, field, collapsedField, infoPath) {
+  if (!rootCtx.config.collapse || !collapsedField) {
+    rootCtx.fields.set(fieldKey, field)
+    return
+  }
+
+  const parentTypeName = field.parentTypeName
+  const parentTypeFields = collapsedField.parentTypeFields
+  if (parentTypeFields === undefined) {
+    collapsedField.parentTypeFields = field
+  } else if (parentTypeFields.parentTypeName === undefined) {
+    parentTypeFields.set(parentTypeName, field)
+  } else {
+    const fieldsByParentType = new Map()
+      .set(collapsedField.parentTypeName, collapsedField)
+      .set(parentTypeFields.parentTypeName, parentTypeFields)
+      .set(parentTypeName, field)
+    collapsedField.parentTypeFields = fieldsByParentType
+  }
+  if (infoPath !== undefined && infoPath.typename === undefined) {
+    cacheFieldByPath(rootCtx, infoPath, field)
+  }
 }
 
 /**
@@ -1312,7 +1338,9 @@ function shouldInstrumentNode (config, path) {
 
 function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-    const fieldKey = rootCtx.config.collapse || field.jitPathKey ? rootCtx.pathCache.get(curr) : curr
+    const fieldKey = rootCtx.config.collapse || field.jitPathKey || rootCtx.native
+      ? rootCtx.pathCache.get(curr)
+      : curr
     const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) {
       if (curr.typename === undefined) {
@@ -1609,7 +1637,196 @@ function addVariableTags (config, span, variableValues) {
   span.addTags(tags)
 }
 
+// --- GraphQL 17 default field resolution -------------------------------------
+
+/**
+ * GraphQL 17 resolves a field without its own `resolve` through the execution's `fieldResolver`, which its
+ * execute channel does not expose. Its resolve channel reports those fields instead, without the resolve info,
+ * so the field node comes from the operation and the parent from the dotted field path.
+ *
+ * @param {object} ctx `graphql:resolve` context
+ * @returns {object | undefined} The store the resolver runs in.
+ */
+function startDefaultField (ctx) {
+  const store = legacyStorage.getStore()
+  const rootCtx = store?.graphqlRootCtx
+  if (!ctx.isDefaultResolver || !rootCtx?.native) return store
+
+  const hasIastSub = iastResolveCh.hasSubscribers
+  const hasResolverSub = resolverStartCh.hasSubscribers
+  if (depthDisabled && !hasIastSub && !hasResolverSub) return store
+
+  const config = rootCtx.config
+  const segments = ctx.fieldPath.split('.')
+  const args = ctx.args
+  const fieldNode = config.source || config.variables || hasResolverSub
+    ? findFieldNode(rootCtx, segments)
+    : undefined
+
+  if (hasIastSub) {
+    iastResolveCh.publish({ rootCtx, args })
+  }
+  if (hasResolverSub) {
+    resolverStartCh.publish({
+      abortController: rootCtx.abortController,
+      createResolverInfo,
+      info: { fieldName: ctx.fieldName, fieldNodes: fieldNode && [fieldNode] },
+      args,
+    })
+  }
+
+  if (depthDisabled || !shouldInstrumentSegments(config, segments)) return store
+
+  const pathString = toPathString(segments, segments.length, config.collapse)
+  const collapsedField = rootCtx.fields.get(pathString)
+  const existing = findCollapsedField(rootCtx, collapsedField, ctx.parentType)
+  // A default resolver returns synchronously, so graphql resolves its children before the next field at its path.
+  const lastDefaultFields = rootCtx.lastDefaultFields ??= new Map()
+  if (existing !== undefined) {
+    existing.endTime = REUSED_FIELD_END_TIME
+    lastDefaultFields.set(pathString, existing)
+    return existing.currentStore
+  }
+
+  const returnType = rootCtx.schema.getType(ctx.parentType)?.getFields()[ctx.fieldName]?.type
+  const field = {
+    fieldNode,
+    fieldName: ctx.fieldName,
+    parentTypeName: ctx.parentType,
+    returnType: returnType ?? ctx.fieldType,
+    baseTypeName: returnType ? getBaseTypeName(returnType) : ctx.fieldType,
+    endTime: PENDING_FIELD_END_TIME,
+    infoPath: undefined,
+    jitPathKey: false,
+    pathString,
+    collapsedKey: pathString,
+    span: null,
+    parentStore: null,
+    currentStore: null,
+  }
+  addField(rootCtx, pathString, field, collapsedField)
+  lastDefaultFields.set(pathString, field)
+
+  const executeSpan = rootCtx.executeSpan
+  rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, executeSpan._getTime(), rootCtx.variableValues,
+    findParentField(rootCtx, segments))
+  ctx.ddField = field
+  ctx.ddRootCtx = rootCtx
+  return field.currentStore
+}
+
+/**
+ * @param {object} ctx `graphql:resolve` context
+ */
+function finishDefaultField (ctx) {
+  const field = ctx.ddField
+  if (field === undefined) return
+  ctx.ddField = undefined
+  ctx.ddRootCtx.plugin.completeResolveSpan(ctx.ddRootCtx, field, ctx.error, ctx.result, ctx.ddFailed === true)
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {string[]} segments
+ * @returns {object | null}
+ */
+function findParentField (rootCtx, segments) {
+  for (let end = segments.length - 1; end > 0; end--) {
+    if (isListIndex(segments[end - 1])) continue
+    const pathString = toPathString(segments, end, rootCtx.config.collapse)
+    const field = rootCtx.lastDefaultFields.get(pathString) ?? rootCtx.fields.get(pathString)
+    if (field) return field
+  }
+  return null
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {string[]} segments
+ * @returns {import('graphql').FieldNode | undefined}
+ */
+function findFieldNode (rootCtx, segments) {
+  if (rootCtx.fragments === undefined) {
+    rootCtx.fragments = new Map()
+    for (const definition of rootCtx.document.definitions) {
+      if (definition.kind === 'FragmentDefinition') rootCtx.fragments.set(definition.name.value, definition)
+    }
+  }
+
+  let selectionSets = [rootCtx.operation?.selectionSet]
+  let fieldNode
+  for (const segment of segments) {
+    if (isListIndex(segment)) continue
+    const fieldNodes = []
+    for (const selectionSet of selectionSets) collectFieldNodes(rootCtx, selectionSet, segment, fieldNodes)
+    fieldNode = fieldNodes[0]
+    if (fieldNode === undefined) return
+    selectionSets = fieldNodes.map(node => node.selectionSet)
+  }
+  return fieldNode
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {import('graphql').SelectionSetNode | undefined} selectionSet
+ * @param {string} responseKey
+ * @param {import('graphql').FieldNode[]} fieldNodes
+ */
+function collectFieldNodes (rootCtx, selectionSet, responseKey, fieldNodes) {
+  if (selectionSet === undefined) return
+  for (const selection of selectionSet.selections) {
+    if (selection.kind === 'Field') {
+      if ((selection.alias ?? selection.name).value === responseKey) fieldNodes.push(selection)
+    } else {
+      const fragment = selection.kind === 'FragmentSpread'
+        ? rootCtx.fragments.get(selection.name.value)
+        : selection
+      collectFieldNodes(rootCtx, fragment?.selectionSet, responseKey, fieldNodes)
+    }
+  }
+}
+
+/**
+ * @param {string} segment
+ */
+function isListIndex (segment) {
+  const code = segment.charCodeAt(0)
+  return code >= 48 && code <= 57
+}
+
+/**
+ * @param {string[]} segments
+ * @param {number} end
+ * @param {boolean} collapse
+ */
+function toPathString (segments, end, collapse) {
+  let pathString = ''
+  for (let i = 0; i < end; i++) {
+    const segment = collapse && isListIndex(segments[i]) ? '*' : segments[i]
+    pathString = i === 0 ? segment : `${pathString}.${segment}`
+  }
+  return pathString
+}
+
+/**
+ * The dotted-path form of {@link shouldInstrumentNode}.
+ *
+ * @param {{ depth: number, countListIndices?: boolean }} config
+ * @param {string[]} segments
+ */
+function shouldInstrumentSegments (config, segments) {
+  if (config.depth < 0) return true
+
+  let depth = 0
+  for (const segment of segments) {
+    if (config.countListIndices || !isListIndex(segment)) depth++
+  }
+  return config.depth >= depth
+}
+
 module.exports = GraphQLExecutePlugin
+module.exports.finishDefaultField = finishDefaultField
+module.exports.startDefaultField = startDefaultField
 module.exports.readJitDefaultInScope = readJitDefaultInScope
 module.exports.recordJitResolverError = recordJitResolverError
 module.exports.resolveCompiledJitField = resolveCompiledJitField
