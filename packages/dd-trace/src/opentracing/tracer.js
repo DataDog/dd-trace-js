@@ -4,6 +4,7 @@ const os = require('os')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
@@ -20,6 +21,12 @@ const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
+  /**
+   * @readonly
+   * @type {import('../opentelemetry/startup-config').Pipelines}
+   */
+  #startupConfig
+
   constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
@@ -31,21 +38,22 @@ class DatadogTracer {
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
 
-    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-    // exporter when the tracer is running in Test Optimization mode. Test spans
-    // (test_session/test_module/ test_suite/test) belong on the citestcycle
-    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-    // vars set in their environment (e.g. for a separate telemetry integration)
-    // silently lose all test spans. The same applies to the Electron exporter:
-    // spans must reach the Electron SDK's IPC bridge, not an OTLP endpoint,
-    // even when OTEL_* vars are set for unrelated telemetry.
-    const exportOtlpTraces = config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
-      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'
+    const exportOtlpTraces = getExporter.usesOtlpTraceExporter(config)
+    let traces
     if (exportOtlpTraces) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
+      traces = {
+        protocol: this._exporter.protocol,
+        resourceAttributes: this._exporter.getStartupResourceAttributes(),
+      }
     } else {
-      const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
+      let exporterName = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
+      if (config.llmobs?.DD_LLMOBS_ENABLED && !config.isCiVisibility &&
+          (!exporterName || exporterName === exporters.AGENT || exporterName === exporters.AGENTLESS)) {
+        exporterName = exporters.LLMOBS
+      }
+      const Exporter = getExporter(exporterName)
       this._exporter = new Exporter(config, this._prioritySampler)
     }
 
@@ -58,8 +66,7 @@ class DatadogTracer {
       this._exporter,
       this._prioritySampler,
       config,
-      otlpStatsExporter,
-      exportOtlpTraces
+      otlpStatsExporter
     )
     this._url = this._exporter._url
     this._enableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
@@ -71,9 +78,22 @@ class DatadogTracer {
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
+    this.#startupConfig = {
+      tracing: true,
+      traces,
+      spanMetrics: this._processor.getSpanMetricsStartupConfig(),
+    }
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+  }
+
+  /**
+   * Returns the configuration captured when tracing initialized.
+   * @returns {import('../opentelemetry/startup-config').Pipelines}
+   */
+  getStartupConfig () {
+    return this.#startupConfig
   }
 
   startSpan (name, options = {}) {

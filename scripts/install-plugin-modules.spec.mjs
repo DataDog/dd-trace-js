@@ -26,6 +26,13 @@ const pureIntegrations = {
 const subscriberOnlyIntegrations = {
   'claude-agent-sdk': ['@anthropic-ai/claude-agent-sdk'],
   'aws-durable-execution-sdk-js': ['@aws/durable-execution-sdk-js'],
+  webdriverio: ['@wdio/cli', '@wdio/local-runner', '@wdio/jasmine-framework', 'webdriverio', '@wdio/utils'],
+}
+
+// Rewrite targets of an entry that narrows activation. They are internal files of the WebdriverIO project,
+// reached through the packages above, and are never installed as fixtures on their own.
+const rewriteOnlyModules = {
+  webdriverio: ['@wdio/config', '@wdio/runner', 'webdriver', 'jasmine-core'],
 }
 
 describe('plugin fixture discovery', () => {
@@ -56,6 +63,16 @@ describe('plugin fixture discovery', () => {
       const expected = [...getHooks(names).values()]
       assert.ok(expected.length > 0, `${plugin} should have rewriter declarations`)
       assert.deepEqual(getInstrumentation(plugin), expected)
+    }
+  })
+
+  it('leaves rewrite-only packages of a narrowed entry out of fixture discovery', () => {
+    for (const [plugin, names] of Object.entries(rewriteOnlyModules)) {
+      const discovered = new Set(getInstrumentation(plugin).map(declaration => declaration.name))
+      assert.ok(getHooks(names).size > 0, `${plugin} should rewrite ${names.join(', ')}`)
+      for (const name of names) {
+        assert.equal(discovered.has(name), false, `${name} should not be a ${plugin} fixture`)
+      }
     }
   })
 

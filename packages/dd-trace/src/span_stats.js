@@ -100,16 +100,42 @@ class SpanAggStats {
   }
 }
 
+/**
+ * Accept canonical decimal strings or numbers in the non-negative int32 range.
+ *
+ * @param {unknown} value
+ */
+function toStatusCode (value) {
+  if (typeof value === 'number') return value === (value | 0) && value >= 0 ? value : undefined
+  if (typeof value !== 'string') return
+
+  const integer = Number(value) | 0
+  return integer >= 0 && String(integer) === value ? integer : undefined
+}
+
+/**
+ * @param {import('./span_format').FormattedSpan} span
+ */
+function httpStatusCode (span) {
+  const datadogStatus = span.meta[HTTP_STATUS_CODE]
+  if (datadogStatus) return datadogStatus
+
+  const otelMetaStatus = toStatusCode(span.meta['http.response.status_code'])
+  if (otelMetaStatus !== undefined) return otelMetaStatus
+
+  return toStatusCode(span.metrics?.['http.response.status_code']) ?? 0
+}
+
 class SpanAggKey {
   constructor (span) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
-    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.statusCode = httpStatusCode(span)
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
-    this.method = span.meta[HTTP_METHOD] || ''
+    this.method = span.meta[HTTP_METHOD] || span.meta['http.request.method'] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.

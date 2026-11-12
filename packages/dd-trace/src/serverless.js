@@ -2,6 +2,7 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const IS_AWS_LAMBDA = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
 const IS_AWS_LAMBDA_MICROVM = getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined
 // Standard Lambda, whose sandbox freezes between invocations. Excludes Lambda Lite (native-http),
 // Managed Instances (lambda-managed-instances) and MicroVMs.
@@ -46,11 +47,10 @@ function getIsFlexConsumptionAzureFunction () {
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
-  return IS_AWS_LAMBDA_MICROVM || inAWSLambda || isGCPFunction || isAzureFunction
+  return IS_AWS_LAMBDA_MICROVM || IS_AWS_LAMBDA || isGCPFunction || isAzureFunction
 }
 
 /**
@@ -112,6 +112,7 @@ module.exports = {
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
   initializeServerlessTelemetry,
+  IS_AWS_LAMBDA,
   IS_AWS_LAMBDA_MICROVM,
   IS_STANDARD_AWS_LAMBDA,
   // true only for a Node that bundles its own OpenSSL, whose CSPRNG keeps the snapshot's DRBG

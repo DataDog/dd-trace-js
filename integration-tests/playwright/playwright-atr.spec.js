@@ -45,6 +45,8 @@ versions.forEach((version) => {
 
   describe(`playwright@${version} native project retry attribution`, function () {
     this.timeout(60000)
+    // Leave time for post-exit drain and process/intake cleanup before Mocha starts a retry.
+    const collectionOptions = { hardTimeout: this.timeout() - 10_000 }
     const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
@@ -66,7 +68,7 @@ versions.forEach((version) => {
           const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retries.length, 2)
           assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
-        })
+        }, collectionOptions)
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 1)
     })
@@ -77,6 +79,8 @@ versions.forEach((version) => {
 
   contextRetryLimits(`playwright@${version} retry exhaustion metadata`, function () {
     this.timeout(60000)
+    // Leave time for post-exit drain and process/intake cleanup before Mocha starts a retry.
+    const collectionOptions = { hardTimeout: this.timeout() - 10_000 }
     const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
@@ -121,7 +125,7 @@ versions.forEach((version) => {
             assert.strictEqual(sessions.length, 1)
             assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
             assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -148,7 +152,7 @@ versions.forEach((version) => {
             const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retries.length, 3)
             assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -184,7 +188,7 @@ versions.forEach((version) => {
             assert.strictEqual(sessions.length, 1)
             assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
             assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })

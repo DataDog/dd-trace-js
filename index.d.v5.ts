@@ -213,7 +213,9 @@ interface Tracer extends opentracing.Tracer {
   /**
    * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Agentless delivery is enabled by default and starts when the provider is first accessed.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed. The default agentless
+   * endpoint requires DD_API_KEY. Without it, provider initialization fails at once. A custom agentless base URL
+   * and Remote Config delivery do not need the key.
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
@@ -312,6 +314,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -359,6 +362,7 @@ interface Plugins {
   "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "react-router": tracer.plugins.react_router;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -991,7 +995,8 @@ declare namespace tracer {
         enabled?: boolean
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
-         * If configuration is not received within this time, initialization fails.
+         * If configuration is not received within this time, initialization fails. It fails at once when the agentless
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
@@ -2764,6 +2769,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
+
+    /**
+     * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
     interface express extends HttpServer {}
@@ -3428,6 +3439,17 @@ declare namespace tracer {
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
     interface protobufjs extends Integration {}
+
+    /**
+     * This plugin automatically instruments
+     * [React Router](https://reactrouter.com/) Framework Mode via the
+     * ServerInstrumentation API (`createRequestHandler`), tagging Express/http
+     * spans with parameterized routes and creating loader/action child spans.
+     *
+     * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     * Configure request span options on `http` or the host framework integration.
+     */
+    interface react_router extends Pick<Instrumentation, 'enabled' | 'measured'> {}
 
     /**
      * This plugin automatically instruments the

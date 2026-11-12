@@ -1,0 +1,32 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "test-rule-directive-value",
+      "name": "test-rule-directive-value",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "graphql.server.resolver",
+                "key_path": ["author", "include", "if"]
+              }
+            ],
+            "type": "boolean",
+            "value": true
+          }
+        }
+      ],
+      "on_match": ["block"]
+    }
+  ]
+}

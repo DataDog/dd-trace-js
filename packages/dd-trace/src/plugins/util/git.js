@@ -88,7 +88,11 @@ function sanitizedExec (
           exitCode: err.status || err.errno,
         })
       }
-      log.error('Git plugin error executing command', err)
+      if (executionOptions?.expectedFailure) {
+        log.debug('Git plugin error executing command', err)
+      } else {
+        log.error('Git plugin error executing command', err)
+      }
       if (executionOptions?.throwOnError) throw err
       return ''
     }
@@ -226,7 +230,7 @@ function getLatestCommits () {
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
-    log.error('Get latest commits failed: %s', err.message)
+    log.error('Get latest commits failed', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_local_commits', errorType: err.status }
@@ -262,7 +266,9 @@ function getGitRemoteName () {
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true } // Detached HEADs and branches without an upstream use the remote-list fallback.
   )
 
   if (upstreamRemote) {
@@ -391,7 +397,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .split('\n')
       .filter(Boolean)
   } catch (err) {
-    log.error('Get commits to upload failed: %s', err.message)
+    log.error('Get commits to upload failed', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
@@ -435,7 +441,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   try {
     result = execGitPackObjects(temporaryPath)
   } catch (err) {
-    log.error('Git plugin error executing git pack-objects command', err)
+    log.debug('Git plugin error executing git pack-objects command, trying the working directory', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }

@@ -657,7 +657,8 @@ class LLMObs extends NoopLLMObs {
   flush () {
     if (!this.enabled) return
 
-    flushCh.publish()
+    flushCh.publish() // communicates with llmobs-specific writers
+    this._tracer.flushAll?.() // trigger any flushes for meta_struct-bound llmobs spans
   }
 
   #autoAnnotate (span, kind, input, output) {
@@ -727,6 +728,7 @@ class LLMObs extends NoopLLMObs {
       mlApp,
       version,
       _decorator,
+      _experimentTags,
       ...spanOptions
     } = options
 
@@ -746,6 +748,7 @@ class LLMObs extends NoopLLMObs {
       sessionId,
       agentVersion,
       _decorator,
+      _experimentTags,
       spanOptions,
     }
   }
