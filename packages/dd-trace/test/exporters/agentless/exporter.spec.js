@@ -220,16 +220,6 @@ describe('AgentlessExporter', () => {
     })
 
     it('should reflect a runtime id updated on config after construction', () => {
-      const writerOptions = {}
-      const Writer = function (opts) {
-        Object.assign(writerOptions, opts)
-        return writer
-      }
-
-      Exporter = proxyquire('../../../src/exporters/agentless', {
-        './writer': Writer,
-      })
-
       const config = {
         site: 'datadoghq.com',
         env: 'production',
@@ -244,16 +234,6 @@ describe('AgentlessExporter', () => {
     })
 
     it('should reflect an env updated on config after construction', () => {
-      const writerOptions = {}
-      const Writer = function (opts) {
-        Object.assign(writerOptions, opts)
-        return writer
-      }
-
-      Exporter = proxyquire('../../../src/exporters/agentless', {
-        './writer': Writer,
-      })
-
       const config = {
         site: 'datadoghq.com',
         env: 'production',

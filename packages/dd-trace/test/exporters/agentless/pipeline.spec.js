@@ -9,6 +9,7 @@ const { decode } = require('@msgpack/msgpack')
 const { after, before, describe, it } = require('mocha')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../../version')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 
 const agent = require('../../plugins/agent')
@@ -163,10 +164,10 @@ describe('AgentlessWriter data pipeline', () => {
       metadata,
     })
 
-    writer.append([{
-      duration: 1,
+    const root = {
+      duration: 5_000_000,
       error: 0,
-      meta: {},
+      meta: { 'http.status_code': '200' },
       metrics: {},
       name: 'operation',
       parent_id: id('0'),
@@ -175,7 +176,22 @@ describe('AgentlessWriter data pipeline', () => {
       span_id: id('2'),
       start: 1,
       trace_id: id('1'),
-    }])
+    }
+    writer.append([
+      root,
+      {
+        ...root,
+        duration: 17_000_000,
+        metrics: { '_dd.measured': 1 },
+        parent_id: id('2'),
+        resource: 'measured-child',
+        span_id: id('3'),
+      },
+      { ...root, parent_id: id('2'), resource: 'ordinary-child', span_id: id('4') },
+    ])
+    writer.append([{ ...root, duration: 7_000_000, error: 1 }])
+    writer.append([{ ...root, duration: 11_000_000, error: 1, meta: { 'http.status_code': '503' } }])
+    writer.append([{ ...root, duration: 13_000_000, resource: 'other-resource' }])
 
     await new Promise(resolve => writer.flushAndDrainStats(resolve))
     const received = await request
@@ -198,7 +214,19 @@ describe('AgentlessWriter data pipeline', () => {
       assert.strictEqual(payload.ClientComputed, true)
       assert.strictEqual(payload.Stats[0].RuntimeID, 'test-runtime-id')
       assert.strictEqual(payload.Stats[0].ContainerID, 'container-id')
-      assert.strictEqual(payload.Stats[0].Stats[0].Stats[0].Resource, 'resource')
+      const groups = payload.Stats[0].Stats.flatMap(bucket => bucket.Stats)
+      assert.strictEqual(groups.some(group => group.Resource === 'ordinary-child'), false)
+      assert.strictEqual(groups.length, 4)
+      for (const expected of [
+        { Resource: 'resource', HTTPStatusCode: 200, Hits: 2, Errors: 1, Duration: 12_000_000, TopLevelHits: 2 },
+        { Resource: 'resource', HTTPStatusCode: 503, Hits: 1, Errors: 1, Duration: 11_000_000, TopLevelHits: 1 },
+        { Resource: 'other-resource', HTTPStatusCode: 200, Hits: 1, Errors: 0, Duration: 13_000_000, TopLevelHits: 1 },
+        { Resource: 'measured-child', HTTPStatusCode: 200, Hits: 1, Errors: 0, Duration: 17_000_000, TopLevelHits: 0 },
+      ]) {
+        const group = groups.find(group =>
+          group.Resource === expected.Resource && group.HTTPStatusCode === expected.HTTPStatusCode)
+        assertObjectContains(group, expected)
+      }
     }
   })
 })

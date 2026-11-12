@@ -272,7 +272,7 @@ describe('AgentlessWriter', () => {
     assert.strictEqual(createAgentlessExporter.firstCall.args[1].agent, undefined)
   })
 
-  it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {
+  it('reuses the pipeline exporter while configuration is unchanged', async () => {
     const URLConstructor = sinon.spy(globalThis.URL)
     sinon.replace(globalThis, 'URL', URLConstructor)
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
@@ -297,6 +297,25 @@ describe('AgentlessWriter', () => {
     assert.strictEqual(createAgentlessExporter.secondCall.args[0].endpoint,
       'https://other-intake.example/api/v2/spans')
   })
+
+  for (const [initialUrl, updatedUrl, initialDeliveries] of [
+    ['https://intake.example', 'http://intake.example', 1],
+    ['http://intake.example', 'https://intake.example', 0],
+  ]) {
+    it(`validates the receiver when the URL changes from ${initialUrl} to ${updatedUrl}`, async () => {
+      writer = new AgentlessWriter({ url: new URL(initialUrl) })
+      await new Promise(resolve => writer.flush(resolve))
+      sinon.assert.callCount(exporter.sendV04, initialDeliveries)
+
+      writer.setUrl(new URL(updatedUrl))
+      await new Promise(resolve => writer.flush(resolve))
+
+      sinon.assert.calledOnce(createAgentlessExporter)
+      sinon.assert.calledOnce(exporter.sendV04)
+      sinon.assert.callCount(exporter.close, initialDeliveries)
+      assert.strictEqual(createAgentlessExporter.firstCall.args[0].endpoint, 'https://intake.example/api/v2/spans')
+    })
+  }
 
   it('recreates the pipeline exporter when the API key changes', async () => {
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
