@@ -33,7 +33,6 @@ class DataloaderLoadPlugin extends TracingPlugin {
 
   /**
    * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
-   * @returns {void}
    */
   asyncEnd (ctx) {
     this.finish(ctx)
@@ -41,7 +40,6 @@ class DataloaderLoadPlugin extends TracingPlugin {
 
   /**
    * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
-   * @returns {void}
    */
   end (ctx) {
     this.finish(ctx)
@@ -49,7 +47,6 @@ class DataloaderLoadPlugin extends TracingPlugin {
 
   /**
    * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
-   * @returns {void}
    */
   finish (ctx) {
     if (ctx.suppressed) return
@@ -62,7 +59,6 @@ class DataloaderLoadPlugin extends TracingPlugin {
 
   /**
    * @param {{ error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
-   * @returns {void}
    */
   error (ctx) {
     if (ctx.suppressed) return
