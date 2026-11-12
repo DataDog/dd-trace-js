@@ -8,16 +8,59 @@ const path = require('node:path')
 const { PassThrough } = require('node:stream')
 const { pathToFileURL } = require('node:url')
 
+const iitm = require('import-in-the-middle')
 const sinon = require('sinon')
 
 const {
   createEsmResolver,
+  createEsmWrapper,
   driveGetExportsGenerator,
   processModule,
 } = require('../../src/helpers/bundler-esm-exports')
 const transformTypeScript = require('./bundler-esm-exports/transform-typescript')
 
 let spawn
+
+describe('bundler ESM wrappers', () => {
+  /** @type {Array<[string, boolean, string, string]>} */
+  const modules = [
+    [require.resolve('./bundler-esm-exports/space ü.mjs'), false, 'fixture/space "ü"', 'unicodePath'],
+    ['node:dns/promises', true, 'node:dns/promises', 'lookup'],
+  ]
+  for (const [modulePath, internal, specifier, exportName] of modules) {
+    it(`registers replaceable exports and the original specifier for ${specifier}`, async () => {
+      const setters = await processModule({
+        path: modulePath,
+        internal,
+        context: { format: 'module' },
+        moduleSources: new Map(),
+      })
+      const code = createEsmWrapper({ path: modulePath, internal, specifier, setters: setters.values() })
+      const moduleURL = internal ? modulePath : pathToFileURL(modulePath).href
+      const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+      const source = code
+        .replace(JSON.stringify(modulePath), JSON.stringify(moduleURL))
+        .replace(JSON.stringify(iitmPath), JSON.stringify(pathToFileURL(iitmPath).href))
+      const replacement = () => 'instrumented'
+      const registrations = []
+      const hook = (url, namespace, originalSpecifier) => {
+        if (url !== moduleURL) return
+        registrations.push(originalSpecifier)
+        namespace[exportName] = replacement
+      }
+      iitm.addHook(hook)
+      try {
+        const exports = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+
+        assert.deepStrictEqual(registrations, [specifier])
+        assert.strictEqual(exports[exportName], replacement)
+        assert.doesNotMatch(code, /dd-trace:bundler:load|new Proxy/)
+      } finally {
+        iitm.removeHook(hook)
+      }
+    })
+  }
+})
 
 function createChild () {
   const child = new EventEmitter()

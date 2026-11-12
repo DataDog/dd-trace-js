@@ -617,6 +617,9 @@ default, so they are loaded from `node_modules` at runtime: start the server wit
 <h3 id="vite-limitations">Limitations</h3>
 
 * The development server (`vite dev`) is not instrumented.
+* Like the esbuild plugin, bundled ES module interception uses `import-in-the-middle`. The generated wrappers and
+  tracer must share the same IITM runtime, and the packages' `package.json` files must remain accessible at their
+  build-time paths for runtime version lookup.
 * Packages outside `node_modules`, such as linked workspace packages, and Yarn Plug'n'Play installations are not
   instrumented.
 * Vite 6.0.0 cannot bundle Node.js built-ins with `ssr.noExternal: true` unless they are listed in
