@@ -4,7 +4,6 @@
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
-const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const {
   hasDsmBase64,
   hasDsmBinary,
@@ -16,7 +15,17 @@ const {
 const log = require('../log')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
 
-const cache = new LRUCache({ max: 500 })
+const MAX_CACHED_PATHWAY_HASHES = 500
+
+/**
+ * Keyed by the exact string that is hashed for the current node (service, env, edge tags and propagation hash).
+ * Each entry holds that string's hash and the final hashes per parent hash, keyed losslessly by the parent's
+ * bytes so distinct parent hashes never share an entry.
+ *
+ * @type {Map<string, { currentHash: Buffer, byParent: Map<string, Buffer> }>}
+ */
+const cache = new Map()
+let cachedPathwayHashes = 0
 
 const PATHWAY_CONTEXT_BYTES = 20
 
@@ -25,7 +34,7 @@ const PATHWAY_CONTEXT_BYTES = 20
 const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
 
 function shaHash (checkpointString) {
-  // Copy out of the 32-byte digest so the LRU cache doesn't retain it.
+  // Copy out of the 32-byte digest so the cache doesn't retain it.
   return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
 }
 
@@ -42,26 +51,35 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
     ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
     : edgeTags
 
-  // The cache key includes parentHash so a fan-in node with different parents
-  // gets distinct cache entries; the hash input below excludes parentHash and
-  // gets combined with it via a second sha pass to produce the final hash.
   const joinedEdgeTags = hashableEdgeTags.join('')
-  const propagationHex = propagationHashBigInt ? propagationHashBigInt.toString(16) : ''
-  const propagationPart = propagationHex ? `:${propagationHex}` : ''
-  const key = `${service}${env}${joinedEdgeTags}${parentHash}${propagationPart}`
+  const baseString = `${service}${env}${joinedEdgeTags}`
+  const hashInput = propagationHashBigInt ? `${baseString}:${propagationHashBigInt.toString(16)}` : baseString
 
-  let value = cache.get(key)
-  if (value) {
-    return value
+  // The hash input excludes parentHash, which is combined with it via a second sha pass to produce the final hash.
+  // A fan-in node with different parents therefore gets distinct entries under the same hash input.
+  let entry = cache.get(hashInput)
+  const parentKey = parentHash.toString('latin1')
+  if (entry !== undefined) {
+    const cached = entry.byParent.get(parentKey)
+    if (cached !== undefined) {
+      return cached
+    }
   }
 
-  const baseString = `${service}${env}${joinedEdgeTags}`
-  const hashInput = propagationHex ? `${baseString}:${propagationHex}` : baseString
+  if (cachedPathwayHashes >= MAX_CACHED_PATHWAY_HASHES) {
+    cache.clear()
+    cachedPathwayHashes = 0
+    entry = undefined
+  }
 
-  const currentHash = shaHash(hashInput)
-  const buf = Buffer.concat([currentHash, parentHash], 16)
-  value = shaHash(buf.toString())
-  cache.set(key, value)
+  if (entry === undefined) {
+    entry = { currentHash: shaHash(hashInput), byParent: new Map() }
+    cache.set(hashInput, entry)
+  }
+
+  const value = shaHash(Buffer.concat([entry.currentHash, parentHash], 16).toString())
+  entry.byParent.set(parentKey, value)
+  cachedPathwayHashes++
   return value
 }
 
