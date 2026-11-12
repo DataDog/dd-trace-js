@@ -1,7 +1,7 @@
 'use strict'
 
-// GraphQL 17 publishes `graphql:*` tracing channels on every Node.js version and module format, so these
-// plugins map their contexts onto the arguments the rewriter channels carry for earlier versions.
+// GraphQL 17 publishes `graphql:*` tracing channels in either module format wherever `process.getBuiltinModule`
+// exists, so these plugins map their contexts onto the arguments the rewriter channels carry elsewhere.
 
 const dc = require('dc-polyfill')
 
@@ -9,7 +9,7 @@ const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
-const { recordResolveError } = require('./resolve-error')
+const { recordResolveError, recordResolveErrorForPath } = require('./resolve-error')
 const GraphQLValidatePlugin = require('./validate')
 const { getOperation } = require('./utils')
 
@@ -27,6 +27,9 @@ const legacyStorage = storage('legacy')
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 
+/** Errors the resolve channel already attributed to their field. */
+const resolveErrors = new WeakSet()
+
 /**
  * The entry of the last GraphQL 17 module loaded. It re-exports the `print`, `visit` and `getOperationAST` that
  * the signature tools need when a require() of its ES module build hides the files that define them.
@@ -34,6 +37,7 @@ const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
  * @type {object | undefined}
  */
 let graphqlEntry
+dc.subscribe('apm:graphql:entry:load', ({ graphql }) => { graphqlEntry = graphql })
 
 class GraphQLNativeParsePlugin extends GraphQLParsePlugin {
   static prefix = 'tracing:graphql:parse'
@@ -57,13 +61,10 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
   static prefix = 'tracing:graphql:execute'
   static extraPrefixes = []
 
-  constructor (...args) {
-    super(...args)
-    this.addSub('apm:graphql:entry:load', ({ graphql }) => { graphqlEntry = graphql })
-  }
-
   bindStart (ctx) {
-    const { schema, document, operationName } = ctx
+    const { schema, document } = ctx
+    // The `operationName` getter resolves the operation and throws on a malformed document.
+    const operationName = Array.isArray(document?.definitions) ? ctx.operationName : undefined
     ctx.arguments = [{ schema, document, variableValues: ctx.rawVariableValues, operationName }]
     const store = super.bindStart(ctx)
 
@@ -91,10 +92,24 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
 
   // A promise result is published on asyncEnd.
   end (ctx) {
-    if (isSettled(ctx)) super.end(ctx)
+    if (isSettled(ctx)) this.#finish(ctx)
   }
 
   asyncEnd (ctx) {
+    this.#finish(ctx)
+  }
+
+  #finish (ctx) {
+    // Errors raised while completing a field, such as a null non-null value, never reach the resolve channel.
+    const errors = ctx.ddRootCtx && ctx.result?.errors
+    if (Array.isArray(errors)) {
+      for (const error of errors) {
+        const originalError = error.originalError ?? error
+        if (Array.isArray(error.path) && !resolveErrors.has(originalError)) {
+          recordResolveErrorForPath(originalError, error.path, undefined, ctx.ddRootCtx)
+        }
+      }
+    }
     super.end(ctx)
   }
 
@@ -128,6 +143,7 @@ class GraphQLNativeResolvePlugin extends TracingPlugin {
 
   error (ctx) {
     ctx.ddFailed = true
+    if (typeof ctx.error === 'object' && ctx.error !== null) resolveErrors.add(ctx.error)
     // Like locatedError(), an error that already carries a path belongs to that path.
     if (ctx.ddReusedField && !Array.isArray(ctx.error?.path)) recordResolveError(ctx.ddReusedField, ctx.error)
   }
@@ -180,6 +196,7 @@ function startField (ctx) {
   }
 
   const fieldType = ctx.fieldType
+  // Same shape and key order as the field `wrapResolve()` builds in execute.js.
   field = {
     fieldNode,
     fieldName: ctx.fieldName,
@@ -221,7 +238,8 @@ function finishField (ctx) {
 }
 
 /**
- * GraphQL publishes `end` with the result of a synchronous call, and on `asyncEnd` for a promise.
+ * GraphQL publishes `end` with the result of a synchronous call, and on `asyncEnd` for a promise. Its context only
+ * gains `result` once the call settles, so a pending promise leaves it absent on `end`.
  *
  * @param {{ result?: unknown, ddFailed?: boolean }} ctx
  */
@@ -230,6 +248,8 @@ function isSettled (ctx) {
 }
 
 /**
+ * The dotted-path form of the execute plugin's `getParentField()`.
+ *
  * @param {object} rootCtx
  * @param {string[]} segments
  * @returns {object | null}
@@ -299,6 +319,8 @@ function isListIndex (segment) {
 }
 
 /**
+ * The dotted-path form of the execute plugin's `buildCachedPathString()`.
+ *
  * @param {string[]} segments
  * @param {number} end
  * @param {boolean} collapse
@@ -313,7 +335,7 @@ function toPathString (segments, end, collapse) {
 }
 
 /**
- * The dotted-path form of the execute plugin's depth check.
+ * The dotted-path form of the execute plugin's `shouldInstrumentNode()`.
  *
  * @param {{ depth: number, countListIndices?: boolean }} config
  * @param {string[]} segments

@@ -2042,6 +2042,30 @@ describe('Plugin', () => {
           return assertion
         })
 
+        it('should record a non-null violation on the field span', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { inner: Inner }
+            type Inner { bad: String! }
+          `)
+          const rootValue = { inner: () => ({ bad: () => null }) }
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: 'query NonNull { inner { bad } }', rootValue }),
+            agent.assertSomeTraces(traces => {
+              const span = traces[0].find(span => span.meta['graphql.field.path'] === 'inner.bad')
+
+              assert.ok(span)
+              assert.strictEqual(span.error, 1)
+            }, { spanResourceMatch: /NonNull/ }),
+          ])
+
+          assert.strictEqual(result.errors.length, 1)
+        })
+
+        it('should not throw from the tracer for a malformed document', () => {
+          assert.throws(() => graphql.execute({ schema, document: {} }))
+        })
+
         it('should handle execution errors', () => {
           const source = '{ hello }'
           const document = graphql.parse(source)
@@ -2670,6 +2694,19 @@ describe('Plugin', () => {
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
+        })
+
+        it('should trace an operation without variables', async () => {
+          const assertion = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'graphql.resolve'))
+          })
+
+          const [, result] = await Promise.all([
+            assertion,
+            graphql.graphql({ schema, source: '{ hello(title: "planet") }' }),
+          ])
+
+          assert.strictEqual(result.errors, undefined)
         })
       })
 

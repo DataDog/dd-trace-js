@@ -443,7 +443,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       rootCtx.resolveFields = field
     }
 
-    if (fieldNode && this.config.variables && fieldNode.arguments) {
+    if (fieldNode && variableValues && this.config.variables && fieldNode.arguments) {
       const variables = this.#filterVariables(rootCtx, variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
@@ -1339,6 +1339,7 @@ function cacheFieldByPath (rootCtx, path, field) {
 // count toward depth; list indices are execution artifacts and are transparent.
 // On the v5 line `countListIndices` keeps the legacy behaviour of counting every
 // node when collapsing folds the numeric indices into '*'.
+// native.js shouldInstrumentSegments() mirrors this check for graphql 17's dotted paths.
 function shouldInstrumentNode (config, path) {
   if (config.depth < 0) return true
 
