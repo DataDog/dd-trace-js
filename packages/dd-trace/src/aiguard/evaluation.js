@@ -145,22 +145,18 @@ function isValidCustomTag (key, value) {
     key.length === 0 ||
     key.length > MAX_META_KEY_LENGTH ||
     key === TAGS.RESERVED_TAG_KEY ||
-    key.startsWith(TAGS.RESERVED_TAG_PREFIX) ||
-    (key === SERVICE_NAME && typeof value !== 'string')
+    key.startsWith(TAGS.RESERVED_TAG_PREFIX)
   ) {
     return false
   }
 
-  switch (typeof value) {
-    case 'string':
-      return value.length <= MAX_META_VALUE_LENGTH
-    case 'number':
-      return Number.isFinite(value)
-    case 'boolean':
-      return true
-    default:
-      return false
+  if (typeof value === 'string') {
+    return value.length <= MAX_META_VALUE_LENGTH
   }
+
+  if (key === SERVICE_NAME) return false
+
+  return typeof value === 'boolean' || Number.isFinite(value)
 }
 
 /**
