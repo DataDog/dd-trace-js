@@ -6,9 +6,8 @@ const {
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const {
+  buildClientHttpUrl,
   extractPathFromUrl,
-  getQsObfuscator,
-  obfuscateQs,
 } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const getHostname = require('./url')
@@ -70,7 +69,7 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
       'span.kind': 'client',
       'http.method': method,
       'http.url': otelSemantics
-        ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, rawUrl)
+        ? buildClientHttpUrl(this.config, '', rawUrl, rawUrl)
         : stripQueryAndFragment(rawUrl),
       'out.host': getHostname(url),
     }

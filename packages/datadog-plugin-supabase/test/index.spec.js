@@ -1057,29 +1057,33 @@ describe('with OpenTelemetry HTTP semantics', () => {
       })
     }
 
-    for (const { operationName, resource, method, run } of [
+    for (const { operationName, resource, method, url, run } of [
       {
         operationName: 'supabase.storage.request',
         resource: 'POST',
         method: 'POST',
+        url: 'https://project.supabase.co/storage/v1/object/list/files',
         run: () => otelTestSetup.storageFileList(),
       },
       {
         operationName: 'supabase.http.getuser',
         resource: 'GET',
         method: 'GET',
+        url: 'https://project.supabase.co/auth/v1/user',
         run: () => otelTestSetup.goTrueClientGetUser(),
       },
       {
         operationName: 'supabase.http.invoke',
         resource: 'POST',
         method: 'POST',
+        url: 'https://project.supabase.co/functions/v1/hello',
         run: () => otelTestSetup.functionsClientInvoke(),
       },
       {
         operationName: 'supabase.http.invoke',
         resource: 'HTTP',
         method: '_OTHER',
+        url: 'https://project.supabase.co/functions/v1/hello',
         run: () => otelTestSetup.functionsClientInvokeUnknownMethod(),
       },
     ]) {
@@ -1090,7 +1094,7 @@ describe('with OpenTelemetry HTTP semantics', () => {
           assertObjectContains(span, {
             name: resource,
             resource,
-            meta: { 'http.request.method': method },
+            meta: { 'http.request.method': method, 'url.full': url },
             metrics: { _sampling_priority_v1: 2, '_dd.rule_psr': 1 },
           })
           if (method === '_OTHER') {
