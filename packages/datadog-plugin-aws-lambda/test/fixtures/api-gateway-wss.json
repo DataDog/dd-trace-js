@@ -1,0 +1,55 @@
+{
+  "headers": {
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Host": "08se3mvh28.execute-api.eu-west-1.amazonaws.com",
+    "Origin": "https://www.piesocket.com",
+    "Pragma": "no-cache",
+    "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+    "Sec-WebSocket-Key": "NjZTRCyloLbGD/YPeURxZA==",
+    "Sec-WebSocket-Version": "13",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+    "X-Amzn-Trace-Id": "Root=1-61e834a7-7b918e142a94fd8d0ca64b5b",
+    "X-Forwarded-For": "71.195.30.42",
+    "X-Forwarded-Port": "443",
+    "X-Forwarded-Proto": "https"
+  },
+  "multiValueHeaders": {
+    "Accept-Encoding": ["gzip, deflate, br"],
+    "Accept-Language": ["en-US,en;q=0.9"],
+    "Cache-Control": ["no-cache"],
+    "Host": ["08se3mvh28.execute-api.eu-west-1.amazonaws.com"],
+    "Origin": ["https://www.piesocket.com"],
+    "Pragma": ["no-cache"],
+    "Sec-WebSocket-Extensions": ["permessage-deflate; client_max_window_bits"],
+    "Sec-WebSocket-Key": ["NjZTRCyloLbGD/YPeURxZA=="],
+    "Sec-WebSocket-Version": ["13"],
+    "User-Agent": [
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
+    ],
+    "X-Amzn-Trace-Id": ["Root=1-61e834a7-7b918e142a94fd8d0ca64b5b"],
+    "X-Forwarded-For": ["71.195.30.42"],
+    "X-Forwarded-Port": ["443"],
+    "X-Forwarded-Proto": ["https"]
+  },
+  "requestContext": {
+    "routeKey": "$connect",
+    "eventType": "CONNECT",
+    "extendedRequestId": "MM0qRGu4GjQFfbQ=",
+    "requestTime": "19/Jan/2022:15:56:23 +0000",
+    "messageDirection": "IN",
+    "stage": "dev",
+    "connectedAt": 1642607783912,
+    "requestTimeEpoch": 1642607783913,
+    "identity": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+      "sourceIp": "71.195.30.42"
+    },
+    "requestId": "MM0qRGu4GjQFfbQ=",
+    "domainName": "08se3mvh28.execute-api.eu-west-1.amazonaws.com",
+    "connectionId": "MM0qReAFGjQCE-w=",
+    "apiId": "08se3mvh28"
+  },
+  "isBase64Encoded": false
+}
