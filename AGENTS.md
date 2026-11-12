@@ -131,13 +131,16 @@ Update every supported public TypeScript surface for new public APIs unless the 
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Add the default in `packages/dd-trace/src/config/defaults.js`.
-2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
-3. Update both supported public TypeScript surfaces when applicable.
-4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
-5. Update `packages/dd-trace/src/config/supported-configurations.json`.
-6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
-7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
+1. Register the option in `packages/dd-trace/src/config/supported-configurations.json`, including its default,
+    type, and `configurationNames` when exposed through `tracer.init()`.
+2. Defaults, environment/programmatic parsing, and canonical configuration telemetry are derived from the registry
+    at runtime by `config/defaults.js` and `config/index.js`. Edit these or `telemetry/telemetry.js` only for behavior
+    the registry cannot express; ordinary options do not need a separate telemetry name mapping.
+3. Run `npm run generate:config:types` and commit the generated configuration types. Update both supported public
+    TypeScript surfaces when applicable.
+4. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
+5. Test the option in `packages/dd-trace/test/config/index.spec.js`. Add telemetry tests when adding or changing
+    a configuration source.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
 

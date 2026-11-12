@@ -23,6 +23,7 @@ const { markCoverageDirectory } = require('./c8-source-map-cache')
  * @param {string} [options.childCoverageDir]
  * @param {boolean} [options.exitImmediately]
  * @param {boolean} [options.failLookup]
+ * @param {boolean} [options.fakeTimers]
  * @param {number} [options.moduleCount]
  */
 async function runFixture (coverageDir, fixtureDir, options = {}) {
@@ -35,6 +36,7 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
   const observerFile = path.join(fixtureDir, 'observe-source-map-lookups.js')
   const parentFile = path.join(fixtureDir, 'parent.js')
   const targetFile = path.join(fixtureDir, 'target.mjs')
+  const lateModuleFile = path.join(fixtureDir, 'late.cjs')
 
   await mkdir(modulesDir)
   const moduleFiles = new Array(moduleCount)
@@ -45,6 +47,8 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
     importLines[i] = `import ${JSON.stringify(pathToFileURL(moduleFile).href)}`
   }
   await Promise.all(moduleFiles)
+  await writeFile(lateModuleFile, 'module.exports = true\n')
+  const lateModuleUrl = pathToFileURL(await realpath(lateModuleFile)).href
 
   await writeFile(observerFile, String.raw`
     'use strict'
@@ -93,6 +97,23 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
     import { createRequire } from 'node:module'
     ${importLines.join('\n')}
     const require = createRequire(import.meta.url)
+    ${options.fakeTimers
+      ? `const assert = require('node:assert/strict')
+    const { readFileSync } = require('node:fs')
+    const { setImmediate: realSetImmediate } = require('node:timers')
+    const sinon = require(${JSON.stringify(require.resolve('sinon'))})
+    await new Promise(resolve => realSetImmediate(resolve))
+    const clock = sinon.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'] })
+    try {
+      require(${JSON.stringify(lateModuleFile)})
+      assert.strictEqual(clock.countTimers(), 0, 'coverage must not schedule work on the test clock')
+      await new Promise(resolve => realSetImmediate(resolve))
+      assert.ok(readFileSync(${JSON.stringify(lookupLog)}, 'utf8').includes(${JSON.stringify(lateModuleUrl)}))
+      assert.strictEqual(clock.countTimers(), 0)
+    } finally {
+      clock.restore()
+    }`
+      : ''}
     writeFileSync(
       ${JSON.stringify(childCoverageLog)},
       process.env.NODE_V8_COVERAGE ?? ''
@@ -180,6 +201,14 @@ describe('c8 source map cache', () => {
       if (lookup.includes('/modules/')) moduleLookups++
     }
     assert.strictEqual(moduleLookups, 200)
+    await assertTailCovered(ownCoverageDir, targetFile)
+  })
+
+  it('warms source maps without adding work to fake timers', async () => {
+    const ownCoverageDir = path.join(fixtureDir, 'own-coverage')
+    markCoverageDirectory(ownCoverageDir)
+    const { targetFile } = await runFixture(ownCoverageDir, fixtureDir, { fakeTimers: true })
+
     await assertTailCovered(ownCoverageDir, targetFile)
   })
 

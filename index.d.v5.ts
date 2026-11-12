@@ -296,6 +296,7 @@ interface Plugins {
   "async-mutex": tracer.plugins.async_mutex;
   "avsc": tracer.plugins.avsc;
   "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
+  "aws-lambda": tracer.plugins.aws_lambda;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
@@ -873,6 +874,25 @@ declare namespace tracer {
        * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
        */
       enableEvaluationTelemetryOptOutParameter?: boolean
+
+      /**
+       * Loads only the flags that have any of these tags or whose key matches any of these key patterns,
+       * instead of every flag. Each list accepts at most 31 values of at most 200 UTF-8 bytes each.
+       * A selection that cannot be sent is dropped with an error log, and every flag is loaded.
+       * Programmatic only, with no environment variable, so `dd-trace/init` cannot set it.
+       * Captured when `tracer.openfeature` is first accessed. Agentless delivery only.
+       */
+      flagSelection?: {
+        /**
+         * Flag tags, such as `checkout`, matched exactly and case-sensitively.
+         */
+        tags?: string[]
+        /**
+         * Flag key patterns, such as `checkout.*`, matched case-sensitively against the whole key.
+         * `*` matches any run of characters, including none; every other character, including `?`, is literal.
+         */
+        keyPatterns?: string[]
+      }
     }
 
     /**
@@ -2578,6 +2598,46 @@ declare namespace tracer {
      * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
      */
     interface aws_durable_execution_sdk_js extends Integration {}
+
+    /** Configuration for AWS Lambda invocation instrumentation in Lambda runtimes. */
+    interface aws_lambda extends Instrumentation {
+      /** @default true @env DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED */
+      serviceRepresentationEnabled?: boolean;
+      /** @default true @env DD_ENHANCED_METRICS */
+      enhancedMetrics?: boolean;
+      /** @default false @env DD_CAPTURE_LAMBDA_PAYLOAD */
+      captureLambdaPayload?: boolean;
+      /** @default 10 @env DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH */
+      captureLambdaPayloadMaxDepth?: number;
+      /** @default true @env DD_TRACE_MANAGED_SERVICES */
+      createInferredSpan?: boolean;
+      /** @default false @env DD_MERGE_XRAY_TRACES */
+      mergeXrayTraces?: boolean;
+      /** @default true @env DD_ENCODE_AUTHORIZER_CONTEXT */
+      encodeAuthorizerContext?: boolean;
+      /** @default true @env DD_DECODE_AUTHORIZER_CONTEXT */
+      decodeAuthorizerContext?: boolean;
+      /** @default true @env DD_COLD_START_TRACING */
+      coldStartTracing?: boolean;
+      /** @default 3 @env DD_MIN_COLD_START_DURATION */
+      minColdStartTraceDurationMs?: number;
+      /** @default './opentracing/tracer' @env DD_COLD_START_TRACE_SKIP_LIB */
+      coldStartTraceSkipLib?: string;
+      /** @default false @env DD_FLUSH_TO_LOG */
+      logForwarding?: boolean;
+      /** Defaults to true in AWS GovCloud regions. @env DD_LAMBDA_FIPS_MODE */
+      fipsMode?: boolean;
+      /** @env DD_KMS_API_KEY */
+      apiKeyKms?: string;
+      /** @env DD_API_KEY_SECRET_ARN */
+      apiKeySecretArn?: string;
+      /** @default true @env DD_TRACE_AWS_ADD_SPAN_POINTERS */
+      addSpanPointers?: boolean;
+      /** @default false @env DD_DATA_STREAMS_ENABLED */
+      dataStreamsEnabled?: boolean;
+      /** Force a second wrapper even when the handler carries the shared wrapped marker. */
+      forceWrap?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
