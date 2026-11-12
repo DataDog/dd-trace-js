@@ -9,7 +9,9 @@
  * hook will always be active for ESM support.
  */
 
-/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
+/* eslint n/no-unsupported-features/node-builtins: [
+  'error', { ignores: ['module.register', 'module.registerHooks'] }
+] */
 
 import { Buffer } from 'buffer'
 import * as Module from 'module'
@@ -100,7 +102,8 @@ if (isMainThread) {
   const initialized = require('./init.js')
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
-  if (Module.register && initialized) {
+  // `registerHooks` alone keeps the gate open once Node.js drops `register` (nodejs/node#67090).
+  if ((Module.registerHooks || Module.register) && initialized) {
     require('./register.js')
   }
 }
