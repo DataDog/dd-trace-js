@@ -332,7 +332,7 @@ describe('AppSec Lambda handler', () => {
     let env
     let getEnvironmentVariable
 
-    const config = (enabled) => ({ appsec: { DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED: enabled } })
+    const config = (enabled) => ({ appsec: { DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED: enabled } })
 
     const startInvocation = (span = fakeSpan()) => {
       lambda.onLambdaStartInvocation({ span, headers: { host: 'example.com' }, method: 'GET', path: '/' })

@@ -31,7 +31,7 @@ let accessKeyId
 function enable (config) {
   accessKeyId = undefined
 
-  if (!config.appsec.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED) return
+  if (!config.appsec.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED) return
 
   // A MicroVM clone resumes from a memory snapshot, environment included, so the variable would hold the key of the
   // snapshotted environment rather than the clone's own.

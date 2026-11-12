@@ -1625,7 +1625,7 @@ describe('AppSec Lambda AWS access key ID', () => {
   })
 
   it('should tag the Lambda invocation span when the feature is enabled', () => {
-    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED = 'true'
+    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED = 'true'
     appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
 
     const tags = publishInvocation()
@@ -1635,7 +1635,7 @@ describe('AppSec Lambda AWS access key ID', () => {
   })
 
   it('should not tag the Lambda invocation span by default', () => {
-    delete process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED
+    delete process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED
     appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
 
     const tags = publishInvocation()
@@ -1645,7 +1645,7 @@ describe('AppSec Lambda AWS access key ID', () => {
   })
 
   it('should not tag the Lambda invocation span once AppSec is disabled (S4)', () => {
-    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED = 'true'
+    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED = 'true'
     appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
     appsec.disable()
 

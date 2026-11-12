@@ -267,7 +267,7 @@
         ]
       }
     ],
-    "DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED": [
+    "DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
