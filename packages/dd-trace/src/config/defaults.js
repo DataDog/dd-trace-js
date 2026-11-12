@@ -303,6 +303,11 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
   }
 }
 
+// Programmatic only. The Feature Flagging provider validates the raw value, and it is redacted because
+// a wrong-shaped selection would otherwise be printed or sent as is in configuration telemetry.
+addOption({ property: 'featureFlags.flagSelection', type: 'PASSTHROUGH' }, ['featureFlags.flagSelection'])
+sensitiveConfigurations.add('featureFlags.flagSelection')
+
 // Replace the alias with the canonical property name.
 for (const [fullPropertyName, alias] of fallbackConfigurations) {
   if (configurationsTable[alias]?.property) {

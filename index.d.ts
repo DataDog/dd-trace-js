@@ -838,6 +838,25 @@ declare namespace tracer {
        * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
        */
       enableEvaluationTelemetryOptOutParameter?: boolean
+
+      /**
+       * Loads only the flags that have any of these tags or whose key matches any of these key patterns,
+       * instead of every flag. Each list accepts at most 31 values of at most 200 UTF-8 bytes each.
+       * A selection that cannot be sent is dropped with an error log, and every flag is loaded.
+       * Programmatic only, with no environment variable, so `dd-trace/init` cannot set it.
+       * Captured when `tracer.openfeature` is first accessed. Agentless delivery only.
+       */
+      flagSelection?: {
+        /**
+         * Flag tags, such as `checkout`, matched exactly and case-sensitively.
+         */
+        tags?: string[]
+        /**
+         * Flag key patterns, such as `checkout.*`, matched case-sensitively against the whole key.
+         * `*` matches any run of characters, including none; every other character, including `?`, is literal.
+         */
+        keyPatterns?: string[]
+      }
     }
 
     /**
