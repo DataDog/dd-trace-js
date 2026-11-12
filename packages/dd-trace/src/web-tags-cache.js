@@ -21,10 +21,8 @@
 // exactly once, regardless of subscription order or how many other
 // consumers are attached.
 //
-// `endpointResolvedCh` is the same idea one field over: published once per
-// web-server span at the moment its endpoint name settles (see finalEndpoint in
-// profiling/webspan-utils.js), i.e. when routing tags stop being interim
-// placeholders. Consumers that must materialize the endpoint eagerly rather
+// `endpointResolvedCh` publishes when a web-server endpoint becomes available
+// or changes as routing resolves. Consumers that must materialize it eagerly rather
 // than read the tag bag at leisure need that moment; owning it here means the
 // one `dd-trace:span:tags:update` subscription this module already holds serves
 // them too, instead of each consumer adding its own subscriber to that hot
@@ -45,8 +43,7 @@ const { finalEndpoint, isWebServerSpan, getStartedSpans } = require('./profiling
 //   resolved:      true once the parent-chain walk has run.
 //   webTags:       the resolved tag bag, or undefined when the walk came up
 //                  empty (no web-server span found in the started-spans chain).
-//   endpointFinal: true once this span is a web-server span whose endpoint name
-//                  has settled and endpointResolvedCh has been published for it.
+//   endpoint:      the last published endpoint name for this web-server span.
 const CachedSym = Symbol('WebTagsCache')
 
 const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
@@ -91,6 +88,7 @@ function getCachedWebTags (span) {
   }
   cached.webTags = webTags
   cached.resolved = true
+  if (webTags === tags && endpointResolvedCh.hasSubscribers) cached.endpoint = finalEndpoint(tags)
   return webTags
 }
 
@@ -121,12 +119,13 @@ function onTagsUpdate (span) {
   // when nobody is listening, keeping this the same early return it used to be
   // for consumers that only care about web-tag discovery.
   if (
-    !endpointResolvedCh.hasSubscribers || cached.endpointFinal || cached.webTags !== tags ||
-    finalEndpoint(tags) === undefined
+    !endpointResolvedCh.hasSubscribers || cached.webTags !== tags
   ) {
     return
   }
-  cached.endpointFinal = true
+  const endpoint = finalEndpoint(tags)
+  if (endpoint === undefined || endpoint === cached.endpoint) return
+  cached.endpoint = endpoint
   endpointResolvedCh.publish(span)
 }
 
