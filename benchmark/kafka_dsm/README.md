@@ -46,8 +46,9 @@ initialized, like Python, so tracer bootstrap and shutdown are excluded.
 ## Running locally
 
 Requires a Kafka broker on `localhost:9092`. `dd-trace` is not a dependency;
-install the checkout's own dependencies (`npm install` at the repository root),
-then link it (`npm install --no-save ../..`) for the traced scenarios.
+install the checkout's own dependencies (`yarn install` with Yarn 1.x at the
+repository root), then link it (`npm install --no-save ../..`) for the traced
+scenarios.
 
 ```bash
 npm ci
