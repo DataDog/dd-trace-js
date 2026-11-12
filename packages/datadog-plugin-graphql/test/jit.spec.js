@@ -402,6 +402,25 @@ void generatedResolver
             `${filePath} retained its compilation context as ${format}`
           )
           assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
+
+          const ast = parse(content, { range: true, isModule: format === 'module' })
+          const [compileArguments] = query(ast,
+            'FunctionDeclaration[id.name="compileArguments"]:has(VariableDeclarator[id.name="valuesExpression"])')
+          if (compileArguments === undefined) continue
+
+          const [start, end] = compileArguments.range
+          const original = content.slice(start, end)
+          for (const binding of ['args', 'bind']) {
+            const renamed = original.replace(new RegExp(`\\b${binding}\\b`, 'g'), `renamed${binding}`)
+            assert.notStrictEqual(renamed, original, `${filePath} did not contain ${binding}`)
+            const unsupported = content.slice(0, start) + renamed + content.slice(end)
+
+            assert.strictEqual(
+              rewrite(unsupported, filename, format),
+              unsupported,
+              `${filePath} was rewritten with a renamed ${binding} binding as ${format}`
+            )
+          }
         }
       })
 
@@ -2270,7 +2289,9 @@ void generatedResolver
             count: 42,
             empty: null,
             emptyFilter: {},
-            filter: { name: null, size: 7, exact: true },
+            filter: semifies(graphqlJit.version(), '>=0.9.4')
+              ? { size: 7, exact: true }
+              : { name: null, size: 7, exact: true },
             flag: true,
             fixedFilter: { name: 'fixed', size: 8, exact: false },
             fixedTags: ['fixed'],

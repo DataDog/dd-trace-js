@@ -86,6 +86,27 @@ const evaluationTelemetryOptOutOption: TracerOptions = {
     enableEvaluationTelemetryOptOutParameter: 'true'
   }
 };
+const flagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+};
+const tagsOnlyFlagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: { tags: ['checkout'] }
+  }
+};
+const invalidFlagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: {
+      // @ts-expect-error Tags must be a list of strings.
+      tags: 'checkout'
+    }
+  }
+};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
@@ -95,7 +116,11 @@ tracer.init({
   url: 'http://localhost',
   runtimeMetrics: true,
   featureFlags: {
-    enableEvaluationTelemetryOptOutParameter: true
+    enableEvaluationTelemetryOptOutParameter: true,
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
   },
   experimental: {
     exporter: 'log'
@@ -353,6 +378,8 @@ tracer.use('anthropic');
 tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
 tracer.use('claude-agent-sdk', { llmobs: false });
+tracer.use('async-mutex');
+tracer.use('async-mutex', { service: 'mutex' });
 tracer.use('avsc');
 tracer.use('aws-lambda');
 tracer.use('aws-lambda', { serviceRepresentationEnabled: false });
@@ -557,6 +584,7 @@ tracer.use('postgres', { dbmPropagationMode: 'invalid' });
 tracer.use('postgres', { truncate: true });
 tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
+tracer.use('prisma', { client: false, engine: false });
 tracer.use('protobufjs');
 tracer.use('react-router');
 tracer.use('react-router', { measured: true });
@@ -853,6 +881,10 @@ llmobs.registerProcessor((llmobsSpan) => {
     })
   }
 
+  if (llmobsSpan.expectedOutput !== undefined) {
+    llmobsSpan.expectedOutput = { redacted: true }
+  }
+
   return llmobsSpan
 })
 
@@ -1092,6 +1124,10 @@ aiguard.evaluate([
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
+
+aiguard.evaluate([
+  { role: 'user', content: 'What is 2 + 2' },
+], { block: false, tags: { 'app.flow': 'checkout', 'app.attempt': 2, 'app.retry': false } })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },

@@ -49,6 +49,7 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'async-mutex',
   'aws-lambda', // AWS Lambda is activated by the serverless bootstrap rather than a module load
   'azure-cosmos',
   'bullmq',
@@ -62,6 +63,7 @@ const missingInstrumentationHooks = [
 ]
 
 const hooklessOrchestrionPlugins = new Set([
+  'async-mutex',
   'azure-cosmos',
   'bullmq',
   'langchain',
