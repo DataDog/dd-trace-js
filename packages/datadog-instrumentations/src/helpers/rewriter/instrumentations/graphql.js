@@ -1,11 +1,16 @@
 'use strict'
 
-// GraphQL 17 publishes its own `graphql:*` tracing channels, which the plugin subscribes to.
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['process.getBuiltinModule'] }] */
+
+// GraphQL 17 publishes its own `graphql:*` tracing channels, which the plugin subscribes to. It skips them where
+// `process.getBuiltinModule` is missing (Node.js <20.16), so the rewriter keeps instrumenting it there.
+const versionRange = typeof process.getBuiltinModule === 'function' ? '>=0.10 <17' : '>=0.10'
+
 const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'execution/execute.js',
     },
     functionQuery: {
@@ -17,7 +22,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'execution/execute.mjs',
     },
     functionQuery: {
@@ -53,7 +58,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'error/locatedError.js',
     },
     functionQuery: {
@@ -65,7 +70,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'error/locatedError.mjs',
     },
     functionQuery: {
@@ -77,7 +82,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'language/parser.js',
     },
     functionQuery: {
@@ -89,7 +94,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'language/parser.mjs',
     },
     functionQuery: {
@@ -101,7 +106,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'validation/validate.js',
     },
     functionQuery: {
@@ -113,7 +118,7 @@ const instrumentations = [
   {
     module: {
       name: 'graphql',
-      versionRange: '>=0.10 <17',
+      versionRange,
       filePath: 'validation/validate.mjs',
     },
     functionQuery: {

@@ -208,6 +208,9 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions('graphql', 'graphql', (version, moduleName, graphqlVersion) => {
+      // GraphQL 17 publishes its own tracing channels wherever `process.getBuiltinModule` exists.
+      const nativeChannels = semver.gte(graphqlVersion, '17.0.0') && 'getBuiltinModule' in process
+
       before(() => {
         sort = spans => spans.sort((a, b) => {
           const order = [
@@ -2016,7 +2019,7 @@ describe('Plugin', () => {
 
         it('should handle execution exceptions', function () {
           // GraphQL 17 reads the arguments before it publishes on its execute channel.
-          if (semver.gte(graphqlVersion, '17.0.0')) this.skip()
+          if (nativeChannels) this.skip()
 
           const source = '{ hello }'
           const document = graphql.parse(source)
@@ -3420,7 +3423,7 @@ describe('Plugin', () => {
             assert.deepStrictEqual(args.schema, params.schema)
 
             // GraphQL 17's execute channel carries only the schema, document, variables and operation name.
-            if (semver.gte(graphqlVersion, '17.0.0')) {
+            if (nativeChannels) {
               const keys = Object.keys(args).sort()
               assert.deepStrictEqual(keys, ['document', 'operationName', 'schema', 'variableValues'])
               assert.deepStrictEqual(args.variableValues, params.variableValues)
@@ -3452,7 +3455,7 @@ describe('Plugin', () => {
 
         it('should trace executions started by the execute hook', function () {
           // The hook finds the nested execution through contextValue, which GraphQL 17's execute channel omits.
-          if (semver.gte(graphqlVersion, '17.0.0')) this.skip()
+          if (nativeChannels) this.skip()
 
           const localSchema = graphql.buildSchema('type Query { outer: String, nested: String }')
           const outerDocument = graphql.parse('query Outer { outer }')
@@ -3570,7 +3573,7 @@ describe('Plugin', () => {
 
         it('should run the execute hook for synchronous exceptions', function () {
           // GraphQL 17 reads the arguments before it publishes on its execute channel.
-          if (semver.gte(graphqlVersion, '17.0.0')) this.skip()
+          if (nativeChannels) this.skip()
 
           const document = graphql.parse('{ hello }')
 
