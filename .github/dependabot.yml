@@ -419,3 +419,13 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
+
+  # Feature Flagging test data shared across SDKs
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - dependabot
+      - dependencies
+      - semver-patch
