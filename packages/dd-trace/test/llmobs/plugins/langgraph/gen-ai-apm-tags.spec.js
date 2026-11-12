@@ -37,16 +37,16 @@ describe('langgraph gen_ai APM attributes with LLM Observability disabled', () =
     plugin.configure({ enabled: false })
   })
 
-  it('tags the graph run as a workflow', () => {
+  it('tags the graph run as an agent', () => {
     publish({ name: 'my-graph' })
 
     assert.deepStrictEqual(apmTags, {
-      'gen_ai.operation.name': 'workflow',
+      'gen_ai.operation.name': 'agent',
       '_dd.llmobs.artificial_gen_ai_tags': 'true',
     })
   })
 
-  // a workflow carries no model, and its metrics are not token counts
+  // an agent carries no model, and its metrics are not token counts
   it('writes no model or usage for a graph run', () => {
     publish({ name: 'my-graph' })
 

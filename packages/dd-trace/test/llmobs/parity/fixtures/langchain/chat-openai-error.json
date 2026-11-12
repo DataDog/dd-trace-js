@@ -1,0 +1,16 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid parameter: 'model' is not supported by the parity stub.",
+          "type": "invalid_request_error",
+          "param": "model",
+          "code": null
+        }
+      }
+    }
+  ]
+}
