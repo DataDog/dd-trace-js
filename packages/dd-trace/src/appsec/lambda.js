@@ -2,7 +2,9 @@
 
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 
+const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
+const { IS_AWS_LAMBDA_MICROVM } = require('../serverless')
 const { isEmpty } = require('../util')
 const addresses = require('./addresses')
 const apiSecurity = require('./api_security')
@@ -12,6 +14,50 @@ const waf = require('./waf')
 const activeInvocations = new WeakMap()
 
 const MAX_RESPONSE_BODY_SIZE = 16 * 1024 * 1024
+
+const ACCESS_KEY_ID_TAG = 'aws.lambda.access_key_id'
+const ACCESS_KEY_ID_PATTERN = /^(?:ASIA|AKIA)[A-Z0-9]{16}$/
+
+/** @type {string | undefined} */
+let accessKeyId
+
+/**
+ * Reads the execution environment's AWS access key ID once, at AppSec start, so that every invocation of this
+ * execution environment carries the same value and the user's code cannot change it before the first invocation.
+ * Only the key ID is read: the secret access key and the session token are never touched.
+ *
+ * @param {import('../config/config-base')} config
+ */
+function enable (config) {
+  accessKeyId = undefined
+
+  if (!config.appsec.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED) return
+
+  // A MicroVM clone resumes from a memory snapshot, environment included, so the variable would hold the key of the
+  // snapshotted environment rather than the clone's own.
+  if (IS_AWS_LAMBDA_MICROVM) {
+    log.debug('[ASM] Lambda MicroVM detected, Lambda spans will not carry the access key ID')
+    return
+  }
+
+  const value = getEnvironmentVariable('AWS_ACCESS_KEY_ID')
+  if (value === undefined || value === '') {
+    log.debug('[ASM] AWS_ACCESS_KEY_ID is not set, Lambda spans will not carry the access key ID')
+    return
+  }
+
+  if (!ACCESS_KEY_ID_PATTERN.test(value)) {
+    // The value is never logged: a malformed key ID may be a secret pasted into the wrong variable.
+    log.debug('[ASM] AWS_ACCESS_KEY_ID does not look like an access key ID, Lambda spans will not carry it')
+    return
+  }
+
+  accessKeyId = value
+}
+
+function disable () {
+  accessKeyId = undefined
+}
 
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
@@ -40,6 +86,10 @@ function onLambdaStartInvocation (data) {
       '_dd.appsec.enabled': 1,
       '_dd.runtime_family': 'nodejs',
     })
+
+    if (accessKeyId !== undefined) {
+      span.setTag(ACCESS_KEY_ID_TAG, accessKeyId)
+    }
 
     const persistent = {}
 
@@ -215,6 +265,8 @@ function isOverSizeCap (rawBody, isBase64Encoded) {
 }
 
 module.exports = {
+  enable,
+  disable,
   onLambdaStartInvocation,
   onLambdaEndInvocation,
 }

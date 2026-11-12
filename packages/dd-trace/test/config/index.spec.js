@@ -933,6 +933,38 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED', () => {
+    it('should default to false', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED, false)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED', value: false, origin: 'default' },
+      ])
+    })
+
+    it('should be enabled from the environment', () => {
+      process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED', value: true, origin: 'env_var' },
+      ])
+    })
+
+    it('should not report the access key ID in configuration telemetry', () => {
+      process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED = 'true'
+      process.env.AWS_ACCESS_KEY_ID = 'ASIAEXAMPLE000000001'
+
+      getConfig()
+
+      const reported = JSON.stringify(updateConfig.getCall(0).args[0])
+      assert.ok(!reported.includes('ASIAEXAMPLE000000001'))
+    })
+  })
+
   describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
     // RFC-1113: reported verbatim in configuration telemetry, always emitted
     // (empty value with origin=default when unset). No effect on tracer behavior.

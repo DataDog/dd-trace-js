@@ -324,6 +324,160 @@ describe('AppSec Lambda handler', () => {
     })
   })
 
+  describe('AWS access key ID', () => {
+    const ACCESS_KEY_ID = 'ASIAEXAMPLE000000001'
+    const CANARY_SECRET = 'CANARY-SECRET-dd-appsec-0000'
+    const CANARY_TOKEN = 'CANARY-TOKEN-dd-appsec-0000'
+
+    let env
+    let getEnvironmentVariable
+
+    const config = (enabled) => ({ appsec: { DD_APPSEC_AWS_ACCESS_KEY_ID_ENABLED: enabled } })
+
+    const startInvocation = (span = fakeSpan()) => {
+      lambda.onLambdaStartInvocation({ span, headers: { host: 'example.com' }, method: 'GET', path: '/' })
+      return span
+    }
+
+    const accessKeyTag = (span) => span.context().getTag('aws.lambda.access_key_id')
+
+    beforeEach(() => {
+      env = {
+        AWS_ACCESS_KEY_ID: ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY: CANARY_SECRET,
+        AWS_SESSION_TOKEN: CANARY_TOKEN,
+      }
+      getEnvironmentVariable = sinon.spy((name) => env[name])
+
+      lambda = loadLambda({ IS_AWS_LAMBDA_MICROVM: false })
+    })
+
+    const loadLambda = (serverless) => proxyquire('../../src/appsec/lambda', {
+      '../config/helper': { getEnvironmentVariable },
+      '../log': log,
+      '../serverless': serverless,
+      './waf': waf,
+      './reporter': Reporter,
+    })
+
+    afterEach(() => {
+      lambda.disable()
+    })
+
+    it('should tag the invocation span with the access key ID when enabled (S1)', () => {
+      lambda.enable(config(true))
+
+      const span = startInvocation()
+
+      assert.equal(accessKeyTag(span), ACCESS_KEY_ID)
+    })
+
+    it('should tag the span even when the WAF raises nothing, and still run the WAF (S7)', () => {
+      lambda.enable(config(true))
+
+      const span = startInvocation()
+
+      sinon.assert.calledOnce(waf.run)
+      assert.equal(accessKeyTag(span), ACCESS_KEY_ID)
+    })
+
+    it('should not read the environment nor tag the span when disabled (S2)', () => {
+      lambda.enable(config(false))
+
+      const span = startInvocation()
+
+      sinon.assert.notCalled(getEnvironmentVariable)
+      assert.equal(accessKeyTag(span), undefined)
+    })
+
+    it('should not tag the span when AppSec never enabled the handler', () => {
+      const span = startInvocation()
+
+      assert.equal(accessKeyTag(span), undefined)
+    })
+
+    it('should stop tagging once disabled', () => {
+      lambda.enable(config(true))
+      lambda.disable()
+
+      const span = startInvocation()
+
+      assert.equal(accessKeyTag(span), undefined)
+    })
+
+    it('should read only AWS_ACCESS_KEY_ID, never the secret access key or the session token (S3)', () => {
+      lambda.enable(config(true))
+      const span = startInvocation()
+
+      assert.deepStrictEqual(getEnvironmentVariable.args, [['AWS_ACCESS_KEY_ID']])
+
+      const written = JSON.stringify([span.addTags.args, span.setTag.args, waf.run.args, log.debug.args])
+      assert.ok(!written.includes(CANARY_SECRET))
+      assert.ok(!written.includes(CANARY_TOKEN))
+    })
+
+    it('should not read the environment nor tag the span in a Lambda MicroVM', () => {
+      lambda = loadLambda({ IS_AWS_LAMBDA_MICROVM: true })
+      lambda.enable(config(true))
+
+      const span = startInvocation()
+
+      sinon.assert.notCalled(getEnvironmentVariable)
+      sinon.assert.notCalled(log.warn)
+      sinon.assert.notCalled(log.error)
+      assert.equal(accessKeyTag(span), undefined)
+    })
+
+    it('should read the variable once and reuse it across invocations (S6)', () => {
+      lambda.enable(config(true))
+
+      const first = startInvocation()
+      env.AWS_ACCESS_KEY_ID = 'ASIAEXAMPLE000000002'
+      const second = startInvocation()
+
+      sinon.assert.calledOnce(getEnvironmentVariable)
+      assert.equal(accessKeyTag(first), ACCESS_KEY_ID)
+      assert.equal(accessKeyTag(second), ACCESS_KEY_ID)
+    })
+
+    for (const value of ['AKIAEXAMPLE000000001', 'ASIA0123456789ABCDEF']) {
+      it(`should accept ${value}`, () => {
+        env.AWS_ACCESS_KEY_ID = value
+        lambda.enable(config(true))
+
+        assert.equal(accessKeyTag(startInvocation()), value)
+      })
+    }
+
+    const rejected = {
+      unset: undefined,
+      empty: '',
+      'one character short': 'ASIAEXAMPLE00000001',
+      'one character long': 'ASIAEXAMPLE0000000001',
+      lowercase: 'asiaexample000000001',
+      'unknown prefix': 'AROAEXAMPLE000000001',
+      'surrounding whitespace': ' ASIAEXAMPLE000000001',
+      'trailing newline': 'ASIAEXAMPLE000000001\n',
+    }
+
+    for (const [name, value] of Object.entries(rejected)) {
+      it(`should not tag the span, log above debug or log the value when the value is ${name} (S5)`, () => {
+        env.AWS_ACCESS_KEY_ID = value
+        lambda.enable(config(true))
+
+        const span = startInvocation()
+
+        assert.equal(accessKeyTag(span), undefined)
+        sinon.assert.notCalled(log.warn)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.calledOnce(log.debug)
+        if (value) {
+          assert.ok(!JSON.stringify(log.debug.args).includes(value.trim()))
+        }
+      })
+    }
+  })
+
   describe('API Security', () => {
     let apiSecurity
     let telemetry
