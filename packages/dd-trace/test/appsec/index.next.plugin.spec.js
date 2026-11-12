@@ -1,12 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { satisfies } = require('semver')
 
-const agent = require('../plugins/agent')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
+const { json } = require('../../src/appsec/blocking/templates')
+const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
 const httpRequest = require('../setup/helpers/http-client')
 const { initApp, startServer } = require('./next.utils')
+const { getWebSpan } = require('./utils')
 
 describe('test suite', () => {
   withVersions('next', 'next', '>=11.1', version => {
@@ -142,6 +147,31 @@ describe('test suite', () => {
             .catch(e => { done(e) })
 
           agent.subscribe(findBodyThreat)
+        })
+
+        describe('with a response blocking rule', () => {
+          it('should report the blocking status code when a Next.js 404 page is blocked', async () => {
+            const [response] = await Promise.all([
+              httpRequest.get(`http://127.0.0.1:${serverData.port}/api/blockresponse`, { validateStatus: false }),
+              agent.assertSomeTraces(traces => {
+                assertObjectContains(getWebSpan(traces), {
+                  error: 0,
+                  meta: {
+                    'appsec.blocked': 'true',
+                    'http.status_code': '403',
+                  },
+                })
+
+                for (const span of traces.flat()) {
+                  if (span.meta['http.status_code'] === undefined) continue
+                  assert.strictEqual(span.meta['http.status_code'], '403', `${span.name} span status code`)
+                }
+              }),
+            ])
+
+            assert.strictEqual(response.status, 403)
+            assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          })
         })
       })
     })

@@ -142,6 +142,10 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan.setTag('appsec.blocked', 'true')
 
     responseBlockedSet.add(res)
+
+    // The blocking response is final, but frameworks may keep running and rewrite the status (Next.js restores it).
+    Object.defineProperty(res, 'statusCode', { configurable: true, enumerable: true, get: () => statusCode, set () {} })
+
     abortController?.abort()
 
     return true
