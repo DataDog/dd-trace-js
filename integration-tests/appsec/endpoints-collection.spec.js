@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const { before, describe, it } = require('mocha')
+const semver = require('semver')
 
 const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
@@ -50,6 +51,8 @@ describe('Endpoints collection', () => {
     ]
 
     if (framework === 'fastify') {
+      const { version } = require(path.join(cwd, 'node_modules', 'fastify', 'package.json'))
+
       expectedEndpoints.push(
         // Route with regex - not supported in express5
         { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
@@ -74,6 +77,10 @@ describe('Endpoints collection', () => {
         { method: 'GET', path: '*' },
         { method: 'HEAD', path: '*' }
       )
+
+      if (semver.gte(version, '5.11.0')) {
+        expectedEndpoints.push({ method: 'QUERY', path: '/all-methods' })
+      }
     }
 
     if (framework === 'express') {

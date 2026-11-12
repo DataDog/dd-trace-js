@@ -5,7 +5,7 @@ require('../src/when')
 const assertPromise = require('./helpers/promise')
 
 assertPromise('when', when => {
-  return function Promise (executor) {
+  return function LibraryPromise (executor) {
     const deferred = when.defer()
 
     executor(deferred.resolve, deferred.reject)

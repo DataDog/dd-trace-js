@@ -452,6 +452,33 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     })
   })
 
+  it('keeps cached skippable tests with missing line coverage when line coverage is unsupported', (done) => {
+    writeCacheLayout(tmpRoot, {
+      skippableTests: {
+        ...SKIPPABLE_RESPONSE,
+        data: [{
+          type: 'suite',
+          attributes: {
+            suite: 'suite1.spec.js',
+            _is_missing_line_code_coverage: true,
+          },
+        }],
+      },
+    })
+    const ciVisibilityExporter = new CiVisibilityExporter({ url, testOptimization: ITR_FEATURE_GATE_ENABLED })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+    ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
+
+    ciVisibilityExporter.getSkippableSuites({
+      isCoverageReportUploadEnabled: true,
+      isLineCoverageSupported: false,
+    }, (err, skippableSuites) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
+      done()
+    })
+  })
+
   it('falls back to live skippable tests when cached skippable tests are missing', (done) => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'skippable_tests.json'))
     getConfig().DD_API_KEY = '1'

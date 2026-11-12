@@ -7,7 +7,7 @@ try {
 
   // eslint-disable-next-line no-console
   console.log(isWrapped)
-} catch (e) {
+} catch {
   const fastify = require('fastify')
 
   // eslint-disable-next-line no-console

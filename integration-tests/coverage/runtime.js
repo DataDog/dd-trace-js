@@ -34,48 +34,36 @@ const rootCache = new Map()
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function canonicalizePath (value) {
   try { return realpathSync(value) } catch { return value }
 }
 
 /**
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {boolean}
+ * @param {typeof process.env} [env]
  */
 function isCoverageActive (env = process.env) {
   return Boolean(env[ROOT_ENV])
 }
 
-/**
- * @returns {string}
- */
 function scriptLabel () {
   const event = process.env.npm_lifecycle_event ?? ''
   return event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
 }
 
-/**
- * @returns {string}
- */
 function labelSuffix () {
   const label = scriptLabel()
   return label ? `-${label}` : ''
 }
 
 /**
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {string}
+ * @param {typeof process.env} [env]
  */
 function getCollectorRoot (env = process.env) {
   if (env[COLLECTOR_ENV]) return env[COLLECTOR_ENV]
   return path.join(REPO_ROOT, '.nyc_output', `integration-tests-collector${labelSuffix()}`)
 }
 
-/**
- * @returns {string}
- */
 function resetCollectorRoot () {
   const root = getCollectorRoot()
   rmSync(root, { force: true, recursive: true })
@@ -89,7 +77,6 @@ function resetCollectorRoot () {
  * and survives sandbox teardown because it lives under the repo-root collector, not the sandbox.
  *
  * @param {string} [collectorRoot]
- * @returns {string}
  */
 function getV8CoverageDir (collectorRoot = getCollectorRoot()) {
   return path.join(collectorRoot, 'v8')
@@ -105,7 +92,6 @@ function getV8CoverageDir (collectorRoot = getCollectorRoot()) {
  *
  * @param {string | undefined} fromDir
  * @param {string | undefined} toDir
- * @returns {number} count of profiles copied
  */
 function copyV8ProfilesSync (fromDir, toDir) {
   if (!fromDir || !toDir || fromDir === toDir) return 0
@@ -123,9 +109,6 @@ function copyV8ProfilesSync (fromDir, toDir) {
   return copied
 }
 
-/**
- * @returns {string}
- */
 function getMergedReportDir () {
   return path.join(REPO_ROOT, 'coverage', `node-${process.version}${labelSuffix()}`)
 }
@@ -215,7 +198,6 @@ function resolveCoverageRoot (options = {}) {
  * preloader (e.g. `-r dd-trace/ci/init`) can't run before the child_process patch is reinstalled.
  *
  * @param {string | undefined} nodeOptions
- * @returns {string}
  */
 function prependBootstrapRequire (nodeOptions) {
   if (nodeOptions?.includes(CHILD_BOOTSTRAP_PATH)) return nodeOptions
@@ -242,11 +224,11 @@ function prependBootstrapRequire (nodeOptions) {
  * copies the parent's value to a child even when a custom env omits it, so omitting is not enough),
  * while a foreign directory the child set itself is preserved.
  *
- * @param {NodeJS.ProcessEnv | undefined} env
+ * @param {typeof process.env | undefined} env
  * @param {object} [options]
  * @param {string} [options.cwd]
  * @param {string | URL} [options.scriptPath]
- * @returns {NodeJS.ProcessEnv | undefined}
+ * @returns {typeof process.env | undefined}
  */
 function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env

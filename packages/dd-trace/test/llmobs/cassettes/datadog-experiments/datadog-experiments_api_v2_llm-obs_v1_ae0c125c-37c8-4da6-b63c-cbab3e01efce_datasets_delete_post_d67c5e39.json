@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/ae0c125c-37c8-4da6-b63c-cbab3e01efce/datasets/delete",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "112"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"attributes\":{\"type\":\"soft\",\"dataset_ids\":[\"16769477-5212-4d4f-b9ce-35344e872781\"]}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "513",
+      "date": "Thu, 13 Aug 2026 17:29:48 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":[{\"id\":\"16769477-5212-4d4f-b9ce-35344e872781\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"created_at\":\"2026-08-13T17:29:48.124908Z\",\"current_version\":2,\"dataset_type\":\"user\",\"deleted_at\":\"2026-08-13T17:29:48.548875Z\",\"description\":\"created by a dd-trace-js experiments batch update VCR test\",\"name\":\"dd-trace-js-experiments-batch-vcr-client-batch-update-dataset\",\"project_id\":\"ae0c125c-37c8-4da6-b63c-cbab3e01efce\",\"updated_at\":\"2026-08-13T17:29:48.440008Z\"}}]}"
+  }
+}

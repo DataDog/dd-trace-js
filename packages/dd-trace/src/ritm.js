@@ -7,7 +7,11 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
-const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const {
+  isBuiltinModuleName,
+  isRelativeRequire,
+  normalizeModuleName,
+} = require('../../datadog-instrumentations/src/helpers/shared-utils')
 const { getConfiguredEnvName, getEnvironmentVariable } = require('./config/helper')
 
 const origRequire = Module.prototype.require
@@ -16,30 +20,12 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
+let hookedModuleCount = 0
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
-
-function stripNodePrefix (name) {
-  if (typeof name !== 'string') return name
-  return name.startsWith('node:') ? name.slice(5) : name
-}
-
-const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
-
-function isBuiltinModuleName (name) {
-  if (typeof name !== 'string') return false
-  if (name === 'electron') return true
-  return builtinModules.has(stripNodePrefix(name))
-}
-
-function normalizeModuleName (name) {
-  if (typeof name !== 'string') return name
-  const stripped = stripNodePrefix(name)
-  return builtinModules.has(stripped) ? stripped : name
-}
 
 /**
  * @overload
@@ -51,6 +37,11 @@ function normalizeModuleName (name) {
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @param {string[]} modules list of modules to hook into
+ * @param {object | Function} [options] hook options, or the `onrequire` callback
+ * @param {Function} [onrequire] callback to be executed upon encountering module
  */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -74,6 +65,7 @@ function Hook (modules, options, onrequire) {
         hooks.push(onrequire)
       } else {
         moduleHooks[mod] = [onrequire]
+        hookedModuleCount++
       }
     }
   }
@@ -100,8 +92,10 @@ function Hook (modules, options, onrequire) {
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[moduleId]) {
-      // require.cache was potentially altered externally
-      const cacheEntry = require.cache[filename]
+      // Use Node's cache: bundlers replace require.cache with their own factory cache,
+      // whose not-yet-evaluated external modules can still have empty exports.
+      // @ts-expect-error - Module._cache is not typed
+      const cacheEntry = Module._cache[filename]
       if (cacheEntry && cacheEntry.exports !== cache[moduleId].original) {
         return cacheEntry.exports
       }
@@ -126,16 +120,19 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    let exports = origRequire.apply(this, arguments)
-    payload.module = exports
-    if (moduleLoadEndChannel.hasSubscribers) {
-      moduleLoadEndChannel.publish(payload)
-      exports = payload.module
+    let exports
+    try {
+      exports = origRequire.apply(this, arguments)
+      payload.module = exports
+    } finally {
+      // Failed loads must close the subscriber's load stack too. Leave module
+      // unset on failure and preserve the original exception for the caller.
+      if (moduleLoadEndChannel.hasSubscribers) {
+        moduleLoadEndChannel.publish(payload)
+        exports = payload.module
+      }
+      delete patching[moduleId]
     }
-
-    // The module has already been loaded,
-    // so the patching mark can be cleaned up.
-    delete patching[moduleId]
 
     if (builtin) {
       hooks = moduleHooks[moduleId]
@@ -215,6 +212,7 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+  hookedModuleCount = 0
 }
 
 function findProjectRoot (startDir) {
@@ -231,16 +229,20 @@ function findProjectRoot (startDir) {
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+    const registeredHooks = moduleHooks[mod]
+    if (registeredHooks === undefined) continue
+
+    const hooks = registeredHooks.filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
       moduleHooks[mod] = hooks
     } else {
       delete moduleHooks[mod]
+      hookedModuleCount--
     }
   }
 
-  if (Object.keys(moduleHooks).length === 0) {
+  if (hookedModuleCount === 0) {
     Hook.reset()
   }
 }

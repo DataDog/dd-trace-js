@@ -6,6 +6,7 @@
 /* eslint-disable sonarjs/no-identical-functions */
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -105,7 +106,100 @@ describe('Plugin', () => {
             req.end()
           })
         })
+        it('redacts credentials in url.full', async () => {
+          const app = stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+          appListener = server(app, () => {})
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          const client = http2.connect(`${protocol}://username:password@localhost:${port}`)
+          try {
+            await once(client, 'connect')
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            })
+            const request = client.request({ ':path': '/user' })
+            const responseReceived = once(request, 'response')
+            const requestClosed = once(request, 'close')
+            request.resume()
+            request.end()
+            const [, [headers]] = await Promise.all([traceReceived, responseReceived, requestClosed])
+            assert.strictEqual(headers[':status'], 200)
+          } finally {
+            client.close()
+          }
+        })
       })
+
+      for (const { description, statuses, validateStatus, errorStatuses } of [
+        { description: 'default', errorStatuses: [400, 499, 500, 599] },
+        { description: 'explicit default-shaped', statuses: '400-499', errorStatuses: [400, 499] },
+        { description: 'custom', statuses: '200', errorStatuses: [200] },
+        {
+          description: 'custom validation',
+          statuses: '400-599',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+        },
+      ]) {
+        describe(`with OTel semantics and ${description} client statuses`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = statuses
+            }
+            await agent.load('http2', { server: false, client: validateStatus ? { validateStatus } : {} })
+            http2 = require(loadPlugin)
+            appListener = server(stream => {
+              stream.respond({ ':status': responseStatus })
+              stream.end()
+            }, () => {})
+            await once(appListener, 'listening')
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 399, 400, 499, 500, 599]) {
+            it(`classifies status ${status} using the configured range origin`, async () => {
+              responseStatus = status
+              const port = appListener.address().port
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              const client = http2.connect(`${protocol}://localhost:${port}`)
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan(span => {
+                    assert.strictEqual(span.error, expectedError)
+                    assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                    assert.strictEqual(span.metrics['http.response.status_code'], status)
+                  }),
+                  (async () => {
+                    const request = client.request({ ':path': '/user' })
+                    request.end()
+                    const [headers] = await once(request, 'response')
+                    request.resume()
+                    await once(request, 'end')
+                    assert.strictEqual(headers[':status'], status)
+                  })(),
+                ])
+              } finally {
+                client.close()
+              }
+            })
+          }
+        })
+      }
 
       describe('without configuration', () => {
         beforeEach(() => {
@@ -816,6 +910,77 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
+              })
+              .then(done)
+              .catch(done)
+
+            const client = http2
+              .connect(`${protocol}://localhost:${port}`)
+              .on('error', done)
+
+            const req = client.request({ ':path': '/user' })
+            req.on('error', done)
+
+            req.end()
+          })
+        })
+      })
+
+      describe('with configured HTTP client error statuses', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '200-201,202'
+
+          return agent.load('http2', { server: false })
+            .then(() => {
+              http2 = require(loadPlugin)
+            })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('should mark a configured status code as an error', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200,
+            })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+                assert.strictEqual(traces[0][0].error, 1)
+              })
+              .then(done)
+              .catch(done)
+
+            const client = http2
+              .connect(`${protocol}://localhost:${port}`)
+              .on('error', done)
+
+            const req = client.request({ ':path': '/user' })
+            req.on('error', done)
+
+            req.end()
+          })
+        })
+
+        it('should not mark a status code outside of the configured statuses as an error', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 500,
+            })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '500')
+                assert.strictEqual(traces[0][0].error, 0)
               })
               .then(done)
               .catch(done)

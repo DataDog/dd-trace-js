@@ -46,6 +46,7 @@ const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-vi
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
+const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
 const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
@@ -77,6 +78,40 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
+    it('attributes explicit test and suite native retries correctly with flat ATR', async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      childProcess = exec('./node_modules/.bin/vitest run', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          TEST_DIR: 'ci-visibility/vitest-tests/native-retry-attribution.mjs',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count] of [
+            ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+            ['shared before inherited', 2], ['shared override', 2], ['shared after inherited', 2],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const reason = name.endsWith('inherited') ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'), name)
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
+
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
         const eventsPromise = receiver
@@ -85,12 +120,8 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
             metadataDicts.forEach(metadata => {
-              assert.ok(
-                !Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS),
-                `Available keys: ${inspect(Object.keys(metadata.test))}`
-              )
-
               assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: '1',
                 [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
                 [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
                 [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
@@ -681,10 +712,72 @@ versions.forEach((version) => {
       })
     })
 
+    context('test impact analysis with user coverage', () => {
+      for (const coverageProvider of ['v8', 'istanbul']) {
+        for (const { description, env } of [
+          { description: 'with isolation', env: {} },
+          { description: 'without isolation', env: { NO_ISOLATE: 'true' } },
+        ]) {
+          it(`preserves aggregate ${coverageProvider} coverage ${description} when TIA runs no skips`, async () => {
+            async function runAndGetCoverage (settings) {
+              receiver.setSettings(settings)
+              testOutput = ''
+              childProcess = exec('./node_modules/.bin/vitest run --coverage', {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                  TEST_DIR: 'ci-visibility/vitest-tests/tia-{first,second}.mjs',
+                  COVERAGE_PROVIDER: coverageProvider,
+                  ...env,
+                },
+              })
+              childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+              childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+              await receiver.gatherPayloadsUntilChildExit(
+                childProcess,
+                ({ url }) => url === '/api/v2/citestcycle' || url === '/api/v2/citestcov',
+                () => {},
+                { hardTimeout: 60_000 }
+              )
+
+              assert.strictEqual(childProcess.exitCode, 0, testOutput)
+              const linePctMatch = testOutput.match(linePctMatchRegex)
+              assert.ok(linePctMatch, testOutput)
+              assert.ok(testOutput.includes('Coverage report from'), testOutput)
+              assert.strictEqual(fs.existsSync(path.join(cwd, 'coverage/lcov.info')), true)
+
+              return Number(linePctMatch[1])
+            }
+
+            const settings = {
+              coverage_report_upload_enabled: false,
+              tests_skipping: false,
+            }
+            const baselineCoverage = await runAndGetCoverage({
+              ...settings,
+              itr_enabled: false,
+              code_coverage: false,
+            })
+            const tiaCoverage = await runAndGetCoverage({
+              ...settings,
+              itr_enabled: true,
+              code_coverage: true,
+            })
+
+            assert.strictEqual(tiaCoverage, baselineCoverage)
+          })
+        }
+      }
+    })
+
     // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
     // v4 dropped support for Node 18
-    if (version === 'latest' && NODE_MAJOR >= 20) {
-      context('coverage report upload', () => {
+    {
+      const coverageReportUploadContext = version === 'latest' && NODE_MAJOR >= 20 ? context : context.skip
+
+      coverageReportUploadContext('coverage report upload', () => {
         const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
 
@@ -1319,8 +1412,10 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-      if (version === 'latest') {
-        it('sets final_status tag to skip for disabled tests', async () => {
+      {
+        const latestVersionTest = version === 'latest' ? it : it.skip
+
+        latestVersionTest('sets final_status tag to skip for disabled tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {
@@ -1380,7 +1475,7 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-        it('sets final_status tag to skip for quarantined tests', async () => {
+        latestVersionTest('sets final_status tag to skip for quarantined tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {
@@ -1483,7 +1578,16 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout?.on('data', data => { testOutput += data.toString() })
+          childProcess.stderr?.on('data', data => { testOutput += data.toString() })
+
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+          // The main process reconstructs this summary from the worker trace payloads.
+          assert.match(
+            testOutput,
+            /Quarantined: 4 tests run; 3 failures did not affect the test session\./
+          )
         })
       }
     })

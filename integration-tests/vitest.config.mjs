@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
+import { BaseSequencer } from 'vitest/node'
 
 let defineVitestConfig = defineConfig
 
-class CustomSequencer {
+class CustomSequencer extends BaseSequencer {
   async shard (files) {
     return files
   }
@@ -12,7 +13,7 @@ class CustomSequencer {
       // eslint-disable-next-line no-console
       console.log(process.env.CUSTOM_SEQUENCER_MARKER)
     }
-    return files
+    return super.sort(files)
   }
 }
 
@@ -25,6 +26,35 @@ const config = {
   },
 }
 
+if (['native-tags', 'plain-tags'].includes(process.env.EXCLUSIONS_MODE)) {
+  config.test.tags = Object.freeze([
+    Object.freeze({ name: 'flaky', retry: 2, meta: Object.freeze({ userTag: 'preserved' }) }),
+    Object.freeze({ name: 'plain' }),
+  ])
+}
+
+if (process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS) {
+  const plugin = { name: 'user-optimizer-plugin' }
+  const plugins = process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'scalar'
+    ? plugin
+    : process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'promised'
+      ? Promise.resolve(plugin)
+      : [null, undefined, false, []]
+  config.optimizeDeps = {
+    rolldownOptions: { plugins },
+  }
+}
+
+if (process.env.VITEST_THROWING_REPORTER) {
+  config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
+}
+
+if (process.env.VITEST_PRESERVE_SYMLINKS) {
+  config.resolve = {
+    preserveSymlinks: true,
+  }
+}
+
 const poolConfig = process.env.POOL_CONFIG || 'forks'
 if (!process.env.USE_VITEST_DEFAULT_POOL) {
   config.test.pool = poolConfig
@@ -32,6 +62,12 @@ if (!process.env.USE_VITEST_DEFAULT_POOL) {
 
 if (process.env.NO_ISOLATE) {
   config.test.isolate = false
+}
+
+if (process.env.VITEST_NATIVE_MODULE_RUNNER) {
+  config.test.experimental = {
+    viteModuleRunner: false,
+  }
 }
 
 if (process.env.POOL_NO_ISOLATE) {
@@ -46,14 +82,106 @@ if (process.env.VITEST_SETUP_FILE) {
   config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }
 
+if (process.env.VITEST_PARTIAL_PROCESS_SHIM) {
+  config.define = {
+    'globalThis.process': JSON.stringify({
+      env: {},
+      versions: {
+        node: '20.0.0',
+      },
+    }),
+  }
+}
+
 if (process.env.CUSTOM_SEQUENCER) {
   config.test.sequence = {
     sequencer: CustomSequencer,
   }
 }
 
+if (process.env.VITEST_HOOKS_SEQUENCE) {
+  config.test.sequence = {
+    ...config.test.sequence,
+    hooks: process.env.VITEST_HOOKS_SEQUENCE,
+  }
+}
+
 if (process.env.VITEST_RUNNER) {
   config.test.runner = process.env.VITEST_RUNNER
+}
+
+const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
+const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
+
+async function getBrowserProvider () {
+  if (!process.env.VITEST_BROWSER_PROVIDER_FACTORY) return browserProvider
+
+  if (browserProvider === 'webdriverio') {
+    const { webdriverio } = await import('@vitest/browser-webdriverio')
+    const capabilities = {
+      'wdio:enforceWebDriverClassic': true,
+      'goog:chromeOptions': {
+        args: ['disable-dev-shm-usage', 'no-sandbox'],
+      },
+    }
+    if (process.env.VITEST_BROWSER_BINARY) {
+      capabilities['goog:chromeOptions'].binary = process.env.VITEST_BROWSER_BINARY
+    }
+    if (process.env.VITEST_BROWSER_DRIVER_BINARY) {
+      capabilities['wdio:chromedriverOptions'] = {
+        binary: process.env.VITEST_BROWSER_DRIVER_BINARY,
+      }
+    }
+    return webdriverio({
+      capabilities,
+    })
+  }
+
+  return (await import('@vitest/browser-playwright')).playwright()
+}
+
+if (process.env.VITEST_BROWSER_MODE) {
+  config.test.browser = {
+    connectTimeout: process.env.VITEST_BROWSER_CONNECT_TIMEOUT
+      ? Number(process.env.VITEST_BROWSER_CONNECT_TIMEOUT)
+      : undefined,
+    enabled: true,
+    headless: true,
+    provider: await getBrowserProvider(),
+    instances: [{
+      browser: browserName,
+      name: `browser-${browserName}`,
+    }],
+  }
+}
+
+if (process.env.VITEST_MIXED_BROWSER_MODE) {
+  config.test.projects = [
+    {
+      extends: false,
+      test: {
+        include: ['ci-visibility/vitest-browser-tests/mixed-node.mjs'],
+        name: 'node-project',
+        pool: 'forks',
+      },
+    },
+    {
+      extends: false,
+      test: {
+        browser: {
+          enabled: true,
+          headless: true,
+          provider: await getBrowserProvider(),
+          instances: [{
+            browser: browserName,
+            name: `browser-${browserName}`,
+          }],
+        },
+        include: [process.env.TEST_DIR || 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
+        name: 'browser-project',
+      },
+    },
+  ]
 }
 
 if (process.env.PROJECT_POOL_CONFIG) {
@@ -80,7 +208,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
       },
     }
   }
-  projectConfigs.push({ test: firstProjectConfig })
+  projectConfigs.push({ extends: false, test: firstProjectConfig })
 
   if (process.env.SECOND_PROJECT_CONFIG_FILE) {
     projectConfigs.push('vitest.second-project.config.mjs')
@@ -100,7 +228,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
     if (process.env.SECOND_PROJECT_UNNAMED) {
       delete secondProjectConfig.name
     }
-    projectConfigs.push({ test: secondProjectConfig })
+    projectConfigs.push({ extends: false, test: secondProjectConfig })
   }
 
   config.test.projects = projectConfigs
@@ -109,7 +237,7 @@ if (process.env.PROJECT_POOL_CONFIG) {
 if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',
-    include: ['ci-visibility/vitest-tests/**'],
+    include: [process.env.COVERAGE_INCLUDE || 'ci-visibility/vitest-tests/**'],
     reporter: ['text-summary', 'lcov'],
   }
 }

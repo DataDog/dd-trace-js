@@ -1,8 +1,15 @@
 'use strict'
 
-const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const {
+  readDatadogParentId,
+  readDatadogSamplingPriority,
+  readDatadogTraceId,
+  readTraceparent,
+} = require('../../dd-trace/src/carrier')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 const id = require('../../dd-trace/src/id')
+const SpanContext = require('../../dd-trace/src/opentracing/span_context')
+const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
@@ -21,7 +28,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
   handleMessagePublish ({ attributes, pubsub, topicName }) {
     // Skip if message already has trace context from upstream
-    if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+    if (readDatadogTraceId(attributes) || readTraceparent(attributes)) return
 
     const activeSpan = this.tracer.scope().active()
     if (!activeSpan) return
@@ -36,6 +43,24 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     if (topicName) attributes['pubsub.topic'] = topicName
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled || ctx.api !== 'publish' || !ctx.currentStore) return
+    const { request } = ctx
+    const messages = request.messages || []
+    const topic = request.topic
+    const { span } = ctx.currentStore
+
+    for (const msg of messages) {
+      const attributes = msg.attributes ??= {}
+      const dataStreamsContext = this.tracer.setCheckpoint(
+        ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
+        span,
+        getHeadersSize(msg)
+      )
+      DsmPathwayCodec.encode(dataStreamsContext, attributes)
+    }
+  }
+
   bindStart (ctx) {
     const { request, api, projectId } = ctx
     if (api !== 'publish') return
@@ -43,7 +68,10 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const messages = request.messages || []
     const topic = request.topic
     const messageCount = messages.length
-    const hasTraceContext = messages[0]?.attributes?.['x-datadog-trace-id']
+    const hasTraceContext = messages[0]?.attributes && readDatadogTraceId(messages[0].attributes)
+    const parentContext = hasTraceContext && readDatadogParentId(messages[0].attributes)
+      ? this.tracer.extract('text_map', messages[0].attributes)
+      : undefined
 
     /**
      * Batch Publishing Strategy:
@@ -54,28 +82,18 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
      * - Inject batch span context + metadata into all message attributes for downstream
      *   consumers to reconstruct the trace and understand batch relationships
      */
-    const spanLinkData = []
+    const spanLinks = []
     if (hasTraceContext) {
       for (let i = 1; i < messageCount; i++) {
         const link = this.#extractSpanLink(messages[i].attributes)
-        if (link) spanLinkData.push(link)
+        if (link) spanLinks.push(link)
       }
     }
-
-    const firstAttrs = messages[0]?.attributes
-    const parentData = firstAttrs?.['x-datadog-trace-id'] && firstAttrs['x-datadog-parent-id']
-      ? {
-          traceId: firstAttrs['x-datadog-trace-id'],
-          spanId: firstAttrs['x-datadog-parent-id'],
-          traceIdUpper: firstAttrs['_dd.p.tid'],
-          samplingPriority: firstAttrs['x-datadog-sampling-priority'],
-        }
-      : null
 
     const lastSlash = topic.lastIndexOf('/')
     const topicName = lastSlash === -1 ? topic : topic.slice(lastSlash + 1)
     const batchSpan = this.startSpan({
-      childOf: parentData ? this.#extractParentContext(parentData) : undefined,
+      childOf: parentContext,
       resource: `${api} to Topic ${topicName}`,
       meta: {
         'gcloud.project_id': projectId,
@@ -84,7 +102,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         'span.kind': 'producer',
         '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
-        'pubsub.linked_message_count': spanLinkData.length || undefined,
+        'pubsub.linked_message_count': spanLinks.length || undefined,
         operation: messageCount > 1 ? 'batched.pubsub.request' : 'pubsub.request',
       },
       metrics: {
@@ -101,19 +119,10 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const batchTraceIdHex = fullTraceIdHex.slice(-16)
     const batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
 
-    if (spanLinkData.length) {
-      batchSpan.setTag('_dd.span_links', JSON.stringify(
-        spanLinkData.map(link => ({
-          trace_id: link.traceId,
-          span_id: link.spanId,
-          flags: link.samplingPriority || 0,
-        }))
-      ))
-    }
+    if (spanLinks.length) batchSpan.addLinks(spanLinks)
 
     const messageCountStr = String(messageCount)
     const startTimeStr = String(Math.floor(batchSpan._startTime))
-    const dsmEnabled = this.config.dsmEnabled
 
     for (let i = 0; i < messageCount; i++) {
       const msg = messages[i]
@@ -137,15 +146,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       if (batchTraceIdUpper) {
         attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
       }
-
-      if (dsmEnabled) {
-        const dataStreamsContext = this.tracer.setCheckpoint(
-          ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
-          batchSpan,
-          getHeadersSize(msg)
-        )
-        DsmPathwayCodec.encode(dataStreamsContext, attributes)
-      }
     }
 
     ctx.batchSpan = batchSpan
@@ -165,35 +165,24 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   }
 
   #extractSpanLink (attrs) {
-    if (!attrs?.['x-datadog-trace-id'] || !attrs['x-datadog-parent-id']) return null
+    if (!attrs) return null
+    const traceId = readDatadogTraceId(attrs)
+    const spanId = readDatadogParentId(attrs)
+    if (!traceId || !spanId) return null
 
-    // Convert to hex strings
-    const lowerHex = id(attrs['x-datadog-trace-id']).toString(16)
-    const spanIdHex = id(attrs['x-datadog-parent-id']).toString(16)
-
-    // Build full 128-bit trace ID
-    const traceIdHex = attrs['_dd.p.tid']
-      ? attrs['_dd.p.tid'] + lowerHex
-      : lowerHex.padStart(32, '0')
-
+    const samplingPriority = readDatadogSamplingPriority(attrs)
     return {
-      traceId: traceIdHex,
-      spanId: spanIdHex,
-      samplingPriority: attrs['x-datadog-sampling-priority']
-        ? Number.parseInt(attrs['x-datadog-sampling-priority'], 10)
-        : undefined,
+      context: new SpanContext({
+        traceId: id(traceId, 10),
+        spanId: id(spanId, 10),
+        sampling: { priority: samplingPriority ? Number.parseInt(samplingPriority, 10) : 0 },
+        trace: {
+          started: [],
+          finished: [],
+          tags: attrs['_dd.p.tid'] ? { '_dd.p.tid': attrs['_dd.p.tid'] } : {},
+        },
+      }),
     }
-  }
-
-  #extractParentContext (data) {
-    const carrier = {
-      'x-datadog-trace-id': data.traceId,
-      'x-datadog-parent-id': data.spanId,
-    }
-    if (data.traceIdUpper) carrier['_dd.p.tid'] = data.traceIdUpper
-    if (data.samplingPriority) carrier['x-datadog-sampling-priority'] = String(data.samplingPriority)
-
-    return this.tracer.extract('text_map', carrier)
   }
 }
 

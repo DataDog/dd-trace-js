@@ -9,7 +9,6 @@ const digitRegex = /^\d+$/
  *   { 'a.0.b': 'value' } -> { a: [{ b: 'value' }] }
  *
  * @param {object} tags - Key/value pairs of tags
- * @returns Object - Parsed tags
  */
 module.exports = function parseTags (tags) {
   const parsedTags = {}

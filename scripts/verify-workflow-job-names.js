@@ -17,15 +17,13 @@ const githubWorkflowExpressionText = '$' + '{{ github.workflow }}'
 /**
  * @param {string} checkName
  * @param {string} workflowName
- * @returns {string}
  */
 function resolveWorkflowNameExpression (checkName, workflowName) {
   return checkName.replaceAll(githubWorkflowExpressionPattern, workflowName)
 }
 
 /**
- * @param {string} value
- * @returns {string}
+ * @param {unknown} value
  */
 function normalizeWhitespace (value) {
   return String(value).trim().replaceAll(/\s+/g, ' ')
@@ -45,8 +43,7 @@ function extractJobRecords (workflowFileName, workflowName, jobsDefinition) {
 
   for (const [jobId, jobDefinition] of Object.entries(jobsDefinition)) {
     if (!jobDefinition || typeof jobDefinition !== 'object') continue
-    /** @type {{ name?: string }} */
-    const jobObject = /** @type {{ name?: string }} */ (jobDefinition)
+    const jobObject = /** @type {{ name?: unknown }} */ (jobDefinition)
 
     const rawCheckName = normalizeWhitespace(jobObject.name || jobId)
     const resolvedCheckName = normalizeWhitespace(resolveWorkflowNameExpression(rawCheckName, workflowName))
@@ -141,7 +138,7 @@ for (const jobRecord of allJobRecords) {
   workflowNameToWorkflowFiles.set(jobRecord.workflowName, workflowFileSet)
 }
 
-const workflowNameEntries = [...workflowNameToWorkflowFiles.entries()]
+const workflowNameEntries = [...workflowNameToWorkflowFiles]
 workflowNameEntries.sort((first, second) => first[0].localeCompare(second[0]))
 
 for (const [workflowName, workflowFileSet] of workflowNameEntries) {
@@ -168,7 +165,7 @@ for (const jobRecord of allJobRecords) {
   checkNameToJobRecords.set(jobRecord.checkName, jobRecordList)
 }
 
-const duplicateCheckNameGroups = [...checkNameToJobRecords.entries()].filter(([, jobRecordList]) => {
+const duplicateCheckNameGroups = [...checkNameToJobRecords].filter(([, jobRecordList]) => {
   return jobRecordList.length > 1
 })
 duplicateCheckNameGroups.sort((first, second) => {

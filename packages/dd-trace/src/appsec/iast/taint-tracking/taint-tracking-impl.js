@@ -215,9 +215,7 @@ function getTaintTrackingImpl (telemetryVerbosity, dummy = false) {
   if (dummy) return TaintTrackingNoop
 
   // with Verbosity.DEBUG every invocation of a TaintedUtils method increases the EXECUTED_PROPAGATION metric
-  return isDebugAllowed(telemetryVerbosity)
-    ? createImplWith(getContextDebug)
-    : createImplWith(getContextDefault)
+  return createImplWith(isDebugAllowed(telemetryVerbosity) ? getContextDebug : getContextDefault)
 }
 
 function getTaintTrackingNoop () {
@@ -244,7 +242,8 @@ function lodashTaintTrackingHandler (message) {
     const context = getContextDefault()
     const transactionId = getTransactionId(context)
     if (transactionId) {
-      message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
+      const taintResult = getLodashTaintedUtilFn(message.operation)
+      message.result = taintResult(transactionId, message.result, ...message.arguments)
     }
   } catch (e) {
     log.error('[ASM] Error invoking CSI lodash %s', message.operation, e)

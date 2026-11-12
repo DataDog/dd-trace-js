@@ -55,7 +55,6 @@ function groupPartsByRole (parts) {
 /**
  * Check if parts contain thought/reasoning content
  * @param {Array<{thought?: boolean}>} parts
- * @returns {boolean}
  */
 function hasThoughtParts (parts) {
   return parts.some(part => part.thought === true)
@@ -65,7 +64,6 @@ function hasThoughtParts (parts) {
  * Determine the role from a candidate and its parts
  * @param {object} candidate
  * @param {Array<{thought?: boolean}>} parts
- * @returns {string}
  */
 function determineRole (candidate, parts = []) {
   // Check parts for thought indicators
@@ -84,11 +82,9 @@ function determineRole (candidate, parts = []) {
 /**
  * Normalize role to standard values
  * @param {string} role
- * @returns {string}
  */
 function normalizeRole (role) {
-  if (role === ROLES.MODEL) return ROLES.ASSISTANT
-  if (role === ROLES.ASSISTANT) return ROLES.ASSISTANT
+  if (role === ROLES.MODEL || role === ROLES.ASSISTANT) return ROLES.ASSISTANT
   if (role === ROLES.USER) return ROLES.USER
   if (role === ROLES.REASONING) return ROLES.REASONING
   return ROLES.USER // default
@@ -105,18 +101,31 @@ function extractMetrics (response) {
 
   if (!tokenUsage) return metrics
 
-  if (tokenUsage.promptTokenCount) {
-    metrics.inputTokens = tokenUsage.promptTokenCount
+  // Gemini reports thinking tokens (`thoughtsTokenCount`) and tool-use prompt tokens
+  // (`toolUsePromptTokenCount`) outside of `candidatesTokenCount` / `promptTokenCount`.
+  const { thoughtsTokenCount, toolUsePromptTokenCount, cachedContentTokenCount } = tokenUsage
+  const inputTokens = (tokenUsage.promptTokenCount || 0) + (toolUsePromptTokenCount || 0)
+  const outputTokens = (tokenUsage.candidatesTokenCount || 0) + (thoughtsTokenCount || 0)
+
+  if (inputTokens) {
+    metrics.inputTokens = inputTokens
   }
 
-  if (tokenUsage.candidatesTokenCount) {
-    metrics.outputTokens = tokenUsage.candidatesTokenCount
+  if (outputTokens) {
+    metrics.outputTokens = outputTokens
   }
 
-  const totalTokens = tokenUsage.totalTokenCount ||
-                    (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
+  const totalTokens = tokenUsage.totalTokenCount || inputTokens + outputTokens
   if (totalTokens) {
     metrics.totalTokens = totalTokens
+  }
+
+  if (cachedContentTokenCount) {
+    metrics.cacheReadTokens = cachedContentTokenCount
+  }
+
+  if (thoughtsTokenCount) {
+    metrics.reasoningOutputTokens = thoughtsTokenCount
   }
 
   return metrics
@@ -125,10 +134,10 @@ function extractMetrics (response) {
 /**
  * Extract metadata from config
  * @param {object} config
- * @returns {object}
+ * @returns {object | undefined}
  */
 function extractMetadata (config) {
-  if (!config) return {}
+  if (!config) return
 
   const fieldMap = {
     temperature: 'temperature',
@@ -147,9 +156,13 @@ function extractMetadata (config) {
     automatic_function_calling: 'automaticFunctionCalling',
   }
 
-  const metadata = {}
+  let metadata
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
-    metadata[metadataKey] = config[configKey] ?? null
+    const value = config[configKey]
+    if (value != null) {
+      metadata ??= {}
+      metadata[metadataKey] = value
+    }
   }
 
   return metadata
@@ -520,7 +533,6 @@ function formatOutputMessages (response, isStreaming = false) {
 /**
  * Format embedding output from response
  * @param {object} response
- * @returns {string}
  */
 function formatEmbeddingOutput (response) {
   if (!response?.embeddings?.length) {

@@ -26,7 +26,6 @@ function encodeVarint (v) {
  * @param {Uint8Array | Buffer} target
  * @param {number} offset
  * @param {number} value
- * @returns {number}
  */
 function encodeVarintInto (target, offset, value) {
   const sign = value >= 0 ? 0 : 1
@@ -40,7 +39,7 @@ function encodeVarintInto (target, offset, value) {
   let i = offset
   const limit = offset + maxVarLen64 - 1
   // if first byte is 1, the number is negative in javascript, but we want to interpret it as positive
-  while ((high !== 0 || low < 0 || low > 0x80) && i < limit) {
+  while ((high !== 0 || low < 0 || low > 0x7F) && i < limit) {
     target[i] = (low & 0x7F) | 0x80
     low >>>= 7
     low |= (high & 0x7F) << 25
@@ -88,7 +87,7 @@ function decodeUvarint64 (
         low |= n << s
       }
       if (s > 0) {
-        high |= s - 32 > 0 ? n << (s - 32) : n >> (32 - s)
+        high |= s > 32 ? n << (s - 32) : n >> (32 - s)
       }
       return [low, high, bytes]
     }
@@ -96,8 +95,7 @@ function decodeUvarint64 (
       low |= (n & 0x7F) << s
     }
     if (s > 0) {
-      high |=
-        s - 32 > 0 ? (n & 0x7F) << (s - 32) : (n & 0x7F) >> (32 - s)
+      high |= s > 32 ? (n & 0x7F) << (s - 32) : (n & 0x7F) >> (32 - s)
     }
     s += 7
   }

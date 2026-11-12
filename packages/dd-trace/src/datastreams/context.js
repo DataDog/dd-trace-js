@@ -13,7 +13,12 @@ function getDataStreamsContext () {
 function setDataStreamsContext (dataStreamsContext) {
   log.debug('Setting new DSM Context: %j.', dataStreamsContext)
 
-  if (dataStreamsContext) legacyStorage.enterWith({ ...legacyStorage.getStore(), dataStreamsContext })
+  // `undefined` clears: a message that carries no context must not inherit the previous message's.
+  // The identity check keeps the common no-context case from allocating a store per message.
+  const store = legacyStorage.getStore()
+  if (store?.dataStreamsContext !== dataStreamsContext) {
+    legacyStorage.enterWith({ ...store, dataStreamsContext })
+  }
 }
 
 module.exports = {

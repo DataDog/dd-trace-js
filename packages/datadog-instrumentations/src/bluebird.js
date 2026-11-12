@@ -15,12 +15,12 @@ function createGetNewLibraryCopyWrap (originalLib) {
   }
 }
 
-addHook({ name: 'bluebird', versions: ['>=2.0.2'] }, Promise => {
-  shimmer.wrap(Promise.prototype, '_then', wrapThen)
-  return Promise
+addHook({ name: 'bluebird', versions: ['>=2.0.2'] }, LibraryPromise => {
+  shimmer.wrap(LibraryPromise.prototype, '_then', wrapThen)
+  return LibraryPromise
 })
 
-addHook({ name: 'bluebird', versions: ['^2.11.0', '^3.4.1'] }, Promise => {
-  shimmer.wrap(Promise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(Promise))
-  return Promise
+addHook({ name: 'bluebird', versions: ['^2.11.0', '^3.4.1'] }, LibraryPromise => {
+  shimmer.wrap(LibraryPromise, 'getNewLibraryCopy', createGetNewLibraryCopyWrap(LibraryPromise))
+  return LibraryPromise
 })

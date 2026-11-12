@@ -314,8 +314,8 @@ describe('mocha hooks setup', () => {
     }
 
     try {
-      hook.run((err) => {
-        hookError = err
+      hook.run((callbackError) => {
+        hookError = callbackError
       })
     } finally {
       clearTimeout.call(hook)
@@ -334,8 +334,8 @@ describe('mocha hooks setup', () => {
     let hookError
 
     hook.allowUncaught = true
-    hook.run((err) => {
-      hookError = err
+    hook.run((callbackError) => {
+      hookError = callbackError
     })
 
     assert.ok(hookError instanceof Error)
@@ -343,6 +343,36 @@ describe('mocha hooks setup', () => {
       hookError.message,
       'Runnable failed with falsy or undefined exception. Please throw an Error instead.'
     )
+  })
+
+  it('does not swallow errors thrown after a hook completes with allow uncaught enabled', () => {
+    const failure = new Error('test failed')
+    const hook = new Hook('before each', () => {})
+
+    hook.allowUncaught = true
+
+    assert.throws(() => {
+      hook.run(() => {
+        throw failure
+      })
+    }, thrownError => thrownError === failure)
+  })
+
+  it('does not swallow test errors after a promise hook completes with allow uncaught enabled', async () => {
+    await assert.rejects(runFixtureProcess(`
+      describe('suite', () => {
+        beforeEach(async () => {})
+
+        it('fails for the real reason', () => {
+          throw new Error('test failed')
+        })
+      })
+    `, ['--allow-uncaught']), (error) => {
+      assert.strictEqual(typeof error.code, 'number')
+      assert.notStrictEqual(error.code, 0)
+      assert.match(error.stderr, /test failed/)
+      return true
+    })
   })
 
   it('does not let a suppressed after each error change bail behavior', async () => {
@@ -368,10 +398,35 @@ describe('mocha hooks setup', () => {
 })
 
 /**
+ * Subset of Mocha's JSON reporter output that these assertions read.
+ *
+ * @typedef {{
+ *   failures: Array<{ title: string, err: { message: string } }>,
+ *   passes: Array<{ title: string }>,
+ * }} MochaJsonResult
+ */
+
+/**
  * @param {string} body
+ * @param {string[]} [args]
  * @returns {Promise<MochaJsonResult>}
  */
 async function runFixture (body, args = []) {
+  try {
+    const { stdout } = await runFixtureProcess(body, args)
+    return JSON.parse(stdout)
+  } catch (err) {
+    if (!err || typeof err !== 'object' || !('stdout' in err) || typeof err.stdout !== 'string') throw err
+    return JSON.parse(err.stdout)
+  }
+}
+
+/**
+ * @param {string} body
+ * @param {string[]} [args]
+ * @returns {Promise<{ stdout: string, stderr: string }>}
+ */
+async function runFixtureProcess (body, args = []) {
   const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-mocha-hooks-'))
   const fixture = path.join(tmpdir, 'fixture.spec.js')
   fs.writeFileSync(fixture, `'use strict'
@@ -382,8 +437,7 @@ ${body}
 `)
 
   try {
-    const { stdout } = await execFileMocha(fixture, args)
-    return JSON.parse(stdout)
+    return await execFileMocha(fixture, args)
   } finally {
     fs.rmSync(tmpdir, { force: true, recursive: true })
   }
@@ -400,12 +454,7 @@ async function execFileMocha (fixture, args) {
   // plain Mocha behavior with JSON emitted on stdout.
   const mochaArgs = [mochaBin, '--no-config', '--reporter', 'json', ...args, fixture]
 
-  try {
-    return await execFileAsync(process.execPath, mochaArgs)
-  } catch (err) {
-    if (!err || typeof err !== 'object' || !('stdout' in err) || typeof err.stdout !== 'string') throw err
-    return { stdout: err.stdout }
-  }
+  return execFileAsync(process.execPath, mochaArgs)
 }
 
 /**

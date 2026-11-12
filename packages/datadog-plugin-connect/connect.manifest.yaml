@@ -1,0 +1,10 @@
+_v: 1
+name: connect
+display_name: Connect
+description: Instruments inbound HTTP requests and middleware execution in Connect, recording routes and errors.
+packages:
+- name: connect
+category:
+- http.server
+systems: []
+creation_date: '2019-07-02'

@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 const os = require('node:os')
 
-const { describe, it, before, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
@@ -25,7 +25,7 @@ const configWithStartupLogs = {
   logInjection: true,
   runtimeMetrics: true,
   startupLogs: true,
-  appsec: { enabled: true },
+  appsec: { DD_APPSEC_ENABLED: true },
   profiling: { DD_PROFILING_ENABLED: false },
   dsmEnabled: true,
 }
@@ -80,6 +80,9 @@ describe('startup logging', () => {
     assert.strictEqual(logObj.debug, true)
     assert.strictEqual(logObj.appsec_enabled, true)
     assert.strictEqual(logObj.data_streams_enabled, true)
+    assert.strictEqual('OTEL_TRACES_EXPORTER' in logObj, true)
+    assert.strictEqual('OTEL_METRICS_EXPORTER' in logObj, true)
+    assert.strictEqual('OTEL_LOGS_EXPORTER' in logObj, true)
   })
 
   it('logIntegrations should output loaded integrations', () => {
@@ -109,9 +112,9 @@ describe('startup logging', () => {
       debug: true,
       sample_rate: 1,
       sampling_rules: [
-        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 } },
+        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 }, discard: false },
         'rule2',
-        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } },
+        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 }, discard: false },
       ],
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
@@ -121,6 +124,16 @@ describe('startup logging', () => {
       integrations_loaded: ['http', 'fs', 'semver'],
       appsec_enabled: true,
       data_streams_enabled: true,
+      OTEL_TRACES_EXPORTER: 'none',
+      OTEL_METRICS_EXPORTER: 'none',
+      DD_TRACE_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
+      DD_METRICS_OTEL_ENABLED: false,
+      DD_LOGS_OTEL_ENABLED: false,
+      OTEL_LOG_LEVEL: 'none',
+      OTEL_RESOURCE_ATTRIBUTES: {},
+      OTEL_LOGS_EXPORTER: 'none',
+      OTEL_TRACES_SPAN_METRICS_ENABLED: false,
     })
   })
 })
@@ -312,5 +325,114 @@ describe('profiling_enabled', () => {
       warnStub.restore()
       assert.strictEqual(logObj.profiling_enabled, expected)
     })
+  })
+})
+
+describe('OTel exporters', () => {
+  function clearOtlpEnv () {
+    delete process.env.DD_TRACE_ENABLED
+    delete process.env.OTEL_TRACES_EXPORTER
+    delete process.env.OTEL_METRICS_EXPORTER
+    delete process.env.OTEL_LOGS_EXPORTER
+    delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    delete process.env.DD_METRICS_OTEL_ENABLED
+    delete process.env.DD_LOGS_OTEL_ENABLED
+  }
+
+  // Datadog-instrumented dev shells export the OTEL_*_EXPORTER selectors: a leaked
+  // OTEL_TRACES_EXPORTER=otlp corrupts the default-state assertion, and OTEL_METRICS_EXPORTER=none
+  // makes config force DD_METRICS_OTEL_ENABLED back to false, breaking the metrics positive case.
+  beforeEach(clearOtlpEnv)
+  afterEach(clearOtlpEnv)
+
+  function startupLogObj (configOptions) {
+    return require('./helpers/config').runStartup(process.env, configOptions).configuration
+  }
+
+  it('should default to none when no OTLP env vars are set', () => {
+    const logObj = startupLogObj()
+    assert.strictEqual(logObj.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(logObj.OTEL_METRICS_EXPORTER, 'none')
+    assert.strictEqual(logObj.OTEL_LOGS_EXPORTER, 'none')
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when OTEL_TRACES_EXPORTER is otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+  })
+
+  it('OTEL_TRACES_EXPORTER should be none when OTEL_TRACES_EXPORTER is none', () => {
+    process.env.DD_TRACE_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'none')
+  })
+
+  it('OTEL_TRACES_EXPORTER should be none when Test Optimization disables OTel semantics', () => {
+    // Test Optimization keeps test spans on the citestcycle endpoint, so neither OTel semantics nor an explicit
+    // OTEL_TRACES_EXPORTER=otlp changes its effective trace exporter.
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    assert.strictEqual(startupLogObj({ isCiVisibility: true }).OTEL_TRACES_EXPORTER, 'none')
+  })
+
+  it('OTEL_TRACES_EXPORTER should be none with the Electron exporter', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    assert.strictEqual(
+      startupLogObj({ experimental: { exporter: 'electron' } }).OTEL_TRACES_EXPORTER,
+      'none'
+    )
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda explicitly requests OTLP without an endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'false'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+    }
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda semantics uses the default endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'true'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    }
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda semantics has an explicit endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'false'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    }
+  })
+
+  it('OTEL_METRICS_EXPORTER should be otlp when DD_METRICS_OTEL_ENABLED is true', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    assert.strictEqual(startupLogObj().OTEL_METRICS_EXPORTER, 'otlp')
+  })
+
+  it('OTEL_LOGS_EXPORTER should be otlp when DD_LOGS_OTEL_ENABLED is true', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+    assert.strictEqual(startupLogObj().OTEL_LOGS_EXPORTER, 'otlp')
   })
 })

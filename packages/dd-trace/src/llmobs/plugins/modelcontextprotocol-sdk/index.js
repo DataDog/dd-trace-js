@@ -94,9 +94,7 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
         kind: 'task',
         name: 'mcp.initialize',
       }
-    }
-
-    if (method === 'tools/call') {
+    } else if (method === 'tools/call') {
       return {
         kind: 'tool',
         name: getRequestToolName(ctx.request?.params),
@@ -127,9 +125,7 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
       if (clientInfo.name && clientInfo.version) {
         spanTags.client_version = `${clientInfo.name}_${clientInfo.version}`
       }
-    }
-
-    if (method === 'tools/call') {
+    } else if (method === 'tools/call') {
       spanTags.mcp_tool = getRequestToolName(ctx.request?.params)
       spanTags.mcp_tool_kind = 'server'
     }

@@ -17,9 +17,6 @@ class RandomSampler {
     this._rate = rate
   }
 
-  /**
-   * @returns {number}
-   */
   rate () {
     return this._rate
   }
@@ -30,7 +27,6 @@ class RandomSampler {
    * Returns `true` if the sampling decision passes (i.e., the operation should be sampled).
    * This happens if the sampling rate is `1` (i.e., always sample) or if a random value falls below the rate.
    *
-   * @returns {boolean} `true` if the operation should be sampled, otherwise `false`.
    */
   isSampled () {
     return this._rate === 1 || Math.random() < this._rate

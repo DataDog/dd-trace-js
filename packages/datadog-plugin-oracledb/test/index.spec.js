@@ -1,9 +1,10 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
-const { after, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const ddpv = require('mocha/package.json').version
@@ -88,6 +89,34 @@ describe('Plugin', () => {
           })
 
           connectionTests()
+        })
+
+        describe('with connection and Easy Connect protocol', () => {
+          before(async () => {
+            connection = await oracledb.getConnection({
+              ...config,
+              connectString: `tcp://${config.connectString}`,
+            })
+          })
+
+          after(async () => {
+            await connection.close()
+          })
+
+          it('should use the parsed connection tags', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.instance': dbInstance,
+                  'db.name': dbInstance,
+                  'db.hostname': hostname,
+                  'out.host': hostname,
+                  'network.destination.port': port,
+                },
+              }),
+              connection.execute(dbQuery),
+            ])
+          })
         })
 
         function connectionTests () {
@@ -395,11 +424,13 @@ describe('Plugin', () => {
         })
 
         describe('with service function', () => {
+          let currentService
+
           before(async () => {
             await agent.load('oracledb', {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
-                return connAttrs.connectString
+                return currentService ?? connAttrs.connectString
               },
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -417,6 +448,11 @@ describe('Plugin', () => {
           after(async () => {
             await agent.close()
           })
+
+          afterEach(() => {
+            currentService = undefined
+          })
+
           withNamingSchema(
             () => connection.execute(dbQuery),
             {
@@ -439,6 +475,16 @@ describe('Plugin', () => {
               }),
               connection.execute(dbQuery),
             ])
+          })
+
+          it('resolves the service function for every query', async () => {
+            for (const service of ['first', 'second']) {
+              currentService = service
+              await Promise.all([
+                agent.assertFirstTraceSpan({ service }),
+                connection.execute(dbQuery),
+              ])
+            }
           })
         })
 
@@ -469,6 +515,79 @@ describe('Plugin', () => {
               connection.execute(dbQuery),
             ])
             await connection.close()
+          })
+        })
+
+        describe('with pool used via oracledb.getConnection() with no arguments', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              },
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          after(async () => {
+            await agent.close()
+          })
+
+          it('should use the pool connection attributes instead of the undefined outer call attributes', async () => {
+            // node-oracledb delegates a no-argument getConnection() call to the cached default pool.
+            const pool = await oracledb.createPool(config)
+            const connection = await oracledb.getConnection()
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  service: config.connectString,
+                }),
+                connection.execute(dbQuery),
+              ])
+            } finally {
+              await connection.close()
+              await pool.close()
+            }
+          })
+        })
+
+        describe('with pool used via oracledb.getConnection(callback) with no connAttrs', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              },
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          after(async () => {
+            await agent.close()
+          })
+
+          it('should not crash and should use the pool connection attributes', async () => {
+            // node-oracledb delegates a callback-only getConnection(callback) call to the cached
+            // default pool, the same way a no-argument getConnection() call does for the promise API.
+            const pool = await oracledb.createPool(config)
+            const connection = await new Promise((resolve, reject) => {
+              oracledb.getConnection((error, conn) => error ? reject(error) : resolve(conn))
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  service: config.connectString,
+                }),
+                connection.execute(dbQuery),
+              ])
+            } finally {
+              await connection.close()
+              await pool.close()
+            }
           })
         })
       })
@@ -521,6 +640,188 @@ describe('Plugin', () => {
         it('passes the caller SQL through unchanged when bindStart is skipped', async () => {
           await storage('legacy').run({ noop: true }, () => connection.execute(dbQuery))
         })
+      })
+
+      describe('with session callbacks in a custom tracer logger', () => {
+        const callbackQuery = 'select 1 as LOGGER_SESSION from dual'
+        let previousDebug
+        let writeLog
+
+        before(async () => {
+          previousDebug = process.env.DD_TRACE_DEBUG
+          process.env.DD_TRACE_DEBUG = 'true'
+          tracer = await agent.load('oracledb', undefined, {
+            logger: {
+              debug () {},
+              error () {
+                const write = writeLog
+                writeLog = undefined
+                write?.()
+              },
+            },
+          })
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+        })
+
+        after(async () => {
+          writeLog = undefined
+          await agent.close()
+          if (previousDebug === undefined) {
+            delete process.env.DD_TRACE_DEBUG
+          } else {
+            process.env.DD_TRACE_DEBUG = previousDebug
+          }
+        })
+
+        for (const useCallback of [false, true]) {
+          for (const queued of [false, true]) {
+            const api = useCallback ? 'callback' : 'Promise'
+            const timing = queued ? 'queued' : 'immediate'
+
+            it(`suppresses ${timing} ${api} session queries`, async () => {
+              tracer.use('oracledb', { dbmPropagationMode: 'service' })
+              let sessionResult
+              let sessionCalls = 0
+              let injected
+              let loggerSuppressed
+              let heldConnection
+              let acquiredConnection
+              let acquisition
+              const spans = []
+              /** @param {import('../../dd-trace/test/plugins/agent').SerializedSpan[][]} traces */
+              const onTraces = traces => spans.push(...traces.flat())
+              const createPool = useCallback ? promisify(oracledb.createPool) : oracledb.createPool
+              const sessionPool = await createPool.call(oracledb, {
+                ...config,
+                poolMax: 1,
+                poolMin: 0,
+                queueMax: 1,
+                /**
+                 * @param {import('oracledb').Connection} callbackConnection
+                 * @param {string} requestedTag
+                 * @param {(error?: Error | null) => void} callback
+                 */
+                sessionCallback (callbackConnection, requestedTag, callback) {
+                  if (requestedTag !== 'STATE=logger') return callback()
+                  sessionCalls++
+                  callbackConnection.execute(callbackQuery,
+                    /**
+                     * @param {Error | null} error
+                     * @param {import('oracledb').Result<number[]>} [result]
+                     */
+                    (error, result) => {
+                      sessionResult = result
+                      callback(error)
+                    })
+                },
+              })
+              const getConnection = useCallback ? promisify(sessionPool.getConnection) : sessionPool.getConnection
+              /** @param {{ query: string, injected?: string }} ctx */
+              const onStart = ctx => {
+                if (ctx.query === callbackQuery) injected = ctx.injected
+              }
+
+              try {
+                if (queued) heldConnection = await sessionPool.getConnection({ tag: 'STATE=held' })
+                dc.subscribe('apm:oracledb:query:start', onStart)
+                agent.subscribe(onTraces)
+                writeLog = () => {
+                  loggerSuppressed = storage('legacy').getHandle()?.noop
+                  acquisition = getConnection.call(sessionPool, { tag: 'STATE=logger' })
+                }
+
+                tracer.extract('unsupported-format', {})
+                assert.strictEqual(loggerSuppressed, true)
+                assert.ok(acquisition)
+                if (queued) {
+                  assert.strictEqual(sessionCalls, 0)
+                  await heldConnection.close()
+                  heldConnection = undefined
+                }
+                acquiredConnection = await acquisition
+                await agent.assertNoTraces(onTraces)
+                assert.strictEqual(spans.some(
+                  /** @param {import('../../dd-trace/test/plugins/agent').SerializedSpan} span */
+                  span => span.resource === callbackQuery), false)
+                assert.strictEqual(injected, undefined)
+                assert.strictEqual(sessionCalls, 1)
+                assert.deepStrictEqual(sessionResult.rows, [[1]])
+              } finally {
+                writeLog = undefined
+                agent.unsubscribe(onTraces)
+                dc.unsubscribe('apm:oracledb:query:start', onStart)
+                if (heldConnection !== undefined) await heldConnection.close()
+                if (acquiredConnection !== undefined) await acquiredConnection.close()
+                await sessionPool.close()
+              }
+            })
+          }
+        }
+      })
+
+      describe('with queued session callback contexts', () => {
+        before(async () => {
+          tracer = await agent.load('oracledb')
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+        })
+
+        after(() => agent.close())
+
+        for (const enabled of [true, false]) {
+          it(`preserves queued requests with the plugin enabled=${enabled}`, async () => {
+            tracer.use('oracledb', { enabled })
+            const parents = [tracer.startSpan('first'), tracer.startSpan('second')]
+            const contexts = []
+            let heldConnection
+            let acquiredConnection
+            const sessionPool = await oracledb.createPool({
+              ...config,
+              poolMax: 1,
+              poolMin: 0,
+              queueMax: 2,
+              /**
+               * @param {import('oracledb').Connection} callbackConnection
+               * @param {string} requestedTag
+               * @param {(error?: Error | null) => void} callback
+               */
+              sessionCallback (callbackConnection, requestedTag, callback) {
+                if (requestedTag !== 'STATE=held') contexts.push(tracer.scope().active())
+                callback()
+              },
+            })
+
+            try {
+              heldConnection = await sessionPool.getConnection({ tag: 'STATE=held' })
+              const acquisitions = parents.map(
+                /**
+                 * @param {import('opentracing').Span} parent
+                 * @param {number} index
+                 */
+                (parent, index) => {
+                  return tracer.scope().activate(parent, () => sessionPool.getConnection({ tag: `STATE=${index}` }))
+                })
+              await Promise.all([
+                Promise.all(acquisitions),
+                (async () => {
+                  await heldConnection.close()
+                  heldConnection = undefined
+                  for (const acquisition of acquisitions) {
+                    acquiredConnection = await acquisition
+                    await acquiredConnection.close()
+                    acquiredConnection = undefined
+                  }
+                })(),
+              ])
+              if (enabled) assert.deepStrictEqual(contexts, parents)
+              assert.strictEqual(contexts.length, 2)
+            } finally {
+              if (heldConnection !== undefined) await heldConnection.close()
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              await sessionPool.close()
+              for (const parent of parents) parent.finish()
+            }
+          })
+        }
       })
 
       describe('with DBM propagation enabled with service using plugin configurations', () => {

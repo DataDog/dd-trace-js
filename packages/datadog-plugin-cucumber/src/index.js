@@ -35,6 +35,7 @@ const {
   TEST_SOURCE_START,
   TEST_STATUS,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -72,6 +73,8 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      testSessionEmptyReason,
+      error,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -115,6 +118,21 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (testSessionEmptyReason) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          testSessionEmptyReason
+        )
+      }
+      if (error) {
+        for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
+          testSuiteSpan.setTag(TEST_STATUS, 'fail')
+          testSuiteSpan.setTag('error', error)
+        }
+        this.testSessionSpan.setTag('error', error)
+        this.testModuleSpan.setTag('error', error)
+      }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -232,6 +250,11 @@ class CucumberPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testSourceLine,
         [TEST_SOURCE_FILE]: testSourceFile,
       }
+      if (ctx.testAnnotations?.mustFail) extraTags['test.test_management.prevent_failure_suppression'] = 'true'
+      if (ctx.testAnnotations?.noAutoRetry) extraTags['test.test_management.no_auto_retry'] = 'true'
+      if (ctx.assignedProperties?.attempt_to_fix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+      if (ctx.assignedProperties?.disabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+      if (ctx.assignedProperties?.quarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
       if (isParallel) {
         extraTags[CUCUMBER_IS_PARALLEL] = 'true'
       }
@@ -308,6 +331,7 @@ class CucumberPlugin extends CiPlugin {
       isNew,
       isEfdRetry,
       isFlakyRetry,
+      isExternalRetry,
       isAttemptToFix,
       isAttemptToFixRetry,
       hasFailedAllRetries,
@@ -348,9 +372,12 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
-      if (isFlakyRetry > 0) {
+      if (isFlakyRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+      } else if (isExternalRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
       }
 
       if (hasFailedAllRetries) {
@@ -427,7 +454,8 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:is-modified-test', ({
-      scenarios,
+      gherkinNodes,
+      gherkinScopeRanges,
       testFileAbsolutePath,
       modifiedFiles,
       stepIds,
@@ -435,11 +463,25 @@ class CucumberPlugin extends CiPlugin {
       setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
-      for (const scenario of scenarios) {
+      for (const [startLine, endLine] of gherkinScopeRanges) {
+        if (isModifiedTest(testScenarioPath, startLine, endLine, modifiedFiles, 'cucumber')) {
+          setIsModified(true)
+          return
+        }
+      }
+      for (const gherkinNode of gherkinNodes) {
+        const lastStep = gherkinNode.steps.at(-1)
+        let endLine = lastStep?.location.line ?? gherkinNode.location.line
+        if (lastStep?.dataTable?.rows.length) {
+          endLine = lastStep.dataTable.rows.at(-1).location.line
+        } else if (lastStep?.docString) {
+          const { content, location } = lastStep.docString
+          endLine = location.line + (content ? content.split('\n').length + 1 : 1)
+        }
         const isModified = isModifiedTest(
           testScenarioPath,
-          scenario.location.line,
-          scenario.steps.at(-1).location.line,
+          gherkinNode.location.line,
+          endLine,
           modifiedFiles,
           'cucumber'
         )

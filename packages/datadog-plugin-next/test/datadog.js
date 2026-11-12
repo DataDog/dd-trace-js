@@ -15,8 +15,17 @@ const config = {
   },
 }
 
-module.exports = require('../../..').init({
+const tracer = require('../../..').init({
   service: 'test',
   flushInterval: 0,
   plugins: false,
-}).use('next', process.env.WITH_CONFIG ? config : true).use('http')
+}).use('next', process.env.WITH_CONFIG ? config : true)
+
+if (process.env.WITH_HTTP !== 'false') {
+  const httpConfig = process.env.WITH_HTTP_RESOURCE_RENAMING === 'true'
+    ? { resourceRenamingEnabled: true }
+    : true
+  tracer.use('http', httpConfig)
+}
+
+module.exports = tracer

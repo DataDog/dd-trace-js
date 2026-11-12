@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/ae0c125c-37c8-4da6-b63c-cbab3e01efce/datasets/16769477-5212-4d4f-b9ce-35344e872781/batch_update",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "392"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"id\":\"16769477-5212-4d4f-b9ce-35344e872781\",\"attributes\":{\"insert_records\":[{\"id\":\"batch-a\",\"input\":{\"value\":1},\"expected_output\":{\"value\":2},\"metadata\":{\"source\":\"batch-insert\"}},{\"id\":\"batch-b\",\"input\":{\"value\":2},\"expected_output\":null,\"metadata\":{\"source\":\"batch-insert\"}}],\"update_records\":[],\"delete_records\":[],\"deduplicate\":true,\"create_new_version\":true}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "882",
+      "date": "Thu, 13 Aug 2026 17:29:48 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":[{\"id\":\"batch-a\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"c4e8e245-d4af-4db1-8e98-3bcfd2e7273a\",\"created_at\":\"2026-08-13T17:29:48.229104911Z\",\"dataset_id\":\"16769477-5212-4d4f-b9ce-35344e872781\",\"expected_output\":{\"value\":2},\"input\":{\"value\":1},\"metadata\":{\"source\":\"batch-insert\"},\"tags\":[],\"ttl\":\"2029-08-12T17:29:48.238577739Z\",\"updated_at\":\"2026-08-13T17:29:48.229104911Z\",\"version\":1}},{\"id\":\"batch-b\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"canonical_id\":\"e02e9873-3f50-45f8-8e2d-47a40dc8376d\",\"created_at\":\"2026-08-13T17:29:48.229104911Z\",\"dataset_id\":\"16769477-5212-4d4f-b9ce-35344e872781\",\"input\":{\"value\":2},\"metadata\":{\"source\":\"batch-insert\"},\"tags\":[],\"ttl\":\"2029-08-12T17:29:48.238587233Z\",\"updated_at\":\"2026-08-13T17:29:48.229104911Z\",\"version\":1}}]}"
+  }
+}

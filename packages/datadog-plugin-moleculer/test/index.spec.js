@@ -58,13 +58,18 @@ describe('Plugin', () => {
 
       describe('server', () => {
         describe('without configuration', () => {
-          before(() => agent.load('moleculer', { client: false }))
+          before(async () => {
+            await agent.load('moleculer', { client: false })
+            await startBroker()
+          })
 
-          before(() => startBroker())
-
-          after(() => broker.stop())
-
-          after(() => agent.close())
+          after(async () => {
+            try {
+              await broker.stop()
+            } finally {
+              await agent.close()
+            }
+          })
 
           it('should do automatic instrumentation', done => {
             agent.assertSomeTraces(traces => {
@@ -113,18 +118,23 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          before(() => agent.load('moleculer', {
-            client: false,
-            server: { service: 'custom' },
-            params: true,
-            meta: true,
-          }))
+          before(async () => {
+            await agent.load('moleculer', {
+              client: false,
+              server: { service: 'custom' },
+              params: true,
+              meta: true,
+            })
+            await startBroker()
+          })
 
-          before(() => startBroker())
-
-          after(() => broker.stop())
-
-          after(() => agent.close())
+          after(async () => {
+            try {
+              await broker.stop()
+            } finally {
+              await agent.close()
+            }
+          })
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -155,18 +165,19 @@ describe('Plugin', () => {
           const hostname = os.hostname()
           let tracer
 
-          beforeEach(() => startBroker())
-
-          afterEach(() => broker.stop())
-
-          beforeEach(done => {
-            agent.load('moleculer', { server: false })
-              .then(() => { tracer = require('../../dd-trace') })
-              .then(done)
-              .catch(done)
+          beforeEach(async () => {
+            await startBroker()
+            await agent.load('moleculer', { server: false })
+            tracer = require('../../dd-trace')
           })
 
-          afterEach(() => agent.close())
+          afterEach(async () => {
+            try {
+              await broker.stop()
+            } finally {
+              await agent.close()
+            }
+          })
 
           withPeerService(
             () => tracer,
@@ -240,18 +251,23 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          before(() => agent.load('moleculer', {
-            client: { service: 'custom' },
-            server: false,
-            params: true,
-            meta: true,
-          }))
+          before(async () => {
+            await agent.load('moleculer', {
+              client: { service: 'custom' },
+              server: false,
+              params: true,
+              meta: true,
+            })
+            await startBroker()
+          })
 
-          before(() => startBroker())
-
-          after(() => broker.stop())
-
-          after(() => agent.close())
+          after(async () => {
+            try {
+              await broker.stop()
+            } finally {
+              await agent.close()
+            }
+          })
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -278,13 +294,18 @@ describe('Plugin', () => {
       })
 
       describe('client + server (local)', () => {
-        before(() => agent.load('moleculer'))
+        before(async () => {
+          await agent.load('moleculer')
+          await startBroker()
+        })
 
-        before(() => startBroker())
-
-        after(() => broker.stop())
-
-        after(() => agent.close())
+        after(async () => {
+          try {
+            await broker.stop()
+          } finally {
+            await agent.close()
+          }
+        })
 
         it('should propagate context', async () => {
           let spanId
@@ -320,11 +341,9 @@ describe('Plugin', () => {
       describe('client + server (remote)', () => {
         let clientBroker
 
-        before(() => agent.load('moleculer'))
-
-        before(() => startBroker())
-
-        before(function () {
+        before(async function () {
+          await agent.load('moleculer')
+          await startBroker()
           const waitTimeout = 10000
           this.timeout(waitTimeout) // wait for discovery
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
@@ -344,15 +363,21 @@ describe('Plugin', () => {
             },
           })
 
-          return clientBroker.start()
-            .then(() => clientBroker.waitForServices('math', waitTimeout))
+          await clientBroker.start()
+          await clientBroker.waitForServices('math', waitTimeout)
         })
 
-        after(() => clientBroker.stop())
-
-        after(() => broker.stop())
-
-        after(() => agent.close())
+        after(async () => {
+          try {
+            await clientBroker.stop()
+          } finally {
+            try {
+              await broker.stop()
+            } finally {
+              await agent.close()
+            }
+          }
+        })
 
         it('should propagate context', async () => {
           let spanId
@@ -385,11 +410,10 @@ describe('Plugin', () => {
         })
       })
       describe('meta propagation', () => {
-        before(() => agent.load('moleculer', {
-          meta: true,
-        }))
-
         before(async () => {
+          await agent.load('moleculer', {
+            meta: true,
+          })
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
           broker = new ServiceBroker({
             nodeID: `server-${process.pid}`,
@@ -413,12 +437,16 @@ describe('Plugin', () => {
             },
           })
 
-          return broker.start()
+          await broker.start()
         })
 
-        after(() => broker.stop())
-
-        after(() => agent.close())
+        after(async () => {
+          try {
+            await broker.stop()
+          } finally {
+            await agent.close()
+          }
+        })
 
         it('should propagate meta from child to parent', async () => {
           const result = await broker.call('test.first')

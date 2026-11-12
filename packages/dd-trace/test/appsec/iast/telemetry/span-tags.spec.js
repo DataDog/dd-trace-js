@@ -67,6 +67,30 @@ describe('Telemetry Span tags', () => {
     assert.deepStrictEqual(rootSpan.addTags.secondCall.args[0], { '_dd.test.executed.source.source_type_2': 2 })
   })
 
+  it('should join multiple tags in a metric name', () => {
+    EXECUTED_SOURCE.inc(context, ['source.type.1', 'origin:parameter'], 42)
+
+    const { metrics } = getNamespaceFromContext(context).toJSON()
+
+    addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
+
+    sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
+      '_dd.test.executed.source.parameter_source_type_1': 42,
+    })
+  })
+
+  it('should keep empty tag segments in a metric name', () => {
+    EXECUTED_SOURCE.inc(context, ['source.type.1', 'origin:'], 42)
+
+    const { metrics } = getNamespaceFromContext(context).toJSON()
+
+    addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
+
+    sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
+      '_dd.test.executed.source._source_type_1': 42,
+    })
+  })
+
   it('should add span tags with tag name like \'tagPrefix.metricName\' for not tagged metrics', () => {
     REQUEST_TAINTED.inc(context, 42)
 

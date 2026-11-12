@@ -62,6 +62,8 @@ const errorHandler = async (_event, _context) => {
 /**
  * Lambda Authorizer handler - only receives event, no context.
  * This is the signature used by API Gateway Lambda Authorizers.
+ *
+ * @param {import('aws-lambda').APIGatewayAuthorizerEvent} event
  */
 const authorizerHandler = async (event) => {
   // Simulate a simple authorizer that returns an IAM policy
@@ -71,6 +73,8 @@ const authorizerHandler = async (event) => {
 
 /**
  * Synchronous Lambda Authorizer handler - only receives event, no context.
+ *
+ * @param {import('aws-lambda').APIGatewayAuthorizerEvent} event
  */
 const authorizerHandlerSync = (event) => {
   return {
@@ -90,6 +94,8 @@ const authorizerHandlerSync = (event) => {
 
 /**
  * Lambda Authorizer handler that throws an error.
+ *
+ * @param {import('aws-lambda').APIGatewayAuthorizerEvent} event
  */
 const authorizerErrorHandler = async (event) => {
   class AuthorizationError extends Error {

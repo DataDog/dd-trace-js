@@ -1,6 +1,6 @@
 'use strict'
 
-const { prepareTestServerForIast } = require('../../utils')
+const { prepareTestServerForIast, invokeCommandInjectionSink } = require('../../utils')
 const { withVersions } = require('../../../../setup/mocha')
 
 const connectionData = {
@@ -65,8 +65,7 @@ describe('db sources with pg', () => {
           const result = await client.query('SELECT * from examples')
           const firstItem = result.rows[0]
 
-          const childProcess = require('child_process')
-          childProcess.execSync(firstItem.command)
+          invokeCommandInjectionSink(firstItem.command)
 
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')
@@ -104,8 +103,7 @@ describe('db sources with pg', () => {
           const result = await pool.query('SELECT * from examples')
           const firstItem = result.rows[0]
 
-          const childProcess = require('child_process')
-          childProcess.execSync(firstItem.command)
+          invokeCommandInjectionSink(firstItem.command)
 
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')

@@ -8,8 +8,9 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
-const log = require('../../dd-trace/src/log')
+const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -32,13 +33,21 @@ class HttpClientPlugin extends ClientPlugin {
     // A URL object (e.g. from the fetch integration) carries the query in
     // `options.search`, not `options.path`; keep it so url.full retains the query.
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
+    const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    let otelUrl = uri
+    if (otelSemantics) {
+      const otelHostname = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
+      const otelHost = options.port ? `${otelHostname}:${options.port}` : otelHostname
+      const auth = typeof options.auth === 'string' && options.auth ? 'REDACTED:REDACTED@' : ''
+      const otelBase = `${protocol}//${auth}${otelHost}`
+      otelUrl = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
+    }
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -51,11 +60,11 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
+        'http.url': otelUrl,
         'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port, 10),
       },
     }, false)
 
@@ -166,7 +175,7 @@ function addRequestHeaders (req, span, config) {
 }
 
 function normalizeClientConfig (config) {
-  const validateStatus = getStatusValidator(config)
+  const validateStatus = getClientStatusValidator(config)
   const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
@@ -180,19 +189,6 @@ function normalizeClientConfig (config) {
     headers,
     hooks,
   }
-}
-
-function is400ErrorCode (code) {
-  return code < 400 || code >= 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return is400ErrorCode
 }
 
 function getFilter (config) {

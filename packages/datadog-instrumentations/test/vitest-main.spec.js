@@ -1,0 +1,660 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const proxyquire = require('proxyquire').noPreserveCache()
+
+const {
+  getProvidedContext,
+  parseProvidedContextValue,
+  setProvidedContext,
+} = require('../src/vitest-util')
+
+describe('vitest utilities', () => {
+  describe('browser-safe provided context', () => {
+    it('leaves safe values unchanged', () => {
+      const context = { knownTests: ['safe test'] }
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddUndefined: undefined,
+        _ddNull: null,
+        _ddBoolean: false,
+        _ddNumber: 42,
+        _ddString: 'safe test',
+        _ddContext: context,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddUndefined, undefined)
+      assert.strictEqual(providedContext._ddNull, null)
+      assert.strictEqual(providedContext._ddBoolean, false)
+      assert.strictEqual(providedContext._ddNumber, 42)
+      assert.strictEqual(providedContext._ddString, 'safe test')
+      assert.strictEqual(providedContext._ddContext, context)
+      assert.strictEqual(parseProvidedContextValue('safe test'), 'safe test')
+      assert.strictEqual(parseProvidedContextValue(context), context)
+    })
+
+    it('rejects malformed serialized context', () => {
+      const providedContext = {}
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddTestPropertiesByFilepath: { knownTests: ['test containing </script>'] },
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestPropertiesByFilepath.slice(0, -1)), undefined)
+    })
+
+    it('escapes every Datadog-provided value without changing user context', () => {
+      const providedContext = {}
+      const userContext = { testName: '</script>' }
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+
+      setProvidedContext(ctx, {
+        _ddIsKnownTestsEnabled: true,
+        _ddTestCommand: testCommand,
+        userContext,
+      }, 'Could not set provided context.')
+
+      assert.strictEqual(providedContext._ddIsKnownTestsEnabled, true)
+      assert.ok(!providedContext._ddTestCommand.includes('<'))
+      assert.strictEqual(parseProvidedContextValue(providedContext._ddTestCommand), testCommand)
+      assert.strictEqual(providedContext.userContext, userContext)
+    })
+
+    it('restores every Datadog-provided value for workers', () => {
+      const providedContext = {}
+      const testCommand = 'vitest --testNamePattern=</script>'
+      const testPropertiesByFilepath = {
+        'test.mjs': { knownTests: ['test containing </ScRiPt> and <markup>'] },
+      }
+      const ctx = {
+        getRootProject () {
+          return { _provided: providedContext }
+        },
+      }
+      const previousWorker = globalThis.__vitest_worker__
+
+      setProvidedContext(ctx, {
+        _ddTestCommand: testCommand,
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      }, 'Could not set provided context.')
+      globalThis.__vitest_worker__ = { providedContext }
+
+      try {
+        assert.ok(!providedContext._ddTestCommand.includes('<'))
+        assert.ok(!providedContext._ddTestPropertiesByFilepath.includes('<'))
+
+        const restoredContext = getProvidedContext()
+
+        assert.strictEqual(restoredContext.testCommand, testCommand)
+        assert.deepStrictEqual(restoredContext.testPropertiesByFilepath, testPropertiesByFilepath)
+      } finally {
+        if (previousWorker === undefined) {
+          delete globalThis.__vitest_worker__
+        } else {
+          globalThis.__vitest_worker__ = previousWorker
+        }
+      }
+    })
+  })
+})
+
+describe('vitest main instrumentation', () => {
+  for (const method of ['startVitest', 'createVitest']) {
+    for (const legacy of [false, true]) {
+      for (const active of [false, true]) {
+        const state = active ? 'active' : 'inactive'
+        const signature = legacy ? 'legacy' : 'current'
+        it(`preserves ${state} ${method} browser overrides (${signature})`, () => {
+          const hooks = []
+          const starts = []
+          proxyquire('../src/vitest-main', {
+            './helpers/instrument': {
+              ...require('../src/helpers/instrument'),
+              addHook (target, hook) { hooks.push({ target, hook }) },
+            },
+            './vitest-util': {
+              ...require('../src/vitest-util'),
+              testSessionStartCh: {
+                hasSubscribers: active,
+                publish (payload) { starts.push(payload) },
+              },
+            },
+          })
+          const api = {
+            startVitest (...args) { return args },
+            createVitest (...args) { return args },
+          }
+          const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+          hook(api, legacy ? '3.2.6' : '5.0.1')
+
+          // Repeated calls must still inject into active sessions after the start event was published.
+          for (let call = 0; call < 2; call++) {
+            const overrides = active ? { plugins: [] } : Object.freeze({ plugins: Object.freeze([]) })
+            const args = legacy ? ['test', {}] : [{}]
+            if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+            args.push(overrides)
+            const result = api[method](...args)
+            assert.strictEqual(result[result.length - 1], overrides)
+            assert.strictEqual(overrides.plugins.length, active ? 1 : 0)
+            if (active) assert.strictEqual(overrides.plugins[0].name, 'datadog:vitest-browser-setup-file')
+          }
+          for (const descriptor of [
+            { get: () => undefined },
+            { value: undefined, writable: false },
+            { value: null, writable: false },
+          ]) {
+            for (const inherited of [false, true]) {
+              const readOnly = Object.defineProperty({}, 'plugins', { ...descriptor, enumerable: true })
+              const overrides = inherited ? Object.create(readOnly) : readOnly
+              const args = legacy ? ['test', {}] : [{}]
+              if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+              args.push(overrides)
+              const result = api[method](...args)
+              const supplied = result[result.length - 1]
+              if (active) {
+                assert.notStrictEqual(supplied, overrides)
+                assert.strictEqual(supplied.plugins.length, 1)
+                assert.strictEqual(supplied.plugins[0].name, 'datadog:vitest-browser-setup-file')
+              } else {
+                assert.strictEqual(supplied, overrides)
+              }
+              assert.strictEqual(overrides.plugins, 'value' in descriptor ? descriptor.value : undefined)
+            }
+          }
+          assert.strictEqual(starts.length, active ? 1 : 0)
+        })
+      }
+    }
+  }
+
+  for (const method of ['start', 'reportCoverage']) {
+    it(`preserves ${method} results and synchronous errors without subscribers`, () => {
+      const hooks = []
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh: { hasSubscribers: false },
+        },
+      })
+      let result
+      class Vitest {
+        /** @param {string} argument */
+        start (argument) {
+          assert.strictEqual(this, vitest)
+          assert.strictEqual(argument, 'argument')
+          if (result instanceof Error) throw result
+          return result
+        }
+
+        /** @param {string} argument */
+        reportCoverage (argument) { return this.start(argument) }
+        runFiles () {}
+      }
+      const vitest = new Vitest()
+      const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+      hook({ Vitest }, '5.0.1')
+
+      for (result of [undefined, {}, Promise.resolve('result')]) {
+        assert.strictEqual(vitest[method]('argument'), result)
+      }
+      result = new Error('synchronous failure')
+      assert.throws(() => vitest[method]('argument'), result)
+    })
+  }
+
+  const scenarios = [
+    { name: 'collected', tasks: [{ mode: 'run' }] },
+    { name: 'result without state', tasks: [{ mode: 'run', result: {} }] },
+    { name: 'queued', tasks: [{ mode: 'run', result: { state: 'queued' } }] },
+    { name: 'running', tasks: [{ mode: 'run', result: { state: 'run' } }] },
+    { name: 'skipped result', tasks: [{ mode: 'run', result: { state: 'skip' } }] },
+    { name: 'todo result', tasks: [{ mode: 'run', result: { state: 'todo' } }] },
+    { name: 'skipped mode', tasks: [{ mode: 'skip' }] },
+    { name: 'todo mode', tasks: [{ mode: 'todo' }] },
+    { name: 'passed', tasks: [{ mode: 'run', result: { state: 'pass' } }], status: 'pass' },
+    { name: 'failed', tasks: [{ mode: 'run', result: { state: 'fail' } }], status: 'fail' },
+    {
+      name: 'mixed collected and passed',
+      tasks: [{ mode: 'run' }, { mode: 'run', result: { state: 'pass' } }],
+      status: 'pass',
+    },
+  ]
+  for (const { name, tasks, status = 'skip' } of scenarios) {
+    it(`reports ${name} tasks as ${status}`, async () => {
+      const hooks = []
+      const finishes = []
+      const testSessionFinishCh = { hasSubscribers: true }
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './helpers/channel': {
+          getChannelPromise (channel, payload) {
+            if (channel === testSessionFinishCh) finishes.push(payload)
+            return Promise.resolve()
+          },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh,
+        },
+      })
+      class Vitest {
+        config = { passWithNoTests: false }
+        state = {
+          pathsSet: new Set(['/repo/test.mjs']),
+          getFailedFilepaths: () => status === 'fail' ? ['/repo/test.mjs'] : [],
+          getFiles: () => [{ type: 'suite', tasks: tasks.map(task => ({ type: 'test', ...task })) }],
+          getCountOfFailedTests: () => status === 'fail' ? 1 : 0,
+          getUnhandledErrors: () => [],
+        }
+
+        start () { return Promise.resolve() }
+        close () {}
+        exit () {}
+        reportCoverage () {}
+        runFiles () {}
+      }
+      const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+      hook({ Vitest, startVitest () {} })
+      const vitest = new Vitest()
+
+      await vitest.start()
+      await vitest.close()
+
+      assert.strictEqual(finishes.length, 1)
+      assert.strictEqual(finishes[0].status, status)
+      assert.strictEqual(finishes[0].testSessionEmptyReason, status === 'skip' ? 'all_tests_skipped' : undefined)
+      if (status === 'fail') {
+        assert.strictEqual(finishes[0].error.message, 'Test suites failed: 1.')
+      } else {
+        assert.strictEqual(finishes[0].error, undefined)
+      }
+    })
+  }
+
+  for (const method of ['start', 'runFiles']) {
+    for (const reason of [null, undefined, false, 0, '', 'startup failure', new Error('startup failure')]) {
+      it(`preserves ${method} rejection ${String(reason) || 'empty string'} and reports a failed session`, async () => {
+        const hooks = []
+        const finishes = []
+        const testSessionFinishCh = { hasSubscribers: true }
+        proxyquire('../src/vitest-main', {
+          './helpers/instrument': {
+            ...require('../src/helpers/instrument'),
+            addHook (target, hook) { hooks.push({ target, hook }) },
+          },
+          './helpers/channel': {
+            getChannelPromise (channel, payload) {
+              if (channel === testSessionFinishCh) finishes.push(payload)
+              return Promise.resolve({ libraryConfig: {} })
+            },
+          },
+          './vitest-util': {
+            ...require('../src/vitest-util'),
+            testSessionFinishCh,
+            testSessionConfigurationCh: { hasSubscribers: false },
+          },
+        })
+        class Vitest {
+          config = { passWithNoTests: true }
+          state = {
+            pathsSet: new Set(),
+            getFailedFilepaths: () => [],
+            getFiles: () => [],
+            getCountOfFailedTests: () => 0,
+            getUnhandledErrors: () => [],
+          }
+
+          start () {
+            // A framework or user hook can reject with any JavaScript value.
+            return Promise.reject(reason)
+          }
+
+          runFiles () {
+            return Promise.reject(reason)
+          }
+
+          close () {}
+          exit () {}
+          reportCoverage () {}
+          getRootProject () { return { _provided: {} } }
+        }
+        const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+        hook({ Vitest }, '5.0.1')
+        const vitest = new Vitest()
+
+        await assert.rejects(vitest[method]([]), error => {
+          assert.strictEqual(error, reason)
+          return true
+        })
+        await vitest.close()
+
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(finishes[0].testSessionEmptyReason, undefined)
+        assert.strictEqual(finishes[0].error, reason)
+      })
+    }
+  }
+
+  it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
+    const hooks = []
+    const libraryConfigurationRequests = []
+    const libraryConfigurationCh = {}
+    const knownTestsCh = {}
+    const noWorkerInitStates = []
+    const providedContexts = []
+    const testSessionFinishPayloads = []
+    const testSuiteFinishPayloads = []
+    let reserveEarlyFlakeDetectionSuite
+    let shouldUseNoWorkerInit = false
+    const testSuiteFinishCh = {
+      hasSubscribers: true,
+    }
+    const testSessionFinishCh = {
+      hasSubscribers: true,
+    }
+    const testSessionConfigurationCh = {
+      hasSubscribers: false,
+    }
+    const channel = {
+      hasSubscribers: false,
+      publish () {},
+      runStores (store, callback) {
+        store.currentStore = {}
+        callback()
+      },
+    }
+    const realInstrument = require('../src/helpers/instrument')
+    const realNoWorkerInit = require('../src/vitest-main-no-worker-init')
+    const realVitestUtil = require('../src/vitest-util')
+
+    proxyquire('../src/vitest-main', {
+      './helpers/channel': {
+        getChannelPromise (currentChannel, data) {
+          if (currentChannel === libraryConfigurationCh) {
+            libraryConfigurationRequests.push(data)
+            return Promise.resolve({
+              libraryConfig: {
+                earlyFlakeDetectionFaultyThreshold: 1,
+                earlyFlakeDetectionRetryPolicy: {
+                  durationRetryCounts: [
+                    { durationLimitMs: 5000, retryCount: 2 },
+                  ],
+                  schedulingRetryCount: 2,
+                },
+                isEarlyFlakeDetectionEnabled: true,
+                isKnownTestsEnabled: true,
+              },
+            })
+          }
+          if (currentChannel === knownTestsCh) {
+            return Promise.resolve({ knownTests: { vitest: {} } })
+          }
+          if (currentChannel === testSuiteFinishCh) {
+            testSuiteFinishPayloads.push(data)
+          }
+          if (currentChannel === testSessionFinishCh) {
+            testSessionFinishPayloads.push(data)
+          }
+          return Promise.resolve()
+        },
+      },
+      './helpers/instrument': {
+        ...realInstrument,
+        addHook (target, hook) {
+          hooks.push({ hook, target })
+        },
+      },
+      './vitest-main-no-worker-init': {
+        ...realNoWorkerInit,
+        configure (_ctx, _frameworkVersion, _testSpecifications, _setupData, options) {
+          reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
+          noWorkerInitStates.push(options.state)
+        },
+        deactivate () {},
+        isSupportedVersion () {
+          return true
+        },
+        shouldUse () {
+          return shouldUseNoWorkerInit
+        },
+      },
+      './vitest-util': {
+        ...realVitestUtil,
+        codeCoverageReportCh: channel,
+        findExportByName (vitestPackage, exportName) {
+          for (const [key, value] of Object.entries(vitestPackage)) {
+            if (value?.name === exportName) return { key, value }
+          }
+        },
+        getWorkspaceProject () {
+          return {
+            getProvidedContext () {
+              return {}
+            },
+          }
+        },
+        isEarlyFlakeDetectionFaultyCh: channel,
+        knownTestsCh,
+        libraryConfigurationCh,
+        modifiedFilesCh: channel,
+        setProvidedContext (_ctx, providedContext) {
+          providedContexts.push(providedContext)
+        },
+        testManagementTestsCh: channel,
+        testSessionConfigurationCh,
+        testSessionFinishCh,
+        testSuiteFinishCh,
+      },
+    })
+
+    class BaseSequencer {
+      async sort (specifications) {
+        return specifications
+      }
+    }
+    const sequencerHook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/coverage.*').hook
+    sequencerHook({ BaseSequencer }, '4.1.10')
+
+    const ctx = {
+      close () {},
+      config: { passWithNoTests: false, shard: { index: 2, count: 2 } },
+      exit () {},
+      getTestFilepaths () {
+        return []
+      },
+      state: {
+        getFiles: () => [],
+        getCountOfFailedTests: () => 0,
+        getUnhandledErrors: () => [],
+        getFailedFilepaths () {
+          return []
+        },
+        pathsSet: new Set(),
+      },
+    }
+    const sequencer = new BaseSequencer()
+    sequencer.ctx = ctx
+    await sequencer.sort([{ filepath: '/repo/browser.mjs', pool: 'browser' }])
+
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/shared.mjs', false), true)
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/shared.mjs', true), true)
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/second.mjs', true), false)
+    assert.strictEqual(reserveEarlyFlakeDetectionSuite('/repo/shared.mjs', false), false)
+
+    class Typechecker {
+      async prepareResults () {
+        return {
+          files: [{ filepath: '/repo/typecheck.ts', result: { state: 'pass' }, tasks: [] }],
+        }
+      }
+    }
+    const typecheckerHook = hooks.find(({ target }) => target.versions[0] === '>=4.0.0').hook
+    typecheckerHook({ Typechecker }, '4.1.10')
+
+    const typechecker = new Typechecker()
+    typechecker.ctx = ctx
+    await typechecker.prepareResults()
+    assert.strictEqual(testSuiteFinishPayloads.length, 1)
+    assert.strictEqual(testSuiteFinishPayloads[0].deferFlush, true)
+
+    const typecheckFiles = [
+      { filepath: '/repo/first-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+      { filepath: '/repo/second-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+    ]
+    class TypecheckPoolWorker {
+      constructor () {
+        this.project = {
+          typechecker: {
+            getResult () {
+              return { files: typecheckFiles }
+            },
+          },
+          vitest: ctx,
+        }
+      }
+
+      send () {}
+
+      on (event, callback) {
+        this[event] = callback
+      }
+    }
+    class ForksPoolWorker {
+      constructor () {
+        this.env = { VITEST: 'true' }
+      }
+
+      start () {
+        return this.env
+      }
+
+      on () { /* empty */ }
+    }
+    class ThreadsPoolWorker extends ForksPoolWorker {}
+    const vitestV5IndexHook = hooks.find(({ target }) =>
+      target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
+    ).hook
+    vitestV5IndexHook({ ForksPoolWorker, ThreadsPoolWorker, TypecheckPoolWorker }, '5.0.4')
+
+    const forksPoolWorker = new ForksPoolWorker()
+    assert.strictEqual(forksPoolWorker.start().DD_VITEST_WORKER, '1')
+    const threadsPoolWorker = new ThreadsPoolWorker()
+    assert.strictEqual(threadsPoolWorker.start().DD_VITEST_WORKER, '1')
+
+    const typecheckPoolWorker = new TypecheckPoolWorker()
+    typecheckPoolWorker.on('message', () => {})
+    for (const file of typecheckFiles) {
+      typecheckPoolWorker.send({ type: 'run', context: { files: [{ filepath: file.filepath }] } })
+      await typecheckPoolWorker.message({ type: 'testfileFinished' })
+    }
+    assert.strictEqual(testSuiteFinishPayloads.length, 3)
+
+    const customPoolTypechecker = new Typechecker()
+    customPoolTypechecker.ctx = {
+      ...ctx,
+      config: { pool: './custom-pool.mjs' },
+    }
+    await customPoolTypechecker.prepareResults()
+    const customPoolAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.strictEqual(
+      customPoolAdmissionContexts[customPoolAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled,
+      false
+    )
+
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/vm.mjs', pool: 'vmThreads' },
+    ]])
+    const vmAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.strictEqual(vmAdmissionContexts[vmAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
+
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/typecheck.ts', pool: 'typescript' },
+    ]])
+
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/custom.mjs', pool: './custom-pool.mjs' },
+    ]])
+
+    shouldUseNoWorkerInit = true
+    await sequencer.sort([[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/no-worker.mjs', pool: 'threads' },
+    ]])
+    assert.strictEqual(noWorkerInitStates[noWorkerInitStates.length - 1].isEfdSuiteAdmissionEnabled, false)
+
+    class Vitest {
+      /** @param {object[]} testSpecifications test specifications */
+      async runFiles (testSpecifications) {
+        return testSpecifications
+      }
+    }
+    const cliApiHook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+    cliApiHook({ async startVitest () {}, Vitest }, '4.1.10')
+    await Vitest.prototype.runFiles.call(ctx, [[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/no-worker.mjs', pool: 'threads' },
+    ]])
+
+    class TinyPool {
+      /** @param {{ env: Record<string, string>, filename: string }} options worker pool options */
+      constructor (options) {
+        this.options = options
+      }
+    }
+    const tinyPoolHook = hooks.find(({ target }) => target.name === 'tinypool').hook
+    const DatadogTinyPool = tinyPoolHook(TinyPool)
+    const pool = new DatadogTinyPool({
+      env: {
+        NODE_OPTIONS: '--require dd-trace/ci/init --conditions "custom condition"',
+        VITEST: 'true',
+      },
+      filename: '/repo/node_modules/vitest/dist/worker.js',
+    })
+    assert.strictEqual(pool.options.env.NODE_OPTIONS, '--conditions "custom condition"')
+    assert.strictEqual(pool.options.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
+    assert.strictEqual(pool.options.env.DD_VITEST_WORKER, '1')
+
+    assert.deepStrictEqual(
+      libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),
+      [true, true, true, true, true, true, true]
+    )
+    const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
+    assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
+    assert.strictEqual(efdAdmissionContexts[efdAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
+
+    await sequencer.sort([])
+    await ctx.close()
+    assert.strictEqual(testSessionFinishPayloads.length, 1)
+    assert.strictEqual(testSessionFinishPayloads[0].status, 'fail')
+    assert.strictEqual(testSessionFinishPayloads[0].testSessionEmptyReason, undefined)
+    assert.match(testSessionFinishPayloads[0].error.message, /No test files were found/)
+  })
+})

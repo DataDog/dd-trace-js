@@ -2,7 +2,11 @@
 
 const { channel } = require('dc-polyfill')
 
-const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+const {
+  getEnvironmentVariable,
+  getValueFromEnvSources,
+  isSupportedConfiguration,
+} = require('./config/helper')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
@@ -32,7 +36,11 @@ const pluginClasses = {}
 // during instrumentation initialization (e.g. re-requires in bundler contexts)
 // are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
-  maybeEnable(plugins[name])
+  try {
+    maybeEnable(plugins[name])
+  } catch (error) {
+    log.error('Error activating plugin %s', name, error)
+  }
 })
 
 // instrument everything that needs Plugin System V2 instrumentation
@@ -59,12 +67,14 @@ function maybeEnable (Plugin) {
 }
 
 function getEnabled (Plugin) {
-  const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+  const envName = normalizePluginEnvName(`DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`)
+  if (!isSupportedConfiguration(envName)) return
+
   // skipDefault: only an explicitly configured value should drive enablement here. A registered
-  // default of `false` (e.g. an experimental plugin like `nats`) must not be read as an explicit
+  // default of `false` (e.g. an opt-in plugin like `nats`) must not be read as an explicit
   // "disabled via configuration option" — that path both logs a misleading line and nulls the
-  // plugin class, bypassing the experimental opt-in handled by `loadPlugin`.
-  return getValueFromEnvSources(normalizePluginEnvName(envName), true)
+  // plugin class, bypassing the opt-in handled by `loadPlugin`.
+  return getValueFromEnvSources(envName, true)
 }
 
 // TODO this must always be a singleton.
@@ -75,11 +85,15 @@ module.exports = class PluginManager {
     this._configsByName = {}
 
     this._loadedSubscriber = ({ name }) => {
-      const Plugin = plugins[name]
+      try {
+        const Plugin = plugins[name]
 
-      if (!Plugin || typeof Plugin !== 'function') return
+        if (!Plugin || typeof Plugin !== 'function') return
 
-      this.loadPlugin(Plugin.id)
+        this.loadPlugin(Plugin.id)
+      } catch (error) {
+        log.error('Error activating plugin %s', name, error)
+      }
     }
 
     loadChannel.subscribe(this._loadedSubscriber)
@@ -88,8 +102,7 @@ module.exports = class PluginManager {
   loadPlugin (name) {
     const Plugin = pluginClasses[name]
 
-    if (!Plugin) return
-    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
+    if (!Plugin || !this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
     // Check if this is a Test Optimization plugin and Test Optimization is not enabled
     if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
@@ -102,14 +115,25 @@ module.exports = class PluginManager {
     }
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false &&
-        (!Plugin.experimental || isTrue(getEnabled(Plugin))),
+        (!Plugin.optIn || isTrue(getEnabled(Plugin))),
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
-    this._pluginsByName[name].configure({
+    const config = {
       ...this.#getSharedConfig(name),
       ...pluginConfig,
-    })
+    }
+    const plugin = this._pluginsByName[name]
+    try {
+      plugin.configure(config)
+    } catch (error) {
+      try {
+        plugin.configure({ enabled: false })
+      } catch (disableError) {
+        log.error('Error disabling plugin %s after failed activation', name, disableError)
+      }
+      throw error
+    }
   }
 
   // TODO: merge config instead of replacing
@@ -165,6 +189,8 @@ module.exports = class PluginManager {
       codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
+      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
+      DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
       clientIpEnabled,
       clientIpHeader,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
@@ -181,7 +207,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental,
+      tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
@@ -194,6 +220,8 @@ module.exports = class PluginManager {
       site,
       url,
       headers: headerTags || [],
+      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
+      DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
@@ -202,7 +230,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental,
+      tracing,
       resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 

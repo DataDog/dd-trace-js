@@ -8,6 +8,11 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const {
+  isRewriteActivationEnabled,
+  isRewriteTargetName,
+} = require('../../../datadog-instrumentations/src/helpers/rewriter/targets')
+const plugins = require('../../src/plugins')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -44,8 +49,29 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'async-mutex',
+  'azure-cosmos',
+  'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
+  'langchain',
+  'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
 ]
+
+const hooklessOrchestrionPlugins = new Set([
+  'async-mutex',
+  'azure-cosmos',
+  'bullmq',
+  'langchain',
+  'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -57,11 +83,11 @@ function extractPluginIds (source, re, index) {
 }
 
 function extractPluginsInterfaceKeys (dtsSource) {
-  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/m)
+  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/)
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]
-  return extractPluginIds(body, /^\s*"([^"]+)"\s*:\s*/gm, 1)
+  return extractPluginIds(body, /^[ \t]*"([^"]+)"[ \t]*:[ \t]*/gm, 1)
 }
 
 function extractRuntimePluginPackageNames (pluginsIndexSource) {
@@ -94,7 +120,7 @@ describe('Plugin Structure Validation', () => {
 
   const instrumentationFiles = new Set(
     fs.readdirSync(instrumentationsDir)
-      .filter(file => file.endsWith('.js'))
+      .filter(file => file.endsWith('.js') || fs.existsSync(path.join(instrumentationsDir, file, 'index.js')))
       .map(file => file.replace('.js', ''))
   )
 
@@ -116,11 +142,11 @@ describe('Plugin Structure Validation', () => {
       })
 
       it('should have a corresponding instrumentation file', () => {
-        if (abstractPlugins.includes(pluginId)) {
+        if (abstractPlugins.includes(pluginId) || hooklessOrchestrionPlugins.has(pluginId)) {
           return
         }
 
-        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation entry point: ${pluginId}`)
       })
     })
   })
@@ -141,7 +167,8 @@ describe('Plugin Structure Validation', () => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
-      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId)) {
+      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId) &&
+        !hooklessOrchestrionPlugins.has(pluginId)) {
         missingInstrumentations.push(pluginId)
       }
     })
@@ -173,6 +200,47 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('registers pure Orchestrion integrations only as rewrite targets', () => {
+    const names = [
+      '@azure/cosmos',
+      '@langchain/core',
+      '@langchain/langgraph',
+      '@openai/agents-realtime',
+      '@supabase/auth-js',
+      '@supabase/functions-js',
+      '@supabase/postgrest-js',
+      '@supabase/realtime-js',
+      '@supabase/storage-js',
+      '@wdio/cli',
+      '@wdio/jasmine-framework',
+      '@wdio/local-runner',
+      '@wdio/utils',
+      'bullmq',
+      'mercurius',
+      'postgres',
+      'react-router',
+      'webdriverio',
+    ]
+
+    for (const name of names) {
+      assert.equal(hooks[name], undefined)
+      assert.equal(isRewriteTargetName(name), true)
+      assert.equal(isRewriteActivationEnabled(name), true)
+    }
+    for (const name of ['@wdio/config', '@wdio/runner', 'webdriver', 'jasmine-core']) {
+      assert.equal(hooks[name], undefined)
+      assert.equal(isRewriteTargetName(name), true)
+      assert.equal(isRewriteActivationEnabled(name), false)
+    }
+    assert.equal(isRewriteActivationEnabled('graphql'), false)
+    assert.equal(hooks.graphql.esmFirst, true)
+    assert.equal(typeof hooks.graphql.fn, 'function')
+  })
+
+  it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
+    assert.strictEqual(plugins['@graphql-tools/executor'], plugins.graphql)
   })
 
   it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {

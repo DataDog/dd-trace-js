@@ -1,0 +1,11 @@
+_v: 1
+name: selenium
+display_name: Selenium
+description: Instruments Selenium browser navigation and shutdown to enrich test spans with browser metadata, correlate
+  tests with Datadog RUM, and clean up RUM sessions.
+packages:
+- name: selenium-webdriver
+category:
+- other
+systems: []
+creation_date: '2024-04-22'

@@ -8,7 +8,7 @@ const { getValueFromEnvSources } = require('../config/helper')
 // `config/defaults` defers its own `dns` require until after it exports, so this no longer hits
 // the `config/defaults` <-> log parse cycle that motivated the lazy require below.
 const { defaults } = require('../config/defaults')
-const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
+const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel, errorRecordChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
 
@@ -29,7 +29,13 @@ const log = {
       const stack = logRecord.stack.split('\n')
       const fn = stack[1].replace(/^\s+at ([^\s]+) .+/, '$1')
       const options = { depth: 2, breakLength: Infinity, compact: true, maxArrayLength: Infinity }
-      const params = args.map(a => inspect(a, options)).join(', ')
+      let params = ''
+      let isFirstParameter = true
+      for (const argument of args) {
+        if (!isFirstParameter) params += ', '
+        params += inspect(argument, options)
+        isFirstParameter = false
+      }
 
       stack[0] = `Trace: ${fn}(${params})`
 
@@ -89,10 +95,25 @@ const log = {
 }
 
 function publishFormatted (ch, formatter, ...args) {
-  if (ch.hasSubscribers) {
-    const log = Log.parse(...args)
-    const { formatted, cause } = getErrorLog(log)
+  const publishRecord = ch === errorChannel && errorRecordChannel.hasSubscribers
+  const publishLog = ch.hasSubscribers
+  if (!publishLog && !publishRecord) return
 
+  let record
+  try {
+    const parsed = Log.parse(...args)
+    if (!publishLog && !parsed.sendViaTelemetry) return
+    record = getErrorLog(parsed)
+  } catch (err) {
+    // Telemetry must not expose parsing failures while the configured logger is disabled.
+    if (!publishLog) return
+    throw err
+  }
+
+  if (publishRecord) errorRecordChannel.publish(record)
+
+  if (publishLog) {
+    const { formatted, cause } = record
     // calling twice ch.publish() because Error cause is only available in Node.js v16.9.0
     // TODO: replace it with Error(message, { cause }) when cause has broad support
     if (formatted) ch.publish(formatter?.(formatted) || formatted)
@@ -103,7 +124,10 @@ function publishFormatted (ch, formatter, ...args) {
 function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
     const result = err.delegate(...err.args)
-    return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+    const resolved = Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+    resolved.cause ??= err.cause
+    resolved.sendViaTelemetry &&= err.sendViaTelemetry
+    return resolved
   }
   return err
 }

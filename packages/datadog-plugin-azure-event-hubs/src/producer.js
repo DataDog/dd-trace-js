@@ -46,9 +46,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         }
         injectTraceContext(this.tracer, span, ctx.eventData)
       }
-    }
-
-    if (ctx.functionName === 'sendBatch') {
+    } else if (ctx.functionName === 'sendBatch') {
       const eventData = ctx.eventData
       const eventDataLength = eventData.length || eventData._context.connection._eventsCount
       span.setTag('messaging.operation', 'send')

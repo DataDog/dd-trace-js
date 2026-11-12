@@ -50,7 +50,12 @@ class SchemaExtractor {
 
     if (Array.isArray(fieldType)) {
       // Union Type
-      type = 'union[' + fieldType.map(t => SchemaExtractor.getType(t.type || t)).join(',') + ']'
+      type = 'union['
+      for (const typeDefinition of fieldType) {
+        if (type !== 'union[') type += ','
+        type += SchemaExtractor.getType(typeDefinition.type || typeDefinition)
+      }
+      type += ']'
     } else if (fieldType === 'array') {
       // Array Type
       array = true
@@ -149,12 +154,8 @@ class SchemaExtractor {
     span.setTag(SCHEMA_NAME, descriptor.name)
     span.setTag(SCHEMA_OPERATION, operation)
 
-    if (!tracer._dataStreamsProcessor.canSampleSchema(operation)) {
-      return
-    }
-
     // if the span is unsampled, do not sample the schema
-    if (!tracer._prioritySampler.isSampled(span)) {
+    if (!tracer._dataStreamsProcessor.canSampleSchema(operation) || !tracer._prioritySampler.isSampled(span)) {
       return
     }
 

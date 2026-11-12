@@ -1,0 +1,449 @@
+'use strict'
+
+const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
+const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
+let fakeClock
+
+const baseConfig = {
+  runner: 'local',
+  specs: [
+    './first.e2e.js',
+    './second.e2e.js',
+  ],
+  maxInstances: 2,
+  capabilities: [{
+    browserName: 'chrome',
+    ...(process.env.WEBDRIVERIO_CLASSIC === 'true' ? { 'wdio:enforceWebDriverClassic': true } : {}),
+    ...(process.env.WEBDRIVERIO_PROMPT_BEHAVIOR
+      ? { unhandledPromptBehavior: process.env.WEBDRIVERIO_PROMPT_BEHAVIOR, 'wdio:enforceWebDriverClassic': true }
+      : {}),
+  }],
+  protocol: 'http',
+  hostname: '127.0.0.1',
+  port: Number(process.env.WEBDRIVER_PORT),
+  path: '/',
+  connectionRetryCount: 0,
+  services: [],
+  framework,
+  reporters: [],
+  /**
+   * @param {object} config
+   * @param {Record<string, {capabilities: object}>} capabilities
+   */
+  beforeSession (config, capabilities) {
+    if (process.env.WEBDRIVERIO_FREEZE_LAST_CAPABILITIES === 'true') {
+      Object.freeze(Object.values(capabilities).at(-1).capabilities)
+    }
+  },
+  before () {
+    if (process.env.WEBDRIVERIO_FAKE_DATE === 'true') {
+      fakeClock = require('@sinonjs/fake-timers').install({ toFake: ['Date'] })
+    }
+  },
+  after () {
+    fakeClock?.uninstall()
+  },
+  jasmineOpts: {
+    defaultTimeoutInterval: 10_000,
+    random: false,
+  },
+  mochaOpts: {
+    ui: 'bdd',
+    timeout: 10_000,
+  },
+}
+
+const scenarioConfig = {
+  exclusions: {
+    maxInstances: 1,
+    specs: ['./test-exclusions.e2e.js'],
+  },
+  exclusionsPassing: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-passing.e2e.js'],
+  },
+  exclusionsNative: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-native.e2e.js'],
+  },
+  exclusionsProtected: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-protected.e2e.js'],
+  },
+  videosBrowser: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos-browser.e2e.js'],
+    hostname: undefined,
+    port: undefined,
+    capabilities: [{
+      browserName: 'chrome',
+      'wdio:enforceWebDriverClassic': process.env.WEBDRIVERIO_CLASSIC === 'true',
+      ...(process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY
+        ? { 'wdio:chromedriverOptions': { binary: process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY } }
+        : {}),
+      'goog:chromeOptions': {
+        ...(process.env.WEBDRIVERIO_CHROME_BINARY ? { binary: process.env.WEBDRIVERIO_CHROME_BINARY } : {}),
+        args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1000,800'],
+      },
+    }],
+  },
+  videos: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos.e2e.js'],
+  },
+  videosJasmineRetry: {
+    maxInstances: 1,
+    specs: ['./jasmine-retry.e2e.js'],
+  },
+  videosParallel: {
+    injectGlobals: false,
+    capabilities: [{ browserName: 'chrome' }, { browserName: 'firefox' }],
+    specs: ['./videos.e2e.js'],
+  },
+  videosMultiremote: {
+    injectGlobals: false,
+    capabilities: {
+      firstBrowser: { capabilities: { browserName: 'chrome' } },
+      secondBrowser: { capabilities: { browserName: 'firefox' } },
+    },
+    specs: ['./videos.e2e.js'],
+  },
+  emptyShard: {
+    specs: ['./first.e2e.js'],
+    shard: { current: 2, total: 2 },
+  },
+  noWorkers: {
+    specs: [],
+  },
+  noWorkersSharded: {
+    specs: ['./no-matching-specs.e2e.js'],
+    shard: { current: 2, total: 2 },
+  },
+  allSkipped: {
+    maxInstances: 1,
+    specs: ['./all-skipped.e2e.js'],
+  },
+  empty: {
+    maxInstances: 1,
+    specs: ['./empty.e2e.js'],
+  },
+  automaticLogSubmission: {
+    after () {
+      const loggers = require('./automatic-log-submission-logger')
+      for (const [loggerName, logger] of Object.entries(loggers)) {
+        logger.info(`Hello from WebdriverIO ${loggerName} after hook!`)
+      }
+    },
+    maxInstances: 1,
+    specs: ['./automatic-log-submission.e2e.js'],
+  },
+  automaticConsoleLogSubmission: {
+    maxInstances: 1,
+    specs: ['./automatic-console-log-submission.e2e.js'],
+  },
+  atr: {
+    maxInstances: 1,
+    specs: ['./atr.e2e.js'],
+  },
+  atrAlwaysFails: {
+    maxInstances: 1,
+    specs: ['./atr-always-fail.e2e.js'],
+  },
+  atrBoth: {
+    maxInstances: 1,
+    specs: [[
+      './atr.e2e.js',
+      './atr-always-fail.e2e.js',
+    ]],
+  },
+  atrHookFailures: {
+    maxInstances: 1,
+    specs: ['./atr-hook-fail.e2e.js'],
+  },
+  bail: {
+    maxInstances: 1,
+    mochaOpts: {
+      bail: true,
+    },
+    specs: [[
+      './fail.e2e.js',
+      './second.e2e.js',
+    ]],
+  },
+  preFrameworkFailure: {
+    maxInstances: 1,
+    reporters: ['webdriverio-missing-reporter'],
+    specs: ['./first.e2e.js'],
+  },
+  disabledEfd: {
+    maxInstances: 1,
+    specs: [[
+      './impacted.e2e.js',
+      './disabled-efd.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  efd: {
+    maxInstances: 1,
+    specs: ['./efd.e2e.js'],
+  },
+  efdAfterEachFailure: {
+    maxInstances: 1,
+    specs: ['./efd-after-each-fail.e2e.js'],
+  },
+  efdFaultySchedule: {
+    maxInstances: 1,
+    specs: [
+      [
+        './first.e2e.js',
+        './efd.e2e.js',
+      ],
+      './second.e2e.js',
+    ],
+  },
+  failedTestReplayAndImpacted: {
+    maxInstances: 1,
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  failedTestReplayBothAndImpacted: {
+    maxInstances: 1,
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './efd-failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  grep: {
+    maxInstances: 1,
+    mochaOpts: {
+      grep: 'first worker',
+    },
+    specs: [[
+      './first.e2e.js',
+      './second.e2e.js',
+    ]],
+  },
+  hookFailure: {
+    maxInstances: 1,
+    specs: [[
+      './hook-fail.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  impacted: {
+    maxInstances: 1,
+    specs: [[
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  jasmineStatuses: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./jasmine-statuses.e2e.js'],
+  },
+  jasmineAfterAllFailure: {
+    maxInstances: 1,
+    specs: ['./jasmine-after-all-fail.e2e.js'],
+  },
+  jasmineAttemptToFixSkipped: {
+    maxInstances: 1,
+    specs: ['./jasmine-attempt-to-fix-skipped.e2e.js'],
+  },
+  jasmineDelayedSettings: {
+    maxInstances: 1,
+    specs: ['./first.e2e.js'],
+  },
+  jasmineEfdPassing: {
+    jasmineOpts: {
+      grep: 'retries a new test|passes|stays skipped|runs selected test',
+    },
+    maxInstances: 1,
+    specs: [[
+      './efd.e2e.js',
+      './jasmine-efd-skipped.e2e.js',
+      './jasmine-filtered.e2e.js',
+    ]],
+  },
+  jasmineExpectationHookFailures: {
+    maxInstances: 1,
+    specs: ['./jasmine-expectation-hook-fail.e2e.js'],
+  },
+  jasmineGlobalAfterAllFailure: {
+    maxInstances: 1,
+    specs: [[
+      './jasmine-global-after-all-fail.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  jasmineNoExpectations: {
+    jasmineOpts: {
+      failSpecWithNoExpectations: true,
+    },
+    maxInstances: 1,
+    specs: ['./jasmine-no-expectations.e2e.js'],
+  },
+  jasminePassing: {
+    maxInstances: 1,
+    runnerEnv: {
+      NODE_OPTIONS: '--require ./runner-env-preload.js',
+    },
+    specs: [[
+      './empty.e2e.js',
+      './first.e2e.js',
+      './second.e2e.js',
+      './jasmine-hooks.e2e.js',
+      './runner-env.e2e.js',
+    ]],
+  },
+  jasmineRumAndRetry: {
+    maxInstances: 1,
+    specs: [[
+      './rum.e2e.js',
+      './rum-no-after-each.e2e.js',
+      './jasmine-retry.e2e.js',
+    ]],
+  },
+  loadFailure: {
+    maxInstances: 1,
+    specs: ['./load-fail.e2e.js'],
+  },
+  locallyDisabledFailures: {
+    maxInstances: 1,
+    specs: [[
+      './efd.e2e.js',
+      './test-management.e2e.js',
+    ]],
+  },
+  locallyDisabledPassing: {
+    maxInstances: 1,
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  managedEfdPassing: {
+    maxInstances: 1,
+    specs: [[
+      './atr-always-fail.e2e.js',
+      './managed-hook-fail.e2e.js',
+    ]],
+  },
+  mochaPassing: {
+    maxInstances: 1,
+    mochaOpts: {
+      delay: true,
+    },
+    runnerEnv: {
+      NODE_OPTIONS: '--require ./runner-env-preload.js',
+    },
+    specs: [[
+      './first.e2e.js',
+      './second.e2e.js',
+      './runner-env.e2e.js',
+      './delay.e2e.js',
+    ]],
+  },
+  multipleCapabilities: {
+    capabilities: [
+      { browserName: 'chrome' },
+      { browserName: 'firefox' },
+    ],
+    specs: ['./first.e2e.js'],
+  },
+  parallel: {},
+  retries: {
+    maxInstances: 1,
+    mochaOpts: {
+      retries: 1,
+    },
+    specs: ['./retry.e2e.js'],
+  },
+  rum: {
+    maxInstances: 1,
+    specs: [[
+      './rum.e2e.js',
+      './rum-no-after-each.e2e.js',
+    ]],
+  },
+  serial: {
+    maxInstances: 1,
+  },
+  specFileRetries: {
+    maxInstances: 1,
+    specFileRetries: 1,
+    specFileRetriesDelay: 0,
+    specs: ['./spec-file-retry.e2e.js'],
+  },
+  suiteHookFailure: {
+    maxInstances: 1,
+    specs: ['./suite-hook-fail.e2e.js'],
+  },
+  tdd: {
+    maxInstances: 1,
+    mochaOpts: {
+      ui: 'tdd',
+    },
+    specs: ['./tdd.e2e.js'],
+  },
+  testManagement: {
+    maxInstances: 1,
+    specs: ['./test-management.e2e.js'],
+  },
+  testManagementDisabledHook: {
+    maxInstances: 1,
+    specs: ['./test-management-disabled-hook.e2e.js'],
+  },
+}
+
+scenarioConfig.videosBrowserReload = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-reload.e2e.js'],
+}
+scenarioConfig.videosBrowserRetry = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-retry.e2e.js'],
+  mochaOpts: { retries: 1 },
+}
+scenarioConfig.videosBrowserHooks = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-hooks.e2e.js'],
+  mochaOpts: { retries: 1 },
+}
+scenarioConfig.videosBrowserNoHooks = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-no-hooks.e2e.js'],
+  mochaOpts: { retries: process.env.WEBDRIVERIO_VIDEO_RETRY === 'true' ? 1 : 0 },
+}
+const selectedScenario = scenarioConfig[scenario]
+if (scenario.startsWith('videosBrowser') && process.env.WEBDRIVERIO_REAL_MULTIREMOTE === 'true') {
+  const [capabilities] = selectedScenario.capabilities
+  selectedScenario.capabilities = {
+    first: { capabilities: { ...capabilities } },
+    second: { capabilities: { ...capabilities } },
+  }
+}
+if (!selectedScenario) {
+  throw new Error(`Unknown WebdriverIO integration scenario: ${scenario}`)
+}
+
+exports.config = {
+  ...baseConfig,
+  ...selectedScenario,
+  jasmineOpts: {
+    ...baseConfig.jasmineOpts,
+    ...selectedScenario.jasmineOpts,
+  },
+  mochaOpts: {
+    ...baseConfig.mochaOpts,
+    ...selectedScenario.mochaOpts,
+  },
+}

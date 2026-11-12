@@ -46,9 +46,12 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponses = []
+  #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
   #mediaResponseDelayMs = 0
+  #mediaResponsesPending = false
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -60,6 +63,7 @@ class FakeCiVisIntake extends FakeAgent {
   #waitingTime = 0
   #knownTestsPageIndex = 0
   #testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+  #testManagementResponses = []
   #testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
   #skippableSuitesResponseStatusCode = 200
 
@@ -103,6 +107,24 @@ class FakeCiVisIntake extends FakeAgent {
     this.#settings = newSettings
   }
 
+  /**
+   * Sets library configuration responses to return in order.
+   *
+   * @param {object[]} responses
+   */
+  setSettingsResponses (responses) {
+    this.#settingsResponses = responses.slice()
+  }
+
+  /**
+   * Delays settings responses to exercise initialization ordering.
+   *
+   * @param {number} delayMs
+   */
+  setSettingsResponseDelay (delayMs) {
+    this.#settingsResponseDelayMs = delayMs
+  }
+
   setSettingsResponseCode (statusCode) {
     this.#settingsResponseStatusCode = statusCode
   }
@@ -122,10 +144,17 @@ class FakeCiVisIntake extends FakeAgent {
 
   /**
    * @param {number} delayMs - Delay before responding to screenshot uploads
-   * @returns {void}
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
+  }
+
+  /**
+   * Leaves media requests open until the client cancels them.
+   *
+   */
+  setMediaResponsesPending () {
+    this.#mediaResponsesPending = true
   }
 
   setWaitingTime (newWaitingTime) {
@@ -134,6 +163,15 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTests (newTestManagementTests) {
     this.#testManagementResponse = newTestManagementTests
+  }
+
+  /**
+   * Sets Test Management responses to return in order.
+   *
+   * @param {object[]} responses
+   */
+  setTestManagementTestResponses (responses) {
+    this.#testManagementResponses = responses.slice()
   }
 
   setTestManagementTestsResponseCode (newStatusCode) {
@@ -148,7 +186,7 @@ class FakeCiVisIntake extends FakeAgent {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
 
-    app.put('/v0.4/traces', (req, res) => {
+    const handleV04Traces = (req, res) => {
       if (req.body.length === 0) return res.status(200).send()
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       this.emit('message', {
@@ -156,7 +194,12 @@ class FakeCiVisIntake extends FakeAgent {
         payload: msgpack.decode(req.body, { useBigInt64: true }),
         url: req.url,
       })
-    })
+    }
+
+    // Both methods the Agent accepts for trace intake: the legacy writer sends
+    // PUT, and a writer built on libdatadog sends POST.
+    app.put('/v0.4/traces', handleV04Traces)
+    app.post('/v0.4/traces', handleV04Traces)
 
     app.get('/info', (req, res) => {
       res.status(200).send(JSON.stringify(this.#infoResponse))
@@ -164,6 +207,11 @@ class FakeCiVisIntake extends FakeAgent {
         headers: req.headers,
         url: req.url,
       })
+    })
+
+    app.post('/dogstatsd/v2/proxy', express.text({ type: () => true }), (req, res) => {
+      res.status(200).send('OK')
+      this.emit('message', { headers: req.headers, payload: req.body, url: req.url })
     })
 
     // It can be slowed down with setWaitingTime
@@ -249,7 +297,11 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+    app.post([
+      '/api/v2/ci/test-runs/:traceId/media',
+      '/evp_proxy/:version/api/v2/ci/test-runs/:traceId/media',
+      '/api/v2/ci/test-suites/:testSessionId/:testSuiteId/media',
+    ], express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       const receivedAtMs = Date.now()
       const respond = () => {
         res.status(this.#mediaResponseStatusCode).send()
@@ -257,6 +309,8 @@ class FakeCiVisIntake extends FakeAgent {
           headers: req.headers,
           media: {
             traceId: req.params.traceId,
+            testSessionId: req.params.testSessionId,
+            testSuiteId: req.params.testSuiteId,
             contentType: req.headers['content-type'],
             // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
             // evp_proxy, which forwards only an allow-listed header set.
@@ -269,6 +323,9 @@ class FakeCiVisIntake extends FakeAgent {
         })
       }
 
+      if (this.#mediaResponsesPending) {
+        return
+      }
       if (this.#mediaResponseDelayMs > 0) {
         setTimeout(respond, this.#mediaResponseDelayMs)
       } else {
@@ -280,22 +337,33 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
-        this.#settingsResponseStatusCode
-      res.status(settingsResponseStatusCode)
-      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
-        res.send(JSON.stringify({
-          data: {
-            attributes: this.#settings,
-          },
-        }))
-      } else {
-        res.send(JSON.stringify({ errors: ['error'] }))
+      const respond = () => {
+        const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
+          this.#settingsResponseStatusCode
+        const settings = this.#settingsResponses.length
+          ? this.#settingsResponses.shift()
+          : this.#settings
+        res.status(settingsResponseStatusCode)
+        if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+          res.send(JSON.stringify({
+            data: {
+              attributes: settings,
+            },
+          }))
+        } else {
+          res.send(JSON.stringify({ errors: ['error'] }))
+        }
+        this.emit('message', {
+          headers: req.headers,
+          url: req.url,
+        })
       }
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url,
-      })
+
+      if (this.#settingsResponseDelayMs > 0) {
+        setTimeout(respond, this.#settingsResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
@@ -373,10 +441,13 @@ class FakeCiVisIntake extends FakeAgent {
       '/evp_proxy/:version/api/v2/test/libraries/test-management/tests',
     ], (req, res) => {
       res.setHeader('content-type', 'application/json')
+      const testManagementResponse = this.#testManagementResponses.length
+        ? this.#testManagementResponses.shift()
+        : this.#testManagementResponse
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: this.#testManagementResponse,
+            modules: testManagementResponse,
           },
         },
       })
@@ -417,6 +488,8 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponses = []
+    this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []
     this.#suitesToSkip = DEFAULT_SUITES_TO_SKIP
@@ -426,8 +499,10 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
     this.#mediaResponseDelayMs = 0
+    this.#mediaResponsesPending = false
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    this.#testManagementResponses = []
     this.#skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
@@ -442,7 +517,7 @@ class FakeCiVisIntake extends FakeAgent {
   // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
   // only when a workload's child runtime is provably above the default.
   /**
-   * @param {import('child_process').ChildProcess | NodeJS.EventEmitter} childProcess
+   * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
    *   so a child that has already exited is handled correctly.
    * @param {(message: object) => boolean} [payloadMatch] Per-message filter; falsy
@@ -450,20 +525,29 @@ class FakeCiVisIntake extends FakeAgent {
    * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
    *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
    *   after the returned promise resolves.
-   * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
+   * @param {{ gracePeriod?: number, hardTimeout?: number, captureOutput?: boolean }} [options]
    */
   gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
-    const { gracePeriod = 1000, hardTimeout = 30_000 } = options
+    const { gracePeriod = 1000, hardTimeout = 30_000, captureOutput = false } = options
     const payloads = []
+    let stdout = ''
+    let stderr = ''
 
     return new Promise((resolve, reject) => {
       let settled = false
       let graceTimer = null
 
+      const stdoutHandler = chunk => { stdout = (stdout + chunk.toString()).slice(-64 * 1024) }
+      const stderrHandler = chunk => { stderr = (stderr + chunk.toString()).slice(-64 * 1024) }
+
       const cleanup = () => {
         settled = true
         this.off('message', messageHandler)
         childProcess.off('exit', exitHandler)
+        if (captureOutput) {
+          childProcess.stdout?.off('data', stdoutHandler)
+          childProcess.stderr?.off('data', stderrHandler)
+        }
         clearTimeout(hardTimer)
         clearTimeout(graceTimer)
       }
@@ -508,11 +592,16 @@ class FakeCiVisIntake extends FakeAgent {
         if (settled) return
         cleanup()
         reject(new Error(
-          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)`
+          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)` +
+          (captureOutput ? `\nChild stdout:\n${stdout}\nChild stderr:\n${stderr}` : '')
         ))
       }, hardTimeout)
 
       this.on('message', messageHandler)
+      if (captureOutput) {
+        childProcess.stdout?.on('data', stdoutHandler)
+        childProcess.stderr?.on('data', stderrHandler)
+      }
 
       // Child may already have exited (very fast spawn-and-die).
       if (childProcess.exitCode !== null || childProcess.signalCode != null) {
@@ -547,7 +636,7 @@ class FakeCiVisIntake extends FakeAgent {
             clearTimeout(timeoutId)
             this.off('message', messageHandler)
             resolve()
-          } catch (e) {
+          } catch {
             // Assertion not yet satisfied — we'll try again when a new payload arrives.
             // The timeout handler will re-run onPayload and reject with the actual error.
           }

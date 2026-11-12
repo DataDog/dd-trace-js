@@ -1,10 +1,9 @@
 'use strict'
 
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
+const { getHeadersSize, getSizeOrZero } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const SpanContext = require('../../dd-trace/src/opentracing/span_context')
-const id = require('../../dd-trace/src/id')
 const { storage } = require('../../datadog-core')
+const reconstructPubSubRequestContext = require('./pubsub-request-context')
 
 /**
  * PULL SUBSCRIPTION: Service explicitly pulls messages from Pub/Sub and processes them.
@@ -75,25 +74,18 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     })
   }
 
-  #reconstructPubSubRequestContext (attrs) {
-    const traceIdLower = attrs['_dd.pubsub_request.trace_id']
-    const spanId = attrs['_dd.pubsub_request.span_id']
-    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { message } = ctx
+    if (!message?.attributes) return
 
-    if (!traceIdLower || !spanId) return null
-
-    const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
-    const traceId = id(traceId128, 16)
-    const parentId = id(spanId, 16)
-
-    const tags = {}
-    if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
-
-    return new SpanContext({
-      traceId,
-      spanId: parentId,
-      tags,
-    })
+    const { span } = ctx.currentStore
+    const subscription = message._subscriber._subscription
+    const topic = subscription?.metadata?.topic || message.attributes?.['pubsub.topic']
+    const payloadSize = getSizeOrZero(message.data) + getHeadersSize(message.attributes)
+    this.tracer.decodeDataStreamsContext(message.attributes)
+    this.tracer
+      .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
   }
 
   bindStart (ctx) {
@@ -112,9 +104,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     let childOf = this.tracer.extract('text_map', message.attributes)
 
+    let pubsubRequestContext
     const isFirstMessage = batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = this.#reconstructPubSubRequestContext(message.attributes)
+      pubsubRequestContext = reconstructPubSubRequestContext(
+        message.attributes, childOf, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
       if (pubsubRequestContext) {
         childOf = pubsubRequestContext
       }
@@ -133,14 +128,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'receive',
     }
 
+    let batchContext
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
-      // Use JSON format like producer for proper span link parsing
-      meta['_dd.span_links'] = JSON.stringify([{
-        trace_id: batchRequestTraceId,
-        span_id: batchRequestSpanId,
-        flags: 0,
-      }])
+      batchContext = pubsubRequestContext || reconstructPubSubRequestContext(
+        message.attributes, null, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
     }
 
     const metrics = {
@@ -169,6 +162,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics,
     }, ctx)
 
+    if (batchContext) span.addLink({ context: batchContext })
+
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())
     }
@@ -179,13 +174,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         const deliveryDuration = Date.now() - Number(publishStartTime)
         span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
       }
-    }
-
-    if (this.config.dsmEnabled && message?.attributes) {
-      const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(message.attributes)
-      this.tracer
-        .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
     }
 
     return ctx.currentStore

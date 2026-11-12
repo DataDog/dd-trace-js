@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const { hostname } = require('node:os')
 const { inspect } = require('node:util')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const { DsmPathwayCodec } = require('../../src/datastreams/pathway')
+const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const propagationHash = require('../../src/propagation-hash')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -217,6 +220,10 @@ describe('DataStreamsProcessor', () => {
     clearTimeout(processor.timer)
   })
 
+  afterEach(() => {
+    propagationHash.configure(null)
+  })
+
   it('should construct', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
@@ -328,11 +335,9 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('should include ProcessTags when propagation is enabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
     const processTags = require('../../src/process-tags')
     processTags.initialize()
 
-    // Configure and enable the feature
     propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true })
 
     processor.recordCheckpoint(mockCheckpoint)
@@ -347,15 +352,9 @@ describe('DataStreamsProcessor', () => {
       processTags.serialized.split(','),
       'ProcessTags should match process-tags module as array'
     )
-
-    // Cleanup
-    propagationHash.configure(null)
   })
 
   it('should not include ProcessTags when propagation is disabled', () => {
-    const propagationHash = require('../../src/propagation-hash')
-
-    // Ensure the feature is disabled
     propagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false })
 
     processor.recordCheckpoint(mockCheckpoint)
@@ -365,9 +364,160 @@ describe('DataStreamsProcessor', () => {
     const payload = call.args[0]
 
     assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
+  })
 
-    // Cleanup
-    propagationHash.configure(null)
+  // A small fake epoch keeps Date.now() * 1e6 within safe-integer range so the
+  // nanosecond deltas are exact.
+  const MS = 1e6
+
+  const captureCheckpoints = () => {
+    const recorded = []
+    sinon.stub(processor, 'recordCheckpoint').callsFake((checkpoint) => recorded.push(checkpoint))
+    return recorded
+  }
+
+  it('resets the edge start per hop so edge latency is per-hop, not cumulative', () => {
+    // produce(a) -> consume(a) -> produce(b) -> consume(b), 1s processing at the
+    // middle hop. The downstream topic-b edge must be the 3ms queue wait, not
+    // the cumulative 1008ms.
+    const recorded = captureCheckpoints()
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    try {
+      const produceA = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, null)
+      clock.tick(5)
+      const consumeA = processor.setCheckpoint(['direction:in', 'group:g2', 'topic:a', 'type:kafka'], null, produceA)
+      clock.tick(1000)
+      const produceB = processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, consumeA)
+      clock.tick(3)
+      processor.setCheckpoint(['direction:in', 'group:g3', 'topic:b', 'type:kafka'], null, produceB)
+    } finally {
+      clock.restore()
+    }
+
+    const [, consumeACp, produceBCp, consumeBCp] = recorded
+    assert.strictEqual(consumeACp.edgeLatencyNs, 5 * MS)
+    assert.strictEqual(produceBCp.edgeLatencyNs, 1000 * MS)
+    assert.strictEqual(consumeBCp.edgeLatencyNs, 3 * MS)
+    assert.strictEqual(consumeBCp.pathwayLatencyNs, 1008 * MS)
+  })
+
+  it('measures same-direction (fan-out) hops from the closest opposite-direction checkpoint', () => {
+    // consume -> produce(a), produce(b): both fan-out produces measure their
+    // edge from the shared consume, not from each other.
+    const recorded = captureCheckpoints()
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    try {
+      const origin = processor.setCheckpoint(['direction:out', 'topic:in', 'type:kafka'], null, null)
+      clock.tick(5)
+      const consume = processor.setCheckpoint(['direction:in', 'group:g', 'topic:in', 'type:kafka'], null, origin)
+      clock.tick(2)
+      const fanoutA = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, consume)
+      clock.tick(3)
+      processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, fanoutA)
+    } finally {
+      clock.restore()
+    }
+
+    const [, , fanoutACp, fanoutBCp] = recorded
+    assert.strictEqual(fanoutACp.edgeLatencyNs, 2 * MS)
+    assert.strictEqual(fanoutBCp.edgeLatencyNs, 5 * MS)
+  })
+
+  it('restarts the pathway for a produce loop with no consume (same direction, entry parent)', () => {
+    const recorded = captureCheckpoints()
+    const clock = sinon.useFakeTimers({ now: 1000, toFake: ['Date'] })
+    try {
+      const p1 = processor.setCheckpoint(['direction:out', 'topic:a', 'type:kafka'], null, null)
+      clock.tick(4)
+      processor.setCheckpoint(['direction:out', 'topic:b', 'type:kafka'], null, p1)
+    } finally {
+      clock.restore()
+    }
+
+    const [, loop] = recorded
+    assert.strictEqual(loop.edgeLatencyNs, 0)
+    assert.strictEqual(loop.pathwayLatencyNs, 0)
+  })
+
+  it('does not record negative latencies when the producer clock is ahead of the consumer clock', () => {
+    // The producer host's clock runs 50ms ahead of the consumer host's, and the
+    // message really spends 5ms in the queue, so the consumer sees a start
+    // timestamp 45ms in its future.
+    const consumerNowMs = DEFAULT_TIMESTAMP
+    const producerNowMs = consumerNowMs - 5 + 50
+
+    const clock = sinon.useFakeTimers({ now: producerNowMs, toFake: ['Date'] })
+    let consumeCtx
+    try {
+      const produceCtx = processor.setCheckpoint(['direction:out', 'topic:skew', 'type:kafka'], null, null)
+      const headers = DsmPathwayCodec.encode(produceCtx, {})
+
+      clock.setSystemTime(consumerNowMs)
+      consumeCtx = processor.setCheckpoint(
+        ['direction:in', 'group:g', 'topic:skew', 'type:kafka'], null, DsmPathwayCodec.decode(headers)
+      )
+    } finally {
+      clock.restore()
+    }
+
+    const consumeHash = consumeCtx.hash.readBigUInt64LE()
+    const timeBucket = processor.bucketFromTimestamp(consumerNowMs * 1e6)
+    const consumePoint = [...timeBucket.checkpoints.values()].find(point => point.hash === consumeHash)
+    assert.ok(consumePoint, 'consume checkpoint was not recorded')
+
+    for (const name of ['edgeLatency', 'pathwayLatency']) {
+      const sketch = consumePoint[name]
+      assert.strictEqual(sketch.count, 1, `${name} count`)
+      assert.ok(sketch.min >= 0, `${name} min is ${sketch.min}s`)
+      assert.strictEqual(sketch.negativeStore.count, 0, `${name} has values in the negative store`)
+      assert.ok(sketch.getValueAtQuantile(0.5) >= 0, `${name} p50 is ${sketch.getValueAtQuantile(0.5)}s`)
+    }
+  })
+})
+
+describe('DataStreamsProcessor#setCheckpoint payload size', () => {
+  const config = {
+    dsmEnabled: true,
+    hostname: '127.0.0.1',
+    port: 8126,
+    url: new URL('http://127.0.0.1:8126'),
+    env: 'test',
+    version: 'v1',
+    service: 'service1',
+    tags: {},
+  }
+
+  let processor
+  let recorded
+
+  beforeEach(() => {
+    processor = new DataStreamsProcessor(config)
+    clearTimeout(processor.timer)
+    recorded = sinon.stub(processor, 'recordCheckpoint')
+  })
+
+  it('adds the pathway field a producer will inject', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:kafka'], null, undefined, 100)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100 + PATHWAY_FIELD_BYTES)
+  })
+
+  it('reports the payload verbatim when the caller sizes the pathway itself', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:eventbridge'], null, undefined, 100, 0)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100)
+  })
+
+  it('adds a caller-supplied pathway size', () => {
+    processor.setCheckpoint(['direction:out', 'topic:t', 'type:eventbridge'], null, undefined, 100, 7)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 107)
+  })
+
+  it('never adds the pathway field to a consumer checkpoint', () => {
+    processor.setCheckpoint(['direction:in', 'topic:t', 'type:kafka'], null, undefined, 100)
+
+    assert.strictEqual(recorded.firstCall.args[0].payloadSize, 100)
   })
 })
 

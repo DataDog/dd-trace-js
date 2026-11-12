@@ -5,6 +5,7 @@
   "instructions": true,
   "variants": {
     "client-with-tracer": {
+      "iterations": 12,
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
@@ -14,6 +15,7 @@
       }
     },
     "server-with-tracer": {
+      "iterations": 11,
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
@@ -24,6 +26,7 @@
       }
     },
     "server-querystring-obfuscation": {
+      "iterations": 11,
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",

@@ -16,7 +16,6 @@ const {
   SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
-const { NODE_MAJOR } = require('../../../version')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { loadMessage } = require('./helpers')
 
@@ -36,14 +35,13 @@ function compareJson (expected, span) {
 
 describe('Plugin', () => {
   describe('avsc', function () {
-    this.timeout(0)
+    this.timeout(30_000)
     let tracer
     let avro
     let dateNowStub
     let mockTime = 0
 
-    // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : '*', (version) => {
+    withVersions('avsc', ['avsc'], (version) => {
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas

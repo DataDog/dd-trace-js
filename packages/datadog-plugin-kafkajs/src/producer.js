@@ -1,7 +1,8 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { getKafkaMessageSize } = require('./utils')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -29,12 +30,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   /**
    *
    * @typedef {object} ProducerResponseItem
-   * @property {string} topic
+   * @property {string} topicName
    * @property {number} partition
    * @property {import('kafkajs/utils/long').Long} [offset]
    * @property {import('kafkajs/utils/long').Long} [baseOffset]
    *
    * @param {ProducerResponseItem} response
+   * @param {string} [clusterId]
    * @returns {ProducerBacklog}
    */
   transformProduceResponse (response, clusterId) {
@@ -56,14 +58,12 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   /**
    *
    * @param {{ result: ProducerResponseItem[] }} ctx
-   * @returns {void}
    */
   commit (ctx) {
     const commitList = ctx.result
     const clusterId = ctx.clusterId
 
-    if (!this.config.dsmEnabled) return
-    if (!commitList || !Array.isArray(commitList)) return
+    if (!this.config.dsmEnabled || !commitList || !Array.isArray(commitList)) return
     for (const rawCommit of commitList) {
       const commit = this.transformProduceResponse(rawCommit, clusterId)
       this.tracer.setOffset(commit)
@@ -76,7 +76,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        const payloadSize = getMessageSize(message)
+        const payloadSize = getKafkaMessageSize(message)
         const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
         if (clusterId) {

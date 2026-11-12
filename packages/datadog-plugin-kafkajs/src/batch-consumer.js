@@ -1,8 +1,7 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
-const { convertToTextMap } = require('./utils')
+const { convertToTextMap, getKafkaMessageSize } = require('./utils')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static id = 'kafkajs'
@@ -39,7 +38,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       }
 
       if (!this.config.dsmEnabled) continue
-      const payloadSize = getMessageSize(message)
+      const payloadSize = getKafkaMessageSize(message)
       this.tracer.decodeDataStreamsContext(headers)
       const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
       if (clusterId) {

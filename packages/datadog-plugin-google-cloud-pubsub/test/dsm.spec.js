@@ -128,6 +128,72 @@ describe('Plugin', () => {
           })
         })
 
+        describe('concurrent context isolation', () => {
+          it('Should maintain separate DSM context for interleaved consume-produce flows', async () => {
+            const setCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'setCheckpoint')
+
+            try {
+              const topicAIn = (await pubsub.createTopic(`dsm-iso-a-in-${id()}`))[0]
+              const topicBIn = (await pubsub.createTopic(`dsm-iso-b-in-${id()}`))[0]
+              const topicAOut = (await pubsub.createTopic(`dsm-iso-a-out-${id()}`))[0]
+              const topicBOut = (await pubsub.createTopic(`dsm-iso-b-out-${id()}`))[0]
+
+              const subA = (await topicAIn.createSubscription(`sub-a-${id()}`))[0]
+              const subB = (await topicBIn.createSubscription(`sub-b-${id()}`))[0]
+
+              const fullTopicAIn = topicAIn.metadata?.name || topicAIn.name
+              const fullTopicBIn = topicBIn.metadata?.name || topicBIn.name
+              const fullTopicAOut = topicAOut.metadata?.name || topicAOut.name
+              const fullTopicBOut = topicBOut.metadata?.name || topicBOut.name
+
+              // Synchronization: both consumers must receive before either produces
+              let resolveAEntered, resolveBEntered
+              const aEntered = new Promise(resolve => { resolveAEntered = resolve })
+              const bEntered = new Promise(resolve => { resolveBEntered = resolve })
+              let doneCount = 0
+              const allDone = new Promise(resolve => {
+                const check = () => { if (++doneCount === 2) resolve() }
+                subA.on('message', async (msg) => {
+                  msg.ack()
+                  resolveAEntered()
+                  await bEntered
+                  await publish(topicAOut, { data: Buffer.from('from-a') })
+                  check()
+                })
+                subB.on('message', async (msg) => {
+                  msg.ack()
+                  resolveBEntered()
+                  await aEntered
+                  await publish(topicBOut, { data: Buffer.from('from-b') })
+                  check()
+                })
+              })
+
+              await publish(topicAIn, { data: Buffer.from('msg-a') })
+              await publish(topicBIn, { data: Buffer.from('msg-b') })
+
+              await allDone
+
+              const calls = setCheckpointSpy.getCalls()
+              const checkpoint = (dir, topic) => calls.find(c =>
+                c.args[0].includes(`direction:${dir}`) && c.args[0].includes(`topic:${topic}`)
+              )
+
+              const consumeA = checkpoint('in', fullTopicAIn)
+              const consumeB = checkpoint('in', fullTopicBIn)
+              const produceA = checkpoint('out', fullTopicAOut)
+              const produceB = checkpoint('out', fullTopicBOut)
+
+              assert.ok(produceA?.args[2], 'Process A produce should have a parent DSM context')
+              assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
+              assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
+              assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
+            } finally {
+              setCheckpointSpy.restore()
+            }
+          })
+        })
+
         describe('it should set a message payload size', () => {
           let recordCheckpointSpy
 
@@ -148,14 +214,32 @@ describe('Plugin', () => {
           })
 
           it('when consuming a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
+            const topic = (await pubsub.createTopic(`dsm-size-${id()}`))[0]
+            const subscription = (await topic.createSubscription(`dsm-size-sub-${id()}`))[0]
+            const data = Buffer.alloc(1000, 'a')
 
-            await consume(async () => {
-              assert.ok(
-                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
-                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
-              )
+            const received = new Promise(resolve => {
+              subscription.on('message', msg => {
+                msg.ack()
+                resolve(msg)
+              })
             })
+
+            await publish(topic, { data })
+            const message = await received
+            await subscription.close()
+
+            const consumeCheckpoint = recordCheckpointSpy.args
+              .map(args => args[0])
+              .find(checkpoint => checkpoint.edgeTags.includes('direction:in') &&
+                checkpoint.edgeTags.includes(`topic:${topic.name}`))
+
+            assert.ok(consumeCheckpoint, 'Expected a direction:in checkpoint for the consumed message')
+            assert.strictEqual(message.data.length, data.length)
+            assert.ok(
+              consumeCheckpoint.payloadSize >= data.length,
+              `Expected consume payloadSize ${consumeCheckpoint.payloadSize} >= message data size ${data.length}`
+            )
           })
         })
       })

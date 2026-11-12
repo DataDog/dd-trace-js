@@ -26,7 +26,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
       const result = ctx.result
       if (result?.code) span.setTag('db.response.status_code', (result.code).toString())
       if (result?.substatus) span.setTag('cosmosdb.response.sub_status_code', result.substatus)
-      span.finish()
+      this.finish(ctx)
     }
   }
 

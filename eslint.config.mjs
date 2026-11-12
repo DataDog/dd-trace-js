@@ -11,24 +11,37 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginRegexp from 'eslint-plugin-regexp'
 import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import { carrierFieldsConfig } from './eslint-rules/carrier-fields-policy.mjs'
+import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
+import eslintNoConditionalObjectSpread from './eslint-rules/eslint-no-conditional-object-spread.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
+import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
+import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireAgentStop from './eslint-rules/eslint-require-agent-stop.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
+
+const PACKAGE_SRC_FILES = [
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+]
 
 const SRC_FILES = [
   '*.js',
@@ -41,16 +54,45 @@ const SRC_FILES = [
   'scripts/**/*.mjs',
   'packages/*/*.js',
   'packages/*/*.mjs',
-  'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs',
+  ...PACKAGE_SRC_FILES,
+]
+
+const PROCESS_ENV_DISABLE_ALLOW_FILES = [
+  '.mochamultireporterrc.js',
+  'ci/init.js',
+  'ci/vitest-no-worker-init-setup.mjs',
+  'nyc.config.js',
+  'packages/datadog-esbuild/index.js',
+  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/cypress-config.js',
+  'packages/datadog-instrumentations/src/mocha/main.js',
+  'packages/datadog-instrumentations/src/vitest.js',
+  'packages/datadog-webpack/src/log.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
+  'packages/dd-trace/src/config/helper.js',
+  'packages/dd-trace/src/config/index.js',
+  'packages/dd-trace/src/config/stable.js',
+  'packages/dd-trace/src/debugger/index.js',
+  'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/plugins/util/test.js', // Reads DDTest's artifact locator and its existing alias.
+  'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
 const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
   'integration-tests/**/*.js',
+  'integration-tests/**/*.jsx',
   'integration-tests/**/*.mjs',
   '**/*.spec.js',
+]
+
+const TRACKED_NODE_MODULE_DIRECTORIES = [
+  'packages/datadog-instrumentations/test/helpers/rewriter/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules/anotherlib/node_modules',
+  'packages/dd-trace/test/node_modules',
 ]
 
 const GLOBAL_RESTRICTED_REQUIRES = [
@@ -80,6 +122,37 @@ const GLOBAL_RESTRICTED_REQUIRES = [
   },
 ]
 
+const SRC_RESTRICTED_SYNTAX = [
+  {
+    // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+    // `toString()` and run in chromium — coverage counters inside would ReferenceError.
+    selector:
+      "CallExpression[callee.property.name='evaluate']" +
+      ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+    message:
+      'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+      '(NYC-excluded in nyc.config.js) and import it here.',
+  },
+  {
+    // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
+    // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
+    selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
+    message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
+  },
+]
+
+// Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
+const OBJECT_KEYS_LENGTH_PROBE = {
+  selector:
+    ':matches(BinaryExpression[right.value=0], BinaryExpression[left.value=0], UnaryExpression[operator="!"],' +
+    ' IfStatement, ConditionalExpression, LogicalExpression, WhileStatement, DoWhileStatement)' +
+    " > MemberExpression[property.name='length']" +
+    " > CallExpression[callee.object.name='Object'][callee.property.name='keys']",
+  message: 'Do not probe emptiness with `Object.keys(obj).length`; the keys array is allocated on every call. ' +
+    'Track presence with a boolean at the assignment site, probe a known key (`obj.field !== undefined`), or ' +
+    'return `undefined` when there is nothing to report instead of an empty object.',
+}
+
 export default [
   {
     name: 'dd-trace/global-ignore',
@@ -89,13 +162,13 @@ export default [
       '!**/integration-tests/coverage', // The integration-test coverage harness lives here, not a report.
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
-      '**/docs', // Any JS here is for presentation only.
+      'docs/test.js', // Generated by the documentation type test
       '**/.next', // Generated Next.js build output
       '**/out', // Generated
-      '**/node_modules', // We don't own these.
-      '**/versions', // This is effectively a node_modules tree.
+      ...TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `!${directory}/`),
+      'versions/', // Generated dependency installations
+      'packages/dd-trace/test/plugins/versions/*/', // Generated dependency installations
       '**/acmeair-nodejs', // We don't own this.
-      '**/vendor', // Generally, we didn't author this code.
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
@@ -199,6 +272,7 @@ export default [
       '@stylistic/yield-star-spacing': ['error', 'both'],
       'accessor-pairs': ['error', { setWithoutGet: true, enforceForClassMembers: true }],
       'array-callback-return': ['error', { allowImplicit: false, checkForEach: false }],
+      'block-scoped-var': 'error',
       'brace-style': [ // TODO: Deprecated, use @stylistic/brace-style instead
         'error',
         '1tbs',
@@ -218,6 +292,7 @@ export default [
       'dot-notation': ['error', { allowKeywords: true }],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'func-call-spacing': ['error', 'never'], // TODO: Deprecated, use @stylistic/func-call-spacing instead
+      'grouped-accessor-pairs': ['error', 'getBeforeSet'],
       indent: [ // TODO: Deprecated, use @stylistic/indent instead
         'error',
         2,
@@ -259,8 +334,12 @@ export default [
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-amd': 'error',
       'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
+      'import/no-empty-named-blocks': 'error',
+      'import/no-import-module-exports': 'error',
+      'import/no-mutable-exports': 'error',
       'import/no-named-default': 'error',
       'import/no-self-import': 'error',
       'import/order': ['error', {
@@ -278,19 +357,44 @@ export default [
       }],
       'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
+      // The option keeps `@overload` blocks that document fewer params than the implementation.
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/check-template-names': 'error',
+      'jsdoc/check-types': 'error',
+      'jsdoc/no-bad-blocks': 'error',
+      'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
-      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/no-restricted-syntax': ['error', {
+        contexts: [{
+          context: 'any',
+          comment:
+            'JsdocBlock:not(*:has(JsdocTag[tag=/^(?:callback|func|function|interface|method|overload|typedef)$/]))' +
+            ':has(JsdocTag[tag=/^returns?$/]:matches(' +
+            '[parsedType.type=/^(?:JsdocTypeNull|JsdocTypeUndefined)$/],' +
+            '[parsedType.type="JsdocTypeName"]' +
+            '[parsedType.value=/^(?:string|number|boolean|bigint|symbol|void)$/]))',
+          message: 'Primitive return types are inferred and should be omitted.',
+        }, {
+          context: 'any',
+          comment: 'JsdocBlock:has(JsdocTag[tag=/^returns?$/]:not([parsedType.type]))',
+          message: 'Return descriptions without a type should be omitted.',
+        }],
+      }],
+      'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
-      'jsdoc/require-param': 'off',
+      'jsdoc/require-param': 'error',
       'jsdoc/require-property-description': 'off',
+      'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
       'jsdoc/require-returns-type': 'off',
       'jsdoc/require-returns': 'off',
+      'jsdoc/require-template': 'error',
+      'jsdoc/require-throws-description': 'error',
+      'jsdoc/require-yields-description': 'error',
       'jsdoc/tag-lines': 'off', // Alignment is not important for us.
       'n/handle-callback-err': ['error', '^(err|error)$'],
       'n/no-callback-literal': 'error',
@@ -303,6 +407,7 @@ export default [
       'no-array-constructor': 'error',
       'no-caller': 'error',
       'no-constant-condition': ['error', { checkLoops: false }], // override config from @eslint/js/recommended
+      'no-constructor-return': 'error',
       'no-empty': ['error', { allowEmptyCatch: true }], // override config from @eslint/js/recommended
       'no-eval': 'error',
       'no-extend-native': 'error',
@@ -324,9 +429,6 @@ export default [
       'no-sequences': 'error',
       'no-template-curly-in-string': 'error',
       'no-throw-literal': 'error',
-      // Surfaces pre-existing latent bugs (always-undefined vars in tests/intake helpers)
-      // unrelated to this tooling bump; worth a focused follow-up.
-      'no-unassigned-vars': 'off',
       'no-undef-init': 'error',
       'no-unmodified-loop-condition': 'error',
       'no-unneeded-ternary': ['error', { defaultAssignment: false }],
@@ -354,11 +456,17 @@ export default [
       'object-shorthand': ['warn', 'properties'],
       'one-var': ['error', { initialized: 'never' }],
       'prefer-const': ['error', { destructuring: 'all' }],
+      'prefer-numeric-literals': 'error',
       'prefer-promise-reject-errors': 'error',
       'prefer-regex-literals': ['error', { disallowRedundantWrapping: true }],
-      // Newly enabled by the ESLint 10 bump; deferred with no-unassigned-vars above.
+      // 6 errors. Attaching `cause` changes error output, so it needs its own change.
       'preserve-caught-error': 'off',
+      'promise/no-new-statics': 'error',
+      'promise/no-return-in-finally': 'error',
+      'promise/no-return-wrap': 'error',
       'promise/param-names': 'error',
+      'promise/spec-only': 'error',
+      'promise/valid-params': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
       'use-isnan': [ // override config from @eslint/js/recommended
@@ -378,6 +486,7 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
+      '**/*.jsx', // Browser code does not use Node.js module semantics.
       '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
@@ -387,15 +496,21 @@ export default [
       '@stylistic': eslintPluginStylistic,
       'eslint-rules': {
         rules: {
+          'eslint-carrier-fields': eslintCarrierFields,
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-call-result-invocation': eslintNoCallResultInvocation,
+          'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
+          'eslint-no-unnecessary-array-join': eslintNoUnnecessaryArrayJoin,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-conditional-object-spread': eslintNoConditionalObjectSpread,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
+          'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
@@ -433,7 +548,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
-      'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-call-result-invocation': 'error',
       'eslint-rules/eslint-no-private-tags-access': ['error', {
         allowFiles: [
           // The span_context implementation defines and reads `_tags` directly.
@@ -446,7 +561,6 @@ export default [
           'packages/dd-trace/src/llmobs/span_processor.js',
           // Test specs that intentionally mock the `_tags` field shape on a
           // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
-          'packages/dd-trace/test/opentracing/span_context.spec.js',
           'packages/dd-trace/test/priority_sampler.spec.js',
           'packages/dd-trace/test/sampling_rule.spec.js',
           'packages/dd-trace/test/span_sampler.spec.js',
@@ -461,16 +575,20 @@ export default [
           'packages/dd-trace/test/profiling/profilers/wall.spec.js',
           // Benchmark stubs that mock the `_tags` field shape on a fake span
           // context (their `getTag`/`getTags` mocks read from `_tags`).
-          'benchmark/stubs/span.js',
           'benchmark/sirun/exporting-pipeline/index.js',
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'import/no-extraneous-dependencies': 'error',
+      // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
+      // callback, so returning the callback call would drop the event.
+      'n/callback-return': 'off',
       'n/hashbang': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
+      'n/no-mixed-requires': 'error',
       'n/no-process-exit': 'error',
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
@@ -489,7 +607,14 @@ export default [
       }],
       'no-console': 'error',
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      // 107 errors, all of them the `new Promise(resolve => setTimeout(resolve, ms))` shape.
+      // `no-async-promise-executor` already covers the executor footgun that loses errors.
+      'no-promise-executor-return': 'off',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-return-assign': 'error',
+      'no-template-curly-in-string': 'error',
+      'no-unmodified-loop-condition': 'error',
+      'no-unreachable-loop': 'error',
       'no-useless-assignment': 'error',
       'no-var': 'error',
       'no-void': ['error', { allowAsStatement: true }],
@@ -497,6 +622,10 @@ export default [
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
+      radix: 'error',
+      // 49 errors, all in single-flow init or test scaffolding. The one site with real
+      // concurrency (the debugger's breakpoint bookkeeping) already runs behind a lock.
+      'require-atomic-updates': 'off',
       'require-await': 'error',
       strict: 'error',
     },
@@ -508,34 +637,91 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'sonarjs/anchor-precedence': 'error',
+      'sonarjs/arguments-order': 'error',
+      'sonarjs/comma-or-logical-or-case': 'error',
       'sonarjs/duplicates-in-character-class': 'error',
+      'sonarjs/empty-string-repetition': 'error',
+      'sonarjs/inverted-assertion-arguments': 'error',
       'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-case-label-in-switch': 'error',
       'sonarjs/no-code-after-done': 'error',
+      'sonarjs/no-collection-size-mischeck': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-empty-after-reluctant': 'error',
+      'sonarjs/no-empty-collection': 'error',
+      'sonarjs/no-empty-group': 'error',
+      'sonarjs/no-equals-in-for-termination': 'error',
       'sonarjs/no-extra-arguments': 'error',
+      'sonarjs/no-globals-shadowing': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-identical-conditions': 'error',
       'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/no-invariant-returns': 'error',
+      'sonarjs/no-mixed-completion-style': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
       'sonarjs/no-redundant-assignments': 'error',
       'sonarjs/no-redundant-jump': 'error',
       'sonarjs/no-small-switch': 'error',
+      'sonarjs/no-unthrown-error': 'error',
       'sonarjs/no-unused-collection': 'error',
       'sonarjs/no-use-of-empty-return-value': 'error',
+      'sonarjs/no-variable-usage-before-declaration': 'error',
+      'sonarjs/non-existent-operator': 'error',
       'sonarjs/prefer-immediate-return': 'error',
+      'sonarjs/prefer-promise-shorthand': 'error',
       'sonarjs/prefer-single-boolean-return': 'error',
+      'sonarjs/prefer-while': 'error',
+      'sonarjs/reduce-initial-value': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
+      'sonarjs/slow-regex': 'error',
       'sonarjs/stable-tests': 'error',
+      'sonarjs/synchronous-suite-callback': 'error',
       'sonarjs/test-check-exception': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
       'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
+      // SonarJS rules marked `requiresTypeChecking` report nothing without a TypeScript program, so they
+      // read as clean while catching nothing. Enabling them needs typescript-eslint wired up first.
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
+      // 37 errors, all false positives: those suites are built by shared helper factories
+      // (`assertPromise`, `prepareTestServerForIast`) instead of literal `it()` calls.
+      'sonarjs/no-empty-test-file': 'off',
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
+    },
+  },
+  eslintPluginRegexp.configs['flat/recommended'],
+  {
+    name: 'dd-trace/regexp-deviations',
+    rules: {
+      'regexp/optimal-lookaround-quantifier': 'error',
+      'regexp/no-useless-flag': 'error',
+      'regexp/no-super-linear-move': 'error',
+      'regexp/no-unused-capturing-group': 'off',
+      'regexp/negation': 'off',
+      'regexp/prefer-w': 'off',
+      'regexp/use-ignore-case': 'off',
+      'regexp/prefer-d': 'off',
+      'regexp/sort-flags': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/regexp-generated',
+    files: [
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-secret-rules.js',
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-password-rules.js',
+    ],
+    rules: {
+      'regexp/no-dupe-disjunctions': 'off',
+      'regexp/prefer-range': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+      'regexp/prefer-character-class': 'off',
+      'regexp/no-useless-non-capturing-group': 'off',
     },
   },
   {
@@ -545,28 +731,18 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'eslint-rules/eslint-no-process-env-disable': ['error', {
+        allowFiles: PROCESS_ENV_DISABLE_ALLOW_FILES,
+      }],
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-no-unnecessary-array-join': 'error',
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
-      'no-restricted-syntax': ['error', {
-        // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
-        // `toString()` and run in chromium — coverage counters inside would ReferenceError.
-        selector:
-          "CallExpression[callee.property.name='evaluate']" +
-          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
-        message:
-          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(NYC-excluded in nyc.config.js) and import it here.',
-      }, {
-        // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
-        // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
-        selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
-        message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
-      }],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX],
 
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
@@ -585,61 +761,70 @@ export default [
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
+      // Not in `recommended`: the innerHTML sink class and unread object properties.
+      'unicorn/iteration-fallback-style': 'error',
+      'unicorn/no-unsafe-dom-html': 'error',
+      'unicorn/no-unused-properties': 'error',
+
       // Overriding recommended unicorn rules.
-      // Rules not listed here are left at the `recommended` default. The v65→v68 bump
-      // turned ~130 rules on in `recommended`; the entries below are the ones that fire
-      // on our source and are intentionally kept off (counts are from the v68 run).
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // Many errors
-      'unicorn/expiring-todo-comments': 'off',
-      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
-      'unicorn/name-replacements': 'off', // Many errors | naming churn (split out of prevent-abbreviations)
-      'unicorn/prevent-abbreviations': 'off', // Many errors
+      // Rules not listed here are left at the `recommended` default. The entries below
+      // document deliberate exceptions. Volume markers stay coarse so they do not drift:
+      // `few` is under ten sites, `many` is tens, `lots` is hundreds or more.
+      'unicorn/catch-error-name': ['off', { name: 'err' }], // lots
+      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // lots
+      'unicorn/name-replacements': 'off', // lots | naming churn (split out of prevent-abbreviations)
+      'unicorn/prevent-abbreviations': 'off', // Its replacements moved to name-replacements
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
       'unicorn/no-array-sort': 'off', // Node.js 20
+      'unicorn/prefer-abort-signal-any': 'off', // Node.js 18.17
       'unicorn/prefer-dispose': 'off', // Explicit resource management (newer Node.js)
+      'unicorn/prefer-group-by': 'off', // Node.js 21
+      'unicorn/prefer-iterator-zip': 'off', // Iterator.zip is unavailable in Node.js 18
+      'unicorn/prefer-iterator-helpers': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
-      'unicorn/prefer-promise-with-resolvers': 'off', // 6 errors | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-promise-try': 'off', // Promise.try (Node.js 24)
+      'unicorn/prefer-promise-with-resolvers': 'off', // few | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)
       'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
+      'unicorn/prefer-url-can-parse': 'off', // Node.js 18.17
       'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
 
+      'unicorn/prefer-default-parameters': ['error', { checkFallbackExpressions: false }],
+
       // These rules could potentially be evaluated again at a much later point
-      'unicorn/class-reference-in-static-methods': 'off', // 6 errors
-      'unicorn/consistent-class-member-order': 'off', // 55 errors | ordering churn
-      'unicorn/consistent-conditional-object-spread': 'off', // 3 errors
-      'unicorn/consistent-optional-chaining': 'off', // 3 errors
+      'unicorn/class-reference-in-static-methods': 'off', // few
+      'unicorn/consistent-class-member-order': 'off', // many | ordering churn
+      'unicorn/consistent-conditional-object-spread': 'off', // many
       'unicorn/explicit-length-check': 'off', // Not a big advantage
       'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
-      'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
-      'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
-      'unicorn/no-duplicate-if-branches': 'off', // 1 error | may surface real bugs
-      'unicorn/no-duplicate-logical-operands': 'off', // 2 errors | may surface real bugs
-      'unicorn/no-error-property-assignment': 'off', // 6 errors
+      'unicorn/no-computed-property-existence-check': 'off', // lots | needs an audit
+      'unicorn/no-declarations-before-early-exit': 'off', // many
+      'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
-      'unicorn/no-incorrect-template-string-interpolation': 'off', // 3 errors | audit for real bugs first
-      'unicorn/no-invalid-argument-count': 'off', // 98 errors | high false-positive risk, worth a focused pass
-      'unicorn/no-loop-iterable-mutation': 'off', // 2 errors | may surface real bugs
-      'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit
+      // Enable when Map and Set initialization can be excluded.
+      // https://github.com/sindresorhus/eslint-plugin-unicorn/issues/3992
+      'unicorn/no-immediate-mutation': 'off',
+      'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
-      'unicorn/no-undeclared-class-members': 'off', // 272 errors | requires declaring every field
-      'unicorn/no-unreadable-array-destructuring': 'off', // 4 errors | not autofixable, needs manual rewrite
-      'unicorn/no-unreadable-for-of-expression': 'off', // 32 errors
-      'unicorn/no-unreadable-object-destructuring': 'off', // 57 errors
-      'unicorn/no-unsafe-string-replacement': 'off', // 6 errors
-      'unicorn/no-useless-recursion': 'off', // 2 errors
+      'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
+      'unicorn/no-unreadable-array-destructuring': 'off', // few | not autofixable, needs manual rewrite
+      'unicorn/no-unreadable-for-of-expression': 'off', // many
+      'unicorn/no-unreadable-object-destructuring': 'off', // many
+      'unicorn/no-unsafe-string-replacement': 'off', // many | replacement callbacks reduce readability
+      'unicorn/no-useless-recursion': 'off', // few | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
-      'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
-      'unicorn/prefer-hoisting-branch-code': 'off', // 2 errors | reshapes branch bodies
-      'unicorn/prefer-minimal-ternary': 'off', // 24 errors
-      'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
-      'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
+      'unicorn/prefer-early-return': 'off', // many | tension with our positive-`if` style
+      'unicorn/prefer-number-is-safe-integer': 'off', // many
+      'unicorn/prefer-object-iterable-methods': 'off', // many
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
-      'unicorn/prefer-smaller-scope': 'off', // 3 errors
-      'unicorn/prefer-split-limit': 'off', // 23 errors
-      'unicorn/require-array-sort-compare': 'off', // 8 errors | may surface real default-sort bugs
+      'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
+      'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
+      'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
+      'unicorn/single-line-block-comment-style': 'off', // lots | preserve compact JSDoc typedefs
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
@@ -647,8 +832,11 @@ export default [
       'unicorn/max-nested-calls': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-array-splice': 'off', // toSpliced copies the whole array (perf)
+      'unicorn/no-asterisk-prefix-in-documentation-comments': 'off', // Preserve standard JSDoc formatting
       'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
       'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
+      'unicorn/no-negated-array-predicate': 'off', // Predicate inversion is harder to read and creates churn
+      'unicorn/no-negated-comparison': 'off', // Opposite comparisons do not preserve NaN handling
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
@@ -659,47 +847,60 @@ export default [
       'unicorn/operator-assignment': 'off', // Covered by core operator-assignment
       'unicorn/prefer-array-last-methods': 'off', // Questionable benefit
       'unicorn/prefer-await': 'off', // We avoid async/await in production hot paths
+      'unicorn/prefer-dom-node-html-methods': 'off', // Browser compatibility and different serialization semantics
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
+      'unicorn/prefer-minimal-ternary': 'off', // Conflicts with our restricted-syntax rule on require(cond ? a : b)
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
       'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
-      'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-reflect-apply': 'off', // lots | questionable benefit
       'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
+      'unicorn/prefer-split-limit': 'off', // A limit is slower than getSegment; the rest read every segment
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
-      // Safe to enable in a follow-up: autofixable and aligned with our style. Kept off
-      // here only to keep this version bump free of source churn (counts from the v68 run).
-      'unicorn/logical-assignment-operators': 'off', // 42 errors | matches our ??=/||= usage
-      'unicorn/no-confusing-array-splice': 'off', // 1 error
-      'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
-      'unicorn/no-negated-array-predicate': 'off', // 2 errors
-      'unicorn/no-negated-comparison': 'off', // 1 error
-      'unicorn/no-subtraction-comparison': 'off', // 2 errors
-      'unicorn/no-unnecessary-boolean-comparison': 'off', // 6 errors
-      'unicorn/no-unnecessary-global-this': 'off', // 4 errors
-      'unicorn/no-unnecessary-splice': 'off', // 2 errors
-      'unicorn/no-useless-concat': 'off', // 4 errors
-      'unicorn/no-useless-continue': 'off', // 1 error
-      'unicorn/no-useless-delete-check': 'off', // 1 error
-      'unicorn/no-useless-fallback-in-spread': 'off', // 5 errors
-      'unicorn/no-useless-override': 'off', // 1 error
-      'unicorn/no-useless-template-literals': 'off', // 13 errors
-      'unicorn/prefer-array-from-map': 'off', // 6 errors
-      'unicorn/prefer-boolean-return': 'off', // 1 error
-      'unicorn/prefer-continue': 'off', // 52 errors
-      'unicorn/prefer-direct-iteration': 'off', // 5 errors
-      'unicorn/prefer-else-if': 'off', // 6 errors
-      'unicorn/prefer-global-number-constants': 'off', // 3 errors
-      'unicorn/prefer-logical-operator-over-ternary': 'off', // 3 errors
-      'unicorn/prefer-ternary': 'off', // 16 errors
-      'unicorn/prefer-unary-minus': 'off', // 1 error
+      // These remaining rules need focused rewrites before activation.
+      'unicorn/no-confusing-array-splice': 'off', // few
+      'unicorn/no-for-each': 'off', // many | we already prefer for-of in production
+      'unicorn/no-unnecessary-global-this': 'off', // few | explicit globals are clearer
+      'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
+      'unicorn/prefer-continue': 'off', // many
+      'unicorn/prefer-ternary': 'off', // many
+    },
+  },
+  {
+    name: 'dd-trace/src/conditional-object-spread',
+    files: PACKAGE_SRC_FILES,
+    rules: {
+      'eslint-rules/eslint-no-conditional-object-spread': 'error',
+    },
+  },
+  {
+    name: 'dd-trace/unicorn/all',
+    // Unicorn is otherwise limited to production code, and `sonarjs/no-ignored-exceptions`
+    // reports only a subset of the unused catch bindings in tests and fixtures.
+    plugins: {
+      unicorn: eslintPluginUnicorn,
+    },
+    rules: {
+      'unicorn/consistent-date-clone': 'error',
+      'unicorn/prefer-optional-catch-binding': 'error',
+    },
+  },
+  {
+    name: 'dd-trace/packages/src',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
     },
   },
   {
@@ -708,6 +909,7 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
+      'unicorn/no-top-level-side-effects': 'off', // Constructing the exported lint configuration runs helpers
       'eslint-rules/eslint-config-names-sync': ['error', {
         indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
       }],
@@ -738,6 +940,7 @@ export default [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
       'packages/datadog-instrumentations/test/helpers/check-require-cache/**/*.js',
+      'packages/datadog-instrumentations/test/helpers/hook-module-views/**/*.js',
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
@@ -761,6 +964,7 @@ export default [
     files: [
       'init.js',
       'packages/dd-trace/src/guardrails/**/*',
+      'packages/dd-trace/src/log/levels.js', // Required by the guardrails logger.
       'version.js',
     ],
     settings: {
@@ -792,6 +996,8 @@ export default [
       }],
       'no-var': 'off', // Only supported in Node.js 6+
       'object-shorthand': 'off', // Only supported in Node.js 4+
+      // The binding cannot be dropped without optional catch binding (Node.js 10+).
+      'sonarjs/no-ignored-exceptions': 'off',
       'unicorn/prefer-includes': 'off', // Only supported in Node.js 6+
       'unicorn/prefer-number-properties': 'off', // Only supported in Node.js 0.12+
       'unicorn/prefer-optional-catch-binding': 'off', // Only supported in Node.js 10+
@@ -840,6 +1046,7 @@ export default [
   {
     ...eslintPluginCypress.configs.recommended,
     files: [
+      'integration-tests/cypress/**/*.jsx',
       'packages/datadog-plugin-cypress/src/support.js',
     ],
   },
@@ -865,14 +1072,18 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-agent-stop': 'error',
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/consistent-structure': 'off',
+      'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
+      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-setup-in-describe': 'off',
-      'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
+      'mocha/no-pending-tests': ['error', { allowSkippedWithComment: true }],
+      'mocha/no-root-hooks': 'off',
+      'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [
@@ -905,6 +1116,55 @@ export default [
     },
   },
   {
+    // Tracked package fixtures can intentionally exercise sloppy-mode input.
+    name: 'dd-trace/tracked-node-module-fixtures',
+    files: TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `${directory}/**/*.js`),
+    rules: {
+      strict: 'off',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/esm-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/rewriter/node_modules/test-esm/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/var-class-fixture',
+    files: [
+      'packages/datadog-instrumentations/test/helpers/rewriter/node_modules/' +
+      'test-trace-var-class-instance-method/index.js',
+    ],
+    rules: {
+      'no-var': 'off',
+    },
+  },
+  {
+    // The adjacent package manifest describes generated installations, not this controller's development dependencies.
+    name: 'dd-trace/plugin-versions-controller',
+    files: ['packages/dd-trace/test/plugins/versions/index.js'],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build',
+    files: ['vendor/*.js'],
+    rules: {
+      'n/no-unpublished-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build/cli',
+    files: ['vendor/rspack.js'],
+    rules: {
+      'n/no-process-exit': 'off',
+      'no-console': 'off',
+    },
+  },
+  {
     name: 'dd-trace/test-optimization/relaxed',
     files: [
       'integration-tests/ci-visibility/**/*.js',
@@ -927,10 +1187,6 @@ export default [
         jest: 'readonly',
       },
     },
-    rules: {
-      'mocha/max-top-level-suites': 'off',
-      'mocha/no-pending-tests': 'off',
-    },
   },
   {
     // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
@@ -939,6 +1195,29 @@ export default [
     files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
     rules: {
       'jsdoc/valid-types': 'off',
+    },
+  },
+  {
+    // These fixtures must report skipped tests to verify Test Optimization status handling.
+    name: 'dd-trace/test-optimization/pending-test-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/jest-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping-with-after-each.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-pass.js',
+      'integration-tests/ci-visibility/mocha-skips/skip-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/focused-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/skipped-and-todo-test.js',
+      'integration-tests/ci-visibility/test-management/test-attempt-to-fix-skip.js',
+      'integration-tests/webdriverio/fixtures/jasmine-attempt-to-fix-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-efd-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-statuses.e2e.js',
+    ],
+    rules: {
+      'mocha/no-pending-tests': 'off',
     },
   },
   {
@@ -958,6 +1237,22 @@ export default [
     },
     rules: {
       'sonarjs/stable-tests': 'off',
+    },
+  },
+  {
+    // This fixture loads a module after Jest has finished the test to exercise the resulting test-suite error.
+    name: 'dd-trace/tests/jest-off-timing-import-fixture',
+    files: ['integration-tests/ci-visibility/jest-bad-import/jest-bad-import-test.js'],
+    rules: {
+      'mocha/no-async-in-sync-tests': ['error', { allowedAsyncMethods: ['setTimeout'] }],
+    },
+  },
+  {
+    name: 'dd-trace/bundler-esm-exports/cyclic-star-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-cycle-*.mjs'],
+    rules: {
+      'import/export': 'off',
+      'import/no-cycle': 'off',
     },
   },
   {
@@ -987,6 +1282,22 @@ export default [
     },
   },
   {
+    name: 'dd-trace/openfeature',
+    plugins: {
+      promise: eslintPluginPromise,
+    },
+    files: [
+      'packages/dd-trace/src/openfeature/**/*.js',
+      'packages/dd-trace/test/openfeature/**/*.js',
+    ],
+    rules: {
+      // The OpenFeature hook API defines `finally(hookContext, evalDetails)`, which the rule
+      // reads as `Promise.prototype.finally`.
+      'promise/valid-params': 'off',
+    },
+  },
+  ...carrierFieldsConfig,
+  {
     // The Next.js fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`). The package is supplied to the app at runtime via a
     // stub written into node_modules (see test/index.spec.js), so it never appears
@@ -1002,6 +1313,19 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
     },
   },
 ]

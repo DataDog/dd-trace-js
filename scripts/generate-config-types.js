@@ -41,6 +41,7 @@ const PROPERTY_TYPE_OVERRIDES = {
 }
 const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
+  normalizeProfilingHeapLimitExtensionSize: "number | 'auto'",
   normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
@@ -132,8 +133,7 @@ function findCalculatedFallbackProperties () {
 const CALCULATED_FALLBACK_PROPERTIES = findCalculatedFallbackProperties()
 
 function withUndefined (type, entry, propertyName) {
-  if (entry.default !== null) return type
-  if (CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
+  if (entry.default !== null || CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
   return `${type} | undefined`
 }
 
@@ -253,14 +253,16 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
     const type = getEnvVarType(propertyName, entry)
 
     envVarTypes.set(canonicalName, type)
-    for (const alias of entry.aliases ?? []) {
-      if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
-        envVarTypes.set(alias, type)
+    if ((entry.aliases) != null) {
+      for (const alias of entry.aliases) {
+        if (!supportedConfigurations[alias] && !envVarTypes.has(alias)) {
+          envVarTypes.set(alias, type)
+        }
       }
     }
   }
 
-  const body = [...envVarTypes.entries()]
+  const body = [...envVarTypes]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, type]) => `  ${renderPropertyName(name)}: ${type};`)
     .join('\n')

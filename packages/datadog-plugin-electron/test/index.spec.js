@@ -66,7 +66,7 @@ describe('Plugin', () => {
           startApp(done)
         })
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
         afterEach(done => {
           const proc = child
           child = undefined

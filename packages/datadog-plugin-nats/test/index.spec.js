@@ -56,7 +56,7 @@ describe('Plugin', () => {
           connection = await connect({ servers: '127.0.0.1:4222' })
         })
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
 
         it('should run commands normally without a plugin loaded', async () => {
           // Sanity: published message must round-trip even when only producer spans matter.
@@ -436,7 +436,7 @@ describe('Plugin', () => {
           connection = await connect({ servers: '127.0.0.1:4222' })
         })
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
 
         it('skips the publish wrapper fast-path', () => {
           // The wrap's `!hasSubscribers` branch returns the original immediately,

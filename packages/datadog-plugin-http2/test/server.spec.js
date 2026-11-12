@@ -9,6 +9,7 @@ const { setImmediate } = require('node:timers/promises')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
@@ -258,11 +259,15 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
-        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
-          agent.assertSomeTraces(traces => {
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', async () => {
+          const tracesReceived = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
+            assert.strictEqual(span.type, undefined)
+            assert.strictEqual(Object.hasOwn(span.meta, 'operation.name'), false)
+            assert.strictEqual(Object.hasOwn(span.meta, 'span.type'), false)
             assertObjectContains(span, {
-              name: 'web.request',
+              name: 'GET',
+              resource: 'GET',
               meta: {
                 'span.kind': 'server',
                 'http.request.method': 'GET',
@@ -277,9 +282,12 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'http.method'))
             assert.ok(!Object.hasOwn(span.meta, 'http.url'))
             assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
-          }).then(done).catch(done)
+          })
 
-          request(http2, `http://localhost:${port}/user`).catch(done)
+          await Promise.all([
+            tracesReceived,
+            request(http2, `http://localhost:${port}/user`),
+          ])
         })
       })
 
@@ -308,6 +316,19 @@ describe('Plugin', () => {
           spanProducerFn,
           rawExpectedSchema.server
         )
+
+        it('publishes a close response event', async () => {
+          const emit = sinon.spy()
+          const emitChannel = channel('apm:http2:server:response:emit')
+          emitChannel.subscribe(emit)
+
+          try {
+            await request(http2, `http://localhost:${port}/user`)
+            sinon.assert.calledWithMatch(emit, { eventName: 'close' })
+          } finally {
+            emitChannel.unsubscribe(emit)
+          }
+        })
 
         it('should do automatic instrumentation', done => {
           agent

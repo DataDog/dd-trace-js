@@ -15,6 +15,10 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+/**
+ * @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} Descriptor
+ */
+
 // Reused descriptor scratch space for the `name` and `length` slots that
 // `copyProperties` and `wrapCallback` rewrite per wrap. `Object.defineProperty`
 // reads the descriptor's slots synchronously and does not retain the object,
@@ -46,11 +50,18 @@ function copyProperties (original, wrapped) {
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
       if (skipMethods.has(key)) continue
-      const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+      const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
-      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
-        Object.defineProperty(wrapped, key, descriptor)
+      } else {
+        try {
+          Object.defineProperty(wrapped, key, descriptor)
+        } catch (error) {
+          const wrappedDescriptor = Object.getOwnPropertyDescriptor(wrapped, key)
+          if (wrappedDescriptor?.configurable !== false || wrappedDescriptor.writable) {
+            throw error
+          }
+        }
       }
     }
   }
@@ -65,7 +76,7 @@ function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
   for (const key of ownKeys) {
     if (key === skipKey) continue
-    const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+    const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
     if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
       wrapped[key] = original[key]
     } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
@@ -303,11 +314,11 @@ function assertMethod (target, name, method) {
     let message = 'No target object provided'
 
     if (target) {
-      if (typeof target !== 'object' && typeof target !== 'function') {
-        message = 'Invalid target'
-      } else {
+      if (typeof target === 'object' || typeof target === 'function') {
         name = String(name)
         message = method ? `Original method ${name} is not a function` : `No original method ${name}`
+      } else {
+        message = 'Invalid target'
       }
     }
 
@@ -316,19 +327,17 @@ function assertMethod (target, name, method) {
 }
 
 /**
- * Asserts that a target is not a class constructor.
+ * Asserts that a target is not an identifiable class constructor.
  *
  * @param {Function} target - The target function.
- * @throws {Error} If the target is a class constructor.
+ * @throws {TypeError} If the target is an identifiable class constructor.
  */
 function assertNotClass (target) {
-  // Class constructors have a non-writable `prototype` property; functions have a
-  // writable one and arrows / async / method-shorthand have none at all. The
-  // `'prototype' in target` gate skips the descriptor lookup for the no-prototype
-  // shapes; the `in` operator is cheaper than reading `target.prototype` since
-  // it returns a boolean instead of materialising the prototype reference.
+  // Frozen functions also have a non-writable `prototype`; inspect their source only then.
   if ('prototype' in target &&
-      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false) {
+      // Bound generators inherit `prototype` without owning one, so the descriptor may still be missing.
+      Object.getOwnPropertyDescriptor(target, 'prototype')?.writable === false &&
+      (!Object.isFrozen(target) || Function.prototype.toString.call(target).startsWith('class'))) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }

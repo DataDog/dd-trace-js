@@ -3,24 +3,39 @@
 const { channel } = require('dc-polyfill')
 
 const { isError } = require('../util')
-const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 const {
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
   TRACE_ID,
 } = require('./constants/tags')
 const {
+  FEEDBACK_METRIC_TYPES,
+  FEEDBACK_TARGET_KEYS,
+  buildMetricTags,
+  validateAssessment,
+  validateLabel,
+  validateMetricType,
+  validateMetricValue,
+  validateReasoning,
+  validateTimestamp,
+} = require('./eval-metric')
+const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
+const { buildAgentDeclaration, toAgentVersion } = require('./agent-manifest')
+/** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -35,18 +50,17 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
-  /**
-   * Lazily-created experiments facade (see ./experiments).
-   * @type {import('./experiments').Experiments | undefined}
-   */
-  #experiments
+  #promptManager
+
+  #getOpenFeatureProvider
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -54,6 +68,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
 
   get enabled () {
@@ -66,8 +81,16 @@ class LLMObs extends NoopLLMObs {
    * a clear message on use.
    */
   get experiments () {
-    this.#experiments ??= createExperiments(this._config)
-    return this.#experiments
+    return createExperiments(this._config, this)
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
+    return this.#promptManager
   }
 
   enable (options = {}) {
@@ -94,8 +117,8 @@ class LLMObs extends NoopLLMObs {
 
     // TODO: These configs should be passed through directly at construction time instead.
     this._config.llmobs.DD_LLMOBS_ENABLED = true
-    this._config.llmobs.mlApp = options.mlApp
-    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
+    this._config.llmobs.DD_LLMOBS_ML_APP = options.mlApp
+    this._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -140,7 +163,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
@@ -170,7 +193,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     const llmobs = this
 
@@ -279,15 +302,20 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions, agent } = options
 
-      if (inputData || outputData) {
+      const hasInputOrOutput = spanKind === 'experiment'
+        ? inputData !== undefined || outputData !== undefined
+        : inputData || outputData
+      if (hasInputOrOutput) {
         if (spanKind === 'llm') {
           this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
           this._tagger.tagEmbeddingIO(span, inputData, outputData)
         } else if (spanKind === 'retrieval') {
           this._tagger.tagRetrievalIO(span, inputData, outputData)
+        } else if (spanKind === 'experiment') {
+          this._tagger.tagExperimentIO(span, inputData, outputData)
         } else {
           this._tagger.tagTextIO(span, inputData, outputData)
         }
@@ -312,20 +340,46 @@ class LLMObs extends NoopLLMObs {
       if (toolDefinitions != null) {
         this._tagger.tagToolDefinitions(span, toolDefinitions)
       }
+      if (agent != null) {
+        if (spanKind === 'agent') {
+          this._tagger.tagAgent(span, agent)
+        } else {
+          logger.warn(
+            'Dropping agent annotation on non-agent span kind, annotating agents is only supported for agent spans.'
+          )
+        }
+      }
     } catch (e) {
       if (e.ddErrorTag) {
         err = e.ddErrorTag
       }
       throw e
     } finally {
-      if (autoinstrumented === false) {
+      if (!autoinstrumented) {
         telemetry.recordLLMObsAnnotate(span, err)
       }
     }
   }
 
+  /**
+   * Annotates an experiment row span with its inputs, outputs, and expected output.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {{
+   *   inputData: unknown,
+   *   outputData: unknown,
+   *   expectedOutput: unknown,
+   *   metadata: object,
+   *   tags: object
+   * }} options
+   */
+  _annotateExperimentSpan (span, options) {
+    this.annotate(span, options)
+    this._tagger.tagExperimentExpectedOutput(span, options.expectedOutput)
+  }
+
   exportSpan (span) {
-    span = span || this._active()
+    span ||= this._active()
     let err = ''
     try {
       if (!span) {
@@ -390,7 +444,7 @@ class LLMObs extends NoopLLMObs {
           'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
         )
       }
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error(
@@ -399,92 +453,35 @@ class LLMObs extends NoopLLMObs {
       }
 
       const timestampMs = options.timestampMs || Date.now()
-      if (typeof timestampMs !== 'number' || timestampMs < 0) {
-        err = 'invalid_timestamp'
-        throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
-      }
+      validateTimestamp(timestampMs, 'evaluation')
 
       const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
-      if (!label) {
-        err = 'invalid_metric_label'
-        throw new Error('label must be the specified name of the evaluation metric')
-      }
-      if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
-        err = 'invalid_metric_type'
-        throw new Error('metricType must be one of "categorical", "score", "boolean" or "json"')
-      }
-      if (metricType === 'categorical' && typeof value !== 'string') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a string for a categorical metric.')
-      }
-      if (metricType === 'score' && typeof value !== 'number') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a number for a score metric.')
-      }
-      if (metricType === 'boolean' && typeof value !== 'boolean') {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a boolean for a boolean metric')
-      }
-      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
-        err = 'invalid_metric_value'
-        throw new Error('value must be a JSON object for a json metric')
-      }
-      if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
-        err = 'invalid_assessment'
-        throw new Error('assessment must be pass or fail')
-      }
-      if (reasoning != null && typeof reasoning !== 'string') {
-        err = 'invalid_reasoning'
-        throw new Error('reasoning must be a string')
-      }
+      const labelValue = validateLabel(label, 'evaluation')
+      validateMetricType(metricType, 'evaluation')
+      validateMetricValue(metricType, value)
+      validateAssessment(assessment)
+      validateReasoning(reasoning)
       if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
       }
 
-      const evaluationTags = {
-        'ddtrace.version': tracerVersion,
-        ml_app: mlApp,
-      }
-
-      if (tags) {
-        for (const key in tags) {
-          const tag = tags[key]
-          if (typeof tag === 'string') {
-            evaluationTags[key] = tag
-          } else if (typeof tag.toString === 'function') {
-            evaluationTags[key] = tag.toString()
-          } else if (tag == null) {
-            evaluationTags[key] = Object.prototype.toString.call(tag)
-          } else {
-            // should be a rare case
-            // every object in JS has a toString, otherwise every primitive has its own toString
-            // null and undefined are handled above
-            err = 'invalid_tags'
-            throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
-          }
-        }
-      }
-
-      // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (this._config.DD_TRACE_OTEL_ENABLED) {
-        evaluationTags.source = 'otel'
-      }
-
       const payload = {
+        event_kind: 'evaluation',
         join_on: {
           span: {
             span_id: spanId,
             trace_id: traceId,
           },
         },
-        label,
+        label: labelValue,
         metric_type: metricType,
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
-        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+        // When OTel tracing is enabled, `source:otel` lets the backend wait for OTel span conversion
+        tags: buildMetricTags(tags, mlApp, 'evaluation', this._config.DD_TRACE_OTEL_ENABLED),
       }
       if (reasoning != null) {
         payload.reasoning = reasoning
@@ -498,22 +495,155 @@ class LLMObs extends NoopLLMObs {
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext
       evalMetricAppendCh.publish({ payload, routing })
+    } catch (e) {
+      if (e.ddErrorTag) err = e.ddErrorTag
+      throw e
     } finally {
       telemetry.recordSubmitEvaluation(options, err)
+    }
+  }
+
+  /**
+   * Submits end-user feedback for a span, trace, session, or customer-defined entity.
+   *
+   * Exactly one target must be provided: `span` (as returned by `llmobs.exportSpan()`) or
+   * `spanId` to target a span, `traceId` a trace, `sessionId` a session, or `feedbackJoinKey`
+   * a customer-defined entity.
+   * `label`, `metricType`, `value` and `submitter` are required, and are validated at call time.
+   * @param {object} [options] - The feedback options.
+   * @param {string} [options.label] - The name of the feedback metric.
+   * @param {'categorical' | 'score' | 'boolean' | 'json' | 'text'} [options.metricType] - The value type.
+   * @param {string | number | boolean | Record<string, unknown>} [options.value] - The feedback value,
+   *   matching `metricType`.
+   * @param {{ id: string, type?: string }} [options.submitter] - Who submitted the feedback.
+   * @param {{ traceId: string, spanId: string }} [options.span] - Span context to attach the feedback to.
+   * @param {string} [options.spanId] - ID of the span to attach the feedback to.
+   * @param {string} [options.traceId] - ID of the trace to attach the feedback to.
+   * @param {string} [options.sessionId] - ID of the session to attach the feedback to.
+   * @param {string} [options.feedbackJoinKey] - Customer-defined key to attach the feedback to.
+   * @param {Record<string, string>} [options.tags] - Tags to attach to the feedback.
+   * @param {string} [options.mlApp] - The ML app name. Defaults to the configured one.
+   * @param {number} [options.timestampMs] - When the feedback was generated. Defaults to now.
+   * @param {'pass' | 'fail'} [options.assessment] - Assessment of the feedback.
+   * @param {string} [options.reasoning] - Explanation of the feedback.
+   */
+  submitFeedback (options = {}) {
+    if (!this.enabled) return
+
+    let err = ''
+    let targetType = 'other'
+    let metricTypeTag = 'other'
+    try {
+      const { span, spanId, traceId, sessionId, feedbackJoinKey, submitter } = options
+
+      // Resolved before any validation so telemetry still reports the metric type of a
+      // submission that fails on an unrelated field.
+      const metricType = options.metricType?.toLowerCase()
+      if (FEEDBACK_METRIC_TYPES.includes(metricType)) metricTypeTag = metricType
+
+      // The intake keys feedback off a single top-level identifier, so more than one target
+      // would be ambiguous and none would leave the feedback unattached. `span` also carries a
+      // traceId, but passing it is wire-equivalent to passing its `spanId` directly.
+      let targetName, targetValue
+      let targetCount = 0
+      if (span != null) { targetName = 'span'; targetValue = span.spanId; targetCount++ }
+      if (spanId != null) { targetName = 'spanId'; targetValue = spanId; targetCount++ }
+      if (traceId != null) { targetName = 'traceId'; targetValue = traceId; targetCount++ }
+      if (sessionId != null) { targetName = 'sessionId'; targetValue = sessionId; targetCount++ }
+      if (feedbackJoinKey != null) { targetName = 'feedbackJoinKey'; targetValue = feedbackJoinKey; targetCount++ }
+
+      if (targetCount !== 1) {
+        err = 'invalid_target_count'
+        throw new Error(
+          'Exactly one of `span`, `spanId`, `traceId`, `sessionId` or `feedbackJoinKey` ' +
+          'must be specified to submit feedback.'
+        )
+      }
+
+      targetType = FEEDBACK_TARGET_KEYS[targetName]
+      if (typeof targetValue !== 'string' || !targetValue) {
+        if (targetName === 'span') {
+          err = 'invalid_span'
+          throw new TypeError(
+            '`span` must be an object containing a non-empty string spanId. ' +
+            '`llmobs.exportSpan()` can be used to generate this object from a given span.'
+          )
+        }
+        err = `invalid_${targetType}`
+        throw new TypeError(`\`${targetName}\` must be a non-empty string`)
+      }
+
+      if (typeof submitter?.id !== 'string' || !submitter.id) {
+        err = 'invalid_submitter'
+        throw new TypeError('submitter must be an object containing a non-empty string id')
+      }
+      if (submitter.type != null && typeof submitter.type !== 'string') {
+        err = 'invalid_submitter'
+        throw new TypeError('submitter.type must be a string')
+      }
+
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
+      if (!mlApp) {
+        err = 'missing_ml_app'
+        throw new Error('ML App name is required for sending feedback. Feedback data will not be sent.')
+      }
+
+      const timestampMs = options.timestampMs || Date.now()
+      validateTimestamp(timestampMs, 'feedback')
+
+      const { label, value, tags, reasoning, assessment } = options
+      const labelValue = validateLabel(label, 'feedback')
+      validateMetricType(metricType, 'feedback')
+      validateMetricValue(metricType, value)
+      validateAssessment(assessment)
+      validateReasoning(reasoning)
+
+      const payload = {
+        event_kind: 'feedback',
+        [targetType]: targetValue,
+        label: labelValue,
+        metric_type: metricType,
+        ml_app: mlApp,
+        [`${metricType}_value`]: value,
+        timestamp_ms: timestampMs,
+        tags: buildMetricTags(tags, mlApp, 'feedback'),
+        submitter: submitter.type == null ? { id: submitter.id } : { id: submitter.id, type: submitter.type },
+      }
+      if (reasoning != null) {
+        payload.reasoning = reasoning
+      }
+      if (assessment != null) {
+        payload.assessment = assessment
+      }
+
+      const currentStore = storage.getStore()
+      const routing = currentStore?.routingContext
+      evalMetricAppendCh.publish({ payload, routing })
+    } catch (e) {
+      if (e.ddErrorTag) err = e.ddErrorTag
+      throw e
+    } finally {
+      telemetry.recordSubmitFeedback(metricTypeTag, targetType, err)
     }
   }
 
   annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
+    /** @type {{ annotationContext?: object, agentDeclarations?: AgentDeclaration[] } | undefined} */
     const currentStore = storage.getStore()
-
+    const { agent, ...contextOptions } = options ?? {}
+    /** @type {{ annotationContext: object, agentDeclarations?: AgentDeclaration[] }} */
     const store = {
       ...currentStore,
-      annotationContext: {
-        ...currentStore?.annotationContext,
-        ...options,
-      },
+      annotationContext: { ...currentStore?.annotationContext, ...contextOptions },
+    }
+
+    if (agent != null) {
+      const declaration = buildAgentDeclaration(agent)
+      // Outside `annotationContext`, whose keys come from the caller. Outermost first, so nested declarations fold
+      // onto the outer ones.
+      if (declaration) store.agentDeclarations = [...(currentStore?.agentDeclarations ?? []), declaration]
     }
 
     return storage.run(store, fn)
@@ -544,16 +674,26 @@ class LLMObs extends NoopLLMObs {
   flush () {
     if (!this.enabled) return
 
-    flushCh.publish()
+    flushCh.publish() // communicates with llmobs-specific writers
+    this._tracer.flushAll?.() // trigger any flushes for meta_struct-bound llmobs spans
   }
 
   #autoAnnotate (span, kind, input, output) {
     const annotations = {}
-    if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
+    const spanTags = LLMObsTagger.tagMap.get(span)
+    const isExperiment = kind === 'experiment'
+    const inputKey = isExperiment ? EXPERIMENT_INPUT : INPUT_VALUE
+    const outputKey = isExperiment ? EXPERIMENT_OUTPUT : OUTPUT_VALUE
+    const hasInput = isExperiment ? input !== undefined : input
+    const hasOutput = isExperiment ? output !== undefined : output
+    const hasInputTag = spanTags !== undefined && Object.hasOwn(spanTags, inputKey)
+    const hasOutputTag = spanTags !== undefined && Object.hasOwn(spanTags, outputKey)
+
+    if (hasInput && !['llm', 'embedding'].includes(kind) && !hasInputTag) {
       annotations.inputData = input
     }
 
-    if (output && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+    if (hasOutput && !['llm', 'retrieval'].includes(kind) && !hasOutputTag) {
       annotations.outputData = output
     }
 
@@ -597,22 +737,35 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  #extractOptions (options) {
+  #extractOptions (options, kind) {
     const {
       modelName,
       modelProvider,
       sessionId,
       mlApp,
+      version,
       _decorator,
+      _experimentTags,
       ...spanOptions
     } = options
+
+    let agentVersion
+    if (version !== undefined) {
+      if (kind === 'agent') {
+        agentVersion = toAgentVersion(version)
+      } else {
+        logger.warn('Dropping the version option on a %s span, it is only supported for agent spans.', kind)
+      }
+    }
 
     return {
       mlApp,
       modelName,
       modelProvider,
       sessionId,
+      agentVersion,
       _decorator,
+      _experimentTags,
       spanOptions,
     }
   }

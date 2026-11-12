@@ -13,8 +13,7 @@ class AmqplibClientPlugin extends ClientPlugin {
   bindStart (ctx) {
     const { channel = {}, method, fields } = ctx
 
-    if (method === 'basic.deliver' || method === 'basic.get') return
-    if (method === 'basic.publish') return
+    if (method === 'basic.deliver' || method === 'basic.get' || method === 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
     const span = this.startSpan(this.operationName(), {
@@ -33,7 +32,7 @@ class AmqplibClientPlugin extends ClientPlugin {
       },
     }, ctx)
 
-    fields.headers = fields.headers || {}
+    fields.headers ||= {}
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
 

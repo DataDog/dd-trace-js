@@ -84,17 +84,19 @@ class LoggerProvider {
 
   /**
    * Forces a flush of all pending log records.
-   * @returns {undefined} Promise that resolves when flush is n ssue cncomplete
+   * @param {Function} [done] Called after all pending log exports complete
    */
-  forceFlush () {
-    if (!this.isShutdown) {
-      return this.processor?.forceFlush()
+  forceFlush (done) {
+    if (this.isShutdown || !this.processor) {
+      done?.()
+      return
     }
+
+    this.processor.forceFlush(done)
   }
 
   /**
    * Shuts down the logger provider and all associated processors.
-   * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
     if (!this.isShutdown) {

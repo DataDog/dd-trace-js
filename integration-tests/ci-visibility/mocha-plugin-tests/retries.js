@@ -6,6 +6,11 @@ let attempt = 0
 describe('mocha-test-retries', function () {
   this.retries(4)
 
+  afterEach(() => {
+    // eslint-disable-next-line no-console
+    console.log('MOCHA AFTER EACH EXECUTED')
+  })
+
   it('will be retried and pass', () => {
     assert.strictEqual(attempt++, 2)
   })

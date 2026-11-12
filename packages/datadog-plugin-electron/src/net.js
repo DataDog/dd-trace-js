@@ -64,12 +64,18 @@ class ElectronRequestPlugin extends HttpClientPlugin {
     const responseHead = ctx.res?._responseHead
     const { statusCode } = responseHead || {}
 
-    for (const header in ctx.req._urlLoaderOptions?.headers || {}) {
-      reqHeaders[header.name] = header.value
+    const requestHeaders = ctx.req._urlLoaderOptions?.headers
+    if (requestHeaders) {
+      for (const header in requestHeaders) {
+        reqHeaders[header.name] = header.value
+      }
     }
 
-    for (const header in responseHead?.rawHeaders || {}) {
-      resHeaders[header.name] = header.value
+    const responseHeaders = responseHead?.rawHeaders
+    if (responseHeaders) {
+      for (const header in responseHeaders) {
+        resHeaders[header.name] = header.value
+      }
     }
 
     ctx.req = { headers: reqHeaders }

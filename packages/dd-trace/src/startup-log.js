@@ -4,9 +4,11 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 const { warn } = require('./log/writer')
+const startupConfig = require('./opentelemetry/startup-config')
 
 const errors = {}
 let config
+let otelConfig
 let pluginManager
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
@@ -78,7 +80,7 @@ function configInfo () {
   const url = config.url
   const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
 
-  return {
+  const startupLog = {
     [inspect.custom] () {
       return String(this)
     },
@@ -100,15 +102,18 @@ function configInfo () {
     agent_url: url,
     debug: !!config.debug,
     sample_rate: config.sampler.sampleRate,
+    sample_rate_limit: config.sampler.rateLimit,
     sampling_rules: samplingRules,
     tags: config.tags,
-    ...(config.tags && config.tags.version && { dd_version: config.tags.version }),
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
-    appsec_enabled: config.appsec.enabled,
+    appsec_enabled: config.appsec.DD_APPSEC_ENABLED,
     data_streams_enabled: !!config.dsmEnabled,
+    ...otelConfig,
   }
+  if (config.tags?.version) startupLog.dd_version = config.tags.version
+  return startupLog
 }
 
 /**
@@ -122,10 +127,12 @@ function tracerInfo () {
 }
 
 /**
- * @param {import('./config')} aConfig
+ * @param {ReturnType<import('./config')>} aConfig
+ * @param {import('./opentelemetry/startup-config').Pipelines} [pipelines]
  */
-function setStartupLogConfig (aConfig) {
+function setStartupLogConfig (aConfig, pipelines) {
   config = aConfig
+  otelConfig ??= startupConfig(config, samplingRules, pipelines)
 }
 
 /**

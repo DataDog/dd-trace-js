@@ -1,17 +1,29 @@
 'use strict'
 
-const { setImmediate } = require('node:timers/promises')
-
 const graphql = require('../../../versions/graphql').get()
+
+const object = {}
+const resolved = {
+  address: Promise.resolve(object),
+  civicNumber: Promise.resolve('123'),
+  colour: Promise.resolve('#ffffff'),
+  colours: Promise.resolve([object, object]),
+  friends: Promise.resolve(Array.from({ length: 20 }, () => object)),
+  name: Promise.resolve('test'),
+  owner: Promise.resolve(object),
+  pets: Promise.resolve(Array.from({ length: 20 }, () => object)),
+  petName: Promise.resolve('foo bar'),
+  street: Promise.resolve('foo street'),
+  type: Promise.resolve('dog'),
+}
 
 const Human = new graphql.GraphQLObjectType({
   name: 'Human',
   fields: {
     name: {
       type: graphql.GraphQLString,
-      async resolve (obj, args) {
-        await setImmediate()
-        return 'test'
+      resolve (obj, args) {
+        return resolved.name
       },
     },
     address: {
@@ -20,23 +32,20 @@ const Human = new graphql.GraphQLObjectType({
         fields: {
           civicNumber: {
             type: graphql.GraphQLString,
-            async resolve () {
-              await setImmediate()
-              return '123'
+            resolve () {
+              return resolved.civicNumber
             },
           },
           street: {
             type: graphql.GraphQLString,
-            async resolve () {
-              await setImmediate()
-              return 'foo street'
+            resolve () {
+              return resolved.street
             },
           },
         },
       }),
-      async resolve (obj, args) {
-        await setImmediate()
-        return {}
+      resolve (obj, args) {
+        return resolved.address
       },
     },
     pets: {
@@ -45,23 +54,20 @@ const Human = new graphql.GraphQLObjectType({
         fields: () => ({
           type: {
             type: graphql.GraphQLString,
-            async resolve (obj, args) {
-              await setImmediate()
-              return 'dog'
+            resolve (obj, args) {
+              return resolved.type
             },
           },
           name: {
             type: graphql.GraphQLString,
-            async resolve (obj, args) {
-              await setImmediate()
-              return 'foo bar'
+            resolve (obj, args) {
+              return resolved.petName
             },
           },
           owner: {
             type: Human,
-            async resolve (obj, args) {
-              await setImmediate()
-              return {}
+            resolve (obj, args) {
+              return resolved.owner
             },
           },
           colours: {
@@ -70,29 +76,20 @@ const Human = new graphql.GraphQLObjectType({
               fields: {
                 code: {
                   type: graphql.GraphQLString,
-                  async resolve (obj, args) {
-                    await setImmediate()
-                    return '#ffffff'
+                  resolve (obj, args) {
+                    return resolved.colour
                   },
                 },
               },
             })),
-            async resolve (obj, args) {
-              await setImmediate()
-              return [{}, {}]
+            resolve (obj, args) {
+              return resolved.colours
             },
           },
         }),
       }))),
-      async resolve (obj, args) {
-        await setImmediate()
-        const promises = []
-
-        for (let i = 0; i < 20; i++) {
-          promises.push(Promise.resolve({}))
-        }
-
-        return Promise.all(promises)
+      resolve (obj, args) {
+        return resolved.pets
       },
     },
   },
@@ -104,15 +101,8 @@ const schema = new graphql.GraphQLSchema({
     fields: {
       friends: {
         type: new graphql.GraphQLList(Human),
-        async resolve (obj, args) {
-          await setImmediate()
-          const promises = []
-
-          for (let i = 0; i < 20; i++) {
-            promises.push(Promise.resolve({}))
-          }
-
-          return Promise.all(promises)
+        resolve (obj, args) {
+          return resolved.friends
         },
       },
     },

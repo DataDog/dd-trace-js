@@ -1,50 +1,44 @@
-# Package Category Detection Reference
+# Instrumented Surface Detection Reference
 
-Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
+Detailed guide for classifying an instrumented surface by how it gets responses. These are working categories,
+not constants in the codebase. The operation itself determines its span kind and fields.
 
 ## Categories Explained
 
-### LlmObsCategory.LLM_CLIENT
+### LLM client
 
 **Definition:** Direct wrappers around LLM provider APIs.
 
 **Examples:**
-- `@google/generative-ai` - Google GenAI client (recommended reference implementation)
+- `@google/genai` - Google GenAI client (recommended reference implementation)
 - `@anthropic-ai/sdk` - Anthropic Claude client (recommended reference implementation)
 - `openai` - OpenAI API client
 
 **Observable signs:**
-- Package name contains provider name (openai, anthropic, genai, etc.)
 - Has chat/completion/embedding methods (`chat.completions.create`, `messages.create`)
 - Makes HTTP calls directly to LLM provider endpoints
-- Requires API keys for authentication
-- Has HTTP client dependencies (axios, fetch, request)
-- Code contains HTTP request patterns
+- Owns provider authentication and endpoint configuration
+- Uses an HTTP client or the runtime's `fetch`
 
-**Test strategy:** VCR with real API calls via proxy
+**Test strategy:** exercise the real client through VCR or a canned `fetch`
 
-**Enum value:** `LlmObsCategory.LLM_CLIENT`
-
-### LlmObsCategory.MULTI_PROVIDER
+### Multi-provider
 
 **Definition:** Unified interfaces that abstract multiple LLM providers.
 
 **Examples:**
-- `@ai-sdk/vercel` - Vercel AI SDK
+- `ai` - Vercel AI SDK
 - `langchain` - LangChain framework
 
 **Observable signs:**
-- Package name suggests multi-provider (ai-sdk, langchain)
 - Provider configuration and switching support
-- Wraps multiple Category 1 libraries
-- Dependencies include 2+ LLM provider SDKs
+- Wraps multiple LLM client libraries
+- Accepts provider adapters or SDK instances, often from separate packages
 - Has abstraction layers over providers
 
-**Test strategy:** VCR with real API calls via proxy
+**Test strategy:** exercise the real provider path through VCR or an injected `fetch`
 
-**Enum value:** `LlmObsCategory.MULTI_PROVIDER`
-
-### LlmObsCategory.ORCHESTRATION
+### Orchestration
 
 **Definition:** Workflow/graph managers that coordinate LLM calls but don't make them directly.
 
@@ -53,7 +47,6 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 - Workflow engines, agent coordinators
 
 **Observable signs:**
-- Package name suggests orchestration (langgraph, crew, workflow, graph)
 - Has graph/workflow/chain execution methods (`invoke`, `stream`, `run`)
 - Manages state and control flow between nodes/agents
 - Dependencies include orchestration libraries (e.g., @langchain/core)
@@ -61,9 +54,7 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 
 **Test strategy:** Pure function tests, NO VCR, NO real API calls
 
-**Enum value:** `LlmObsCategory.ORCHESTRATION`
-
-### LlmObsCategory.INFRASTRUCTURE
+### Infrastructure
 
 **Definition:** Communication protocols, server frameworks, infrastructure layers.
 
@@ -73,108 +64,58 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 - Transport layers
 
 **Observable signs:**
-- Package name suggests infrastructure (mcp, protocol, server, transport)
 - Implements protocols or server/client architecture
 - Transport layer code
 
-**Test strategy:** Mock server tests
-
-**Enum value:** `LlmObsCategory.INFRASTRUCTURE`
-
-## Decision Tree
-
-Follow this tree to determine category:
-
-```
-1. Does the package make direct HTTP calls to LLM provider endpoints?
-    ├─ YES → Go to question 2
-    └─ NO  → Go to question 3
-
-2. Does it support multiple LLM providers via configuration?
-    ├─ YES → LlmObsCategory.MULTI_PROVIDER
-    └─ NO  → LlmObsCategory.LLM_CLIENT
-
-3. Does it implement workflow/graph orchestration with state management?
-    ├─ YES → LlmObsCategory.ORCHESTRATION
-    └─ NO  → LlmObsCategory.INFRASTRUCTURE
-```
+**Test strategy:** the SDK's own server and client over its in-memory transport
 
 ## Detection Process
 
-### Step 1: Read Package Name
+The component that performs provider HTTP determines the response strategy. A configurable provider surface is
+multi-provider even when the caller supplies the provider from another package. Without provider traffic, graph or
+workflow execution means orchestration and a protocol implementation means infrastructure.
 
-Analyze package name for patterns:
-- Contains "openai", "anthropic", "genai" → Likely `LlmObsCategory.LLM_CLIENT`
-- Contains "langchain", "llamaindex", "ai-sdk" → Likely `LlmObsCategory.MULTI_PROVIDER`
-- Contains "langgraph", "crew", "workflow" → Likely `LlmObsCategory.ORCHESTRATION`
-- Contains "mcp", "protocol", "server" → Likely `LlmObsCategory.INFRASTRUCTURE`
+### Step 1: Read the Installed Source
 
-### Step 2: Check package.json Dependencies
+Inspect `versions/<package>@<range>/node_modules/<package>/` and find the exported operation being instrumented.
+Follow that operation through wrappers and adapters to the code that produces its result.
 
-```bash
-cat node_modules/{{package}}/package.json
-```
+### Step 2: Find the Response Owner
 
-Look for:
-- HTTP clients (axios, fetch, got) → `LlmObsCategory.LLM_CLIENT`
-- Multiple LLM SDKs (openai + anthropic + cohere) → `LlmObsCategory.MULTI_PROVIDER`
-- LangChain/orchestration libs → `LlmObsCategory.ORCHESTRATION`
-- Protocol/transport libs → `LlmObsCategory.INFRASTRUCTURE`
+- Direct provider HTTP from the package → LLM client
+- A caller-supplied provider adapter or model implementation → multi-provider
+- Node/state execution with no provider transport → orchestration
+- Client/server protocol handlers over a transport → infrastructure
 
-### Step 3: Check Exported Methods
+### Step 3: Check Configuration and Dependencies
 
-```bash
-node -e "console.log(Object.keys(require('{{package}}')))"
-```
+Use `package.json` and constructor options to confirm the source trace:
+- Provider credentials, endpoints and HTTP clients support an LLM-client classification
+- Provider adapter interfaces or separate provider packages support multi-provider
+- State/graph dependencies support orchestration
+- Protocol and transport dependencies support infrastructure
 
-Method patterns:
-- `chat()`, `complete()`, `embed()` → `LlmObsCategory.LLM_CLIENT` or `MULTI_PROVIDER`
-- `invoke()`, `stream()`, `graph()`, `workflow()` → `LlmObsCategory.ORCHESTRATION`
-- `connect()`, `listen()`, `handle()` → `LlmObsCategory.INFRASTRUCTURE`
+### Step 4: Use the Name Only as a Weak Signal
 
-### Step 4: Analyze Source Code
+Names such as `openai`, `langgraph`, or `mcp` are useful search hints, not classifications. Hybrid packages and
+provider adapters are classified per instrumented operation, regardless of package name.
 
-Check for:
-- HTTP request patterns (`http.request`, `.post(`, `fetch(`) → `LlmObsCategory.LLM_CLIENT`
-- Provider switching logic → `LlmObsCategory.MULTI_PROVIDER`
-- State management, graph execution → `LlmObsCategory.ORCHESTRATION`
-- Protocol implementation → `LlmObsCategory.INFRASTRUCTURE`
+## Worked Examples
 
-## Real-World Examples
-
-### Example 1: Anthropic (LLM_CLIENT)
-
-**Package:** `@anthropic-ai/sdk` — see `packages/datadog-plugin-anthropic/`
-
-**Category:** `LlmObsCategory.LLM_CLIENT` — name contains "anthropic", direct HTTP calls to Claude API, requires API key, methods are `messages.create`
-
-### Example 2: Google GenAI (LLM_CLIENT)
-
-**Package:** `@google/generative-ai` — see `packages/datadog-plugin-google-genai/`
-
-**Category:** `LlmObsCategory.LLM_CLIENT` — name contains "genai", direct HTTP calls to Gemini API, complex nested message format (contents/parts)
-
-### Example 3: Vercel AI SDK (MULTI_PROVIDER)
-
-**Package:** `ai` (Vercel AI SDK)
-
-- Name contains "ai-sdk" → multi_provider
-- Depends on openai + anthropic SDKs (multiple LLM providers)
-- Methods include provider-agnostic chat interface
-
-**Category:** `LlmObsCategory.MULTI_PROVIDER`
-
-### Example 4: LangGraph (ORCHESTRATION)
-
-**Package:** `@langchain/langgraph` — see `packages/dd-trace/src/llmobs/plugins/langgraph/`
-
-**Category:** `LlmObsCategory.ORCHESTRATION` — name indicates graph orchestration, depends on `@langchain/core`, methods manage workflow state (`StateGraph.invoke`, `Pregel.stream`), no direct LLM HTTP calls
+| Package | Category | Deciding signal |
+|---------|----------|-----------------|
+| `@anthropic-ai/sdk` | LLM client | `messages.create` calls the Claude API directly, needs a key |
+| `@google/genai` | LLM client | calls the Gemini API directly, nested `contents` / `parts` format |
+| `ai` | multi-provider | accepts separately installed provider implementations behind one API |
+| `@langchain/langgraph` | orchestration | `StateGraph.invoke` / `Pregel.stream` manage state, no provider calls |
 
 ## Edge Cases
 
-When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches test strategy needs: if the package makes HTTP calls it needs VCR (LLM_CLIENT/MULTI_PROVIDER); if it doesn't, use pure functions (ORCHESTRATION) or mock servers (INFRASTRUCTURE).
+When signals conflict or are weak, classify each instrumented surface by its response source. Provider-backed calls
+use VCR or an injected `fetch`; orchestration uses plain node responses; infrastructure uses the SDK's in-memory
+transport.
 
 Some packages don't fit cleanly:
 - Utilities/helpers → Check what they instrument
 - Plugins/extensions → Follow parent library category
-- Hybrid packages → Categorize by primary function
+- Hybrid packages → Classify each instrumented operation separately

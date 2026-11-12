@@ -29,6 +29,28 @@ function getTestsuiteAttr (openTag, name) {
 }
 
 /**
+ * @param {string|number|undefined} value
+ */
+function escapeXmlAttribute (value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+/**
+ * @param {Record<string, string|number|undefined>} properties
+ */
+function formatXunitProperties (properties) {
+  let xml = '<properties>'
+  for (const [name, value] of Object.entries(properties)) {
+    xml += `\n  <property name="${escapeXmlAttribute(name)}" value="${escapeXmlAttribute(value)}"/>`
+  }
+  return `${xml}\n</properties>`
+}
+
+/**
  * @param {string} line
  */
 function isFailureStartLine (line) {
@@ -99,7 +121,7 @@ function splitLines (carry, chunk) {
  *   stdoutEnded: boolean,
  *   stderrEnded: boolean,
  *   code: number|null,
- *   signal: NodeJS.Signals|null,
+ *   signal: keyof import('node:os').SignalConstants|null,
  *   outBuf: {stream: 'stdout'|'stderr', text: string}[],
  *   stderrErrBuf: string[],
  *   failureBuf: string[],
@@ -202,6 +224,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   let totalSkipped = 0
   let totalTime = 0
   const testcases = []
+  const properties = formatXunitProperties(multiMochaRc.scriptsJunitReporterJsReporterOptions.properties)
 
   for (const file of inputFiles) {
     let xml
@@ -212,7 +235,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
       continue
     }
 
-    const openTagMatch = xml.match(/<testsuite\s+[^>]*>/)
+    const openTagMatch = xml.match(/<testsuite\s[^>]*>/)
     if (!openTagMatch) continue
 
     const openTag = openTagMatch[0]
@@ -236,6 +259,7 @@ function mergeXunitFilesToSingleTestsuite (inputFiles, outputFile) {
   const merged = [
     `<testsuite name="Mocha Tests" tests="${totalTests}" failures="${totalFailures}" ` +
     `errors="${totalErrors}" skipped="${totalSkipped}" timestamp="${timestamp}" time="${totalTime}">`,
+    properties,
     testcases.filter(Boolean).join('\n'),
     '</testsuite>\n',
   ].join('\n')
@@ -262,11 +286,10 @@ async function main () {
   let interrupted = false
 
   /**
-   * @param {NodeJS.ErrnoException} error
+   * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
-    if (!error || error.code !== 'EPIPE') return
-    if (interrupted) return
+    if (!error || error.code !== 'EPIPE' || interrupted) return
     interrupted = true
     for (const child of liveChildren) {
       child.kill('SIGTERM')
@@ -277,7 +300,7 @@ async function main () {
   process.stderr.on('error', onPipeError)
 
   /**
-   * @param {NodeJS.Signals} signal
+   * @param {keyof import('node:os').SignalConstants} signal
    */
   const onSignal = (signal) => {
     if (interrupted) return
@@ -351,7 +374,7 @@ async function main () {
   let idx = 0
   let running = 0
   let failures = 0
-  /** @type {{file: string, code: number|null, signal: NodeJS.Signals|null}[]} */
+  /** @type {{file: string, code: number|null, signal: keyof import('node:os').SignalConstants|null}[]} */
   const failed = []
 
   /** @type {Entry[]} */
@@ -757,7 +780,7 @@ async function main () {
   if (failed.length) {
     process.stdout.write('\n=== Failed files ===\n')
     for (const { file, code, signal } of failed) {
-      process.stdout.write(`- ${file} (exit=${code ?? 'null'} signal=${signal ?? 'null'})\n`)
+      process.stdout.write(`- ${file} (exit=${code} signal=${signal})\n`)
     }
     process.stdout.write(
       'Legend: [n] = global failure index across all files; n) = local failure index within a file.\n'

@@ -11,6 +11,9 @@ const { getRootSpan } = require('./utils')
 
 /**
  * @deprecated in favor of trackUserLoginSuccessV2
+ * @param {import('../../tracer')} tracer
+ * @param {import('../../../../../index').User} user
+ * @param {Record<string, string>} [metadata]
  */
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -40,6 +43,10 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
 /**
  * @deprecated in favor of trackUserLoginFailureV2
+ * @param {import('../../tracer')} tracer
+ * @param {string} userId
+ * @param {boolean} exists
+ * @param {Record<string, string>} [metadata]
  */
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   if (!userId || typeof userId !== 'string') {
@@ -160,7 +167,7 @@ function flattenFields (fields, depth = 0) {
 
     if (value && typeof value === 'object') {
       const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, depth + 1)
-      truncated = truncated || inheritTruncated
+      truncated ||= inheritTruncated
 
       if (flatValue) {
         for (const flatKey of Object.keys(flatValue)) {

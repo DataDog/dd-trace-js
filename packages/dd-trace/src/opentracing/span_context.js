@@ -8,7 +8,7 @@ const TRACE_ID_128 = '_dd.p.tid'
 
 class DatadogSpanContext {
   constructor (props) {
-    props = props || {}
+    props ||= {}
 
     this._traceId = props.traceId
     this._spanId = props.spanId
@@ -108,7 +108,6 @@ class DatadogSpanContext {
   /**
    * Check if a tag exists.
    * @param {string} key - Tag key
-   * @returns {boolean}
    */
   hasTag (key) { return Object.hasOwn(this._tags, key) }
 

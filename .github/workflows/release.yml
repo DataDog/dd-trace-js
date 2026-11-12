@@ -74,7 +74,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
@@ -87,8 +87,8 @@ jobs:
           registry-url: https://registry.npmjs.org
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - name: Publish
         run: |
           version="${{ fromJson(steps.pkg.outputs.json).version }}"
@@ -159,8 +159,8 @@ jobs:
       - uses: ./.github/actions/node
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
       - run: yarn
       - name: Build
         working-directory: docs
@@ -173,7 +173,7 @@ jobs:
           ref: gh-pages
       - name: Deploy
         run: |
-          rm -rf *
+          rm -rf ./*
           mv /tmp/out/* .
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -191,7 +191,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
@@ -205,9 +205,9 @@ jobs:
       - uses: ./.github/actions/install
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
+      - run: npm version --no-git-tag-version "${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}"
       - run: npm publish --tag dev
       - run: |
           git tag --force dev
@@ -233,7 +233,7 @@ jobs:
       - uses: ./.github/actions/install
       - id: pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+          content=$(tr '\n' ' ' < ./package.json)
+          echo "json=$content" >> "$GITHUB_OUTPUT"
+      - run: npm version --no-git-tag-version "${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}"
       - run: node scripts/release/publish-electron.js --tag dev

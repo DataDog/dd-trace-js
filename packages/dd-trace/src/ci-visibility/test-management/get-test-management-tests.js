@@ -1,10 +1,8 @@
 'use strict'
 
 const getConfig = require('../../config')
-const request = require('../requests/request')
 const id = require('../../id')
 const log = require('../../log')
-
 const {
   incrementCountMetric,
   distributionMetric,
@@ -14,7 +12,8 @@ const {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 } = require('../telemetry')
-
+const request = require('../requests/request')
+const { createApiRequestRoute } = require('../requests/route')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 const { validateTestManagementTestsResponse } = require('../test-optimization-http-cache-schema')
 
@@ -47,7 +46,7 @@ function parseJsonResponse (rawJson) {
 function parseTestManagementTestsResponse (rawJson, options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateTestManagementTestsResponse(parsedResponse, options)
+    validateTestManagementTestsResponse(parsedResponse)
   }
   const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
   return testManagementTests
@@ -117,30 +116,24 @@ function fetchFromApi ({
   branch,
   cacheKey,
 }, done) {
+  const path = '/api/v2/test/libraries/test-management/tests'
+  const route = createApiRequestRoute(getConfig(), { url, path, isEvpProxy, evpProxyPrefix })
+  if (!route) {
+    return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
+  }
+
   const options = {
-    path: '/api/v2/test/libraries/test-management/tests',
+    ...route,
     method: 'POST',
     headers: {
+      ...route.headers,
       'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url,
   }
 
   if (isGzipCompatible) {
     options.headers['accept-encoding'] = 'gzip'
-  }
-
-  if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
-  } else {
-    const { DD_API_KEY } = getConfig()
-    if (!DD_API_KEY) {
-      return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
-    }
-
-    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const data = JSON.stringify({

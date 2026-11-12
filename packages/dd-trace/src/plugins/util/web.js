@@ -13,6 +13,7 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { getServerStatusValidator } = require('./status-validator')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
@@ -59,7 +60,7 @@ const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
-    const validateStatus = getStatusValidator(config)
+    const validateStatus = getServerStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
@@ -203,6 +204,22 @@ const web = {
     return context ? context.span : null
   },
 
+  /** @param {import('../../opentracing/span') | undefined} span */
+  rootFromSpan (span) {
+    if (!span) return
+
+    const started = span.context()._trace.started
+    while (span) {
+      const context = span.context()
+      if (context.getTag(SPAN_KIND) === SERVER && typeof context.getTag(HTTP_URL) === 'string') return span
+
+      const parentId = context._parentId
+      if (!parentId) return
+      span = started.find(parent => parent.context()._spanId === parentId)
+    }
+    return span
+  },
+
   // Return the active span.
   active (req) {
     const context = contexts.get(req)
@@ -219,7 +236,7 @@ const web = {
     const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
-    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    let childOf = pubsubSpan || this.extractIncomingServerContext(tracer, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -230,6 +247,10 @@ const web = {
     }
 
     return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+  },
+
+  extractIncomingServerContext (tracer, headers) {
+    return tracer.extract(FORMAT_HTTP_HEADERS, normalizeHeadersCarrier(headers))
   },
 
   // Validate a request's status code and then add error tags if necessary
@@ -316,20 +337,16 @@ const web = {
     const writeHead = res.writeHead
 
     return function (statusCode, statusMessage, headers) {
-      // CORS preflight tagging only matters for OPTIONS requests. Skip the
-      // getHeaders() spread + isOriginAllowed work entirely for the common
-      // GET / POST / etc. case. Node's http module passes `req.method`
-      // through unchanged, so all standard methods are uppercase; the
-      // `toLowerCase` fallback covers any non-standard caller.
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
-        headers = typeof statusMessage === 'string' ? headers : statusMessage
-        headers = { ...res.getHeaders(), ...headers }
-
-        if (isOriginAllowed(req, headers)) {
-          addAllowHeaders(req, res, headers)
+        const headerIndex = typeof statusMessage === 'string' || headers != null ? 2 : 1
+        const updatedHeaders = addAllowHeaders(req, res, arguments[headerIndex])
+        if (updatedHeaders) {
+          arguments[headerIndex] = updatedHeaders
+          const result = writeHead.apply(this, arguments)
+          if (context.config.headers.length > 0) context.responseHeaders = updatedHeaders
+          return result
         }
       }
-
       return writeHead.apply(this, arguments)
     }
   },
@@ -345,10 +362,45 @@ const web = {
   },
 }
 
+function normalizeHeadersCarrier (headers) {
+  if (!headers || typeof headers.get !== 'function' || typeof headers[Symbol.iterator] !== 'function') {
+    return headers
+  }
+
+  const carrier = {}
+  for (const [key, value] of headers) {
+    carrier[String(key).toLowerCase()] = value
+  }
+  return carrier
+}
+
+/**
+ * @param {import('node:http').IncomingMessage} req
+ * @param {import('node:http').ServerResponse | import('node:http2').Http2ServerResponse} res
+ * @param {ResponseHeaders} headers
+ */
 function addAllowHeaders (req, res, headers) {
-  const allowHeaders = splitHeader(headers['access-control-allow-headers'])
+  if (!req.headers.origin || !req.headers['access-control-request-headers'] ||
+      res.headersSent || res.stream?.destroyed || res.stream?.closed) return
+
+  const originKey = findHeader(headers, 'access-control-allow-origin')
+  const allowOrigin = originKey === undefined
+    ? res.getHeader('access-control-allow-origin')
+    : getHeaderValue(headers, originKey)
+  if (allowOrigin !== '*' && allowOrigin !== req.headers.origin) return
+
+  const allowKey = findHeader(headers, 'access-control-allow-headers')
+  const existing = allowKey === undefined
+    ? res.getHeader('access-control-allow-headers')
+    : getHeaderValue(headers, allowKey)
+  if (allowKey !== undefined && existing == null) return
+
+  const allowHeaders = splitHeader(existing)
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
+    'baggage',
+    'traceparent',
+    'tracestate',
     'x-datadog-origin',
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
@@ -364,19 +416,69 @@ function addAllowHeaders (req, res, headers) {
   }
 
   if (allowHeaders.length > 0) {
-    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
+    const value = uniq(allowHeaders).join(',')
+    if (headers) return setAllowHeaders(headers, allowKey, value)
+    res.setHeader('access-control-allow-headers', value)
   }
 }
 
-function isOriginAllowed (req, headers) {
-  const origin = req.headers.origin
-  const allowOrigin = headers['access-control-allow-origin']
+/** @typedef {import('node:http').OutgoingHttpHeader} HeaderValue */
+/** @typedef {import('node:http').OutgoingHttpHeaders | Array<HeaderValue | [string, HeaderValue]>} ResponseHeaders */
 
-  return origin && (allowOrigin === '*' || allowOrigin === origin)
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string} name
+ */
+function findHeader (headers, name) {
+  if (!headers) return
+  if (Array.isArray(headers)) {
+    const tuples = Array.isArray(headers[0])
+    for (let i = headers.length - (tuples ? 1 : 2); i >= 0; i -= tuples ? 1 : 2) {
+      const key = tuples ? headers[i][0] : headers[i]
+      if (typeof key === 'string' && key.toLowerCase() === name) return tuples ? i : i + 1
+    }
+  } else {
+    const keys = Object.keys(headers)
+    for (let i = keys.length - 1; i >= 0; i--) {
+      if (keys[i].toLowerCase() === name) return keys[i]
+    }
+  }
+}
+
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string | number} key
+ */
+function getHeaderValue (headers, key) {
+  return Array.isArray(headers) && Array.isArray(headers[0]) ? headers[key][1] : headers[key]
+}
+
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string | number | undefined} key
+ * @param {string} value
+ */
+function setAllowHeaders (headers, key, value) {
+  if (Array.isArray(headers)) {
+    const result = []
+    const tuples = Array.isArray(headers[0])
+    // Native writeHead ignores custom array iterators.
+    for (let i = 0; i < headers.length; i++) result.push(headers[i])
+    if (key !== undefined) {
+      result[key] = tuples ? [headers[key][0], value] : value
+    } else if (tuples) {
+      result.push(['access-control-allow-headers', value])
+    } else {
+      result.push('access-control-allow-headers', value)
+    }
+    return result
+  }
+  return { ...headers, [key ?? 'access-control-allow-headers']: value }
 }
 
 function splitHeader (str) {
-  return typeof str === 'string' ? str.split(/\s*,\s*/) : []
+  if (Array.isArray(str)) str = str.join(',')
+  return str === undefined ? [] : String(str).split(',').map((header) => header.trim())
 }
 
 function addRequestTags (context, spanType) {
@@ -485,9 +587,10 @@ function addResourceTag (context) {
 
   if (spanContext.getTag(RESOURCE_NAME)) return
 
-  const resource = [req.method, spanContext.getTag(HTTP_ROUTE)]
-    .filter(Boolean)
-    .join(' ')
+  let resource = req.method
+  const route = spanContext.getTag(HTTP_ROUTE)
+
+  if (route) resource += ` ${route}`
 
   span.setTag(RESOURCE_NAME, resource)
 }
@@ -506,10 +609,14 @@ function addRequestHeaders (context) {
 }
 
 function addResponseHeaders (context) {
-  const { res, config, span, inferredProxySpan } = context
+  const { res, config, span, inferredProxySpan, responseHeaders } = context
 
   for (const [key, tag] of config.headers) {
-    const resHeader = res.getHeader(key)
+    let resHeader = res.getHeader(key)
+    if (resHeader === undefined && responseHeaders) {
+      const headerKey = findHeader(responseHeaders, key)
+      if (headerKey !== undefined) resHeader = getHeaderValue(responseHeaders, headerKey)
+    }
     if (resHeader) {
       const tagName = tag || `${HTTP_RESPONSE_HEADERS}.${key}`
       span.setTag(tagName, resHeader)
@@ -531,19 +638,6 @@ function getHeadersToRecord (config) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
-}
-
-function isNot500ErrorCode (code) {
-  return code < 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return isNot500ErrorCode
 }
 
 const noop = () => {}

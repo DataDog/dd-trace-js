@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const path = require('path')
 
 const { satisfies } = require('semver')
@@ -17,7 +18,7 @@ const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10)
 const SERVICE_NAME = 'test'
 
 describe('Plugin', () => {
@@ -30,7 +31,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -43,7 +44,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -72,43 +73,91 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
-        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', async () => {
           const app = express()
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
 
-          appListener = server(app, port => {
-            agent.assertFirstTraceSpan(span => {
-              // OpenTelemetry attribute names are present...
-              assertObjectContains(span, {
-                type: 'http',
-                resource: 'GET',
-                meta: {
-                  'span.kind': 'client',
-                  'http.request.method': 'GET',
-                  'url.full': `${protocol}://localhost:${port}/user`,
-                  'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
-                },
-              })
-              // ...and the Datadog ones are absent.
-              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
-              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
-              assert.ok(!Object.hasOwn(span.meta, 'error.type'))
-            }).then(done).catch(done)
-
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-              res.on('data', () => {})
+          appListener = server(app, () => {})
+          await once(appListener, 'listening')
+          const { port } = appListener.address()
+          const traceReceived = agent.assertFirstTraceSpan(span => {
+            // OpenTelemetry attribute names are present...
+            assertObjectContains(span, {
+              resource: 'GET',
+              meta: {
+                'span.kind': 'client',
+                'http.request.method': 'GET',
+                'url.full': `${protocol}://localhost:${port}/user`,
+                'server.address': 'localhost',
+              },
+              metrics: {
+                'http.response.status_code': 200,
+                'server.port': port,
+              },
             })
-            req.end()
+            // ...and the Datadog ones are absent.
+            assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+            assert.ok(!Object.hasOwn(span.meta, 'out.host'))
+            assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+            assert.ok(!Object.hasOwn(span.meta, 'operation.name'))
+            assert.ok(!Object.hasOwn(span.meta, 'span.type'))
           })
+          const request = http.get(`${protocol}://localhost:${port}/user`, response => response.resume())
+          await Promise.all([traceReceived, once(request, 'close')])
         })
+
+        for (const scenario of [
+          { name: 'brackets an IPv6 literal in url.full', hostname: '::1' },
+          { name: 'brackets an IPv6 literal with an implicit default port', hostname: '::1', defaultPort: true },
+          {
+            name: 'brackets an IPv6 literal with an explicit default port',
+            hostname: '::1',
+            defaultPort: true,
+            explicitPort: true,
+          },
+          { name: 'redacts credentials in url.full', auth: 'username:password' },
+          { name: 'uses both OTel placeholders for a colonless auth option', auth: 'username', options: true },
+        ]) {
+          it(scenario.name, async () => {
+            const hostname = scenario.hostname ?? 'localhost'
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+            appListener = server(app, () => {}, hostname)
+            await once(appListener, 'listening')
+
+            const port = appListener.address().port
+            const defaultPort = protocol === 'https' ? 443 : 80
+            const localAgent = scenario.defaultPort ? new http.Agent() : undefined
+            if (localAgent) localAgent.defaultPort = port
+
+            const urlHost = hostname === '::1' ? '[::1]' : hostname
+            const urlPort = scenario.defaultPort ? '' : `:${port}`
+            const redactedAuth = scenario.auth ? 'REDACTED:REDACTED@' : ''
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://${redactedAuth}${urlHost}${urlPort}/user`)
+              assert.strictEqual(span.meta['server.address'], hostname)
+              assert.strictEqual(span.metrics['server.port'], scenario.defaultPort ? defaultPort : port)
+            })
+
+            const auth = scenario.auth ? `${scenario.auth}@` : ''
+            const targetPort = scenario.explicitPort ? `:${defaultPort}` : urlPort
+            const target = scenario.options
+              ? { protocol: `${protocol}:`, hostname, port, path: '/user', auth: scenario.auth }
+              : `${protocol}://${auth}${urlHost}${targetPort}/user`
+            const request = http.request(target, { agent: localAgent }, res => res.resume())
+            const requestClosed = once(request, 'close')
+            request.end()
+            try {
+              await Promise.all([traceReceived, requestClosed])
+            } finally {
+              localAgent?.destroy()
+            }
+          })
+        }
 
         it('sets error.type to the status code on a 4xx client response', done => {
           const app = express()
@@ -151,6 +200,65 @@ describe('Plugin', () => {
           })
         })
       })
+
+      for (const { description, statuses, validateStatus, errorStatuses } of [
+        { description: 'default', errorStatuses: [400, 499, 500, 599, 600] },
+        { description: 'explicit default-shaped', statuses: '400-499', errorStatuses: [400, 499] },
+        { description: 'custom', statuses: '200', errorStatuses: [200] },
+        {
+          description: 'custom validation',
+          statuses: '400-599',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+        },
+      ]) {
+        describe(`with OTel semantics and ${description} client statuses`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = statuses
+            }
+            await agent.load('http', { server: false, client: validateStatus ? { validateStatus } : {} })
+            http = require(pluginToBeLoaded)
+            appListener = server((req, res) => {
+              res.writeHead(responseStatus)
+              res.end()
+            }, () => {})
+            await once(appListener, 'listening')
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 399, 400, 499, 500, 599, 600]) {
+            it(`classifies status ${status} using the configured range origin`, async () => {
+              responseStatus = status
+              const port = appListener.address().port
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.error, expectedError)
+                  assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                  assert.strictEqual(span.metrics['http.response.status_code'], status)
+                }),
+                (async () => {
+                  const request = http.get(`${protocol}://localhost:${port}/user`)
+                  const [response] = await once(request, 'response')
+                  response.resume()
+                  await once(response, 'end')
+                  assert.strictEqual(response.statusCode, status)
+                })(),
+              ])
+            })
+          }
+        })
+      }
 
       describe('without configuration', () => {
         beforeEach(async () => {
@@ -387,8 +495,12 @@ describe('Plugin', () => {
         })
 
         // Merging no longer happens since Node 20
-        if (NODE_MAJOR < 20) {
-          it('should support a string URL and an options object, which merges and takes precedence', done => {
+        {
+          const mergedUrlOptionsTest = NODE_MAJOR < 20 ? it : it.skip
+          const mergedUrlOptionsTitle = 'should support a string URL and an options object, ' +
+            'which merges and takes precedence'
+
+          mergedUrlOptionsTest(mergedUrlOptionsTitle, done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -803,8 +915,10 @@ describe('Plugin', () => {
           })
         })
 
-        if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error with Node 20', done => {
+        {
+          const node20Test = satisfies(process.version, '>=20') ? it : it.skip
+
+          node20Test('should not record default HTTP agent timeout as error with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -832,7 +946,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if custom Agent timeout is used with Node 20', done => {
+          node20Test('should record error if custom Agent timeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -864,7 +978,7 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
-          it('should record error if req.setTimeout is used with Node 20', done => {
+          node20Test('should record error if req.setTimeout is used with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -1023,8 +1137,10 @@ describe('Plugin', () => {
           })
         })
 
-        if (protocol === 'http') {
-          it('should skip requests marked as noop', done => {
+        {
+          const noopRequestTest = protocol === 'http' ? it : it.skip
+
+          noopRequestTest('should skip requests marked as noop', done => {
             const app = express()
 
             app.get('/user', (req, res) => {
@@ -1189,6 +1305,70 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
               res.on('data', () => { })
+            })
+
+            req.end()
+          })
+        })
+      })
+
+      describe('with configured HTTP client error statuses', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '200-201,202'
+
+          return agent.load('http', { server: false })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+              express = require('express')
+            })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('should mark a configured status code as an error', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].error, 1)
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+
+            req.end()
+          })
+        })
+
+        it('should not mark a status code outside of the configured statuses as an error', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(500).send()
+          })
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '500')
+              assert.strictEqual(traces[0][0].error, 0)
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
             })
 
             req.end()

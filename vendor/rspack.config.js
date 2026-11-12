@@ -2,30 +2,27 @@
 
 // TODO: Stop depending on `@opentelemetry/api` and instead intercept the user
 //       version with an instrumentation.
-// TODO: Stop depending on `@openfeature/server-sdk` and `@openfeature/core` and
-//       instead intercept the user version with an instrumentation.
-// TODO: Vendor `@datadog/openfeature-node-server` when the above has been
-//       addressed. Until then, `packages/dd-trace/src/openfeature/flagging_provider.js`
-//       loads it through a bundler-opaque require so customer bundles do not
-//       follow the optional peer-of-peer chain (see #8635).
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
+const { join } = require('node:path')
+
 const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
-const { join } = require('path')
+
 const { dependencies } = require('./package.json')
 
 const include = new Set([
   ...Object.keys(dependencies),
+  '@datadog/openfeature-node-server/rules-based',
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
-  'source-map/lib/util' // TODO: remove usage of dependency internals
+  'source-map/lib/util', // TODO: remove usage of dependency internals
 ])
 
 const exclude = new Set([
-  'mutexify' // we only ever use `mutexify/promise`
+  'mutexify', // we only ever use `mutexify/promise`
 ])
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
@@ -67,25 +64,39 @@ module.exports = {
       }),
     ],
   },
-  // These are shared between dd-trace and users, so they need to be external.
+  // This is shared between dd-trace and users, so it needs to be external.
   externals: {
-    '@opentelemetry/api': '@opentelemetry/api'
+    '@opentelemetry/api': '@opentelemetry/api',
   },
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
-      excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      handleMissingLicenseText: (packageName, licenseType) => licenseType,
+      // Module order depends on the installer's layout, so the first module does not identify the entry package.
+      renderLicenses: modules => modules
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(licenseModule => {
+          if (!licenseModule.licenseText) {
+            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+          }
+          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+        })
+        .join(`\n${'-'.repeat(78)}\n\n`),
       stats: {
-        warnings: false
-      }
+        warnings: false,
+      },
     }),
     new CopyRspackPlugin({
       patterns: [
+        {
+          from: '@datadog/openfeature-node-server/rules-based.d.ts',
+          to: '@datadog/openfeature-node-server/rules-based/index.d.ts',
+        },
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',
-          to: 'source-map'
+          to: 'source-map',
         },
       ],
     }),
@@ -93,9 +104,9 @@ module.exports = {
   output: {
     filename: '[name]/index.js',
     library: {
-      type: 'commonjs2'
+      type: 'commonjs2',
     },
     path: join(__dirname, 'dist'),
-    clean: true
+    clean: true,
   },
 }

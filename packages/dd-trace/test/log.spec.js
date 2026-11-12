@@ -28,11 +28,12 @@ describe('log', () => {
       const logWriter = {
         configure: sinon.spy(),
       }
+      const loadConfigHelper = proxyquire.noPreserveCache()
       const configHelper = isServerless
-        ? proxyquire.noPreserveCache()('../src/config/helper', {
+        ? loadConfigHelper('../src/config/helper', {
           '../serverless': { IS_SERVERLESS: true },
         })
-        : proxyquire.noPreserveCache()('../src/config/helper', {
+        : loadConfigHelper('../src/config/helper', {
           '../serverless': { IS_SERVERLESS: false },
           './stable': function StableConfigStub () {
             this.localEntries = localEntries
@@ -41,7 +42,8 @@ describe('log', () => {
           },
         })
 
-      const log = proxyquire.noPreserveCache()('../src/log', {
+      const loadLog = proxyquire.noPreserveCache()
+      const log = loadLog('../src/log', {
         '../config/helper': configHelper,
         './writer': logWriter,
       })
@@ -222,7 +224,8 @@ describe('log', () => {
         DD_TRACE_DEBUG: 'true',
         ...envEntries,
       }
-      log = proxyquire.noPreserveCache()('../src/log', {})
+      const loadLog = proxyquire.noPreserveCache()
+      log = loadLog('../src/log', {})
       log.configure(options)
       return log
     }
@@ -262,13 +265,18 @@ describe('log', () => {
     })
 
     it('should call the logger in a noop context', () => {
+      const stores = []
       logger.debug = () => {
-        assert.ok('noop' in storage('legacy').getStore())
-        assert.strictEqual(storage('legacy').getStore().noop, true)
+        stores.push(storage('legacy').getStore())
       }
 
       loadConfiguredLog({ logger })
+      const parent = storage('legacy').getStore()
       log.debug('debug')
+
+      assert.strictEqual(stores.length, 1)
+      assert.strictEqual(stores[0]?.noop, true)
+      assert.strictEqual(storage('legacy').getStore(), parent)
     })
 
     describe('debug', () => {
@@ -305,7 +313,7 @@ describe('log', () => {
         sinon.assert.calledOnce(console.debug)
         const debugMessage = console.debug.firstCall.args[0]
         assert.match(debugMessage,
-          /^Trace: Context.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
+          /^Trace: Context.foo\('argument', \{ hello: 'world' \}, Foo \{ bar: 'baz' \}\)/
         )
         const lineCount = debugMessage.split('\n').length
         assert.ok(lineCount >= 3, `Expected at least 3 lines in trace, got ${lineCount}: ${inspect(debugMessage)}`)
@@ -520,7 +528,42 @@ describe('log', () => {
       let logWriter
 
       beforeEach(() => {
-        logWriter = proxyquire.noPreserveCache()('../src/log/writer', {})
+        const loadWriter = proxyquire.noPreserveCache()
+        logWriter = loadWriter('../src/log/writer', {})
+      })
+
+      describe('getLogLevel', () => {
+        afterEach(() => logWriter.configure(false))
+
+        it('reports the normalized level used to filter messages', () => {
+          for (const [input, expected, debugCalls, errorCalls] of [
+            [undefined, 'debug', 1, 1],
+            [' WARN ', 'warn', 0, 1],
+            ['critical', 'error', 0, 1],
+            ['off', 'off', 0, 0],
+            ['invalid', 'debug', 1, 1],
+          ]) {
+            logger.debug.resetHistory()
+            logger.error.resetHistory()
+            logWriter.configure(true, input, logger)
+
+            log.debug('filtered-debug')
+            log.error(error)
+
+            assert.equal(logWriter.getLogLevel(), expected)
+            assert.equal(logger.debug.callCount, debugCalls)
+            assert.equal(logger.error.callCount, errorCalls)
+          }
+        })
+
+        it('reports disabled logging and follows later reconfiguration', () => {
+          logWriter.configure(true, 'warn')
+          assert.equal(logWriter.getLogLevel(), 'warn')
+          logWriter.configure(false, 'error')
+          assert.equal(logWriter.getLogLevel(), 'none')
+          logWriter.configure(true, 'info')
+          assert.equal(logWriter.getLogLevel(), 'info')
+        })
       })
 
       describe('error', () => {

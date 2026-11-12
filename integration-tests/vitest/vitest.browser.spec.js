@@ -1,0 +1,1338 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { exec } = require('node:child_process')
+const { once } = require('node:events')
+const { inspect, stripVTControlCharacters } = require('node:util')
+
+const {
+  getCiVisAgentlessConfig,
+  installPlaywrightChromium,
+  sandboxCwd,
+  useSandbox,
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
+const { ERROR_MESSAGE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
+const {
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_NAME,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_CODE_OWNERS,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_FINAL_STATUS,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_IS_RUM_ACTIVE,
+  TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_NAME,
+  TEST_PARAMETERS,
+  TEST_RETRY_REASON,
+  TEST_RETRY_REASON_TYPES,
+  TEST_SKIPPED_BY_ITR,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
+  TEST_STATUS,
+  TEST_TYPE,
+} = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
+
+const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { suiteLocalExpectations, assertDeclarationLocations } = require('./exclusion-executions')
+
+const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
+const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
+const latestVitestVersion = browserProvider === 'webdriverio'
+  ? latestVersions['@vitest/browser-webdriverio']
+  : latestVersions.vitest
+const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVitestVersion
+const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
+const browserProjectName = `browser-${browserName}`
+const browserProviderDescription = browserProvider === 'playwright' ? '' : ` with ${browserProvider}`
+const playwrightVersion = getLatestPlaywrightSpecifier()
+const browserProviderDependency = isLegacyBrowserProvider
+  ? `@vitest/browser@${vitestVersion}`
+  : `@vitest/browser-${browserProvider}@${vitestVersion}`
+const browserRuntimeDependency = browserProvider === 'webdriverio'
+  ? `webdriverio@${latestVersions.webdriverio}`
+  : `playwright@${playwrightVersion}`
+const sandboxDependencies = [
+  `vitest@${vitestVersion}`,
+  browserProviderDependency,
+  browserRuntimeDependency,
+]
+if (isLegacyBrowserProvider) {
+  sandboxDependencies.push('vite@6.1.0')
+}
+const NODE_OPTIONS = '--import dd-trace/register.js -r dd-trace/ci/init'
+
+function getEvents (payloads) {
+  return payloads.flatMap(({ payload }) => payload.events)
+}
+
+function getEventContents (events, type) {
+  return events.filter(event => event.type === type).map(event => event.content)
+}
+
+function getTestByName (tests, name) {
+  const test = tests.find(test => test.meta[TEST_NAME] === name)
+  assert.ok(test, `Could not find test ${name}. Found: ${inspect(tests.map(test => test.meta[TEST_NAME]))}`)
+  return test
+}
+
+describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, function () {
+  this.timeout(180_000)
+
+  const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
+  // Vitest 3 does not support aroundEach fixtures.
+  const aroundEachIt = isLegacyBrowserProvider ? it.skip : it
+  let childProcess
+  let cwd
+  let receiver
+  let testOutput
+
+  useSandbox(sandboxDependencies, true)
+
+  before(function () {
+    this.timeout(120_000)
+    cwd = sandboxCwd()
+    if (browserProvider === 'playwright') {
+      installPlaywrightChromium(cwd)
+    }
+  })
+
+  beforeEach(async () => {
+    childProcess = undefined
+    receiver = await new FakeCiVisIntake().start()
+    testOutput = ''
+  })
+
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver.stop()
+  })
+
+  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0, extraArguments = []) {
+    const cliArguments = extraArguments.length > 0 ? ` ${extraArguments.join(' ')}` : ''
+    childProcess = exec(`./node_modules/.bin/vitest run${cliArguments}`, {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_SERVICE: undefined,
+        NODE_OPTIONS,
+        TEST_DIR: testFile ? `ci-visibility/vitest-browser-tests/${testFile}` : undefined,
+        VITEST_BROWSER_BINARY: process.env.VITEST_BROWSER_BINARY,
+        VITEST_BROWSER_DRIVER_BINARY: process.env.VITEST_BROWSER_DRIVER_BINARY,
+        VITEST_BROWSER_MODE: '1',
+        VITEST_BROWSER_PROVIDER: browserProvider,
+        VITEST_BROWSER_PROVIDER_FACTORY: isLegacyBrowserProvider ? undefined : '1',
+        ...extraEnv,
+      },
+    })
+    childProcess.stdout.on('data', data => { testOutput += data })
+    childProcess.stderr.on('data', data => { testOutput += data })
+
+    const [exitCode] = await once(childProcess, 'exit')
+    assert.strictEqual(exitCode, expectedExitCode, testOutput)
+    return exitCode
+  }
+
+  function gatherEvents (assertions) {
+    return receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      payloads => assertions(getEvents(payloads), payloads),
+      60_000
+    )
+  }
+
+  it('reports test and suite native retry overrides as external with flat ATR', async () => {
+    receiver.setSettings({
+      itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+    })
+    const eventsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      for (const [name, count] of [
+        ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+        ['shared before inherited', 2], ['shared override', 2], ['shared after inherited', 2],
+      ]) {
+        const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+        assert.strictEqual(attempts.length, count, name)
+        const reason = name.endsWith('inherited') ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+        const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.strictEqual(retries.length, count - 1, name)
+        assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+      }
+    })
+    await Promise.all([
+      runVitest(undefined, {
+        TEST_DIR: 'ci-visibility/vitest-tests/native-retry-attribution.mjs',
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+      }, 1),
+      eventsPromise,
+    ])
+  })
+
+  it('reports each browser test once with browser identity', async () => {
+    receiver.setSettings({
+      di_enabled: true,
+    })
+
+    const payloadsPromise = gatherEvents((events, payloads) => {
+      const metadata = payloads.flatMap(({ payload }) => payload.metadata)
+      for (const metadataEntry of metadata) {
+        assert.ok(!(DD_CAPABILITIES_FAILED_TEST_REPLAY in metadataEntry.test))
+      }
+
+      assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+      assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
+      assert.strictEqual(getEventContents(events, 'test_suite_end').length, 1)
+
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      const testSuite = getEventContents(events, 'test_suite_end')[0]
+      assert.strictEqual(testSuite.meta[TEST_TYPE], 'browser')
+
+      const passedTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+      assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(passedTest.meta[TEST_TYPE], 'browser')
+      assert.strictEqual(passedTest.meta[TEST_BROWSER_NAME], browserName)
+      assert.strictEqual(passedTest.meta[TEST_BROWSER_DRIVER], browserProvider)
+      assert.strictEqual(passedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(passedTest.meta[TEST_FINAL_STATUS], 'pass')
+      assert.strictEqual(passedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+      assert.strictEqual(passedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-browser-tests/browser-reporting.mjs')
+      assert.strictEqual(passedTest.metrics[TEST_SOURCE_START], 4)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in passedTest.meta))
+      assert.deepStrictEqual(JSON.parse(passedTest.meta[TEST_PARAMETERS]), {
+        arguments: {
+          browser: browserName,
+          project: browserProjectName,
+        },
+        metadata: {},
+      })
+
+      const skippedTest = getTestByName(tests, 'vitest browser reporting reports skipped browser tests')
+      assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+      assert.strictEqual(skippedTest.meta[TEST_TYPE], 'browser')
+      assert.strictEqual(skippedTest.meta[TEST_BROWSER_NAME], browserName)
+      assert.strictEqual(skippedTest.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
+      assert.strictEqual(skippedTest.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+      assert.strictEqual(skippedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-browser-tests/browser-reporting.mjs')
+      assert.strictEqual(skippedTest.metrics[TEST_SOURCE_START], 11)
+      assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-reporting.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles known test names containing a closing script tag', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'
+    receiver.setSettings({ known_tests_enabled: true })
+    receiver.setKnownTests({
+      vitest: {
+        [testSuite]: [
+          'known test containing </script> in its name',
+        ],
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting runs the test body in the browser'
+      ).meta[TEST_STATUS], 'pass')
+      assert.strictEqual(getTestByName(
+        tests,
+        'vitest browser reporting reports skipped browser tests'
+      ).meta[TEST_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-reporting.mjs', {
+        VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('handles test commands containing a closing script tag', async () => {
+    const exitCode = await runVitest('browser-reporting.mjs', {
+      VITEST_BROWSER_CONNECT_TIMEOUT: '5000',
+    }, 0, [
+      "--testNamePattern='runs the test body|</script>'",
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('reports multiple errors from one browser test execution as one attempt', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+      assert.match(tests[0].meta[ERROR_MESSAGE], /test attempt 1 failed/)
+      assert.doesNotMatch(tests[0].meta[ERROR_MESSAGE], /cleanup for attempt 1 failed/)
+      assert.match(tests[0].meta[ERROR_STACK], /browser-multiple-errors\.mjs:\d+:\d+/)
+      assert.doesNotMatch(tests[0].meta[ERROR_STACK], /[?&](?:import|browserv)(?:[=&]|$)/)
+      assert.doesNotMatch(tests[0].meta[ERROR_STACK], /https?:\/\/localhost:\d+/)
+      if (!isLegacyBrowserProvider) {
+        assert.doesNotMatch(tests[0].meta[ERROR_STACK], /node_modules\/@vitest\/runner/)
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-multiple-errors.mjs', {}, 1),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 1, testOutput)
+  })
+
+  it('reports errors from the correct automatic retry attempt', async () => {
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      early_flake_detection: {
+        enabled: false,
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.match(tests[0].meta[ERROR_MESSAGE], /test attempt 1 failed/)
+      assert.match(tests[1].meta[ERROR_MESSAGE], /test attempt 2 failed/)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-multiple-errors.mjs', {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+      }, 1),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 1, testOutput)
+  })
+
+  it('waits for retries within repeated browser tests before quarantining', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-retry-repeat-quarantine.mjs'
+    receiver.setSettings({
+      test_management: {
+        enabled: true,
+      },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'waits for every retry and repeat before quarantining': {
+                properties: {
+                  quarantined: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 4)
+      for (let index = 0; index < tests.length; index++) {
+        const test = tests[index]
+        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.match(test.meta[ERROR_MESSAGE], new RegExp(`retry and repeat attempt ${index + 1}`))
+        if (index === 0) {
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        } else {
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+        }
+      }
+      assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-retry-repeat-quarantine.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('correlates sequential browser tests with RUM', async () => {
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      early_flake_detection: {
+        enabled: false,
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 4)
+
+      const firstTest = getTestByName(tests, 'vitest browser RUM correlation correlates the first browser test')
+      const secondTest = getTestByName(
+        tests,
+        'vitest browser RUM correlation uses a new correlation ID without restarting RUM'
+      )
+      const retriedTests = tests.filter(
+        test => test.meta[TEST_NAME] === 'vitest browser RUM correlation uses a new RUM correlation ID on retry'
+      )
+      const firstTestExecutionId = getRumTestExecutionId(testOutput, 'first')
+      const secondTestExecutionId = getRumTestExecutionId(testOutput, 'second')
+      const firstRetryExecutionId = getRumTestExecutionId(testOutput, 'retry-1')
+      const secondRetryExecutionId = getRumTestExecutionId(testOutput, 'retry-2')
+
+      assert.strictEqual(firstTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(firstTest.trace_id.toString(), firstTestExecutionId)
+      assert.strictEqual(secondTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(secondTest.trace_id.toString(), secondTestExecutionId)
+      assert.strictEqual(retriedTests.length, 2)
+      assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
+      assert.strictEqual(retriedTests[0].meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(retriedTests[0].trace_id.toString(), firstRetryExecutionId)
+      assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'pass')
+      assert.strictEqual(retriedTests[1].meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(retriedTests[1].trace_id.toString(), secondRetryExecutionId)
+      assert.notStrictEqual(firstTestExecutionId, secondTestExecutionId)
+      assert.notStrictEqual(firstRetryExecutionId, secondRetryExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('keeps RUM correlation active through user teardown hooks', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-teardown.mjs', {
+        VITEST_HOOKS_SEQUENCE: 'list',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('installs RUM correlation before user setup hooks and retains earlier RUM activity', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'user-setup')
+
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(test.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-user-setup.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-before-each-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not fail browser tests when correlation ID generation fails', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-crypto-failure.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-failure-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate browser tests with a reused correlation ID', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      const firstTest = getTestByName(tests, 'correlates the first fixed browser crypto value')
+      const secondTest = getTestByName(tests, 'does not reuse a fixed browser crypto value')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'fixed')
+
+      assert.strictEqual(firstTest.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(firstTest.trace_id.toString(), testExecutionId)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in secondTest.meta))
+      assert.notStrictEqual(secondTest.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-crypto-reuse.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/rum-crypto-reuse-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('correlates dynamically skipped browser tests with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'dynamic-skip')
+
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+      assert.strictEqual(test.trace_id.toString(), testExecutionId)
+      assert.ok(Number(test.duration) >= 40 * 1e6)
+      const skipTime = Number(/DD_VITEST_SKIP_TIME:(\d+)/.exec(testOutput)?.[1])
+      assert.ok(Number.isFinite(skipTime), testOutput)
+      assert.ok(Number(test.start) / 1e6 <= skipTime)
+      assert.ok(Number(test.start) / 1e6 + Number(test.duration) / 1e6 < skipTime + 100)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-dynamic-skip.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not reuse RUM correlation when the final browser retry is dynamically skipped', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'retry-skip')
+
+      assert.ok(skippedTest)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in skippedTest.meta))
+      assert.notStrictEqual(skippedTest.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-retry-dynamic-skip.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not treat an uninitialized RUM stub as active', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-uninitialized.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate concurrent browser tests with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-concurrent.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate parallel browser files with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-parallel-*.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('reports mixed Node and browser projects without duplicate events', async () => {
+    const nodeSuite = 'ci-visibility/vitest-browser-tests/mixed-node.mjs'
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: true,
+      coverage_report_upload_enabled: false,
+      tests_skipping: true,
+    })
+    receiver.setSuitesToSkip([{
+      type: 'suite',
+      attributes: { suite: nodeSuite },
+    }])
+
+    const runPromise = runVitest(undefined, {
+      VITEST_BROWSER_MODE: undefined,
+      VITEST_MIXED_BROWSER_MODE: '1',
+    })
+    const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) =>
+        url === '/api/v2/citestcycle' ||
+        url === '/api/v2/citestcov' ||
+        url === '/api/v2/ci/tests/skippable',
+      payloads => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false)
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadata = cyclePayloads.flatMap(({ payload }) => payload.metadata)
+        for (const metadataEntry of metadata) {
+          assert.ok(!(DD_CAPABILITIES_TEST_IMPACT_ANALYSIS in metadataEntry.test))
+        }
+
+        const events = getEvents(cyclePayloads)
+        assert.strictEqual(getEventContents(events, 'test_session_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_module_end').length, 1)
+        assert.strictEqual(getEventContents(events, 'test_suite_end').length, 2)
+
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 3)
+
+        const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
+        assert.strictEqual(nodeTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(nodeTest.meta[TEST_TYPE], 'test')
+        assert.ok(!(TEST_BROWSER_NAME in nodeTest.meta))
+        assert.ok(!(TEST_SKIPPED_BY_ITR in nodeTest.meta))
+
+        const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+        assert.strictEqual(browserTest.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(browserTest.meta[TEST_TYPE], 'browser')
+        assert.strictEqual(browserTest.meta[TEST_BROWSER_NAME], browserName)
+
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+      },
+      { hardTimeout: 60_000 }
+    )
+
+    const [exitCode] = await Promise.all([runPromise, payloadsPromise])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('applies Auto Test Retries to browser tests', async () => {
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      early_flake_detection: {
+        enabled: false,
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const [testSuite] = getEventContents(events, 'test_suite_end')
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      const testSuiteEnd = BigInt(testSuite.start) + BigInt(testSuite.duration)
+      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+      assert.ok(Number(tests[0].duration) >= 30 * 1e6)
+      assert.strictEqual(tests[1].meta[TEST_STATUS], 'pass')
+      assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+      assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+      assert.ok(Number(tests[1].duration) >= 30 * 1e6)
+      const firstAttemptEnd = BigInt(tests[0].start) + BigInt(tests[0].duration)
+      assert.ok(firstAttemptEnd <= BigInt(tests[1].start), 'Expected sequential attempts not to overlap')
+      for (const test of tests) {
+        const testEnd = BigInt(test.start) + BigInt(test.duration)
+        assert.ok(testEnd <= testSuiteEnd, 'Expected every test attempt to finish before its suite')
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-atr.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  if (!isLegacyBrowserProvider) {
+    it('applies the dynamic ATR budget to browser tests', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: { enabled: false },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        for (const test of tests) {
+          assert.strictEqual(test.meta[TEST_TYPE], 'browser')
+          assert.strictEqual(test.meta[TEST_BROWSER_NAME], browserName)
+          assert.strictEqual(test.meta[TEST_BROWSER_DRIVER], browserProvider)
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        }
+        assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+      })
+
+      await Promise.all([
+        runVitest('browser-multiple-errors.mjs', {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+        }, 1),
+        payloadsPromise,
+      ])
+    })
+  }
+
+  {
+    const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
+
+    objectRetryTest('honors object-form retries before quarantining browser failures', async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-object-retry-quarantine.mjs'
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+        },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [testSuite]: {
+              tests: {
+                'honors object-form retries before quarantining': {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+        assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.strictEqual(tests[1].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(tests[1].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+      })
+
+      const [exitCode] = await Promise.all([
+        runVitest('browser-object-retry-quarantine.mjs'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    objectRetryTest('quarantines each repetition when an object-form retry condition stops retries', async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+        },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [testSuite]: {
+              tests: {
+                'stops conditional retries before quarantining': {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        for (const [index, test] of tests.entries()) {
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.match(test.meta[ERROR_MESSAGE], new RegExp(`conditional retry attempt ${index + 1}`))
+        }
+        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+        assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'skip')
+      })
+
+      const [exitCode] = await Promise.all([
+        runVitest('browser-conditional-retry-quarantine.mjs'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+
+  it('applies Early Flake Detection repetitions to new browser tests', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+        },
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 3)
+      for (let index = 0; index < tests.length; index++) {
+        const test = tests[index]
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+        if (index === 0) {
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        } else {
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+        }
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+        },
+        faulty_session_threshold: 0,
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const [testSession] = getEventContents(events, 'test_session_end')
+      assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+      assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_IS_NEW], 'true')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  for (const retries of [0, 1]) {
+    aroundEachIt(`includes fixture teardown when selecting ${retries} EFD retries in Browser Mode`, async () => {
+      receiver.setSettings({
+        known_tests_enabled: true,
+        test_management: { enabled: true },
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 2, '10s': retries },
+          faulty_session_threshold: 100,
+        },
+      })
+      receiver.setKnownTests({ vitest: {} })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/efd-slow-teardown.mjs': {
+              tests: {
+                'quarantined after slow teardown': { properties: { quarantined: true } },
+              },
+            },
+          },
+        },
+      })
+
+      const runPromise = runVitest(undefined, {
+        TEST_DIR: 'ci-visibility/vitest-tests/efd-slow-teardown.mjs',
+      }, 1)
+      const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 3 * (retries + 1), testOutput)
+          for (const outcome of ['fails', 'passes on retry', 'quarantined']) {
+            const name = `${outcome} after slow teardown`
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            const passes = retries === 1 && name.startsWith('passes')
+            assert.deepStrictEqual(attempts.map(test => test.meta[TEST_STATUS]),
+              retries ? ['fail', passes ? 'pass' : 'fail'] : ['fail'])
+            const finalStatus = name.startsWith('quarantined') ? 'skip' : passes ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], finalStatus)
+            assert.ok(!(TEST_IS_RETRY in attempts[0].meta))
+            if (retries) {
+              assert.strictEqual(attempts[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            } else {
+              assert.strictEqual(attempts[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            }
+          }
+        }
+      )
+
+      await Promise.all([runPromise, payloadsPromise])
+    })
+  }
+
+  it('uses an unmocked clock for browser attempt durations and EFD retries', async () => {
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 2,
+          '10s': 1,
+        },
+      },
+      known_tests_enabled: true,
+    })
+    receiver.setKnownTests({ vitest: {} })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 3)
+      for (let index = 0; index < tests.length; index++) {
+        const test = tests[index]
+        assert.ok(
+          Number(test.duration) < 1000 * 1e6,
+          `Expected duration to use an unmocked clock, got ${Number(test.duration) / 1e6}ms`
+        )
+        if (index === 0) {
+          assert.ok(!(TEST_IS_RETRY in test.meta))
+        } else {
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+        }
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-efd-fake-timers.mjs', {
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/fake-timers-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('uses the browser performance clock when process.uptime is unavailable', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-partial-process-shim.mjs', {
+        VITEST_PARTIAL_PROCESS_SHIM: '1',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  // Legacy browser jobs use Vite 6/esbuild; Rolldown optimizer plugins are supported by Vite 8.
+  const rolldownPluginsIt = isLegacyBrowserProvider ? it.skip : it
+  for (const [name, option] of [['empty', '1'], ['scalar', 'scalar'], ['promised', 'promised']]) {
+    rolldownPluginsIt(`starts browser mode with ${name} Rolldown optimizer plugin entries`, async () => {
+      const runPromise = runVitest('browser-reporting.mjs', { VITEST_OPTIONAL_OPTIMIZER_PLUGINS: option })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 2, testOutput)
+          assert.strictEqual(getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+            .meta[TEST_STATUS], 'pass')
+        })
+      await Promise.all([runPromise, eventsPromise])
+    })
+  }
+
+  function readBrowserExecutions () {
+    const counts = {}
+    const output = stripVTControlCharacters(testOutput)
+    for (const [, value] of output.matchAll(/^__DD_EXCLUSION_EXECUTION__ (".*")\r?$/gm)) {
+      const name = JSON.parse(value)
+      counts[name] = (counts[name] || 0) + 1
+    }
+    return counts
+  }
+
+  it('preserves declaration source locations', async () => {
+    const runPromise = runVitest(undefined, {
+      TEST_DIR: 'ci-visibility/vitest-tests/declaration-locations.mjs',
+    })
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        assertDeclarationLocations(getEventContents(getEvents(payloads), 'test'), true)
+      })
+    await Promise.all([runPromise, eventsPromise])
+  })
+
+  for (const mixed of [false, true]) {
+    it(`honors browser suite-local annotations (mixed projects=${mixed})`, async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-suite-local.mjs'
+      const { assignments, check, executions } = suiteLocalExpectations(true)
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+      receiver.setTestManagementTests({ vitest: { suites: { [testSuite]: { tests: assignments } } } })
+      const runPromise = runVitest('browser-exclusions-suite-local.mjs', {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+        VITEST_BROWSER_MODE: mixed ? undefined : '1',
+        VITEST_MIXED_BROWSER_MODE: mixed ? '1' : undefined,
+      }, 1)
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          check(tests.filter(test => test.meta[TEST_TYPE] === 'browser'))
+          const nodeTests = tests.filter(test => test.meta[TEST_TYPE] !== 'browser')
+          assert.strictEqual(nodeTests.length, mixed ? 1 : 0)
+          if (mixed) assert.strictEqual(nodeTests[0].meta[TEST_STATUS], 'pass')
+        })
+      await Promise.all([runPromise, eventsPromise])
+      assert.deepStrictEqual(readBrowserExecutions(), executions)
+    })
+  }
+
+  for (const tags of [false, true]) {
+    const nativeRetryIt = tags && isLegacyBrowserProvider ? it.skip : it
+    nativeRetryIt(`preserves exhausted browser native retries (configured tags=${tags})`, async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      const file = tags ? 'browser-exclusions-native-tags.mjs' : 'browser-exclusions-native.mjs'
+      const nativeRun = runVitest(file, {
+        NODE_OPTIONS: '',
+        EXCLUSIONS_MODE: tags ? 'native-tags' : undefined,
+      }, 1)
+      await Promise.all([nativeRun, once(childProcess, 'close')])
+      assert.deepStrictEqual(readBrowserExecutions(), tags
+        ? { tagged: 3, inherited: 3, control: 1 }
+        : { direct: 2, inherited: 2, control: 1 })
+      testOutput = ''
+      const runPromise = runVitest(file, {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4',
+        EXCLUSIONS_MODE: tags ? 'native-tags' : undefined,
+      }, 1)
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          const excluded = tests.filter(test => test.meta['test.test_management.no_auto_retry'] === 'true')
+          assert.strictEqual(excluded.length, tags ? 6 : 4, testOutput)
+          assert.strictEqual(excluded.filter(test => test.meta[TEST_RETRY_REASON] === 'external').length, tags ? 4 : 2)
+          assert.ok(excluded.every(test => !['auto_test_retry', 'early_flake_detection', 'attempt_to_fix']
+            .includes(test.meta[TEST_RETRY_REASON])))
+          assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === 'control').length, 5)
+        })
+      await Promise.all([runPromise, eventsPromise])
+      assert.deepStrictEqual(readBrowserExecutions(), tags
+        ? { tagged: 3, inherited: 3, control: 5 }
+        : { direct: 2, inherited: 2, control: 5 })
+    })
+  }
+
+  it('excludes browser Attempt to Fix with a passing automatic retry control', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-atf.mjs'
+    receiver.setSettings({
+      flaky_test_retries_enabled: false,
+      test_management: { enabled: true, attempt_to_fix_retries: 2 },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              excluded: { properties: { attempt_to_fix: true } },
+              control: { properties: { attempt_to_fix: true } },
+            },
+          },
+        },
+      },
+    })
+    const runPromise = runVitest('browser-exclusions-atf.mjs')
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const tests = getEventContents(getEvents(payloads), 'test')
+        assert.strictEqual(tests.length, 4, testOutput)
+        const excluded = tests.filter(test => test.meta[TEST_NAME] === 'excluded')
+        assert.strictEqual(excluded.length, 1)
+        assert.strictEqual(excluded[0].meta['test.test_management.no_auto_retry'], 'true')
+        assert.strictEqual(excluded[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        assert.strictEqual(excluded[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+        assert.strictEqual(excluded[0].meta[TEST_IS_RETRY], undefined)
+        assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === 'control').length, 3)
+      })
+    await Promise.all([runPromise, eventsPromise])
+    assert.deepStrictEqual(readBrowserExecutions(), { excluded: 1, control: 3 })
+  })
+
+  it('keeps a sole browser test automation exclusions failure blocking', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-sole.mjs'
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      test_management: { enabled: true, attempt_to_fix_retries: 2 },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'sole protected failure': { properties: { attempt_to_fix: true, disabled: true, quarantined: true } },
+            },
+          },
+        },
+      },
+    })
+    const runPromise = runVitest('browser-exclusions-sole.mjs', { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' }, 1)
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const tests = getEventContents(getEvents(payloads), 'test')
+        assert.strictEqual(tests.length, 1, testOutput)
+        const [test] = tests
+        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'], 'true')
+        assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+        assert.strictEqual(test.meta[TEST_IS_RETRY], undefined)
+      })
+    await Promise.all([runPromise, eventsPromise])
+    assert.deepStrictEqual(readBrowserExecutions(), { sole: 1 })
+  })
+
+  for (const mode of ['atr', 'efd']) {
+    it(`honors browser test automation exclusions with ${mode}`, async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions.mjs'
+      const assigned = {
+        'combined 1': { attempt_to_fix: true, disabled: true, quarantined: true },
+        'combined 2': { attempt_to_fix: true, disabled: true, quarantined: true },
+        'quarantined exclusion': { attempt_to_fix: true, quarantined: true },
+        'disabled exclusion': { attempt_to_fix: true, disabled: true },
+        'protected retries': { disabled: true, quarantined: true },
+        'protected passing': { disabled: true },
+        'native retry': {},
+        'ordinary control': {},
+      }
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        known_tests_enabled: mode === 'efd',
+        early_flake_detection: {
+          enabled: mode === 'efd', slow_test_retries: { '5s': 2 }, faulty_session_threshold: 100,
+        },
+        test_management: { enabled: true, attempt_to_fix_retries: 2 },
+      })
+      receiver.setKnownTests({ vitest: {} })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [testSuite]: {
+              tests: Object.fromEntries(Object.entries(assigned).map(([name, properties]) => [name, { properties }])),
+            },
+          },
+        },
+      })
+      const runPromise = runVitest('browser-exclusions.mjs', { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' }, 1)
+      const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = getEvents(payloads)
+          const tests = getEventContents(events, 'test')
+          for (const [name, properties] of Object.entries(assigned)) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            const noRetry = !['ordinary control', 'protected retries'].includes(name)
+            const protect = name.startsWith('combined') || name.startsWith('protected')
+            const count = name === 'native retry' ? 2 : noRetry ? 1 : 3
+            assert.strictEqual(attempts.length, count, `${name}: ${testOutput}`)
+            for (const test of attempts) {
+              assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+                protect ? 'true' : undefined, name)
+              assert.strictEqual(test.meta['test.test_management.no_auto_retry'], noRetry ? 'true' : undefined, name)
+              for (const [property, tag] of [
+                ['attempt_to_fix', TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                ['disabled', TEST_MANAGEMENT_IS_DISABLED],
+                ['quarantined', TEST_MANAGEMENT_IS_QUARANTINED],
+              ]) assert.strictEqual(test.meta[tag], properties[property] ? 'true' : undefined, name)
+              if (noRetry) {
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined, name)
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], name === 'native retry' && test.meta[TEST_IS_RETRY]
+                  ? TEST_RETRY_REASON_TYPES.ext
+                  : undefined, name)
+              }
+            }
+          }
+          const skipped = getTestByName(tests, 'developer skip')
+          assert.strictEqual(skipped.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skipped.meta['test.test_management.prevent_failure_suppression'], 'true')
+          assert.strictEqual(skipped.meta['test.test_management.no_auto_retry'], 'true')
+        })
+      await Promise.all([
+        runPromise,
+        payloadsPromise,
+      ])
+      assert.deepStrictEqual(readBrowserExecutions(), {
+        combined: 2,
+        'quarantined exclusion': 1,
+        'protected retries': 3,
+        'protected passing': 1,
+        'native retry': 2,
+        'ordinary control': 3,
+      })
+    })
+  }
+
+  it('applies Test Management execution changes to browser tests', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-test-management.mjs'
+    receiver.setSettings({
+      test_management: {
+        enabled: true,
+        attempt_to_fix_retries: 2,
+      },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              'does not execute a disabled browser test': {
+                properties: {
+                  disabled: true,
+                },
+              },
+              'quarantines a failing browser test': {
+                properties: {
+                  quarantined: true,
+                },
+              },
+              'attempts to fix a browser test': {
+                properties: {
+                  attempt_to_fix: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 5)
+
+      const disabledTest = getTestByName(tests, 'does not execute a disabled browser test')
+      assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+      assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+      const quarantinedTest = getTestByName(tests, 'quarantines a failing browser test')
+      assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+      assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+      assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+      const attemptedToFixTests = tests.filter(test => test.meta[TEST_NAME] === 'attempts to fix a browser test')
+      assert.strictEqual(attemptedToFixTests.length, 3)
+      attemptedToFixTests.forEach((test, index) => {
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        if (index > 0) {
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+        }
+      })
+      assert.strictEqual(
+        attemptedToFixTests.at(-1).meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED],
+        'true'
+      )
+
+      const [suite] = getEventContents(events, 'test_suite_end')
+      assert.strictEqual(suite.meta[TEST_SOURCE_FILE], testSuite)
+      assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-test-management.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.match(testOutput, /Disabled: 1 test skipped\./)
+  })
+})
+
+function getRumTestExecutionId (testOutput, testName) {
+  const match = testOutput.match(new RegExp(`DD_VITEST_RUM_EXECUTION_ID:${testName}:(\\d+)`))
+  assert.ok(match, testOutput)
+  return match[1]
+}

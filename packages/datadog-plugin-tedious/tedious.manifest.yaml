@@ -1,0 +1,12 @@
+_v: 1
+name: tedious
+display_name: tedious
+description: Instruments Microsoft SQL Server queries, prepared statements, stored-procedure calls, and bulk loads through
+  tedious.
+packages:
+- name: tedious
+category:
+- db.client
+systems:
+- microsoft.sql_server
+creation_date: '2019-07-03'

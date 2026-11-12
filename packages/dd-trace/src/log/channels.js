@@ -2,21 +2,15 @@
 
 const { channel } = require('dc-polyfill')
 
-const Level = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  critical: 50,
-  off: 100,
-}
+const Level = require('./levels')
 
 const traceChannel = channel('datadog:log:trace')
 const debugChannel = channel('datadog:log:debug')
 const infoChannel = channel('datadog:log:info')
 const warnChannel = channel('datadog:log:warn')
 const errorChannel = channel('datadog:log:error')
+// Telemetry needs the unformatted message, cause and transmission policy, not console output.
+const errorRecordChannel = channel('datadog:log:error:record')
 
 const defaultLevel = Level.debug
 
@@ -29,6 +23,10 @@ function getChannelLogLevel (level) {
 class LogChannel {
   constructor (level) {
     this._level = getChannelLogLevel(level)
+  }
+
+  getLevel () {
+    return Object.keys(Level).find(name => Level[name] === this._level) ?? 'none'
   }
 
   subscribe (logger) {
@@ -75,4 +73,5 @@ module.exports = {
   infoChannel,
   warnChannel,
   errorChannel,
+  errorRecordChannel,
 }

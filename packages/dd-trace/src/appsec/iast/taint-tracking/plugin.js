@@ -30,7 +30,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   configure (config) {
     super.configure(config)
 
-    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    let rowsToTaint = this.iastConfig?.DD_IAST_DB_ROWS_TO_TAINT
     if (typeof rowsToTaint !== 'number') {
       rowsToTaint = 1
     }
@@ -178,12 +178,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addGraphQLSubscriptions () {
     this.addSub(
       { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
-      (data) => {
+      ({ rootCtx, args }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
-        const source = data.rootCtx?.source
+        const source = rootCtx?.source
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
-          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
+          this._taintTrackingHandler(ranges[0].iinfo.type, args, null, iastContext)
         }
       }
     )
@@ -264,9 +264,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   _taintDatabaseResult (result, dbOrigin, iastContext, name) {
-    if (!iastContext) return result
-
-    if (this._rowsToTaint === 0) return result
+    if (!iastContext || this._rowsToTaint === 0) return result
 
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {

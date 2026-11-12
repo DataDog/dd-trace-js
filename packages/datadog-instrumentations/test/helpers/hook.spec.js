@@ -53,6 +53,77 @@ describe('Hook', () => {
     assert.strictEqual(wrapped.default, wrapped)
   })
 
+  it('wraps a builtin once and mirrors the result onto its named ESM exports', () => {
+    const original = sinon.stub()
+    const wrapped = sinon.stub()
+    const cjsExports = { parse: original }
+    const namespace = { default: cjsExports, parse: original }
+    const onrequire = sinon.stub().callsFake(() => {
+      cjsExports.parse = wrapped
+      return cjsExports
+    })
+
+    Hook(['url'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'url', undefined), namespace)
+    assert.strictEqual(namespace.parse, wrapped)
+    sinon.assert.calledOnceWithExactly(onrequire, cjsExports, 'url', undefined, process.version, true)
+  })
+
+  it('leaves a builtin export the ESM view does not carry', () => {
+    const cjsExports = { parse: sinon.stub() }
+    const namespace = { default: cjsExports }
+    const onrequire = sinon.stub().returns(cjsExports)
+
+    Hook(['url'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'url', undefined), namespace)
+    assert.deepStrictEqual(Object.keys(namespace), ['default'])
+  })
+
+  it('mirrors an accessor-backed builtin export, as `replaceGetter` leaves behind', () => {
+    const wrapped = sinon.stub()
+    const cjsExports = {}
+    Object.defineProperty(cjsExports, 'opendir', { get: () => wrapped, enumerable: true, configurable: true })
+    const namespace = { default: cjsExports, opendir: sinon.stub() }
+    const onrequire = sinon.stub().returns(cjsExports)
+
+    Hook(['fs'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'fs', undefined), namespace)
+    assert.strictEqual(namespace.opendir, wrapped)
+  })
+
+  it('leaves electron to the regular hook, since it is not a Node builtin', () => {
+    const cjsExports = { app: sinon.stub() }
+    const namespace = { default: cjsExports, app: cjsExports.app }
+    const onrequire = sinon.stub().returns(cjsExports)
+
+    Hook(['electron'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'electron', undefined), cjsExports)
+    sinon.assert.calledTwice(onrequire)
+  })
+
+  it('rebinds a builtin ESM view when the hook replaces the default export', () => {
+    const original = sinon.stub()
+    const replacement = { parse: sinon.stub() }
+    const cjsExports = { parse: original }
+    const namespace = { default: cjsExports, parse: original }
+    const onrequire = sinon.stub().returns(replacement)
+
+    Hook(['url'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'url', undefined), namespace)
+    assert.strictEqual(namespace.default, replacement)
+    assert.strictEqual(namespace.parse, replacement.parse)
+  })
+
   it('does not inspect named ESM exports when the default export is unchanged', () => {
     const original = sinon.stub()
     const ownKeys = sinon.stub().returns(['default', 'named'])

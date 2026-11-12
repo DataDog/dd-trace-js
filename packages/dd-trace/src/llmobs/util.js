@@ -6,6 +6,12 @@ const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
+  SPAN_KIND,
+  NAME,
+  AGENT_VERSION,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
 } = require('./constants/tags')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
@@ -256,8 +262,7 @@ function findArgumentsBounds (str) {
 
 const memo = new WeakMap()
 function getFunctionArguments (fn, args = []) {
-  if (!fn) return
-  if (!args.length) return
+  if (!fn || !args.length) return
   if (args.length === 1) return args[0]
 
   try {
@@ -292,6 +297,48 @@ function getFunctionArguments (fn, args = []) {
   } catch {
     return args
   }
+}
+
+// The `x-datadog-tags` tagset encoder rejects commas (the entry delimiter) and any byte
+// outside 0x20-0x7E, and a raise there drops the ENTIRE header (taking ml_app,
+// llmobs_trace_id, parent_id, sampling with it). An agent name is arbitrary user text, so it
+// must be skipped rather than sanitized when unsafe: only the digit-safe id then propagates and
+// the backend resolves the real name by span id. `=` is legal in tagset values (illegal only in
+// keys), so a name containing `=` is safe and must not be dropped.
+/**
+ * @param {string} name
+ */
+function agentNameWireSafe (name) {
+  // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
+  if (Buffer.byteLength(name, 'utf8') > 256) return false
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code < 0x20 || code > 0x7E || code === 0x2C /* comma */) return false
+  }
+  return true
+}
+
+/**
+ * Resolve the nearest agent that a *child* of `span` should be attributed to.
+ *
+ * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
+ * already resolved its own nearest agent at registration, so the child inherits that with a
+ * single lookup rather than walking the ancestor chain. An agent never attributes itself.
+ *
+ * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
+ * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
+ * @returns {{ name: string | undefined, spanId: string | undefined, version: string | undefined }}
+ */
+function resolveAgentAttribution (tags, span) {
+  if (!tags) return { name: undefined, spanId: undefined, version: undefined }
+  if (tags[SPAN_KIND] === 'agent') {
+    return {
+      name: tags[NAME] || span._name,
+      spanId: span.context().toSpanId(),
+      version: tags[AGENT_VERSION] || tags[PARENT_AGENT_VERSION],
+    }
+  }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID], version: tags[PARENT_AGENT_VERSION] }
 }
 
 function spanHasError (span) {
@@ -370,7 +417,6 @@ function findGenAIAncestorSpanId (span) {
 /**
  * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
  * @param {number} startTime
- * @returns {string}
  */
 function generateLlmObsTraceId (startTime) {
   const identifier = id()
@@ -412,44 +458,14 @@ function normalizeLlmObsTraceId (traceId) {
   return identifier > MAX_UINT_64 ? identifier.toString(16).padStart(32, '0') : traceId
 }
 
-// Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to `audio/wav` when the
-// format is missing. Provider-specific overrides (e.g. OpenAI's mp3 -> audio/mpeg) are passed in
-// via `mimeTypeLookup` so this stays provider-agnostic. A non-string `format` is treated as missing
-// so a malformed auto-instrumented payload can't throw and disable the plugin.
-/**
- * @param {string} fmt
- * @param {Record<string, string>} [mimeTypeLookup]
- * @returns {string}
- */
-function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
-  fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
-  if (!fmt) return 'audio/wav'
-  return mimeTypeLookup[fmt] ?? `audio/${fmt}`
-}
-
-// Builds an audio part from raw audio bytes (base64-encoded) or an existing base64 string. Only
-// Buffer/Uint8Array inputs are base64-encoded; any other shape is passed through so a malformed
-// auto-instrumented payload can't throw (the tagger soft-skips a non-string `content`).
-/**
- * @param {Buffer | Uint8Array | string} data
- * @param {string} mimeType
- * @returns {{ mimeType: string, content: string }}
- */
-function formatAudioPart (data, mimeType) {
-  const content = Buffer.isBuffer(data) || ArrayBuffer.isView(data)
-    ? Buffer.from(data).toString('base64')
-    : data
-  return { mimeType, content }
-}
-
 module.exports = {
-  audioMimeTypeFromFormat,
+  agentNameWireSafe,
   encodeUnicode,
   findGenAIAncestorSpanId,
   generateLlmObsTraceId,
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
-  formatAudioPart,
+  resolveAgentAttribution,
   validateCostTags,
   validateKind,
   getFunctionArguments,

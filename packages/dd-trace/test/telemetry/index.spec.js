@@ -5,6 +5,7 @@ const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -14,6 +15,9 @@ require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
 const processTags = require('../../src/process-tags')
+const logCollector = require('../../src/telemetry/logs/log-collector')
+const telemetryLogs = require('../../src/telemetry/logs')
+const { ddBasePath } = require('../../src/util')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 const DEFAULT_EXTENDED_HEARTBEAT_INTERVAL = 86400000
@@ -35,11 +39,17 @@ describe('telemetry (proxy)', () => {
       updateIntegrations () {},
       updateConfig () {},
       appClosing () {},
+      flush () {},
     })
 
     proxy = proxyquire('../../src/telemetry', {
       './telemetry': telemetry,
     })
+  })
+
+  it('does not flush before telemetry is started', () => {
+    proxy.flush()
+    sinon.assert.notCalled(telemetry.flush)
   })
 
   it('should proxy when enabled', () => {
@@ -49,11 +59,13 @@ describe('telemetry (proxy)', () => {
     proxy.updateIntegrations()
     proxy.updateConfig([], config)
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.calledWith(telemetry.start, config)
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.called(telemetry.updateConfig)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 
   it('should proxy when enabled from updateConfig', () => {
@@ -62,10 +74,12 @@ describe('telemetry (proxy)', () => {
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.calledWith(telemetry.updateConfig, [], config)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 })
 
@@ -92,6 +106,7 @@ describe('telemetry', () => {
       }).listen(0, done)
     })
 
+    logCollector.reset()
     traceAgent.reqs = []
     traceAgentSeqBase = undefined
 
@@ -108,12 +123,13 @@ describe('telemetry', () => {
       bar2: { _enabled: false },
     }
     /**
-     * @type {object} CircularObject
-     * @property {string} field
-     * @property {object} child
-     * @property {string} child.field
-     * @property {CircularObject | null} child.parent
+     * @typedef {{
+     *   field: string,
+     *   child: { field: string, parent: CircularObject | null },
+     * }} CircularObject
      */
+
+    /** @type {CircularObject} */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value',
@@ -123,9 +139,11 @@ describe('telemetry', () => {
     telemetry.start({
       telemetry: {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
         DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -135,8 +153,9 @@ describe('telemetry', () => {
         'runtime-id': '1a2b3c',
       },
       circularObject,
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: 'true' },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: true },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
@@ -146,10 +165,14 @@ describe('telemetry', () => {
       DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',
     }, {
       _pluginsByName: pluginsByName,
+    }, {
+      tags: 'component:example',
     })
   })
 
   after(() => {
+    telemetryLogs.stop()
+    logCollector.reset()
     traceAgent.close()
   })
 
@@ -158,6 +181,7 @@ describe('telemetry', () => {
       assert.deepStrictEqual(payload.products, {
         appsec: { enabled: true },
         profiler: { version: tracerVersion, enabled: true },
+        dynamic_instrumentation: { enabled: true },
       })
       assert.deepStrictEqual(payload.install_signature, {
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
@@ -248,6 +272,38 @@ describe('telemetry', () => {
     })
   })
 
+  it('should flush logs with startup metadata after app-closing', async () => {
+    telemetry.appClosing()
+    logCollector.reset()
+    dc.channel('datadog:telemetry:log').publish(Object.freeze({
+      message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic',
+    }))
+    const cause = new TypeError('customer-secret')
+    cause.stack = `TypeError: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+    dc.channel('datadog:log:error:record').publish({
+      message: 'Shared request failed', cause, sendViaTelemetry: true,
+    })
+
+    telemetry.flush()
+
+    let request
+    while (!request) {
+      request = traceAgent.reqs.find(({ body }) => body.request_type === 'logs' &&
+        body.payload.logs.some(entry => entry.message === 'Shared request failed'))
+      if (!request) await once(traceAgent, 'handled-req')
+    }
+    assert.deepStrictEqual(request.body.payload.logs, [
+      { message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic,component:example' },
+      {
+        message: 'Shared request failed',
+        level: 'ERROR',
+        count: 1,
+        stack_trace: 'TypeError: redacted\n    at request (request.js:1:2)',
+        tags: 'component:example',
+      },
+    ])
+  })
+
   it('should do nothing when not enabled', (done) => {
     const server = http.createServer(() => {
       assert.fail('server should not be called')
@@ -270,7 +326,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should not send app-closing if telemetry is not enabled', () => {
+  it('should not send app-closing or flush if telemetry is not enabled', () => {
     const sendDataStub = sinon.stub()
     const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
@@ -283,12 +339,14 @@ describe('telemetry', () => {
         DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
-      appsec: { enabled: false, DD_APPSEC_SCA_ENABLED: undefined },
+      appsec: { DD_APPSEC_ENABLED: false, DD_APPSEC_SCA_ENABLED: undefined },
       profiling: { DD_PROFILING_ENABLED: false },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
     }, {
       _pluginsByName: pluginsByName,
     })
     notEnabledTelemetry.appClosing()
+    notEnabledTelemetry.flush()
     assert.strictEqual(sendDataStub.called, false)
   })
 })
@@ -339,8 +397,9 @@ describe('telemetry app-heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -407,8 +466,9 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -452,8 +512,9 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -559,8 +620,9 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -655,8 +717,9 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -748,8 +811,9 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -823,8 +887,9 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -889,8 +954,9 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -977,8 +1043,9 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -1072,6 +1139,7 @@ describe('AVM OSS', () => {
               DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
               DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
             },
+            tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
             hostname: 'localhost',
             port: traceAgent.address().port,
             service: 'test service',
@@ -1080,8 +1148,9 @@ describe('AVM OSS', () => {
             tags: {
               'runtime-id': '1a2b3c',
             },
-            appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+            appsec: { DD_APPSEC_ENABLED: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
             profiling: { DD_PROFILING_ENABLED: false },
+            dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
           }
         })
 

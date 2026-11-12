@@ -5,7 +5,6 @@ const MCP_SESSION_ID_HEADER = 'mcp-session-id'
 
 /**
  * @param {object} toolArguments - The arguments passed to the tool
- * @returns {string} Formatted input string
  */
 function formatToolInput (toolArguments) {
   try {
@@ -20,7 +19,6 @@ function formatToolInput (toolArguments) {
  * MCP tool results contain a `content` array with items like:
  * `[{ type: 'text', text: '...' }, { type: 'image', data: '...', mimeType: '...' }]`
  * @param {object} result - The MCP CallToolResult
- * @returns {string} JSON string of `{ content: Array<{type, text, annotations, meta}>, isError: boolean }`
  */
 function formatOutput (result) {
   if (!result) return ''
@@ -31,8 +29,7 @@ function formatOutput (result) {
   const processed = []
   if (Array.isArray(content)) {
     for (const item of content) {
-      if (!item || typeof item !== 'object') continue
-      if (item.type !== 'text') continue
+      if (!item || typeof item !== 'object' || (item.type !== 'text')) continue
       const contentBlock = {
         type: item.type,
         text: item.text || '',
@@ -51,8 +48,9 @@ function formatOutput (result) {
 }
 
 /**
+ * Returns the tool name, or `unknown_tool` if not found.
+ *
  * @param {object} params - MCP tool request params.
- * @returns {string} The tool name, or `unknown_tool` if not found.
  */
 function getRequestToolName (params) {
   return typeof params?.name === 'string' && params.name ? params.name : 'unknown_tool'

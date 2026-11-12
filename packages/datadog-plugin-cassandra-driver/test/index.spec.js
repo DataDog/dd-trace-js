@@ -117,7 +117,7 @@ describe('Plugin', () => {
 
           try {
             client.batch(queries, { prepare: true })
-          } catch (e) {
+          } catch {
             // older versions require a callback
           }
         })

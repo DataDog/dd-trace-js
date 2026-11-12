@@ -13,6 +13,8 @@ const errorChannel = channel('apm:grpc:client:request:error')
 const finishChannel = channel('apm:grpc:client:request:finish')
 const emitChannel = channel('apm:grpc:client:request:emit')
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+
 function createWrapMakeRequest (type, hasPeer = false) {
   const metadataIndex = type === types.client_stream || type === types.bidi ? 3 : 4
 
@@ -186,9 +188,9 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
  * one at `index` when the user did not pass their own.
  *
  * @param {object} client
- * @param {ArrayLike<unknown>} args
+ * @param {ArgumentsLike} args
  * @param {number} index
- * @returns {{ metadata: object | undefined, args: ArrayLike<unknown> }}
+ * @returns {{ metadata: object | undefined, args: ArgumentsLike }}
  */
 function resolveMetadata (client, args, index) {
   const grpc = client && getGrpc(client)
@@ -243,6 +245,8 @@ function getGrpc (client) {
 function patch (hasPeer = false) {
   return function patch (grpc) {
     const proto = grpc.Client.prototype
+
+    if (instances.has(proto)) return grpc
 
     instances.set(proto, grpc)
 

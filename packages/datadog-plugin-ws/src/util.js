@@ -1,5 +1,6 @@
 'use strict'
 
+const { readDatadogTraceId, readTraceparent } = require('../../dd-trace/src/carrier')
 const DatadogSpanContext = require('../../dd-trace/src/opentracing/span_context')
 
 const TRACE_ID_UPPER_TAG = '_dd.p.tid'
@@ -35,10 +36,9 @@ function createWebSocketSpanContext (spanContext) {
 /**
  * Returns whether distributed trace headers are present.
  * @param {Record<string, string | string[] | undefined>} headers
- * @returns {boolean}
  */
 function hasTraceHeaders (headers) {
-  return !!(headers && (headers['x-datadog-trace-id'] || headers.traceparent))
+  return !!(headers && (readDatadogTraceId(headers) || readTraceparent(headers)))
 }
 
 /**
@@ -58,7 +58,6 @@ function initWebSocketMessageCounters (socket) {
  * Increments and returns the WebSocket message counter.
  * @param {object} socket - The WebSocket socket object
  * @param {string} counterType - Either 'receiveCounter' or 'sendCounter'
- * @returns {number} The incremented counter value
  */
 function incrementWebSocketCounter (socket, counterType) {
   if (!socketCounters.has(socket)) {
@@ -80,7 +79,6 @@ function incrementWebSocketCounter (socket, counterType) {
  * @param {number} counter - The message counter
  * @param {boolean} isServer - Whether this is a server (true) or client (false)
  * @param {boolean} isIncoming - Whether this is an incoming message (true) or outgoing (false)
- * @returns {string} The span pointer hash
  */
 function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, counter, isServer, isIncoming) {
   // Determine prefix based on server/client and incoming/outgoing
@@ -109,7 +107,6 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
  *
  * @param {DatadogSpanContext} spanContext - The handshake span context
  * @param {{ hasTraceHeaders?: boolean } | undefined} socket - The WebSocket socket object
- * @returns {boolean} True if the span has distributed tracing context
  */
 function hasDistributedTracingContext (spanContext, socket) {
   if (!spanContext) return false

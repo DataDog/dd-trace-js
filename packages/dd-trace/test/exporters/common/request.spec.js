@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
+const https = require('node:https')
 const zlib = require('node:zlib')
 const stream = require('node:stream')
 
@@ -43,6 +44,7 @@ describe('request', function () {
   let request
   let log
   let docker
+  let getHttpsProxyAgent
   let maxAttempts
   let retryStubs
   let runInNoopContext
@@ -57,6 +59,7 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    getHttpsProxyAgent = sinon.stub().callsFake((url, agent) => agent)
     // The retry policy is exercised in retry.spec.js. Here we keep the integration
     // deterministic: zero backoff, no startup-phase mutation, attempt count
     // overridable per test.
@@ -72,6 +75,7 @@ describe('request', function () {
         storage: () => ({ run: runInNoopContext }),
       },
       './docker': docker,
+      './proxy': { getHttpsProxyAgent },
       '../../log': log,
       './retry': {
         ...require('../../../src/exporters/common/retry'),
@@ -109,6 +113,214 @@ describe('request', function () {
         assert.strictEqual(res, 'OK')
         done(err)
       })
+  })
+
+  it('preserves a caller-supplied connection agent', (done) => {
+    const customAgent = new http.Agent()
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      agent: customAgent,
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'GET',
+    }, (error) => {
+      const callOptions = http.request.getCall(0).args[0]
+      sandbox.restore()
+      customAgent.destroy()
+      assert.strictEqual(callOptions.agent, customAgent)
+      done(error)
+    })
+  })
+
+  it('selects an HTTPS proxy agent for authenticated requests', (done) => {
+    const url = new URL('https://test:443/path')
+    const options = {
+      url,
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }
+    nock('https://test:443').post('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (error) => {
+      sinon.assert.calledOnce(getHttpsProxyAgent)
+      const [proxyOptions, directAgent] = getHttpsProxyAgent.firstCall.args
+      assert.notStrictEqual(proxyOptions, options)
+      assert.strictEqual(proxyOptions.protocol, 'https:')
+      assert.strictEqual(proxyOptions.hostname, 'test')
+      assert.strictEqual(proxyOptions.path, '/path')
+      assert.ok(directAgent instanceof https.Agent)
+      done(error)
+    })
+  })
+
+  it('reports proxy selection errors without starting a request', () => {
+    const error = new Error('invalid proxy URL')
+    const requestSpy = sinon.spy(https, 'request')
+    const callback = sinon.spy()
+    getHttpsProxyAgent.throws(error)
+
+    request(Buffer.from(''), {
+      url: new URL('https://test:443/path'),
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }, callback)
+
+    requestSpy.restore()
+    sinon.assert.calledOnceWithExactly(callback, error)
+    sinon.assert.notCalled(requestSpy)
+  })
+
+  for (const [url, code] of [
+    ['not a URL', 'ERR_INVALID_URL'],
+    ['ftp://intake.example/path', 'ERR_INVALID_PROTOCOL'],
+  ]) {
+    it(`reports the invalid target ${url} without starting a request`, () => {
+      const sandbox = sinon.createSandbox()
+      const requestSpy = sandbox.spy(http, 'request')
+      const callback = sinon.spy()
+
+      try {
+        request(Buffer.from(''), { url, method: 'POST' }, callback)
+      } finally {
+        sandbox.restore()
+      }
+
+      sinon.assert.calledOnce(callback)
+      assert.strictEqual(callback.firstCall.args[0].code, code)
+      sinon.assert.notCalled(requestSpy)
+    })
+  }
+
+  it('selects a new default agent when callers reuse options with another protocol', (done) => {
+    const options = {
+      url: new URL('http://test:123'),
+      path: '/path',
+      method: 'GET',
+    }
+    nock('http://test:123').get('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (httpError) => {
+      if (httpError) return done(httpError)
+
+      assert.strictEqual(options.agent, undefined)
+      options.url = new URL('https://test:443')
+      nock('https://test:443').get('/path').reply(200, 'OK')
+
+      request(Buffer.from(''), options, (httpsError) => {
+        assert.strictEqual(options.agent, undefined)
+        sinon.assert.notCalled(getHttpsProxyAgent)
+        done(httpsError)
+      })
+    })
+  })
+
+  it('does not mutate caller options or headers', (done) => {
+    const options = {
+      url: new URL('http://test:123/path'),
+      host: 'stale.example:444',
+      socketPath: '/tmp/stale.sock',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+    }
+    nock('http://test:123').put('/path').reply(200, 'OK')
+
+    request(Buffer.from('data'), options, (error) => {
+      assert.deepStrictEqual(options, {
+        url: new URL('http://test:123/path'),
+        host: 'stale.example:444',
+        socketPath: '/tmp/stale.sock',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      })
+      done(error)
+    })
+  })
+
+  it('uses the URL target instead of stale fields when callers reuse options', () => {
+    const callOptions = []
+    const requestMessages = []
+
+    /**
+     * @param {import('node:http').RequestOptions} options
+     * @returns {EventEmitter}
+     */
+    function createRequest (options) {
+      callOptions.push(options)
+      const requestMessage = new EventEmitter()
+      requestMessage.setTimeout = sinon.stub()
+      requestMessage.write = sinon.stub()
+      requestMessage.end = sinon.stub()
+      requestMessages.push(requestMessage)
+      return requestMessage
+    }
+
+    const targetRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const socketToNetwork = { url: 'unix:/tmp/first.sock', method: 'POST', retry: false }
+    const networkToSocket = {
+      url: new URL('http://test:123/network'),
+      protocol: 'https:',
+      hostname: 'stale.example',
+      host: 'stale.example:444',
+      port: 444,
+      socketPath: '/tmp/stale.sock',
+      method: 'POST',
+      retry: false,
+    }
+    const networkToNetwork = { url: new URL('http://test:123/first'), method: 'POST', retry: false }
+
+    targetRequest('', socketToNetwork, sinon.stub())
+    socketToNetwork.url = new URL('http://test:123/network')
+    targetRequest('', socketToNetwork, sinon.stub())
+    targetRequest('', networkToSocket, sinon.stub())
+    networkToSocket.url = 'unix:/tmp/second.sock'
+    targetRequest('', networkToSocket, sinon.stub())
+    targetRequest('', networkToNetwork, sinon.stub())
+    networkToNetwork.url = new URL('http://test:123/second')
+    targetRequest('', networkToNetwork, sinon.stub())
+
+    assert.strictEqual(callOptions[0].socketPath, '/tmp/first.sock')
+    assert.strictEqual(callOptions[1].socketPath, undefined)
+    assert.strictEqual(callOptions[1].hostname, 'test')
+    assert.strictEqual(callOptions[1].port, 123)
+    assert.strictEqual(callOptions[1].path, '/network')
+    assert.strictEqual(callOptions[2].socketPath, undefined)
+    assert.strictEqual(callOptions[2].host, undefined)
+    assert.strictEqual(callOptions[2].protocol, 'http:')
+    assert.strictEqual(callOptions[2].hostname, 'test')
+    assert.strictEqual(callOptions[2].port, 123)
+    assert.strictEqual(callOptions[3].socketPath, '/tmp/second.sock')
+    assert.strictEqual(callOptions[3].protocol, undefined)
+    assert.strictEqual(callOptions[3].hostname, undefined)
+    assert.strictEqual(callOptions[3].port, undefined)
+    assert.strictEqual(callOptions[3].path, undefined)
+    assert.strictEqual(callOptions[4].path, '/first')
+    assert.strictEqual(callOptions[5].path, '/second')
+
+    for (const requestMessage of requestMessages) requestMessage.emit('close')
   })
 
   it('does not retry when retries are disabled', (done) => {
@@ -270,18 +482,84 @@ describe('request', function () {
     assert.strictEqual(callbacks, 1)
   })
 
+  it('lets callers defer a timeout abort until a ready response is processed', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+
+    let respond
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = (timeout, callback) => {
+      assert.strictEqual(timeout, 2000)
+      requestMessage.once('timeout', callback)
+    }
+    requestMessage.write = sinon.spy()
+    requestMessage.end = sinon.spy()
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      assert.strictEqual(options.deferTimeoutAbort, true)
+      respond = onResponse
+      return requestMessage
+    }
+    const deferredTimeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    const completed = new Promise(resolve => {
+      deferredTimeoutRequest(
+        Buffer.alloc(64 * 1024 * 1024),
+        { method: 'GET', retry: false, deferTimeoutAbort: true },
+        (...args) => resolve(args)
+      )
+    })
+
+    requestMessage.emit('timeout')
+    assert.strictEqual(deferredTimeoutRequest.writable, false)
+    respond(response)
+    response.emit('data', Buffer.from('OK'))
+    response.emit('end')
+
+    const [error, result, statusCode] = await completed
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.strictEqual(error, null)
+    assert.strictEqual(result, 'OK')
+    assert.strictEqual(statusCode, 200)
+    assert.strictEqual(deferredTimeoutRequest.writable, true)
+    sinon.assert.notCalled(requestMessage.abort)
+  })
+
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')
-      .reply(400)
+      .reply(400, 'bad request')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
       port: 8080,
+      includeErrorResponseBody: true,
     }, err => {
       assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
+      assert.strictEqual(err.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(err.responseBody, 'bad request')
       done()
     })
   })
@@ -298,8 +576,36 @@ describe('request', function () {
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
+      assert.strictEqual(err.responseBody, undefined)
       done()
     })
+  })
+
+  it('preserves HTTP error details when the global URL is mocked', async () => {
+    nock('http://localhost:8080').put('/path').reply(400, () => {
+      // Mock after Nock's own URL parsing so only the exporter's error handling sees the mock.
+      sinon.replace(globalThis, 'URL', () => {})
+      return 'bad request'
+    })
+
+    try {
+      const error = await new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/path',
+          method: 'PUT',
+          port: 8080,
+          includeErrorResponseBody: true,
+        }, resolve)
+      })
+
+      assert.ok(error instanceof Error)
+      assert.strictEqual(error.status, 400)
+      assert.strictEqual(error.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(error.responseBody, 'bad request')
+    } finally {
+      sinon.restore()
+    }
   })
 
   // Live timeout → abort → retry → 'socket hang up' is covered by
@@ -386,6 +692,44 @@ describe('request', function () {
     })
   })
 
+  for (const [description, options, expectedHasRef] of [
+    ['unrefs retry timers by default', {}, false],
+    ['keeps retry timers referenced when requested', { keepProcessAlive: true }, true],
+  ]) {
+    it(description, () => {
+      const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+      const requestMessage = new EventEmitter()
+      requestMessage.setTimeout = sinon.stub()
+      requestMessage.write = sinon.stub()
+      requestMessage.end = () => requestMessage.emit('error', error)
+
+      const createRequest = sinon.stub().returns(requestMessage)
+      const retryRequest = proxyquire('../../../src/exporters/common/request', {
+        '../../../../datadog-core': {
+          storage: () => ({ run: runInNoopContext }),
+        },
+        http: { ...http, request: createRequest },
+        './docker': docker,
+        '../../log': log,
+        './retry': {
+          ...require('../../../src/exporters/common/retry'),
+          ...retryStubs,
+        },
+      })
+      const setTimeoutSpy = sinon.spy(global, 'setTimeout')
+
+      try {
+        retryRequest('', { method: 'GET', ...options }, sinon.spy())
+
+        const retryTimer = setTimeoutSpy.lastCall.returnValue
+        assert.strictEqual(retryTimer.hasRef(), expectedHasRef)
+        clearTimeout(retryTimer)
+      } finally {
+        setTimeoutSpy.restore()
+      }
+    })
+  }
+
   it('should not retry on a non-retriable error code', (done) => {
     const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
 
@@ -455,9 +799,10 @@ describe('request', function () {
     }
 
     request(Buffer.from(''), options, (err) => {
-      sinon.assert.calledWith(retryStubs.getMaxAttempts, options)
-      sinon.assert.calledWith(retryStubs.getRetryDelay, options, 1)
-      sinon.assert.calledWith(retryStubs.markEndpointReached, options)
+      const retryOptions = retryStubs.getMaxAttempts.firstCall.args[0]
+      assert.notStrictEqual(retryOptions, options)
+      sinon.assert.calledWith(retryStubs.getRetryDelay, retryOptions, 1)
+      sinon.assert.calledWith(retryStubs.markEndpointReached, retryOptions)
       done(err)
     })
   })
@@ -566,12 +911,20 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
+        protocol: 'https:',
+        hostname: 'stale.example',
+        host: 'stale.example:444',
+        port: 444,
         method: 'PUT',
       },
       () => {
         const callOptions = http.request.getCall(0).args[0]
         sandbox.restore()
         assert.strictEqual(callOptions.socketPath, sock)
+        assert.strictEqual(callOptions.protocol, undefined)
+        assert.strictEqual(callOptions.hostname, undefined)
+        assert.strictEqual(callOptions.host, undefined)
+        assert.strictEqual(callOptions.port, undefined)
         done()
       })
   })
@@ -746,6 +1099,49 @@ describe('request', function () {
     })
   })
 
+  it('tracks concurrent payload sizes independently when options are shared', () => {
+    const requests = []
+
+    /**
+     * @returns {EventEmitter} Pending request
+     */
+    function createRequest () {
+      const pending = new EventEmitter()
+      pending.setTimeout = sinon.stub()
+      pending.write = sinon.stub()
+      pending.end = sinon.stub()
+      requests.push(pending)
+
+      return pending
+    }
+
+    const accountingRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const large = Buffer.alloc(63 * 1024 * 1024)
+    const small = Buffer.alloc(1024 * 1024)
+    const options = { method: 'POST', headers: {} }
+
+    accountingRequest(large, options, sinon.stub())
+    accountingRequest(small, options, sinon.stub())
+    requests[0].emit('close')
+    requests[1].emit('close')
+
+    accountingRequest(large, options, sinon.stub())
+
+    assert.strictEqual(accountingRequest.writable, true)
+    requests[2].emit('close')
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
@@ -776,14 +1172,15 @@ describe('request', function () {
             'Content-Type': 'application/octet-stream',
           },
         },
-        (err, res) => {
-          if (err) return done(err)
-
-          if (res) {
-            assert.strictEqual(res, 'OK')
-            okCount++
-          } else {
+        (error, res, statusCode, headers, dropped) => {
+          if (error) {
+            assert.strictEqual(error.code, 'ERR_DD_REQUEST_BUFFER_FULL')
+            assert.strictEqual(dropped, true)
             koCount++
+          } else {
+            assert.strictEqual(res, 'OK')
+            assert.strictEqual(dropped, undefined)
+            okCount++
           }
 
           if (okCount + koCount === 10) {
@@ -798,38 +1195,24 @@ describe('request', function () {
   describe('stripping the Datadog API key from a non-TLS connection', () => {
     // `badheaders` only matches when the key is absent, so a passing request proves it was
     // stripped; a regression that left the key on would miss the interceptor and surface here.
-    it('strips dd-api-key when sending over http to a non-loopback host', (done) => {
-      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
-        .post('/v1/input')
-        .reply(200, 'OK')
+    for (const apiKeyHeader of ['dd-api-key', 'DD-API-KEY']) {
+      it(`strips ${apiKeyHeader} when sending over http to a non-loopback host`, (done) => {
+        nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
+          .post('/v1/input')
+          .reply(200, 'OK')
 
-      request(Buffer.from(''), {
-        method: 'POST',
-        url: new URL('http://intake.example.com/v1/input'),
-        headers: { 'dd-api-key': 'secret-key' },
-      }, (err, res) => {
-        assert.strictEqual(res, 'OK')
-        sinon.assert.calledOnce(log.error)
-        assert.match(log.error.getCall(0).args[0], /non-TLS connection/)
-        done(err)
+        request(Buffer.from(''), {
+          method: 'POST',
+          url: new URL('http://intake.example.com/v1/input'),
+          headers: { [apiKeyHeader]: 'secret-key' },
+        }, (error, res) => {
+          assert.strictEqual(res, 'OK')
+          sinon.assert.calledOnce(log.error)
+          assert.match(log.error.getCall(0).args[0], /non-TLS connection/)
+          done(error)
+        })
       })
-    })
-
-    it('strips the DD-API-KEY header casing as well', (done) => {
-      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
-        .post('/v1/input')
-        .reply(200, 'OK')
-
-      request(Buffer.from(''), {
-        method: 'POST',
-        url: new URL('http://intake.example.com/v1/input'),
-        headers: { 'DD-API-KEY': 'secret-key' },
-      }, (err, res) => {
-        assert.strictEqual(res, 'OK')
-        sinon.assert.calledOnce(log.error)
-        done(err)
-      })
-    })
+    }
 
     it('strips dd-api-key for a non-loopback host that merely starts with "127."', (done) => {
       nock('http://127.evil.com', { badheaders: ['dd-api-key'] })

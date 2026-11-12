@@ -1,11 +1,16 @@
 'use strict'
 
-const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
+const dc = require('node:diagnostics_channel')
+const { once } = require('node:events')
+const http = require('node:http')
 
+const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { httpAgent } = require('../../src/exporters/common/agents')
+const propagationHash = require('../../src/propagation-hash')
 const agent = require('./agent')
 
 const instrumentationsSymbol = Symbol.for('_ddtrace_instrumentations')
@@ -24,6 +29,49 @@ describe('test agent helper', () => {
       assert.strictEqual(agent.server.address().address, '127.0.0.1')
     })
 
+    for (const semantics of ['true', 'false']) {
+      it(`receives OTLP trace requests with OTel semantics=${semantics}`, async () => {
+        const environment = process.env
+        process.env = {
+          ...environment,
+          OTEL_TRACES_EXPORTER: 'otlp',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: semantics,
+        }
+
+        try {
+          const tracer = await agent.load([])
+          const paths = []
+          agent.server.on('request', request => {
+            if (request.method === 'POST') paths.push(request.url)
+          })
+          const traceReceived = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces.length, 1)
+            const [root, child] = traces[0]
+            assert.strictEqual(root.resource, 'otlp-root')
+            assert.strictEqual(child.resource, 'otlp-child')
+            assert.strictEqual(root.service, 'test')
+            assert.strictEqual(root.parent_id, 0n)
+            assert.strictEqual(child.parent_id, root.span_id)
+            assert.strictEqual(child.trace_id, root.trace_id)
+            assert.strictEqual(root.meta['span.kind'], 'client')
+            assert.strictEqual(root.meta['test.tag'], 'value')
+            assert.strictEqual(root.metrics._sampling_priority_v1, 2)
+            assert.ok(root.duration >= 0)
+            assert.ok(root.start > 0)
+          })
+
+          const tags = { 'span.kind': 'client', 'test.tag': 'value', 'sampling.priority': 2 }
+          tracer.trace('otlp-root', { tags }, () => {
+            tracer.trace('otlp-child', () => {})
+          })
+          await traceReceived
+          assert.deepStrictEqual(paths, ['/v1/traces'])
+        } finally {
+          process.env = environment
+        }
+      })
+    }
+
     it('reuses the cached tracer for repeat loads without close', async () => {
       const first = await agent.load([])
       const second = await agent.load([])
@@ -38,6 +86,111 @@ describe('test agent helper', () => {
       await agent.load([])
       const secondId = global._ddtrace._tracer._config.tags['runtime-id']
       assert.notStrictEqual(secondId, firstId)
+    })
+
+    it('removes the exporter keep-alive socket from the shared pool on close', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      await agent.close()
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
+    it('finishes closing when an exporter socket resets', async () => {
+      const tracer = await agent.load([])
+      const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+      const traceReceived = agent.assertSomeTraces(() => {})
+
+      tracer.trace('test', () => {})
+      await traceReceived
+
+      while (!(origin in httpAgent.freeSockets)) {
+        await once(httpAgent, 'free')
+      }
+
+      const [exporterSocket] = httpAgent.freeSockets[origin]
+      const resetError = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })
+      const resetObserved = once(exporterSocket, 'error')
+
+      /**
+       * @param {string} event
+       */
+      function resetAfterCloseListener (event) {
+        if (event !== 'close') return
+
+        exporterSocket.removeListener('newListener', resetAfterCloseListener)
+        queueMicrotask(() => {
+          exporterSocket.emit('error', resetError)
+          exporterSocket.destroy()
+        })
+      }
+      exporterSocket.on('newListener', resetAfterCloseListener)
+
+      const [, [observedReset]] = await Promise.all([agent.close(), resetObserved])
+      assert.strictEqual(observedReset, resetError)
+      assert.strictEqual(origin in httpAgent.sockets, false)
+      assert.strictEqual(origin in httpAgent.freeSockets, false)
+      assert.strictEqual(origin in httpAgent.requests, false)
+    })
+
+    it('finishes closing with active and queued exporter requests', async () => {
+      const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+      const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+
+      try {
+        await agent.load([])
+        const origin = httpAgent.getName({ host: '127.0.0.1', port: agent.port })
+        agent.server.prependOnceListener('connection', socket => socket.pause())
+        const activeRequest = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const socketAssigned = once(activeRequest, 'socket')
+        const activeRequestErrored = once(activeRequest, 'error')
+        activeRequest.end()
+        const [socket] = await socketAssigned
+        const socketFreeListenerCount = socket.listenerCount('free')
+
+        const queuedRequest = http.request({
+          agent: httpAgent,
+          host: '127.0.0.1',
+          port: agent.port,
+        })
+        const queuedRequestErrored = once(queuedRequest, 'error')
+        queuedRequest.end()
+        assert.strictEqual(httpAgent.requests[origin].length, 1)
+
+        await Promise.all([agent.close(), activeRequestErrored, queuedRequestErrored])
+
+        assert.strictEqual(socket.listenerCount('free'), socketFreeListenerCount)
+        assert.strictEqual(origin in httpAgent.sockets, false)
+        assert.strictEqual(origin in httpAgent.freeSockets, false)
+        assert.strictEqual(origin in httpAgent.requests, false)
+      } finally {
+        if (remoteConfigurationEnabled === undefined) {
+          delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+        } else {
+          process.env.DD_REMOTE_CONFIGURATION_ENABLED = remoteConfigurationEnabled
+        }
+        if (telemetryEnabled === undefined) {
+          delete process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+        } else {
+          process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = telemetryEnabled
+        }
+      }
     })
 
     it('rebuilds the tracer when tracerConfig differs between consecutive loads', async () => {
@@ -111,6 +264,19 @@ describe('test agent helper', () => {
       assert.notStrictEqual(configured.http?.enabled, true)
     })
 
+    it('clears the propagation-hash config on agent.close', async () => {
+      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
+      try {
+        await agent.load([])
+        assert.strictEqual(propagationHash.isEnabled(), true)
+
+        await agent.close()
+        assert.strictEqual(propagationHash.isEnabled(), false)
+      } finally {
+        delete process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
+      }
+    })
+
     // Single-eval invariant: each `datadog-instrumentations/*.js` file evaluates
     // exactly once per process. `addHook` pushes one entry into
     // `instrumentations[name]` per evaluation, so the array length is the eval
@@ -164,6 +330,32 @@ describe('test agent helper', () => {
       } finally {
         delete process.env.SOME_TEST_NOISE
       }
+    })
+  })
+
+  describe('trace intake', () => {
+    afterEach(() => agent.close())
+
+    it('accepts POST requests accepted by the trace agent', async () => {
+      await agent.load([])
+      const assertion = agent.assertFirstTraceSpan({ resource: 'fixture.post' }, {
+        spanResourceMatch: /fixture\.post/,
+      })
+      const body = msgpack.encode([[{ resource: 'fixture.post' }]])
+      const response = await postTrace(agent.port, '/v0.4/traces', body)
+
+      assert.strictEqual(response.statusCode, 200)
+      await assertion
+    })
+
+    it('rejects unsupported POST v0.5 trace requests', async () => {
+      await agent.load([])
+      // A non-empty payload: the msgpack middleware answers 200 for any
+      // zero-length body before routing, which would mask the 404.
+      const body = msgpack.encode([[{ resource: 'fixture.v05' }]])
+      const response = await postTrace(agent.port, '/v0.5/traces', body)
+
+      assert.strictEqual(response.statusCode, 404)
     })
   })
 
@@ -279,3 +471,29 @@ describe('test agent helper', () => {
     })
   })
 })
+
+/**
+ * @param {number} port
+ * @param {string} path
+ * @param {Uint8Array} body
+ * @returns {Promise<import('node:http').IncomingMessage>}
+ */
+function postTrace (port, path, body) {
+  return new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method: 'POST',
+      headers: {
+        'content-length': body.byteLength,
+        'content-type': 'application/msgpack',
+      },
+    }, (response) => {
+      response.resume()
+      response.on('end', () => resolve(response))
+    })
+    request.on('error', reject)
+    request.end(body)
+  })
+}

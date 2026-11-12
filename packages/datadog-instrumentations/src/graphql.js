@@ -3,44 +3,53 @@
 const { addHook, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
-// - graphql: execute, parse, validate (CJS + ESM)
-// - @graphql-tools/executor: execute, normalizedExecutor (CJS + ESM)
+// - graphql: execute, locatedError, parse, validate (CJS + ESM)
+// - @graphql-tools/executor: execute, handleFieldError, normalizedExecutor (CJS + ESM)
 // See helpers/rewriter/instrumentations/graphql.js for the full config.
-//
-// The plugin (packages/datadog-plugin-graphql/src/execute.js) handles the
-// `apm:graphql:execute:start` AppSec/WAF contract from inside its bindStart:
-// publishing the channel synchronously runs subscribers, and an
-// `abortController.abort()` from a subscriber is observed by replacing
-// `ctx.arguments[0]` with an object whose getters throw AbortError. The
-// orchestrion-emitted wrapper's `catch { ...; throw err }` block propagates
-// that throw to the caller of graphql.execute. No outer wrap needed.
 
-for (const hook of getHooks('graphql')) {
-  addHook(hook, exports => exports)
+/**
+ * @param {string} name
+ */
+function addRewriterHooks (name) {
+  const hooks = new Map()
+  for (const hook of getHooks(name).values()) {
+    const existing = hooks.get(hook.file)
+    if (existing) {
+      existing.versions.push(...hook.versions)
+    } else {
+      hooks.set(hook.file, hook)
+    }
+  }
+  for (const hook of hooks.values()) {
+    addHook(hook, exports => exports)
+  }
 }
 
-for (const hook of getHooks('@graphql-tools/executor')) {
-  addHook(hook, exports => exports)
-}
+addRewriterHooks('graphql')
+addRewriterHooks('@graphql-tools/executor')
+addRewriterHooks('graphql-jit')
 
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can
 // rebind globalThis[dd-trace] without us stashing a stale reference).
 
-addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_printer = printer
-  return printer
-})
+// Capture ESM namespace exports through module hooks: __module_export__ only matches CommonJS exports.
+for (const extension of ['js', 'mjs']) {
+  addHook({ name: 'graphql', file: `language/printer.${extension}`, versions: ['>=0.10'] }, printer => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_printer = printer
+    return printer
+  })
 
-addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_visitor = visitor
-  return visitor
-})
+  addHook({ name: 'graphql', file: `language/visitor.${extension}`, versions: ['>=0.10'] }, visitor => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_visitor = visitor
+    return visitor
+  })
 
-addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_utilities = utilities
-  return utilities
-})
+  addHook({ name: 'graphql', file: `utilities/index.${extension}`, versions: ['>=0.10'] }, utilities => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_utilities = utilities
+    return utilities
+  })
+}

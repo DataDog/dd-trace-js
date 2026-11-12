@@ -1,8 +1,17 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+
+/**
+ * @typedef {{
+ *   database?: string,
+ *   host?: string,
+ *   port?: number,
+ *   user?: string
+ * }} ConnectionConfig
+ */
 
 class MySQLPlugin extends DatabasePlugin {
   static id = 'mysql'
@@ -21,6 +30,46 @@ class MySQLPlugin extends DatabasePlugin {
     })
 
     this.addBind(`apm:${this.component}:connection:finish`, ctx => ctx.currentStore)
+
+    // Explicit getConnection calls get an acquire span. Pool queries report their internal acquire
+    // on the query span instead, so each acquire is counted once.
+    this.addSub(`apm:${this.component}:pool:acquire:start`, ctx => {
+      const operation = `${this.component}.pool.acquire`
+
+      this.startSpan(operation, {
+        service: this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system }),
+        resource: operation,
+        startTime: ctx.startTime,
+        type: 'sql',
+        kind: 'client',
+        meta: connectionMeta(this.system, ctx.conf),
+      }, ctx)
+    })
+
+    this.addSub(`apm:${this.component}:pool:acquire:finish`, ctx => {
+      const span = ctx.currentStore?.span
+      if (span === undefined) return
+
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
+      span.setTag(`${this.component}.pool.wait_time`, ctx.poolWaitTime)
+      if (ctx.connectionConfig !== undefined) {
+        span.addTags(connectionMeta(this.system, ctx.connectionConfig))
+        if (typeof this.config.service === 'function') {
+          const service = this.serviceName({
+            pluginConfig: this.config,
+            dbConfig: ctx.connectionConfig,
+            system: this.system,
+          })
+          if (service.name) {
+            this.setServiceName(span, service.name)
+            span.setTag(SVC_SRC_KEY, service.source)
+          }
+        }
+      }
+      this.finish(ctx)
+    })
   }
 
   bindStart (ctx) {
@@ -30,17 +79,31 @@ class MySQLPlugin extends DatabasePlugin {
       resource: ctx.sql,
       type: 'sql',
       kind: 'client',
-      meta: {
-        'db.type': this.system,
-        'db.user': ctx.conf.user,
-        'db.name': ctx.conf.database,
-        'out.host': ctx.conf.host,
-        [CLIENT_PORT_KEY]: ctx.conf.port,
-      },
+      meta: connectionMeta(this.system, ctx.conf),
     }, ctx)
+
+    if (ctx.poolWaitTime !== undefined) {
+      span.setTag(`${this.component}.pool.wait_time`, ctx.poolWaitTime)
+    }
+
     ctx.sql = this.injectDbmQuery(span, ctx.sql, service.name)
 
     return ctx.currentStore
+  }
+}
+
+/**
+ * @param {string} system
+ * @param {ConnectionConfig} config
+ * @returns {Record<string, string|number|undefined>}
+ */
+function connectionMeta (system, config) {
+  return {
+    'db.type': system,
+    'db.user': config.user,
+    'db.name': config.database,
+    'out.host': config.host,
+    [CLIENT_PORT_KEY]: config.port,
   }
 }
 

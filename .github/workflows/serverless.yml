@@ -52,6 +52,7 @@ jobs:
         spec:
           - client
           - aws-sdk
+          - base-inject-field
           - bedrockruntime
           - dynamodb
           - eventbridge
@@ -158,6 +159,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/integration-test
+        with:
+          node-floor: active-lts
 
   azure-functions:
     strategy:
@@ -274,6 +277,8 @@ jobs:
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/integration-test
+        with:
+          node-floor: active-lts
 
   azure-durable-functions:
     runs-on: ubuntu-latest
@@ -292,6 +297,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
+        env:
+          SPEC: index
       - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-durable-functions
@@ -327,6 +335,8 @@ jobs:
       - name: Wait for Cosmos emulator to be ready
         run: timeout 120 bash -c 'until curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/ready; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: active-lts
 
 
   google-cloud-pubsub:

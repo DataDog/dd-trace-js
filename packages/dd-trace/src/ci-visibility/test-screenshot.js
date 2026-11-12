@@ -17,7 +17,6 @@ const SCREENSHOT_UPLOAD_RESULT_ERROR = 'error'
  *
  * @param {object|string} screenshot - Framework screenshot metadata or its file path
  * @param {string} filePath - Resolved screenshot file path
- * @returns {number} Capture time in epoch milliseconds
  */
 function getScreenshotCapturedAtMs (screenshot, filePath) {
   const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
@@ -73,7 +72,6 @@ function getScreenshotUploadTag (uploadResult) {
  *
  * @param {object} testSpan - Test span to tag
  * @param {string|undefined} uploadResult - Aggregate screenshot upload result
- * @returns {void}
  */
 function setScreenshotUploadTags (testSpan, uploadResult) {
   const uploadTag = getScreenshotUploadTag(uploadResult)

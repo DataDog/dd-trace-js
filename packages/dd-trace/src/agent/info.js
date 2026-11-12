@@ -17,22 +17,25 @@ module.exports = {
  * Fetches agent information from the /info endpoint
  * @param {URL} url - The agent URL
  * @param {Function} callback - Callback function with signature (err, agentInfo)
+ * @param {{ deadline?: number, keepProcessAlive?: boolean, signal?: AbortSignal, path?: string, retry?: boolean }}
+ * [options]
+ * Request finalization and routing options
+ * @param {Function} [makeRequest] - Request implementation
  */
-function fetchAgentInfo (url, callback) {
-  const urlKey = url.href
+function fetchAgentInfo (url, callback, options = {}, makeRequest = request) {
+  const urlKey = JSON.stringify([url.href, options.path ?? '/info'])
 
   if (cachedUrl !== null && cachedUrl !== urlKey) {
-    // Clear cache if URL changes
+    // Different consumers may query different paths on the same Agent URL.
     clearCache()
   } else if (cachedData !== null && (Date.now() - cachedTimestamp) < CACHE_TTL_MS) {
     // Return cached result if still valid
     return process.nextTick(callback, null, cachedData)
   }
 
-  request('', {
-    path: '/info',
-    url,
-  }, (err, res) => {
+  options.path ??= '/info'
+  options.url = url
+  makeRequest('', options, (err, res) => {
     if (err) {
       return callback(err)
     }

@@ -6,7 +6,7 @@ const Activation = {
   DISABLED: 'Disabled',
 
   fromConfig (config) {
-    switch (config.appsec.enabled) {
+    switch (config.appsec.DD_APPSEC_ENABLED) {
       // ASM is activated by an env var DD_APPSEC_ENABLED=true
       case true:
         return Activation.ENABLED

@@ -10,15 +10,18 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
-const { DogStatsDClient } = require('../src/dogstatsd')
+const { DogStatsDClient, MetricsAggregationClient } = require('../src/dogstatsd')
 
 // On Node versions that support `monitorEventLoopDelay({ samplePerIteration })`
-// (landed in v26.5.0) the runtime metrics module unconditionally skips the
+// (available in v24.19.0 and v26.5.0) the runtime metrics module unconditionally skips the
 // @datadog/native-metrics path, so the "with native metrics" variant is unreachable.
-const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
+  (NODE_MAJOR === 26 && NODE_MINOR >= 5) ||
+  (NODE_MAJOR === 24 && NODE_MINOR >= 19)
 const NATIVE_METRICS_VARIANTS = SAMPLE_PER_ITERATION_AVAILABLE ? [false] : [true, false]
 // Only runs on a real runtime that actually supports the per-iteration sampler.
 const describeSamplePerIteration = SAMPLE_PER_ITERATION_AVAILABLE ? describe : describe.skip
@@ -27,6 +30,21 @@ const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
 const OtlpTransformer = require('../src/opentelemetry/metrics/otlp_transformer')
 const otlpRuntimeMetrics = require('../src/runtime_metrics/otlp_runtime_metrics')
+
+/**
+ * @param {typeof DogStatsDClient} Client - DogStatsD transport test double
+ * @returns {typeof import('../src/runtime_metrics/client')} Runtime-metrics client factory with real aggregation
+ */
+function proxyMetricsClient (Client) {
+  return proxyquire('../src/runtime_metrics/client', {
+    '../dogstatsd': {
+      DogStatsDClient: Client,
+      createMetricsAggregationClient: options => new MetricsAggregationClient(new Client(options)),
+    },
+  })
+}
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -72,6 +90,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           gauge () {},
           increment () {},
           decrement () {},
+          flush (done) { done?.() },
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
@@ -150,6 +169,20 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         sinon.assert.notCalled(runtimeMetrics.decrement)
         sinon.assert.calledOnce(runtimeMetrics.stop)
       })
+
+      it('flushes when enabled and is noop when disabled', () => {
+        const done = sinon.spy()
+
+        proxy.start()
+        proxy.flush(done)
+        sinon.assert.notCalled(runtimeMetrics.flush)
+        sinon.assert.calledOnce(done)
+
+        config.runtimeMetrics.enabled = true
+        proxy.start(config)
+        proxy.flush(done)
+        sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
+      })
     })
 
     describe('runtimeMetrics', () => {
@@ -175,6 +208,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
+            updateTags: client.updateTags,
           }
         })
 
@@ -184,14 +218,13 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           gauge: sinon.spy(),
           increment: sinon.spy(),
           histogram: sinon.spy(),
-          flush: sinon.spy(),
+          flush: sinon.stub().callsFake(done => done?.()),
+          updateTags: sinon.spy(),
         }
 
         const proxiedObject = {
           // Exercise the real client factory (incl. process tags) but with the spy DogStatsD client.
-          './client': proxyquire('../src/runtime_metrics/client', {
-            '../dogstatsd': { DogStatsDClient: Client },
-          }),
+          './client': proxyMetricsClient(Client),
         }
         if (!nativeMetrics) {
           proxiedObject['@datadog/native-metrics'] = {
@@ -242,6 +275,21 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       afterEach(() => {
         clock.restore()
         runtimeMetrics.stop()
+      })
+
+      it('captures and waits for the final runtime metrics flush', (done) => {
+        client.flush.resetHistory()
+        client.gauge.resetHistory()
+
+        runtimeMetrics.flush(() => {
+          try {
+            sinon.assert.calledOnce(client.flush)
+            sinon.assert.called(client.gauge)
+            done()
+          } catch (error) {
+            done(error)
+          }
+        })
       })
 
       describe('start', () => {
@@ -295,6 +343,32 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           const call = Client.lastCall
           const tags = call.args[0].tags
           assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
+        it('should refresh the DogStatsD client tags when the identity-refresh channel fires', () => {
+          config.tags['runtime-id'] = 'initial-id'
+          config.runtimeMetricsRuntimeId = true
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+          client.updateTags.resetHistory()
+
+          // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place
+          // and then publishing to the shared identity-refresh channel (MicroVM clone resume).
+          config.tags['runtime-id'] = 'refreshed-id'
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.calledOnce(client.updateTags)
+          const tags = client.updateTags.lastCall.args[0]
+          assert.ok(tags.includes('runtime-id:refreshed-id'), `expected tags to include refreshed-id: ${tags}`)
+        })
+
+        it('should stop reacting to identity refresh after stop', () => {
+          runtimeMetrics.stop()
+          client.updateTags.resetHistory()
+
+          identityRefreshChannel.publish(config)
+
+          sinon.assert.notCalled(client.updateTags)
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -519,9 +593,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
-            }),
+            './client': proxyMetricsClient(LocalClient),
             '@datadog/native-metrics': nativeMetricsModule,
           })
 
@@ -565,10 +637,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
           const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
-            }),
-            '../../../../version': { NODE_MAJOR: 26, NODE_MINOR: 5 },
+            './client': proxyMetricsClient(LocalClient),
+            '../../../../version': { NODE_MAJOR: 24, NODE_MINOR: 19 },
             '@datadog/native-metrics': {
               start () {
                 throw new Error('Native metrics should not even be required')
@@ -943,7 +1013,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
   })
 })
 
-describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node >= 26.5.0)', () => {
+describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node 24.19+ or >= 26.5)', () => {
   let clock
   let localClient
   let nativeMetricsStart
@@ -975,9 +1045,7 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
     })
 
     localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-      './client': proxyquire('../src/runtime_metrics/client', {
-        '../dogstatsd': { DogStatsDClient: LocalClient },
-      }),
+      './client': proxyMetricsClient(LocalClient),
       '@datadog/native-metrics': { start: nativeMetricsStart, stop () {} },
     })
 
@@ -1047,6 +1115,7 @@ FakePerformanceObserverForOtlp.instances = []
  *   batchCallbacks: Array<{ cb: Function, observables: object[] }>,
  *   fireBatchCallbacks: () => Map<object, Array<{ v: number, a: object }>>,
  *   fakeMetricsClient: object,
+ *   identityRefreshCalls: Array<{ client: object, config: object, unsubscribe: Function }>,
  * }}
  */
 function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
@@ -1055,6 +1124,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
   const records = {}
   const batchCallbacks = []
   const statsdCalls = []
+  const identityRefreshCalls = []
   FakePerformanceObserverForOtlp.instances = []
 
   function makeFactory (type) {
@@ -1088,12 +1158,12 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     createObservableUpDownCounter: makeFactory('updowncounter'),
     createObservableCounter: makeFactory('observable-counter'),
     createHistogram: makeFactory('histogram'),
-    addBatchObservableCallback (cb, observables) {
-      batchCallbacks.push({ cb, observables })
+    addBatchObservableCallback (observeBatch, observables) {
+      batchCallbacks.push({ observeBatch, observables })
     },
-    removeBatchObservableCallback (cb) {
-      const idx = batchCallbacks.findIndex(r => r.cb === cb)
-      if (idx !== -1) batchCallbacks.splice(idx, 1)
+    removeBatchObservableCallback (observeBatch) {
+      const index = batchCallbacks.findIndex(registration => registration.observeBatch === observeBatch)
+      if (index !== -1) batchCallbacks.splice(index, 1)
     },
   }
 
@@ -1109,7 +1179,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
 
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
 
-  const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+  const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+  const otlpMetrics = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
     '@opentelemetry/api': {
       metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
     },
@@ -1122,14 +1193,19 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
+      subscribeToIdentityRefresh: (client, config) => {
+        const unsubscribe = sinon.spy()
+        identityRefreshCalls.push({ client, config, unsubscribe })
+        return unsubscribe
+      },
     },
   })
 
   function fireBatchCallbacks () {
     const observed = new Map()
-    for (const { cb, observables } of batchCallbacks) {
+    for (const { observeBatch, observables } of batchCallbacks) {
       const allowed = new Set(observables)
-      cb({
+      observeBatch({
         observe: (instrument, value, attrs = {}) => {
           if (!allowed.has(instrument)) return
           if (!observed.has(instrument)) observed.set(instrument, [])
@@ -1149,6 +1225,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     fireBatchCallbacks,
     fakeMetricsClient,
     statsdCalls,
+    identityRefreshCalls,
   }
 }
 
@@ -1417,16 +1494,19 @@ describe('otlp_runtime_metrics', () => {
       removeBatchObservableCallback () {},
     }
     const errorLog = sinon.spy()
-    const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
+    const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
+    const otlpMetricsFailing = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
       '@opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
       '../log': { debug () {}, error: errorLog },
       './client': {
         createMetricsClient: () => ({ flush () {} }),
+        subscribeToIdentityRefresh: () => () => {},
       },
     })
-    const dispatcher = proxyquire.noCallThru()('../src/runtime_metrics', {
+    const loadRuntimeMetrics = proxyquire.noCallThru()
+    const dispatcher = loadRuntimeMetrics('../src/runtime_metrics', {
       './otlp_runtime_metrics': otlpMetricsFailing,
       '../log': { error: errorLog },
     })
@@ -1478,6 +1558,22 @@ describe('otlp_runtime_metrics', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
     assert.strictEqual(Object.keys(createdInstruments).length, Object.keys(SPEC).length,
       'should register every metric again after stop')
+  })
+
+  it('subscribes the DogStatsD client to identity refresh on start and unsubscribes on stop', () => {
+    const ctx = loadOtlpRuntimeMetricsTestModule()
+    const config = { runtimeMetrics: { eventLoop: true } }
+
+    ctx.otlpMetrics.start(config)
+
+    assert.strictEqual(ctx.identityRefreshCalls.length, 1)
+    assert.strictEqual(ctx.identityRefreshCalls[0].client, ctx.fakeMetricsClient)
+    assert.strictEqual(ctx.identityRefreshCalls[0].config, config)
+    sinon.assert.notCalled(ctx.identityRefreshCalls[0].unsubscribe)
+
+    ctx.otlpMetrics.stop()
+
+    sinon.assert.calledOnce(ctx.identityRefreshCalls[0].unsubscribe)
   })
 })
 

@@ -27,7 +27,7 @@ const KNOWN_METHODS = new Set([
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
 const DD_HTTP_META_KEYS = new Set([
-  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.endpoint', 'http.url', 'out.host',
+  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
@@ -48,9 +48,9 @@ function stripIpv6Brackets (host) {
 
 /**
  * Decompose a server request URL into the OpenTelemetry `url.*` / `server.*`
- * parts. Structural fields (scheme, address, port, path) are read from the raw
- * URL; the query is taken from the already-obfuscated URL so the configured
- * query-string obfuscation is preserved.
+ * parts. Structural fields (scheme, address, path) are read from the raw URL;
+ * the port is explicit or inferred from the scheme. The query comes from the
+ * already-obfuscated URL so configured query-string obfuscation is preserved.
  *
  * @param {string} rawUrl full request URL (`scheme://host[:port]/path?query`)
  * @param {string} obfuscatedUrl same URL with its query string obfuscated
@@ -69,10 +69,8 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     const hostname = parsed.hostname
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
-    }
-    if (parsed.port) {
-      const parsedPort = Number.parseInt(parsed.port)
-      if (parsedPort > 0) port = parsedPort
+      port = parsed.port ? Number.parseInt(parsed.port, 10) : defaultPortForUrl(rawUrl)
+      if (port === 0) port = undefined
     }
     path = parsed.pathname || '/'
   } catch {
@@ -100,11 +98,10 @@ function toHttpScheme (scheme) {
 
 /**
  * Redact any userinfo embedded in a URL's authority, since `url.full` must not
- * leak credentials: `user:pass@host` -> `REDACTED:REDACTED@host`, `user@host` ->
- * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
+ * leak credentials. Any userinfo becomes `REDACTED:REDACTED@host`, matching OpenTelemetry HTTP
+ * instrumentation. Returns the URL unchanged when no userinfo is present.
  *
  * @param {string} url
- * @returns {string}
  */
 function redactUrlCredentials (url) {
   const schemeEnd = url.indexOf('://')
@@ -125,17 +122,13 @@ function redactUrlCredentials (url) {
   const at = url.lastIndexOf('@', authorityEnd - 1)
   if (at < authorityStart) return url
 
-  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
-  return url.slice(0, authorityStart) + redacted + url.slice(at)
+  return url.slice(0, authorityStart) + 'REDACTED:REDACTED' + url.slice(at)
 }
 
 /**
- * The scheme's default port, used as the `server.port` fallback for client spans
- * (the attribute is required for clients but the explicit port is absent for
- * default-port requests).
+ * Return the required client `server.port` when the URL omits its default port.
  *
  * @param {string} [url]
- * @returns {number | undefined}
  */
 function defaultPortForUrl (url) {
   if (url === undefined) return
@@ -156,7 +149,7 @@ function defaultPortForUrl (url) {
  * `span_format`) when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
  * integration is covered from one place. No-op for non-HTTP spans. The span
  * keeps the Datadog tag names throughout its lifetime — only the serialized
- * output is renamed — so runtime consumers (peer.service, AppSec, trace stats)
+ * output is renamed — so runtime consumers (peer.service, AppSec)
  * are unaffected.
  *
  * @param {FormattedHttpSpan} formattedSpan
@@ -210,7 +203,7 @@ function applyHttpOtelSemantics (formattedSpan) {
     // metric (the OTLP exporter serializes meta as stringValue but metrics as
     // intValue) — mirroring how server.port is handled below. Guard against a
     // non-numeric status, which would otherwise write a NaN metric.
-    statusCode = Number.parseInt(status)
+    statusCode = Number.parseInt(status, 10)
     if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
   }
 
@@ -219,8 +212,6 @@ function applyHttpOtelSemantics (formattedSpan) {
 
   const clientIp = meta['http.client_ip']
   if (clientIp !== undefined) newMeta[CLIENT_ADDRESS] = clientIp
-
-  // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
   if (kind === 'server') {
     // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)
@@ -254,15 +245,9 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   }
 
-  // OTel error semantics for an error response (no-clobber on an exception-derived
-  // type): server spans are errors on 5xx only (4xx MUST be left unset per the
-  // spec); client spans on any status >= 400.
-  if (status !== undefined && newMeta[ERROR_TYPE] === undefined) {
-    const isError = kind === 'server' ? statusCode >= 500 : statusCode >= 400
-    if (isError) {
-      newMeta[ERROR_TYPE] = status
-      formattedSpan.error = 1
-    }
+  if (status !== undefined && formattedSpan.error &&
+      newMeta[ERROR_TYPE] === undefined && Number.isFinite(statusCode)) {
+    newMeta[ERROR_TYPE] = status
   }
 
   formattedSpan.meta = newMeta

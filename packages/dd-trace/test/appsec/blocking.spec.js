@@ -14,8 +14,8 @@ describe('blocking', () => {
 
   const config = {
     appsec: {
-      blockedTemplateHtml: 'htmlBodyéé',
-      blockedTemplateJson: 'jsonBody',
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: 'htmlBodyéé',
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: 'jsonBody',
     },
   }
 
@@ -33,9 +33,9 @@ describe('blocking', () => {
     }
 
     const blocking = proxyquire('../../src/appsec/blocking', {
-      '../log': log,
-      './blocked_templates': defaultBlockedTemplate,
-      './telemetry': telemetry,
+      '../../log': log,
+      './templates': defaultBlockedTemplate,
+      '../telemetry': telemetry,
     })
 
     block = blocking.block
@@ -421,10 +421,10 @@ describe('blocking', () => {
       }
 
       const blocking = proxyquire('../../src/appsec/blocking', {
-        '../log': log,
-        '../plugins/util/web': webStub,
-        './blocked_templates': { ...defaultBlockedTemplate, graphqlJson: 'graphqlBody' },
-        './telemetry': telemetry,
+        '../../log': log,
+        '../../plugins/util/web': webStub,
+        './templates': { ...defaultBlockedTemplate, graphqlJson: 'graphqlBody' },
+        '../telemetry': telemetry,
       })
 
       addSpecificEndpoint = blocking.addSpecificEndpoint
@@ -433,9 +433,9 @@ describe('blocking', () => {
 
       blocking.setTemplates({
         appsec: {
-          blockedTemplateHtml: undefined,
-          blockedTemplateJson: undefined,
-          blockedTemplateGraphql: undefined,
+          DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: undefined,
+          DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: undefined,
+          DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: undefined,
         },
       })
     })
@@ -520,7 +520,7 @@ describe('blocking', () => {
       }
       setTemplates({
         appsec: {
-          blockedTemplateHtml: 'sec_id: [security_response_id]',
+          DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: 'sec_id: [security_response_id]',
         },
       })
 

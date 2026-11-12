@@ -1,5 +1,10 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
+const { realpathSync } = require('node:fs')
+const { resolve, sep } = require('node:path')
+const { fileURLToPath } = require('node:url')
+
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
@@ -10,12 +15,14 @@ const {
 } = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
-const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const {
   getTestSuitePath,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
   getCoveredFilesFromCoverage,
@@ -28,10 +35,13 @@ const {
   getTestCoverageLinesPercentage,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
   isModifiedTest,
+  isMarkedAsUnskippable,
 } = require('../../../dd-trace/src/plugins/util/test')
 
+const { addMochaRunHooks } = require('./common')
 const {
   isNewTest,
   getTestProperties,
@@ -50,27 +60,55 @@ const {
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
+  resetRunState,
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
-
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
+/**
+ * @typedef {{ replacement: Function, run: Function }} ReporterReplacement
+ * @typedef {{
+ *   createFileRunner?: ReporterReplacement,
+ *   hookRuns: Map<object, ReporterReplacement>,
+ *   pendingTests: Map<object, { hadPending: boolean, pending: unknown }>,
+ *   tests: Set<object>
+ * }} RunnerRecoveryState
+ */
+
 const patched = new WeakSet()
+const runnerEndHandlers = new WeakMap()
+const runnerHookMethods = new WeakMap()
+const runnerTestEndHandlers = new WeakMap()
+const runnerFailuresAdjusted = new WeakSet()
+const runnerFrameworkErrors = new WeakMap()
+const runnerStarted = new WeakSet()
+const readyRunners = new WeakSet()
+const pendingRunnerStarts = new WeakMap()
+const runnerRecoveryStates = new WeakMap()
+const runnersWithPendingCoverageReset = new WeakSet()
+const parallelRunners = new WeakSet()
+const wrappedRunnerEmitPrototypes = new WeakSet()
+const rootSuitesWithHookFiles = new WeakSet()
+const ROOT_HOOK_NAMES = ['_beforeAll', '_afterAll', '_beforeEach', '_afterEach']
+const ROOT_SUITE_ARRAY_NAMES = ['tests', 'suites', '_onlyTests', '_onlySuites', ...ROOT_HOOK_NAMES]
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
+let areAllSuitesSkipped = false
 let skippedSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -94,6 +132,7 @@ const mochaGlobalRunCh = channel('ci:mocha:global:run')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
+const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
@@ -112,17 +151,6 @@ function warnDeprecatedMochaVersion (frameworkVersion) {
     'dd-trace support for Mocha<8.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Mocha to >=8.0.0.'
   )
-}
-
-// Tests from workers do not come with `isFailed` method
-function isTestFailed (test) {
-  if (test.isFailed) {
-    return test.isFailed()
-  }
-  if (test.isPending) {
-    return !test.isPending() && test.state === 'failed'
-  }
-  return false
 }
 
 function getRootSuiteStatus (rootTests) {
@@ -146,6 +174,40 @@ function haveRootTestsFinished (rootTests) {
     }
   }
   return true
+}
+
+/**
+ * @param {{ file: string }} test
+ */
+function startRootSuite (test) {
+  const ctx = testFileToSuiteCtx.get(test.file)
+  if (ctx?._pendingRootStart) {
+    ctx._pendingRootStart = false
+    testSuiteStartCh.runStores(ctx, () => {})
+  }
+}
+
+/**
+ * @param {string} file
+ * @param {'pass' | 'fail' | 'skip'} status
+ * @param {object} [runner] Defers coverage reset until this runner's suite-end reporters finish.
+ */
+function finishRootSuite (file, status, runner) {
+  const ctx = testFileToSuiteCtx.get(file)
+  if (!ctx) {
+    log.warn('No ctx found for suite', file)
+    return
+  }
+
+  if (global.__coverage__) {
+    const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
+    testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+    mergeCoverage(global.__coverage__, originalCoverageMap)
+    if (runner) runnersWithPendingCoverageReset.add(runner)
+    else resetCoverage(global.__coverage__)
+  }
+
+  testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
 }
 
 function getSuitePath (suite) {
@@ -185,12 +247,6 @@ function getFilteredSuites (originalSuites) {
   }, { suitesToRun: [], skippedSuites: new Set(), suitesToSkipForRun })
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function isTiaCoverageBackfillEnabled () {
   return config.isItrEnabled && config.isCoverageReportUploadEnabled
 }
@@ -209,7 +265,6 @@ function getCoverageRootDir () {
  * from the suite path.
  *
  * @param {string} testSuiteAbsolutePath
- * @returns {boolean}
  */
 function isModifiedTestSuite (testSuiteAbsolutePath) {
   const testPath = getTestSuitePath(testSuiteAbsolutePath, getCoverageRootDir())
@@ -221,7 +276,7 @@ function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
 }
 
 function getSkippedSuitesCoverageForRun () {
-  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && skippableSuitesCoverage !== undefined
     ? skippableSuitesCoverage
     : {}
 }
@@ -237,8 +292,9 @@ function getMochaTestSessionCoverageFiles () {
 
 function resetSuiteSkippingRunState () {
   isSuitesSkipped = false
+  areAllSuitesSkipped = false
   skippedSuites = []
-  skippableSuitesCoverage = {}
+  skippableSuitesCoverage = undefined
   skippedSuitesCoverage = {}
   untestedCoverage = undefined
   config.repositoryRoot = undefined
@@ -294,65 +350,29 @@ function getOnStartHandler (frameworkVersion) {
 /**
  * @param {boolean} isParallel
  * @param {() => void} onDone
- * @returns {() => void}
+ * @returns {(frameworkError?: unknown, onFrameworkErrorDone?: () => void) => void}
  */
 function getOnEndHandler (isParallel, onDone) {
-  return function () {
+  return function (frameworkError, onFrameworkErrorDone) {
     let status = 'pass'
-    let error
+    let error = frameworkError
     if (this.stats) {
-      status = this.stats.failures === 0 ? 'pass' : 'fail'
-      if (this.stats.tests === 0) {
+      status = this.stats.failures === 0 && this.failures === 0 ? 'pass' : 'fail'
+      if (this.stats.tests === this.stats.pending && status === 'pass') {
         status = 'skip'
       }
     } else if (this.failures !== 0) {
       status = 'fail'
     }
 
-    if (config.isEarlyFlakeDetectionEnabled) {
-      /**
-       * If Early Flake Detection (EFD) is enabled the logic is as follows:
-       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
-       * - If just a single attempt passes, we will prevent the test process from failing.
-       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
-       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
-       */
-      for (const tests of Object.values(efdTests)) {
-        const failingEfdTests = tests.filter(test => isTestFailed(test))
-        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
-        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
-        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
-          this.stats.failures -= nonQuarantinedFailingEfdTests.length
-          this.failures -= nonQuarantinedFailingEfdTests.length
-        }
-      }
-    }
-
-    // We subtract the errors from quarantined tests from the total number of failures.
-    // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
-    if (config.isTestManagementTestsEnabled) {
-      let numFailedQuarantinedTests = 0
-      for (const test of testsQuarantined) {
-        if (isTestFailed(test)) {
-          numFailedQuarantinedTests++
-        }
-      }
-      this.stats.failures -= numFailedQuarantinedTests
-      this.failures -= numFailedQuarantinedTests
-    }
-
-    // Recompute status after EFD and quarantine adjustments have reduced failure counts
-    if (status === 'fail') {
-      if (this.stats) {
-        status = this.stats.failures === 0 ? 'pass' : 'fail'
-      } else {
-        status = this.failures === 0 ? 'pass' : 'fail'
-      }
-    }
-
-    if (status === 'fail') {
+    if (arguments.length > 0) {
+      status = 'fail'
+    } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
+    const testSessionEmptyReason = status === 'skip'
+      ? (this.stats.pending > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
+      : undefined
 
     testFileToSuiteCtx.clear()
 
@@ -395,11 +415,457 @@ function getOnEndHandler (isParallel, onDone) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
-    }, onDone)
+      isFrameworkError: arguments.length > 0,
+      testSessionEmptyReason,
+    }, () => {
+      try {
+        onDone()
+      } finally {
+        onFrameworkErrorDone?.()
+      }
+    })
 
-    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    logTestOptimizationSummary({
+      attemptToFixExecutions,
+      newTestsWithDynamicNames,
+      extraSections: areAllSuitesSkipped ? [TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE] : [],
+    })
     loggedAttemptToFixTests.clear()
   }
+}
+
+/**
+ * Applies Test Optimization failure suppression once per runner execution.
+ *
+ * @param {object} runner
+ */
+function adjustRunnerFailuresOnce (runner) {
+  if (runnerFailuresAdjusted.has(runner)) return
+
+  runnerFailuresAdjusted.add(runner)
+  adjustRunnerFailuresForTestOptimization(runner, config)
+}
+
+/**
+ * Returns the mutations that must be restored after reporter-error recovery.
+ *
+ * @param {object} runner
+ * @returns {RunnerRecoveryState}
+ */
+function getRunnerRecoveryState (runner) {
+  let state = runnerRecoveryStates.get(runner)
+  if (!state) {
+    state = {
+      hookRuns: new Map(),
+      pendingTests: new Map(),
+      tests: new Set(),
+    }
+    runnerRecoveryStates.set(runner, state)
+  }
+  return state
+}
+
+/**
+ * Marks a test pending for the aborted run while retaining its reusable state.
+ *
+ * @param {object} runner
+ * @param {object} test
+ */
+function markTestPending (runner, test) {
+  const state = getRunnerRecoveryState(runner)
+  if (!state.pendingTests.has(test)) {
+    state.pendingTests.set(test, {
+      hadPending: Object.hasOwn(test, 'pending'),
+      pending: test.pending,
+    })
+  }
+  state.tests.add(test)
+  test.pending = true
+  test._ddReporterStartFailed = true
+}
+
+/**
+ * Marks a completed test for immediate reporter-error finalization.
+ *
+ * @param {object} runner
+ * @param {object} test
+ */
+function markTestTerminal (runner, test) {
+  getRunnerRecoveryState(runner).tests.add(test)
+  test._ddReporterTerminalFailed = true
+}
+
+/**
+ * Restores test and hook state changed only to abort the current run.
+ *
+ * @param {object} runner
+ */
+function restoreReporterMutations (runner) {
+  const state = runnerRecoveryStates.get(runner)
+  if (!state) return
+
+  runnerRecoveryStates.delete(runner)
+  for (const [test, { hadPending, pending }] of state.pendingTests) {
+    if (hadPending) test.pending = pending
+    else delete test.pending
+  }
+  for (const test of state.tests) {
+    delete test._ddTestFinishStarted
+    delete test._ddTestFinishPublished
+    delete test._ddIsFinalAttempt
+    delete test._ddHookFailed
+    delete test._ddReporterStartFailed
+    delete test._ddReporterTerminalFailed
+  }
+  for (const [hook, { replacement, run }] of state.hookRuns) {
+    if (hook.run === replacement) hook.run = run
+  }
+  if (state.createFileRunner && runner._createFileRunner === state.createFileRunner.replacement) {
+    runner._createFileRunner = state.createFileRunner.run
+  }
+}
+
+/**
+ * Prevents Mocha from entering hooks or the test body after a test-start reporter error.
+ *
+ * @param {object} runner
+ * @param {object} test
+ */
+function stopCurrentTest (runner, test) {
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+
+  markTestPending(runner, test)
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
+ * Prevents Mocha from entering a hook after its hook-start reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ */
+function stopCurrentHook (runner, hook) {
+  const hookMethod = runner.hook
+  const hookDown = runner.hookDown
+  const hookUp = runner.hookUp
+  const run = hook.run
+
+  stopRemainingCurrentHooks(runner, hook)
+  runner.hook = function (name, onDone) {
+    runner.hook = hookMethod
+    onDone()
+  }
+  runner.hookDown = function (name, onDone) {
+    runner.hookDown = hookDown
+    onDone()
+  }
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+  hook.run = function (onDone) {
+    hook.run = run
+    const test = hook.ctx?.currentTest
+    if (test) {
+      if (hook.parent?._afterEach?.includes(hook) || hook.parent?._afterAll?.includes(hook)) {
+        markTestTerminal(runner, test)
+        if (!test._ddTestFinishStarted) {
+          const onTestEnd = runnerTestEndHandlers.get(runner)
+          onTestEnd?.(test)
+        }
+      } else {
+        markTestPending(runner, test)
+      }
+    }
+    onDone()
+  }
+}
+
+/**
+ * Prevents Mocha from running after-each hooks after a terminal test reporter event fails.
+ *
+ * @param {object} runner
+ * @param {object} test
+ */
+function stopAfterEachHooks (runner, test) {
+  const hookUp = runner.hookUp
+
+  markTestTerminal(runner, test)
+  runner.hookUp = function (name, onDone) {
+    runner.hookUp = hookUp
+    onDone()
+  }
+}
+
+/**
+ * Prevents Mocha from entering any subsequent user hooks after a reporter error.
+ *
+ * @param {object} runner
+ */
+function stopFutureHooks (runner) {
+  if (runnerHookMethods.has(runner)) return
+
+  runnerHookMethods.set(runner, runner.hook)
+  runner.hook = function (name, onDone) {
+    onDone()
+  }
+}
+
+/**
+ * Restores the runner hook method after reporter-error finalization.
+ *
+ * @param {object} runner
+ */
+function restoreFutureHooks (runner) {
+  const hook = runnerHookMethods.get(runner)
+  if (!hook) return
+
+  runnerHookMethods.delete(runner)
+  runner.hook = hook
+}
+
+/**
+ * Stops hooks remaining in the currently executing hook array.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ */
+function stopRemainingCurrentHooks (runner, hook) {
+  const hookLists = [hook.parent?._beforeAll, hook.parent?._beforeEach, hook.parent?._afterEach, hook.parent?._afterAll]
+
+  for (const hooks of hookLists) {
+    const hookIndex = hooks?.indexOf(hook) ?? -1
+    if (hookIndex === -1) continue
+
+    for (let index = hookIndex + 1; index < hooks.length; index++) {
+      const remainingHook = hooks[index]
+      const run = remainingHook.run
+      const replacement = function (onDone) {
+        remainingHook.run = run
+        onDone()
+      }
+      getRunnerRecoveryState(runner).hookRuns.set(remainingHook, { replacement, run })
+      remainingHook.run = replacement
+    }
+    return hooks === hook.parent._beforeEach
+  }
+  return false
+}
+
+/**
+ * Prevents a completed before-each hook from continuing into the test body.
+ *
+ * @param {object} runner
+ * @param {object} hook
+ */
+function stopAfterHookEnd (runner, hook) {
+  if (!stopRemainingCurrentHooks(runner, hook) || !runner.test) return
+
+  markTestPending(runner, runner.test)
+}
+
+/**
+ * Prevents Mocha from entering the root suite after a run-start reporter error.
+ *
+ * @param {object} runner
+ */
+function stopRootSuite (runner) {
+  const runSuite = runner.runSuite
+
+  runner.runSuite = function (suite, onDone) {
+    runner.runSuite = runSuite
+    onDone()
+  }
+}
+
+function skipParallelFile () {}
+
+function createSkippedParallelFileRunner () {
+  return skipParallelFile
+}
+
+/**
+ * Prevents a parallel run-start reporter error from scheduling test workers.
+ *
+ * @param {object} runner
+ */
+function stopParallelWorkers (runner) {
+  const state = getRunnerRecoveryState(runner)
+  if (state.createFileRunner) return
+
+  const run = runner._createFileRunner
+  const replacement = createSkippedParallelFileRunner
+  state.createFileRunner = { replacement, run }
+  runner._createFileRunner = replacement
+}
+
+/**
+ * Resets suite coverage after every reporter has observed the completed suite.
+ *
+ * @param {object} runner
+ */
+function resetPendingSuiteCoverage (runner) {
+  if (!runnersWithPendingCoverageReset.delete(runner) || !global.__coverage__) return
+
+  resetCoverage(global.__coverage__)
+}
+
+/**
+ * Reads a string Error property without invoking user code outside this boundary.
+ *
+ * @param {Error} error
+ * @param {'message' | 'name' | 'stack'} property
+ * @returns {string | undefined}
+ */
+function readErrorString (error, property) {
+  try {
+    const value = error[property]
+    if (typeof value === 'string') return value
+  } catch {
+    // Ignore user-defined accessors.
+  }
+}
+
+/**
+ * Creates an Error for Test Optimization tags without coercing a user-thrown value.
+ *
+ * @param {unknown} frameworkError
+ * @returns {Error}
+ */
+function getFrameworkFinalizationError (frameworkError) {
+  if (typeof frameworkError === 'string') return new Error(frameworkError)
+  let isError = false
+  try {
+    isError = frameworkError instanceof Error
+  } catch {
+    // User-thrown proxies can fail the instanceof prototype lookup.
+  }
+  if (!isError) return new Error('Mocha reporter failed')
+
+  const message = readErrorString(frameworkError, 'message') || 'Mocha reporter failed'
+  const error = new Error(message)
+  const name = readErrorString(frameworkError, 'name')
+  const stack = readErrorString(frameworkError, 'stack')
+  if (name) error.name = name
+  if (stack) error.stack = stack
+  return error
+}
+
+/**
+ * Defers reporter errors until Mocha can emit its remaining lifecycle events, then
+ * runs Datadog's end handler and propagates the original error after finalization.
+ *
+ * @param {Function} Runner
+ */
+function wrapRunnerEmit (Runner) {
+  if (wrappedRunnerEmitPrototypes.has(Runner.prototype)) return
+
+  wrappedRunnerEmitPrototypes.add(Runner.prototype)
+  shimmer.wrap(Runner.prototype, 'emit', emit => function (event) {
+    const endHandler = runnerEndHandlers.get(this)
+    if (!endHandler) return emit.apply(this, arguments)
+
+    if (event === 'start') runnerStarted.add(this)
+
+    if (!runnerStarted.has(this)) return emit.apply(this, arguments)
+
+    const hasPendingFrameworkError = runnerFrameworkErrors.has(this)
+    const pendingFrameworkError = runnerFrameworkErrors.get(this)
+    if (event !== 'end') {
+      try {
+        return emit.apply(this, arguments)
+      } catch (error) {
+        if (!hasPendingFrameworkError) {
+          runnerFrameworkErrors.set(this, error)
+          this.abort()
+          stopFutureHooks(this)
+          if (event === 'start') {
+            if (parallelRunners.has(this)) stopParallelWorkers(this)
+            else stopRootSuite(this)
+          } else if (event === 'test') stopCurrentTest(this, arguments[1])
+          else if (event === 'hook') stopCurrentHook(this, arguments[1])
+          else if (event === 'hook end') {
+            const hook = arguments[1]
+            stopAfterHookEnd(this, hook)
+            const test = hook.ctx?.currentTest
+            if (test && hook.parent?._afterEach?.includes(hook)) {
+              markTestTerminal(this, test)
+              if (!test._ddTestFinishStarted) {
+                const onTestEnd = runnerTestEndHandlers.get(this)
+                onTestEnd?.(test)
+              }
+            }
+          } else if (event === 'pending' || event === 'pass' || event === 'fail' || event === 'retry' ||
+            event === 'test end') {
+            const test = arguments[1]
+            stopAfterEachHooks(this, test)
+            if (event === 'test end' && !test._ddTestFinishStarted) {
+              const onTestEnd = runnerTestEndHandlers.get(this)
+              onTestEnd?.(test)
+            }
+          }
+        }
+        return
+      } finally {
+        if (event === 'suite end') resetPendingSuiteCoverage(this)
+      }
+    }
+
+    runnerEndHandlers.delete(this)
+    restoreFutureHooks(this)
+    parallelRunners.delete(this)
+    runnerTestEndHandlers.delete(this)
+    runnerStarted.delete(this)
+    let result
+    let hasFrameworkError = hasPendingFrameworkError
+    let frameworkError = pendingFrameworkError
+    try {
+      result = emit.apply(this, arguments)
+    } catch (error) {
+      if (!hasFrameworkError) {
+        hasFrameworkError = true
+        frameworkError = error
+        runnerFrameworkErrors.set(this, error)
+      }
+    } finally {
+      restoreReporterMutations(this)
+    }
+
+    adjustRunnerFailuresOnce(this)
+
+    if (hasFrameworkError) {
+      const finalizationError = getFrameworkFinalizationError(frameworkError)
+      let hasPropagatedFrameworkError = false
+      const propagateFrameworkError = () => {
+        if (hasPropagatedFrameworkError) return
+
+        hasPropagatedFrameworkError = true
+        if (typeof this.uncaught === 'function') process.removeListener('uncaughtException', this.uncaught)
+        if (typeof this.unhandled === 'function') process.removeListener('unhandledRejection', this.unhandled)
+        process.nextTick(() => { throw frameworkError })
+      }
+
+      try {
+        endHandler.call(this, finalizationError, propagateFrameworkError)
+      } catch (finalizerError) {
+        log.error('Datadog Mocha finalizer failed after a reporter error', finalizerError)
+        propagateFrameworkError()
+      }
+
+      return result
+    }
+
+    endHandler.call(this)
+    return result
+  })
 }
 
 function applyKnownTestsResponse ({ err, knownTests }) {
@@ -426,6 +892,55 @@ function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
 }
 
+/**
+ * @typedef {object} MochaSuite
+ * @property {MochaSuite[]} suites
+ * @property {import('mocha').Test[]} tests
+ * @property {MochaSuite[]} _onlySuites
+ * @property {import('mocha').Test[]} _onlyTests
+ */
+
+/**
+ * Mirrors Mocha 5's private exclusivity check.
+ *
+ * @param {MochaSuite} suite
+ */
+function hasOnly (suite) {
+  if (suite._onlyTests.length || suite._onlySuites.length) return true
+
+  for (const childSuite of suite.suites) {
+    if (hasOnly(childSuite)) return true
+  }
+  return false
+}
+
+/**
+ * Mirrors Mocha 5's private exclusivity filter.
+ *
+ * @param {MochaSuite} suite
+ */
+function filterOnly (suite) {
+  if (suite._onlyTests.length) {
+    suite.tests = suite._onlyTests
+    suite.suites = []
+  } else {
+    suite.tests = []
+
+    for (const onlySuite of suite._onlySuites) {
+      if (hasOnly(onlySuite)) filterOnly(onlySuite)
+    }
+
+    const filteredSuites = []
+    for (const childSuite of suite.suites) {
+      if (suite._onlySuites.includes(childSuite) || filterOnly(childSuite)) {
+        filteredSuites.push(childSuite)
+      }
+    }
+    suite.suites = filteredSuites
+  }
+  return suite.tests.length > 0 || suite.suites.length > 0
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
@@ -443,11 +958,11 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     } = response || {}
     if (!response || err) {
       suitesToSkip = []
-      skippableSuitesCoverage = {}
+      skippableSuitesCoverage = undefined
     } else {
       suitesToSkip = skippableSuites
       itrCorrelationId = responseItrCorrelationId
-      skippableSuitesCoverage = responseSkippableSuitesCoverage || {}
+      skippableSuitesCoverage = responseSkippableSuitesCoverage
     }
     if (localSuites) {
       suitesToSkip = getSuitesToSkipFromPaths(localSuites)
@@ -457,18 +972,54 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
+    if (runner._opts?.cleanReferencesAfterRun === false) {
+      const rootSuite = runner.suite
+      const originalArrays = ROOT_SUITE_ARRAY_NAMES.map(name => rootSuite[name])
+      // Restore definitions before completion callbacks can start another run, including with the plugin disabled.
+      runner.prependOnceListener('end', () => {
+        for (let index = 0; index < ROOT_SUITE_ARRAY_NAMES.length; index++) {
+          rootSuite[ROOT_SUITE_ARRAY_NAMES[index]] = originalArrays[index]
+        }
+      })
+    }
+
+    // Root hooks must be selected before .only() removes other files from the test tree.
+    for (const name of ROOT_HOOK_NAMES) {
+      runner.suite[name] = runner.suite[name].filter(hook => !hook.file ||
+        !suitesToSkip.includes(getSuitePath(hook)) || unskippableSuites.includes(hook.file))
+    }
+
     // We remove the suites that we skip through ITR
+    // Mocha normally applies exclusivity after this asynchronous configuration step.
+    if (typeof runner.suite.hasOnly === 'function') {
+      if (runner.suite.hasOnly()) runner.suite.filterOnly()
+    } else if (hasOnly(runner.suite)) {
+      filterOnly(runner.suite)
+    }
+    const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
+    // Root tests share a Mocha suite across files, but TIA still selects them by file.
+    const filteredRootTests = getFilteredSuites(runner.suite.tests)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
-    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length ||
+      filteredRootTests.suitesToRun.length !== runner.suite.tests.length
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    runner.suite.tests = filteredRootTests.suitesToRun
+    // Mocha reapplies exclusivity when the delayed runner resumes.
+    if (runner.suite._onlyTests.length) {
+      runner.suite._onlyTests = runner.suite.tests
+    }
+    if (runner.suite._onlySuites.length) {
+      runner.suite._onlySuites = runner.suite._onlySuites.filter(suite => suitesToRun.includes(suite))
+    }
+    areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
-    skippedSuites = [...filteredSuites.skippedSuites]
-    suitesToSkip = suitesToSkipForRun
+    skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
+    suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
 
@@ -529,8 +1080,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+    config.earlyFlakeDetectionRetryPolicy =
+      libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -542,6 +1093,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled && satisfies(frameworkVersion, '>=8.0.0')
+    config.dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
     config.isDiEnabled = libraryConfig.isDiEnabled
     config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
 
@@ -574,16 +1127,89 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
 }
 
+/**
+ * @param {import('mocha').Runner} runner
+ */
+function startMochaRunner (runner) {
+  if (readyRunners.has(runner)) {
+    runner.suite.run()
+  } else {
+    // Global setup can finish after configuration. Preserve the configuration
+    // context until Runner#run has installed its delayed-start listener.
+    pendingRunnerStarts.set(runner, AsyncResource.bind(() => runner.suite.run()))
+  }
+}
+
+/**
+ * @param {import('mocha').Runner['run']} run
+ * @param {import('mocha').Runner} runner
+ * @param {Parameters<import('mocha').Runner['run']>} args
+ * @returns {import('mocha').Runner}
+ */
+function runMochaRunner (run, runner, args) {
+  const result = run.apply(runner, args)
+  // Once delay mode is enabled, startup must complete even if the plugin is disabled during global setup.
+  readyRunners.add(runner)
+  const start = pendingRunnerStarts.get(runner)
+  if (start) {
+    pendingRunnerStarts.delete(runner)
+    start()
+  }
+  return result
+}
+
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
-addHook({
-  name: 'mocha',
-  versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @param {import('./common').MochaHookMeta} hookMeta
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion, hookMeta) {
   warnDeprecatedMochaVersion(frameworkVersion)
 
+  // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
+  shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
+    const result = ui.apply(this, args)
+    const suite = this.suite
+    if (!rootSuitesWithHookFiles.has(suite)) {
+      rootSuitesWithHookFiles.add(suite)
+      let file
+      suite.prependListener('pre-require', (context, testFile) => {
+        file = testFile
+      })
+      suite.on('post-require', () => {
+        file = undefined
+      })
+      // Hook objects are created at runtime; inspect the caller while registration is still on the stack.
+      shimmer.wrap(suite, '_createHook', createHook => function createHookWithFile (...args) {
+        const hook = createHook.apply(this, args)
+        if (file && !hook.file) {
+          try {
+            const { moduleBaseDir } = hookMeta
+            const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
+            for (const site of getCallSites(createHookWithFile)) {
+              const source = site.getFileName()
+              if (!source || source.startsWith('node:')) continue
+              const sourceFile = source.startsWith('file:') ? fileURLToPath(source) : source
+              if (mochaPathPrefix && sourceFile.startsWith(mochaPathPrefix)) continue
+              // Helpers register shared setup; only direct declarations belong to the loading test file.
+              if (sourceFile === file || realpathSync(sourceFile) === realpathSync(file)) hook.file = file
+              break
+            }
+          } catch (error) {
+            log.debug('Error capturing Mocha root hook source: %s', error)
+          }
+        }
+        return hook
+      })
+    }
+    return result
+  })
+
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -592,19 +1218,26 @@ addHook({
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
+    const originalDelay = this.options.delay
     this.options.delay = true
 
-    const runner = run.apply(this, args)
+    let runner
+    try {
+      runner = run.apply(this, args)
+    } finally {
+      // Only this runner needs the configuration delay, including when the next run disables the plugin.
+      this.options.delay = originalDelay
+    }
 
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
-        unskippableSuites.push(path)
+        unskippableSuites.push(resolve(path))
       }
     })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
-      if (isFailedTestReplayEnabled()) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       if (config.isKnownTestsEnabled) {
@@ -624,23 +1257,25 @@ addHook({
         getCodeCoverageCh.publish({
           onDone: (receivedCodeCoverage) => {
             untestedCoverage = receivedCodeCoverage
-            global.run()
+            startMochaRunner(runner)
           },
         })
       } else {
-        global.run()
+        startMochaRunner(runner)
       }
     })
 
     return runner
   })
   return Mocha
-})
+}
+
+addMochaRunHooks([MINIMUM_MOCHA_VERSION], wrapMochaRun)
 
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/cli/run-helpers.js',
+  filePattern: String.raw`lib/cli/run-helpers\.(?:c?js)$`,
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
@@ -650,7 +1285,7 @@ addHook({
     const mocha = args[0]
 
     /**
-     * This attaches `run` to the global context, which we'll call after
+     * This enables the delayed root suite, which we'll release after
      * our configuration and skippable suites requests.
      * You need this both here and in Mocha#run hook: the programmatic API
      * does not call `runMocha`, so it needs to be in Mocha#run. When using
@@ -671,28 +1306,42 @@ addHook({
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
-}, function (Runner, frameworkVersion) {
-  if (patched.has(Runner)) return Runner
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
+}, function (runnerPackage, frameworkVersion) {
+  const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
+  if (typeof Runner !== 'function' || patched.has(Runner)) return
 
   patched.add(Runner)
+  wrapRunnerEmit(Runner)
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, args)
+      resetRunState(this.suite)
+      workerTestAnnotations.clear()
+      return runMochaRunner(run, this, args)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
-    args[0] = onRunDone
+    resetRunState(this.suite)
+    workerTestAnnotations.clear()
+    runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
+    args[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
+      onRunDone(this.failures)
+      runnerFrameworkErrors.delete(this)
+    }
 
-    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    let { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
-    // Counts how many original tests per pure-root file still need their final attempt.
+    // Counts how many selected tests per pure-root file still need their final attempt.
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
     const rootFinalizationPendingCountByFile = new Map()
@@ -702,6 +1351,8 @@ addHook({
     let hasEnded = false
     let hasFinishedRun = false
     let endRunner
+    let endError
+    let onFrameworkErrorDone
 
     function updateRootTestForFinalAttempt (test) {
       if (!test._retriedTest) return
@@ -719,7 +1370,8 @@ addHook({
       if (hasFinishedRun) return
       if (hasEnded && pendingRootFinalizations === 0) {
         hasFinishedRun = true
-        onEnd.call(endRunner)
+        if (onFrameworkErrorDone) onEnd.call(endRunner, endError, onFrameworkErrorDone)
+        else onEnd.call(endRunner)
       }
     }
 
@@ -762,33 +1414,18 @@ addHook({
       }
       rootPendingCountByFile.delete(file)
 
-      const ctx = testFileToSuiteCtx.get(file)
-      if (!ctx) {
-        log.warn('No ctx found for suite', file)
-        return
-      }
-
       const rootTests = rootTestsByFile.get(file) || []
-      const status = getRootSuiteStatus(rootTests)
-
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
-        testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
-      }
-
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, getRootSuiteStatus(rootTests))
     }
 
-    function finishRootSuiteFallbackForFile (file) {
+    function finishRootSuiteFallbackForFile (file, runner) {
       const ctx = testFileToSuiteCtx.get(file)
       if (!ctx || !rootPendingCountByFile.has(file)) return
 
       const rootTests = rootTestsByFile.get(file) || []
       const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
       rootPendingCountByFile.delete(file)
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, status, runner)
     }
 
     function finishRootSuiteAfterFinalAttempt (test) {
@@ -800,11 +1437,13 @@ addHook({
 
     const onEnd = getOnEndHandler(false, onFlushDone)
 
-    this.once('start', getOnStartHandler(frameworkVersion))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
 
-    this.once('end', function () {
+    runnerEndHandlers.set(this, function (frameworkError, frameworkErrorDone) {
       hasEnded = true
       endRunner = this
+      endError = frameworkError
+      onFrameworkErrorDone = frameworkErrorDone
       finishRunIfReady()
     })
 
@@ -814,53 +1453,59 @@ addHook({
     // instead of suiteA -> suiteB -> testA -> ... -> testB)
     // when the suite has tests that are in the top level
     // (no describe(...))
-    this.on('test', function (test) {
-      const ctx = testFileToSuiteCtx.get(test.file)
-      if (ctx?._pendingRootStart) {
-        ctx._pendingRootStart = false
-        testSuiteStartCh.runStores(ctx, () => {})
-      }
+    this.prependListener('test', getOnTestHandler(true, config))
+    // Reporters are registered before Runner#run, so prepend this after the test handler
+    // to start the suite first and preserve the test event if a reporter throws.
+    this.prependListener('test', startRootSuite)
+
+    // Reporters are registered before this run wrapper. Prepend terminal handlers
+    // so a reporter error cannot strand a test span that Mocha already completed.
+    const onTestEnd = getOnTestEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
     })
+    runnerTestEndHandlers.set(this, onTestEnd)
+    this.prependListener('test end', onTestEnd)
 
-    this.on('test', getOnTestHandler(true))
+    this.prependListener('retry', getOnTestRetryHandler(config))
 
-    this.on('test end', getOnTestEndHandler(config, {
-      onStart: incrementPendingRootFinalization,
-      onFinish: function (test) {
-        finishRootSuiteAfterFinalAttempt(test)
-        decrementPendingRootFinalization(test)
-      },
-    }))
-
-    this.on('retry', getOnTestRetryHandler(config))
-
-    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler(config, {
-      onStart: incrementPendingRootFinalization,
-      onFinish: function (test) {
-        finishRootSuiteAfterFinalAttempt(test)
-        decrementPendingRootFinalization(test)
-      },
-    }))
-
-    this.on('hook end', function (hook) {
+    this.prependListener('hook end', function (hook) {
       const test = hook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
     })
 
-    this.on('fail', getOnFailHandler(true, config))
+    // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted.
+    this.prependListener('hook end', getOnHookEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
+    }))
 
-    this.on('fail', function (testOrHook) {
+    this.prependListener('fail', function (testOrHook) {
       if (testOrHook.type !== 'hook') return
       const test = testOrHook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
     })
+    this.prependListener('fail', getOnFailHandler(true, config))
 
-    this.on('pending', getOnPendingHandler())
+    this.prependListener('pending', getOnPendingHandler())
+    // Static skips emit 'pending' without 'test', so their suite must start here too.
+    this.prependListener('pending', startRootSuite)
 
-    this.on('suite', function (suite) {
+    this.prependListener('suite', function (suite) {
+      if (suite.root) {
+        // TIA and .only() have now selected the suites that can finish during this run.
+        const selectedSuites = getSuitesByTestFile(suite)
+        suitesByTestFile = selectedSuites.suitesByTestFile
+        numSuitesByTestFile = selectedSuites.numSuitesByTestFile
+      }
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be
@@ -870,9 +1515,14 @@ addHook({
         // below. Since 'suite' fires for root first, in the mixed case the ctx is created
         // here and the describe-based handler finds it already set.
         if (suite.root && suite.tests.length > 0) {
+          const { _grep: grep, _invert: invert } = this
+          const lastIndex = grep.lastIndex
+          const selectedTests = suite.tests.filter(test => grep.test(test.fullTitle()) !== !!invert)
+          // Inspecting a stateful grep must not change which tests Mocha subsequently selects.
+          if (grep.lastIndex !== lastIndex) grep.lastIndex = lastIndex
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
-            const testsForFile = suite.tests.filter(t => t.file === file)
+            const testsForFile = selectedTests.filter(t => t.file === file)
             rootTestsByFile.set(file, testsForFile)
             // Only track the countdown for pure root-level files.
             // Mixed files are finished by the normal 'suite end' path.
@@ -909,13 +1559,14 @@ addHook({
       }
     })
 
-    this.on('suite end', function (suite) {
+    // Reporters are registered before Runner#run, so this must run first when one throws.
+    this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
-        // listeners via finishRootSuiteForFile. Two edge cases remain here:
+        // listeners via finishRootSuiteForFile. Fallback cases remain here:
         //
-        // 1. All-pending: no 'test' event fired, _pendingRootStart is still true.
-        //    Start and immediately finish with 'skip'.
+        // 1. Unstarted file: no 'test' or 'pending' event fired (e.g. all tests
+        //    were filtered out). Start and immediately finish with 'skip'.
         //
         // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
         //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has
@@ -942,7 +1593,7 @@ addHook({
               continue
             }
 
-            finishRootSuiteFallbackForFile(test.file)
+            finishRootSuiteFallbackForFile(test.file, this)
           }
         }
         return
@@ -984,7 +1635,7 @@ addHook({
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
         mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
+        runnersWithPendingCoverageReset.add(this)
       }
 
       const ctx = testFileToSuiteCtx.get(suite.file)
@@ -995,10 +1646,10 @@ addHook({
       }
     })
 
-    return run.apply(this, args)
+    return runMochaRunner(run, this, args)
   })
 
-  return Runner
+  return runnerPackage
 })
 
 // Used both in serial and parallel mode, and by both the main process and the workers
@@ -1009,15 +1660,20 @@ addHook({
   file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
+const workerTestAnnotations = new Map()
+
 function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
       collectTestOptimizationSummariesFromTraces(payload, {
         newTestsWithDynamicNames,
+        testAnnotations: workerTestAnnotations,
         attemptToFixExecutions,
       })
       workerReportTraceCh.publish(payload)
+    } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
+      workerReportTelemetryCh.publish(payload)
     }
   }
 }
@@ -1033,10 +1689,7 @@ addHook({
   file: 'src/WorkerHandler.js',
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testFinishCh.hasSubscribers) {
-      return exec.apply(this, arguments)
-    }
-    if (!path?.length) {
+    if (!testFinishCh.hasSubscribers || !path?.length) {
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
@@ -1080,18 +1733,28 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/parallel-buffered-runner.js',
+  filePattern: String.raw`lib/nodejs/parallel-buffered-runner\.(?:c?js)$`,
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
+  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
+    workerTestAnnotations.clear()
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
-    arguments[0] = onRunDone
+    runnerFailuresAdjusted.delete(this)
+    runnerFrameworkErrors.delete(this)
+    runnerStarted.delete(this)
+    parallelRunners.add(this)
+    arguments[0] = () => {
+      adjustRunnerFailuresOnce(this)
+      if (!this.failures && runnerFrameworkErrors.has(this)) this.failures = 1
+      onRunDone(this.failures)
+      runnerFrameworkErrors.delete(this)
+    }
 
-    this.once('start', getOnStartHandler(frameworkVersion))
-    this.once('end', getOnEndHandler(true, onFlushDone))
+    this.prependOnceListener('start', getOnStartHandler(frameworkVersion))
+    runnerEndHandlers.set(this, getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
     for (const filePath of files) {
@@ -1128,10 +1791,11 @@ addHook({
           }
         }
         isSuitesSkipped = skippedFiles.length > 0
+        areAllSuitesSkipped = options.grep === undefined && files.length > 0 && filteredFiles.length === 0
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
-        run.apply(this, [onRunDone, { files: filteredFiles }])
+        run.apply(this, [onRunDone, { files: filteredFiles, options }])
       } else {
         run.apply(this, arguments)
       }
@@ -1149,9 +1813,34 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/buffered-worker-pool.js',
-}, (BufferedWorkerPoolPackage) => {
+  filePattern: String.raw`lib/nodejs/buffered-worker-pool\.(?:c?js)$`,
+}, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
+
+  if (satisfies(frameworkVersion, '<9.2.0')) {
+    // Shimmer is required because the worker environment must be changed before workerpool forks,
+    // before any test lifecycle hook can run. Mocha added this worker ID itself in 9.2.0.
+    shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
+      const pool = create.apply(this, arguments)
+
+      if (!testFinishCh.hasSubscribers) return pool
+
+      let workerId = 0
+      shimmer.wrap(pool._pool, '_createWorkerHandler', createWorkerHandler => function () {
+        this.forkOpts = {
+          ...this.forkOpts,
+          env: {
+            // eslint-disable-next-line eslint-rules/eslint-process-env
+            ...(this.forkOpts.env || process.env),
+            MOCHA_WORKER_ID: String(workerId++),
+          },
+        }
+        return createWorkerHandler.apply(this, arguments)
+      })
+
+      return pool
+    })
+  }
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
@@ -1170,8 +1859,7 @@ addHook({
     if (config.isKnownTestsEnabled) {
       if (config.knownTests?.mocha) {
         const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
-        newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
-        newWorkerArgs._ddEfdSlowTestRetries = config.earlyFlakeDetectionSlowTestRetries
+        newWorkerArgs._ddEfdRetryPolicy = config.earlyFlakeDetectionRetryPolicy
         newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {
@@ -1208,6 +1896,8 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+      newWorkerArgs._ddIsDynamicAtrEnabled = config.isDynamicAtrEnabled
+      newWorkerArgs._ddDynamicAtrBuckets = config.dynamicAtrBuckets
     }
 
     if (isFailedTestReplayEnabled()) {
@@ -1230,6 +1920,9 @@ addHook({
     const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
+      test._ddTestAnnotations ||= workerTestAnnotations.get(
+        `${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`
+      )
       const testProperties = getTestProperties(test, config.testManagementTests)
       const isAttemptToFix = config.isTestManagementTestsEnabled && testProperties.isAttemptToFix
 
@@ -1246,7 +1939,7 @@ addHook({
         }
       }
       // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (!isAttemptToFix && (isNew || isModified)) {
+      if (!test._ddTestAnnotations?.noAutoRetry && !isAttemptToFix && (isNew || isModified)) {
         const testFullName = getTestFullName(test)
         const tests = efdTests[testFullName]
 

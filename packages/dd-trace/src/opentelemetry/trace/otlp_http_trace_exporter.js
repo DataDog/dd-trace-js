@@ -39,15 +39,24 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    * @param {boolean} otelTraceSemanticsEnabled - When true, do not emit Datadog-only attributes as span attributes
    */
   constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled) {
-    super(url, headers, timeout, 'http/json', 'traces')
+    super(url, headers, timeout, 'http/json', 'traces', resourceAttributes)
     this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelTraceSemanticsEnabled)
+  }
+
+  /**
+   * Recomputes the resource attributes baked into the transformer (e.g. after a MicroVM clone
+   * resume regenerates `runtime-id`).
+   *
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#transformer.updateResourceAttributes(resourceAttributes)
   }
 
   /**
    * Exports DD-formatted spans via OTLP over HTTP.
    *
    * @param {import('./otlp_transformer').DDFormattedSpan[]} spans - Array of DD-formatted spans to export
-   * @returns {void}
    */
   export (spans) {
     if (spans.length === 0) {

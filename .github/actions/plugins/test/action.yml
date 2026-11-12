@@ -2,7 +2,7 @@ name: Plugin Tests
 description: Run plugin tests
 inputs:
   node-floor:
-    description: 'Lower Node alias: oldest-maintenance-lts or newest-maintenance-lts.'
+    description: 'Lower Node alias: oldest-maintenance-lts, newest-maintenance-lts, or active-lts.'
     required: false
     default: oldest-maintenance-lts
   suffix:
@@ -16,6 +16,8 @@ runs:
       uses: ./.github/actions/node/oldest-maintenance-lts
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
       uses: ./.github/actions/node/newest-maintenance-lts
+    - if: ${{ inputs.node-floor == 'active-lts' }}
+      uses: ./.github/actions/node/active-lts
     - uses: ./.github/actions/install
     - run: npm run test:plugins:ci
       shell: bash

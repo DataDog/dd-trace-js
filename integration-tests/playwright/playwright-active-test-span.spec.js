@@ -1,8 +1,7 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -28,13 +27,14 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const NUM_RETRIES_EFD = 3
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {
@@ -42,11 +42,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -91,15 +87,6 @@ versions.forEach((version) => {
 
     contextNewVersions('active test span', () => {
       it('can grab the test span and add tags', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const test = events.find(event => event.type === 'test').content
-
-            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
           {
@@ -111,13 +98,32 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const test = events.find(event => event.type === 'test').content
+
+            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
+          }, { hardTimeout: 70_000 })
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
       it('can grab the test span and add spans', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
         const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
@@ -131,30 +137,76 @@ versions.forEach((version) => {
             // custom span is children of active test span
             assert.strictEqual(customSpan.trace_id.toString(), test.trace_id.toString())
             assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
-          })
+          }, { hardTimeout: 70_000 })
 
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
+      it('does not request the page fixture from instrumented hooks', async (receiver, run) => {
         const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+          './node_modules/.bin/playwright test -c playwright.config.js no-page-fixture-test.js',
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
 
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }, { hardTimeout: 70_000 })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      // Playwright 1.64 builds hook step stacks from hook.location. The afterEach hook injected by Test
+      // Optimization used to have no location, which crashed the worker when the trace was retained.
+      it('does not crash when the injected hook has a retained trace', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js injected-hook-location-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-hook-location',
+              PLAYWRIGHT_WORKERS: '1',
+              // Parallel scenarios share the sandbox. Playwright removes the output dir on startup and the
+              // worker artifacts dir on exit, which would delete this run's trace files while they are written.
+              PLAYWRIGHT_OUTPUT_DIR: './test-results-injected-hook-location',
+            },
+          }
+        )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 2)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass', test.meta[ERROR_MESSAGE])
+            }
+          }, { hardTimeout: 70_000 })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
+
+        assert.strictEqual(exitCode, 0)
       })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
-      const getTestAssertions = (receiver, { isRedirecting }) =>
+      const getTestAssertions = (receiver, proc, { isRedirecting }) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
             tests.forEach(test => {
               if (isRedirecting) {
                 // can't do assertions because playwright has been redirected
@@ -174,85 +226,82 @@ versions.forEach((version) => {
                 )
               }
             })
-          })
+          }, { hardTimeout: 70_000 })
 
-      const runRumTest = async (receiver, { isRedirecting }, extraEnvVars) => {
-        const testAssertionsPromise = getTestAssertions(receiver, { isRedirecting })
-        let proc
-        try {
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-rum',
-                ...extraEnvVars,
-              },
-            }
-          )
+      const runRumTest = async (receiver, run, { isRedirecting, telemetryEnabled = false }, extraEnvVars) => {
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'error',
+              PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-rum',
+              ...(telemetryEnabled && {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              }),
+              ...extraEnvVars,
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-          const [[exitCode]] = await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+        const assertions = [once(proc, 'exit'), getTestAssertions(receiver, proc, { isRedirecting })]
+        if (telemetryEnabled) {
+          assertions.push(receiver
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
 
-          assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
-        } finally {
-          proc?.kill()
+              const testSessionMetric = telemetryEvents.find(
+                ({ metric }) => metric === 'test_session'
+              )
+              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
+              const eventFinishedTestEvents = telemetryEvents
+                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+              assert.ok(eventFinishedTestEvents.length > 0, 'test event telemetry from a worker should be sent')
+              eventFinishedTestEvents.forEach(({ tags }) => {
+                assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+                assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
+              })
+            }, { hardTimeout: 70_000 }))
         }
+
+        const [[exitCode]] = await Promise.all(assertions)
+        assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
+        assert.doesNotMatch(testOutput, /Failed to find injection points/)
       }
 
-      it('can correlate tests and RUM sessions', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: false })
+      it('can correlate tests and RUM sessions', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false })
       })
 
       for (const failure of ['throw', 'reject']) {
-        it(`does not fail when the RUM correlation cookie ${failure}s`, async (receiver) => {
-          await runRumTest(receiver, { isRedirecting: false }, {
+        it(`does not fail when the RUM correlation cookie ${failure}s`, async (receiver, run) => {
+          await runRumTest(receiver, run, { isRedirecting: false }, {
             RUM_COOKIE_FAILURE: failure,
           })
         })
       }
 
-      it('expires only the RUM correlation cookie during cleanup', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: false }, {
+      it('expires only the RUM correlation cookie during cleanup', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false }, {
           VERIFY_RUM_COOKIE_CLEANUP: 'true',
         })
       })
 
-      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver) => {
-        const telemetryPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-            const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
-
-            const testSessionMetric = telemetryEvents.find(
-              ({ metric }) => metric === 'test_session'
-            )
-            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
-
-            const eventFinishedTestEvents = telemetryEvents
-              .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
-
-            eventFinishedTestEvents.forEach(({ tags }) => {
-              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
-              assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
-            })
-          })
-
-        await Promise.all([
-          runRumTest(
-            receiver,
-            { isRedirecting: false },
-            {
-              ...getCiVisEvpProxyConfig(receiver.port),
-              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-            }
-          ),
-          telemetryPromise,
-        ])
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false, telemetryEnabled: true })
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: true })
       })
     })
 
@@ -305,21 +354,6 @@ versions.forEach((version) => {
 
     contextNewVersions('playwright early bail', () => {
       it('reports tests that did not run', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
-            assertObjectContains(failedTest.meta, {
-              [TEST_NAME]: 'failing test fails and causes early bail',
-            })
-            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
-            assertObjectContains(didNotRunTest.meta, {
-              [TEST_NAME]: 'did not run because of early bail',
-            })
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
@@ -332,6 +366,20 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assertObjectContains(failedTest.meta, {
+              [TEST_NAME]: 'failing test fails and causes early bail',
+            })
+            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+            assertObjectContains(didNotRunTest.meta, {
+              [TEST_NAME]: 'did not run because of early bail',
+            })
+          }, { hardTimeout: 70_000 })
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
@@ -343,7 +391,11 @@ const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 describe('playwright instrumentation (unit)', () => {
   let pageHook
+  let pageGotoSubscriber
   let subscriber
+  let commonIndexHook
+  let testFinishPayload
+  let workerHook
   const testPageGotoCh = {
     get hasSubscribers () {
       return subscriber !== undefined
@@ -361,9 +413,29 @@ describe('playwright instrumentation (unit)', () => {
       './helpers/instrument': {
         ...realInstrument,
         addHook: addHookSpy,
-        channel: name => name === 'ci:playwright:test:page-goto'
-          ? testPageGotoCh
-          : realInstrument.channel(name),
+        channel: name => {
+          if (name === 'ci:playwright:test:page-goto') return testPageGotoCh
+          if (name === 'ci:playwright:test:finish') {
+            return {
+              get hasSubscribers () { return true },
+              publish (payload) {
+                testFinishPayload = payload
+                payload.onDone()
+              },
+            }
+          }
+          return realInstrument.channel(name)
+        },
+        tracingChannel: name => {
+          if (name === 'orchestrion:playwright-core:Page_goto') {
+            return {
+              subscribe (handlers) {
+                pageGotoSubscriber = handlers
+              },
+            }
+          }
+          return realInstrument.tracingChannel(name)
+        },
       },
     })
 
@@ -372,15 +444,154 @@ describe('playwright instrumentation (unit)', () => {
       return target.name === 'playwright-core' && target.file === 'lib/client/page.js'
     })
     pageHook = call.args[1]
+
+    const workerCall = addHookSpy.getCalls().find(({ args }) => {
+      const target = args[0]
+      return target.name === 'playwright' && target.file === 'lib/worker/workerMain.js'
+    })
+    workerHook = workerCall.args[1]
+
+    const commonIndexCall = addHookSpy.getCalls().find(({ args }) => {
+      const target = args[0]
+      return target.name === 'playwright' && target.file === 'lib/common/index.js'
+    })
+    commonIndexHook = commonIndexCall.args[1]
   })
 
   afterEach(() => {
     subscriber = undefined
+    testFinishPayload = undefined
   })
+
+  function createWorkerMain (dispatchEvent, entry) {
+    class WorkerMain {
+      constructor () {
+        this._project = { project: { name: 'chromium' } }
+      }
+
+      runTestGroup () {}
+      gracefullyClose () {}
+
+      async _runTest (test) {
+        this.dispatchEvent('stepEnd', { stepId: 'missing-step' })
+        this.dispatchEvent('stepBegin', {
+          stepId: 'step-id',
+          testId: 'test-id',
+          title: 'valid step',
+          wallTime: 100,
+        })
+        this.dispatchEvent('stepEnd', {
+          stepId: 'step-id',
+          testId: 'test-id',
+          wallTime: 125,
+          error: { message: 'step error' },
+        })
+        this.dispatchEvent('stepEnd', { stepId: 'step-id' })
+        this._currentTest = {
+          annotations: [],
+          error: undefined,
+          expectedStatus: 'passed',
+          retry: 0,
+          status: 'passed',
+          testId: 'test-id',
+        }
+        return 'run result'
+      }
+    }
+    WorkerMain.prototype.dispatchEvent = dispatchEvent
+    if (entry === 'legacy worker hook') {
+      workerHook({ WorkerMain })
+      return new WorkerMain()
+    }
+
+    const commonExport = { suiteUtils: {} }
+    Object.defineProperty(commonExport, 'startProcessRunner', {
+      configurable: true,
+      get: () => create => create(),
+    })
+    const common = commonIndexHook(commonExport)
+    return common.startProcessRunner(() => new WorkerMain())
+  }
+
+  for (const entry of ['legacy worker hook', 'modern process runner hook']) {
+    it(`forwards an unmatched step end through the ${entry}`, () => {
+      const calls = []
+      const returnValue = Symbol('return value')
+      const worker = createWorkerMain(function () {
+        calls.push({ receiver: this, args: [...arguments] })
+        return returnValue
+      }, entry)
+      const receiver = {}
+      const payload = { stepId: 'missing-step' }
+      const extraArgument = { extra: true }
+
+      assert.strictEqual(worker.dispatchEvent.call(receiver, 'stepEnd', payload, extraArgument), returnValue)
+      assert.deepStrictEqual(calls, [{ receiver, args: ['stepEnd', payload, extraArgument] }])
+      assert.strictEqual(calls[0].receiver, receiver)
+      assert.strictEqual(calls[0].args[1], payload)
+      assert.strictEqual(calls[0].args[2], extraArgument)
+    })
+
+    it(`forwards a duplicate step end through the ${entry}`, () => {
+      const calls = []
+      const returnValue = Symbol('return value')
+      const worker = createWorkerMain(function () {
+        calls.push({ receiver: this, args: [...arguments] })
+        return returnValue
+      }, entry)
+      const receiver = {}
+      const payload = { stepId: 'completed-step' }
+      const extraArgument = { extra: true }
+
+      worker.dispatchEvent('stepBegin', {
+        stepId: 'completed-step', testId: 'test-id', wallTime: 10, title: 'step',
+      })
+      worker.dispatchEvent('stepEnd', { stepId: 'completed-step', testId: 'test-id', wallTime: 20 })
+      assert.strictEqual(worker.dispatchEvent.call(receiver, 'stepEnd', payload, extraArgument), returnValue)
+      assert.deepStrictEqual(calls.at(-1), { receiver, args: ['stepEnd', payload, extraArgument] })
+      assert.strictEqual(calls.at(-1).receiver, receiver)
+      assert.strictEqual(calls.at(-1).args[1], payload)
+      assert.strictEqual(calls.at(-1).args[2], extraArgument)
+      assert.strictEqual(worker.dispatchEvent('done', { ok: true }), returnValue)
+      assert.deepStrictEqual(calls.at(-1).args, ['done', { ok: true }])
+      assert.strictEqual(calls.length, 4)
+    })
+
+    it(`reports only matched step metadata through the ${entry}`, async () => {
+      const worker = createWorkerMain(() => {}, entry)
+      const test = {
+        id: 'test-id',
+        title: 'test title',
+        _requireFile: '/test/file.js',
+        location: { file: '/test/file.js', line: 1 },
+        parent: { _hooks: [] },
+        repeatEachIndex: 0,
+      }
+
+      assert.strictEqual(await worker._runTest(test), 'run result')
+      assert.deepStrictEqual(testFinishPayload.steps, [{
+        testId: 'test-id',
+        startTime: new Date(100),
+        title: 'valid step',
+        duration: 25,
+        error: { message: 'step error' },
+      }])
+    })
+  }
 
   function subscribe (listener) {
     subscriber = listener
   }
+
+  it('does not inspect pages outside Playwright workers', () => {
+    const evaluate = sinon.spy()
+    const ctx = { self: { evaluate } }
+
+    pageGotoSubscriber.asyncEnd(ctx)
+
+    assert.strictEqual(evaluate.callCount, 0)
+    assert.ok(!Object.hasOwn(ctx, 'resolveCallback'))
+  })
 
   function createPage ({
     addCookies = async () => {},

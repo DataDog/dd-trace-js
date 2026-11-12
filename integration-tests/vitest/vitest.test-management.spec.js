@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const fs = require('node:fs')
+const path = require('node:path')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -68,6 +70,8 @@ function assertAttemptToFixFailures (tests, testName) {
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess
+    // Native module loading was introduced in Vitest 4.1; Vitest 5 requires Node.js >=22.
+    const nativeModuleRunnerIt = version === 'latest' && NODE_MAJOR >= 22 ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
@@ -191,8 +195,10 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('test management', () => {
+    {
+      const testManagementContext = version === 'latest' ? context : context.skip
+
+      testManagementContext('test management', () => {
         it('supports test.concurrent with test management features', async () => {
           const attemptToFixTestName = 'concurrent test management can attempt to fix a concurrent test'
           const disabledTestName = 'concurrent test management can disable a concurrent test'
@@ -507,7 +513,7 @@ versions.forEach((version) => {
                     assert.match(stdout, /Attempt to fix passed/)
                   } else {
                     assert.match(stdout, /Attempt to fix failed/)
-                    assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                    assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
                   }
                   if (isQuarantining || isDisabling) {
                     assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -521,6 +527,61 @@ versions.forEach((version) => {
                 done()
               }).catch(done)
             })
+          }
+
+          /**
+           * @param {boolean} shouldAlwaysPass
+           * @returns {Promise<void>}
+           */
+          const runNativeModuleRunnerAttemptToFixTest = async (shouldAlwaysPass) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            let testOutput = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run --reporter=json --outputFile=atf-results.json',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                  VITEST_NATIVE_MODULE_RUNNER: 'true',
+                  ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                },
+              }
+            )
+            childProcess.stdout?.on('data', data => { testOutput += data })
+            childProcess.stderr?.on('data', data => { testOutput += data })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const attempts = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+
+                assert.ok(attempts.length > 1, testOutput)
+                assert.ok(attempts.some(test => test.meta[TEST_IS_RETRY] === 'true'), testOutput)
+              }
+            )
+
+            const [[exitCode, signal]] = await Promise.all([
+              once(childProcess, 'exit'),
+              payloadsPromise,
+            ])
+            const expectedSuccess = Boolean(shouldAlwaysPass)
+
+            assert.strictEqual(signal, null, testOutput)
+            assert.strictEqual(exitCode, expectedSuccess ? 0 : 1, testOutput)
+
+            const report = JSON.parse(fs.readFileSync(path.join(cwd, 'atf-results.json'), 'utf8'))
+            const assertionResults = report.testResults.flatMap(({ assertionResults }) => assertionResults)
+
+            assert.strictEqual(report.success, expectedSuccess)
+            assert.strictEqual(assertionResults.length, 1)
+            assert.strictEqual(assertionResults[0].status, expectedSuccess ? 'passed' : 'failed')
           }
 
           it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
@@ -540,6 +601,18 @@ versions.forEach((version) => {
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
           })
+
+          nativeModuleRunnerIt('reports failure when all attempt-to-fix executions fail with native module loading',
+            async function () {
+              this.timeout(60_000)
+              await runNativeModuleRunnerAttemptToFixTest(false)
+            })
+
+          nativeModuleRunnerIt('reports success when all attempt-to-fix executions pass with native module loading',
+            async function () {
+              this.timeout(60_000)
+              await runNativeModuleRunnerAttemptToFixTest(true)
+            })
 
           it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
@@ -630,6 +703,8 @@ versions.forEach((version) => {
 
             const [[exitCode]] = await Promise.all([
               once(childProcess, 'exit'),
+              once(childProcess.stdout, 'end'),
+              once(childProcess.stderr, 'end'),
               eventsPromise,
             ])
 
@@ -796,6 +871,133 @@ versions.forEach((version) => {
               shouldAlwaysPass: true,
             })
           })
+
+          it('preserves attempt to fix for programmatically skipped disabled tests', async () => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs': {
+                    tests: {
+                      'other context can programmatic skip': {
+                        properties: {
+                          attempt_to_fix: true,
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_NAME] === 'other context can programmatic skip')
+
+                assert.strictEqual(tests.length, 1)
+                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            childProcess.stdout?.on('data', data => { stdout += data })
+            childProcess.stderr?.on('data', data => { stdout += data })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              eventsPromise,
+            ])
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Attempt to fix passed/)
+            assert.doesNotMatch(stdout, /Disabled:/)
+          })
+
+          it('preserves quarantine for skipped attempt to fix tests', async () => {
+            const testNames = [
+              'attempt to fix skip tests can statically skip',
+              'attempt to fix skip tests can programmatically skip',
+            ]
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs': {
+                    tests: Object.fromEntries(testNames.map(testName => [testName, {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true,
+                      },
+                    }])),
+                  },
+                },
+              },
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+
+                assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), testNames.sort())
+                for (const test of tests) {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'skip')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                }
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix-skip.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            childProcess.stdout?.on('data', data => { stdout += data })
+            childProcess.stderr?.on('data', data => { stdout += data })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              once(childProcess.stdout, 'end'),
+              once(childProcess.stderr, 'end'),
+              eventsPromise,
+            ])
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
+            assert.strictEqual(
+              (stdout.match(/Test was marked as quarantined but was not quarantined because it is attempt to fix\./g) || [])
+                .length,
+              2
+            )
+          })
         })
 
         context('disabled', () => {
@@ -873,11 +1075,15 @@ versions.forEach((version) => {
             childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
+            childProcess.stderr?.on('data', (data) => {
+              stdout += data
+            })
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 if (isDisabling) {
                   assert.doesNotMatch(stdout, /I am running/)
+                  assert.match(stdout, /Disabled: \d+ tests? skipped\./)
                   assert.strictEqual(exitCode, 0)
                 } else {
                   assert.match(stdout, /I am running/)
@@ -984,12 +1190,19 @@ versions.forEach((version) => {
             childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
+            childProcess.stderr?.on('data', (data) => {
+              stdout += data
+            })
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 // it runs regardless of the quarantine status
                 assert.match(stdout, /I am running when quarantined/)
                 if (isQuarantining) {
+                  assert.match(
+                    stdout,
+                    /Quarantined: \d+ tests? run; \d+ failures? did not affect the test session\./
+                  )
                   // exit code 0 even though one of the tests failed
                   assert.strictEqual(exitCode, 0)
                 } else {
@@ -1200,7 +1413,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                 DD_TRACE_DEBUG: '1',
               },

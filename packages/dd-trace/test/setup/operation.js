@@ -18,7 +18,10 @@ class RetryOperation extends BaseRetryOperation {
     super(timeouts, { service })
   }
 
-  /** @this {{ _options: { service?: string } }} */
+  /**
+   * @this {{ _options: { service?: string } }}
+   * @param {Error} error
+   */
   retry (error) {
     const shouldRetry = super.retry(error)
 

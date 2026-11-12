@@ -6,8 +6,13 @@ const path = require('node:path')
 const { globSync } = require('glob')
 const YAML = require('yaml')
 
+const { TEST_FILE_GLOB, createTestFileIndex } = require('./helpers/test-file-index')
+
+/** @typedef {import('./helpers/test-file-index').TestFileIndex} TestFileIndex */
+
+const NODE_MODULES_IGNORE_GLOBS = ['**/node_modules/**']
 const DEFAULT_IGNORE_GLOBS = [
-  '**/node_modules/**',
+  ...NODE_MODULES_IGNORE_GLOBS,
   '**/coverage/**',
   '**/.git/**',
   '**/.nyc_output/**',
@@ -15,54 +20,18 @@ const DEFAULT_IGNORE_GLOBS = [
   'vendor/dist/**',
 ]
 
-const GLOB_CACHE_MAX = 2000
-/** @type {Map<string, string[]>} */
-const globCache = new Map()
-let globCacheHits = 0
-let globCacheMisses = 0
-
 const COVERAGE_ACTIONS = new Set([
   './.github/actions/coverage',
   './.github/actions/upload-coverage-artifact',
 ])
 const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
+  'integration-tests/vitest/run-with-coverage.js',
   'scripts/c8-ci.js',
 ])
 
 /**
- * @param {string} pattern
- * @param {{cwd: string, nodir: boolean, windowsPathsNoEscape: boolean, ignore?: string[]}} opts
- * @returns {string[]}
- */
-function globSyncCached (pattern, opts) {
-  const ignoreKey = Array.isArray(opts.ignore) ? opts.ignore.join('\n') : ''
-  const key = `${opts.cwd}\0${pattern}\0${opts.nodir ? 1 : 0}\0${opts.windowsPathsNoEscape ? 1 : 0}\0${ignoreKey}`
-
-  const cached = globCache.get(key)
-  if (cached) {
-    globCacheHits++
-    // Basic LRU: refresh insertion order.
-    globCache.delete(key)
-    globCache.set(key, cached)
-    return cached
-  }
-
-  globCacheMisses++
-  const res = globSync(pattern, opts)
-
-  globCache.set(key, res)
-  if (globCache.size > GLOB_CACHE_MAX) {
-    const first = globCache.keys().next().value
-    if (first !== undefined) globCache.delete(first)
-  }
-
-  return res
-}
-
-/**
  * @param {string} s
- * @returns {string}
  */
 function stripOuterQuotes (s) {
   if (s.length < 2) return s
@@ -129,7 +98,6 @@ function shellSplit (s) {
 
 /**
  * @param {string} token
- * @returns {boolean}
  */
 function looksLikeFileGlob (token) {
   // We only care about globs that can match paths in the repo.
@@ -146,7 +114,6 @@ function looksLikeFileGlob (token) {
  * Converts some shell-specific patterns in scripts into a conservative file glob.
  * @param {string} raw
  * @param {{ preserveEnv?: boolean }} [opts]
- * @returns {string}
  */
 function normalizeScriptGlob (raw, opts = {}) {
   const preserveEnv = Boolean(opts.preserveEnv)
@@ -158,6 +125,7 @@ function normalizeScriptGlob (raw, opts = {}) {
   // Convert bash extglob + command substitution patterns used in this repo into plain env vars.
   // Example: @($(echo $PLUGINS)) -> $PLUGINS
   // Example: @($(echo ${SPEC:-'*'})) -> ${SPEC:-*}
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- Parses bounded repository package scripts.
   p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
@@ -193,7 +161,6 @@ function normalizeScriptGlob (raw, opts = {}) {
 /**
  * @param {string} s
  * @param {Record<string, string|undefined>} env
- * @returns {string}
  */
 function expandEnvInString (s, env) {
   // ${NAME} / ${NAME:-default}
@@ -213,13 +180,11 @@ function expandEnvInString (s, env) {
 /**
  * @param {string} name
  * @param {string|undefined} value
- * @returns {string}
  */
 function formatEnvValue (name, value) {
   const val = typeof value === 'string' && value.length ? value : ''
-  if (!val) return '*'
   // GitHub Actions expressions are not resolvable here; treat them as unknown.
-  if (val.includes('${{')) return '*'
+  if (!val || val.includes('${{')) return '*'
 
   if (name === 'PLUGINS') {
     const items = val.split(/[,\s|]+/g).map(x => x.trim()).filter(Boolean)
@@ -231,13 +196,12 @@ function formatEnvValue (name, value) {
 }
 
 /**
- * @param {string} maybe
+ * @param {string | number | boolean | null | undefined} maybe
  * @returns {string|null}
  */
 function unwrapLiteralEnvValue (maybe) {
   const s = String(maybe ?? '').trim()
-  if (!s) return null
-  if (s.includes('${{')) return null
+  if (!s || s.includes('${{')) return null
   return stripOuterQuotes(s)
 }
 
@@ -249,7 +213,7 @@ function splitPlugins (value) {
   const raw = unwrapLiteralEnvValue(value)
   if (!raw) return []
   return raw
-    .split(/[,\s|]+/g)
+    .split(/[,\s|]+/)
     .map(s => s.trim())
     .filter(Boolean)
 }
@@ -340,9 +304,9 @@ function findUnquotedGlobstar (script) {
 function parseExportAssignments (run) {
   /** @type {Record<string, string>} */
   const out = {}
-  const lines = String(run).split('\n')
+  const lines = run.split('\n')
   for (const line of lines) {
-    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/)
+    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
     if (!m) continue
     out[m[1]] = stripOuterQuotes(m[2].trim())
   }
@@ -350,30 +314,23 @@ function parseExportAssignments (run) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {string[]}
  */
-function findTestFiles (repoRoot) {
-  const commonGlobOpts = { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore: DEFAULT_IGNORE_GLOBS }
-
+function findTestFiles (index) {
   // Collect every test-file naming convention used in the repo so an unrun spec
   // can never slip through untracked. Kept deliberately wide (js/mjs/cjs) even
   // where no file currently uses an extension, so a future one is caught.
-  const files = globSyncCached('**/*.@(spec|test).@(js|mjs|cjs)', commonGlobOpts)
-
-  files.sort((a, b) => a.localeCompare(b, 'en'))
-  return files
+  return index.match(TEST_FILE_GLOB, DEFAULT_IGNORE_GLOBS)
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {Record<string, string>} scripts
  * @param {Record<string, string|undefined>} [env]
  * @returns {{ globs: string[], matchedFiles: Set<string> }}
  */
-function expandScriptGlobs (repoRoot, scripts, env = {}) {
-  const ignore = DEFAULT_IGNORE_GLOBS
-
+function expandScriptGlobs (index, scripts, env = {}) {
   /** @type {string[]} */
   const allGlobs = []
   const matchedFiles = new Set()
@@ -392,7 +349,7 @@ function expandScriptGlobs (repoRoot, scripts, env = {}) {
 
       let expanded
       try {
-        expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
+        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
       } catch {
         // If a pattern can't be parsed by glob, skip expanding it. It still counts as an extracted glob.
         continue
@@ -418,7 +375,7 @@ function extractScriptInvocations (run, knownScripts) {
   /** @type {{ tool: 'yarn'|'npm', script: string, explicit: boolean }[]} */
   const out = []
 
-  const tokens = shellSplit(String(run))
+  const tokens = shellSplit(run)
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
 
@@ -466,14 +423,14 @@ function extractScriptInvocations (run, knownScripts) {
 
 /**
  * Expand a script and any nested `npm run`/`yarn <script>` calls into matched files.
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {Record<string, string>} scripts
  * @param {Set<string>} knownScripts
  * @param {string} scriptName
  * @param {Record<string, string|undefined>} env
  * @returns {{ files: Set<string>, globs: string[], visited: string[] }}
  */
-function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) {
+function expandInvokedScript (index, scripts, knownScripts, scriptName, env) {
   /** @type {string[]} */
   const visited = []
   /** @type {string[]} */
@@ -483,8 +440,6 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
   /** @type {string[]} */
   const queue = [scriptName]
   const seen = new Set()
-
-  const ignore = DEFAULT_IGNORE_GLOBS
 
   while (queue.length) {
     const name = queue.shift()
@@ -503,7 +458,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
       allGlobs.push(normalized)
       let expanded
       try {
-        expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
+        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
       } catch {
         continue
       }
@@ -523,7 +478,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
  * @returns {string[]}
  */
 function findWorkflowFiles (repoRoot) {
-  const files = globSyncCached('.github/workflows/*.{yml,yaml}', {
+  const files = globSync('.github/workflows/*.{yml,yaml}', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -565,8 +520,7 @@ const localActionFileCache = new Map()
  * @returns {string|null}
  */
 function resolveLocalActionFile (repoRoot, uses) {
-  if (typeof uses !== 'string') return null
-  if (!uses.startsWith('./')) return null
+  if (typeof uses !== 'string' || !uses.startsWith('./')) return null
 
   const cached = localActionFileCache.get(uses)
   if (cached !== undefined) return cached
@@ -601,75 +555,79 @@ function isUsesStep (step) {
 }
 
 /**
- * @param {string} repoRoot
- * @param {string} uses
- * @param {Record<string, string|undefined>} env
- * @param {Set<string>} visiting
- * @returns {{ run: string, env: Record<string, string|undefined> }[]}
+ * @typedef {{ kind: 'run', run: string, env: Record<string, string> }
+ *   | { kind: 'upload' }
+ *   | { kind: 'opaque', action: string }} StepEvent
  */
-function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile) return []
-  if (visiting.has(actionFile)) return []
-  visiting.add(actionFile)
 
-  const doc = parseYamlFile(repoRoot, actionFile)
-  if (!isPlainObject(doc)) return []
+/**
+ * Ordered events a step contributes, descending into local composite actions.
+ *
+ * Commands and uploads share one timeline because five of this repository's composite actions run a
+ * suite and upload its report, so their relative order exists only inside the action. A second
+ * traversal answering just "does this upload?" drifted from this one and lost the composite guard.
+ *
+ * @param {unknown} stepValue
+ * @param {string} repoRoot
+ * @param {Record<string, string>} env
+ * @param {Set<string>} visiting
+ * @returns {StepEvent[]}
+ */
+function collectStepEvents (stepValue, repoRoot, env, visiting) {
+  if (!isPlainObject(stepValue)) return []
+  const step = stepValue
 
-  const runs = doc.runs
-  if (!isPlainObject(runs) || runs.using !== 'composite') return []
-  const steps = Array.isArray(runs.steps) ? runs.steps : []
-
-  /** @type {{ run: string, env: Record<string, string|undefined> }[]} */
-  const out = []
-
-  for (const s of steps) {
-    if (isRunStep(s)) {
-      /** @type {Record<string, string|undefined>} */
-      const stepEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) stepEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-
-      // Inline env in composite run: export and prefix assignments.
-      const exports = parseExportAssignments(s.run)
-      for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-      const idxYarn = s.run.indexOf('yarn ')
-      const idxNpm = s.run.indexOf('npm ')
-      let idx = idxNpm
-      if (idxYarn !== -1) {
-        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
-      }
-      if (idx > 0) {
-        const prefix = s.run.slice(0, idx)
-        const assigns = parseInlineAssignments(prefix)
-        for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-      }
-
-      out.push({ run: s.run, env: stepEnv })
-      continue
-    }
-
-    if (isUsesStep(s)) {
-      // Recurse into local composite actions.
-      /** @type {Record<string, string|undefined>} */
-      const nextEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) nextEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-      const nested = expandLocalCompositeActionRuns(repoRoot, s.uses, nextEnv, visiting)
-      for (const n of nested) out.push(n)
+  /** @type {Record<string, string>} */
+  const stepEnv = { ...env }
+  if (isPlainObject(step.env)) {
+    for (const [name, value] of Object.entries(step.env)) {
+      stepEnv[name] = typeof value === 'string' ? value : String(value)
     }
   }
 
+  if (isRunStep(step)) {
+    return [{ kind: 'run', run: step.run, env: applyInlineAssignments(step.run, stepEnv) }]
+  }
+
+  if (!isUsesStep(step)) return []
+  if (COVERAGE_ACTIONS.has(step.uses)) return [{ kind: 'upload' }]
+
+  // Third-party retry wrappers run their `with.command` like an inline `run:`. Without unwrapping
+  // it, the joint check below cannot see that `instrumentation-http` exercises
+  // `test:instrumentations:ci` with `PLUGINS=http`.
+  if (/^nick-fields\/retry@/.test(step.uses)) {
+    const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+      ? step.with.command
+      : undefined
+    if (command === undefined) return []
+    return [{ kind: 'run', run: command, env: applyInlineAssignments(command, stepEnv) }]
+  }
+
+  const actionFile = resolveLocalActionFile(repoRoot, step.uses)
+  if (actionFile === null || visiting.has(actionFile)) return []
+
+  const doc = parseYamlFile(repoRoot, actionFile)
+  const runs = isPlainObject(doc) ? doc.runs : undefined
+
+  // A JavaScript or Docker action exposes no steps to read. Reporting it beats letting an upload
+  // hidden inside one read as "this job never uploads".
+  if (!isPlainObject(runs) || runs.using !== 'composite') return [{ kind: 'opaque', action: step.uses }]
+
+  visiting.add(actionFile)
+
+  /** @type {StepEvent[]} */
+  const events = []
+  const steps = Array.isArray(runs.steps) ? runs.steps : []
+  for (const nested of steps) {
+    for (const event of collectStepEvents(nested, repoRoot, stepEnv, visiting)) events.push(event)
+  }
+
   visiting.delete(actionFile)
-  return out
+  return events
 }
 
 /**
  * @param {string} command
- * @returns {boolean}
  */
 function invokesCoverageCollector (command) {
   const tokens = shellSplit(command)
@@ -711,41 +669,12 @@ function findCoverageScripts (scripts, knownScripts) {
  * @param {string} command
  * @param {Set<string>} knownScripts
  * @param {Set<string>} coverageScripts
- * @returns {boolean}
  */
 function commandProducesCoverage (command, knownScripts, coverageScripts) {
   if (invokesCoverageCollector(command)) return true
 
   return extractScriptInvocations(command, knownScripts)
     .some(invocation => coverageScripts.has(invocation.script))
-}
-
-/**
- * @param {string} repoRoot
- * @param {string} uses
- * @param {Set<string>} visiting
- * @returns {boolean}
- */
-function localActionUploadsCoverage (repoRoot, uses, visiting) {
-  if (COVERAGE_ACTIONS.has(uses)) return true
-
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile || visiting.has(actionFile)) return false
-  visiting.add(actionFile)
-
-  const doc = parseYamlFile(repoRoot, actionFile)
-  const steps = doc.runs.steps
-  let uploadsCoverage = false
-
-  for (const step of steps) {
-    if (isUsesStep(step) && localActionUploadsCoverage(repoRoot, step.uses, visiting)) {
-      uploadsCoverage = true
-      break
-    }
-  }
-
-  visiting.delete(actionFile)
-  return uploadsCoverage
 }
 
 /**
@@ -777,7 +706,6 @@ function getMatrixCombinations (matrix) {
  * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
  * @param {string} s
  * @param {Record<string, string>} matrixValues
- * @returns {string}
  */
 function expandMatrixExpressions (s, matrixValues) {
   return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
@@ -786,16 +714,64 @@ function expandMatrixExpressions (s, matrixValues) {
 }
 
 /**
+ * Applies the environment a command sets for itself: `export X=1` lines, and `X=1 npm run …`
+ * prefixes.
+ *
+ * @param {string} command
+ * @param {Record<string, string>} env
+ * @returns {Record<string, string>}
+ */
+function applyInlineAssignments (command, env) {
+  const merged = { ...env, ...parseExportAssignments(command) }
+
+  const idxYarn = command.indexOf('yarn ')
+  const idxNpm = command.indexOf('npm ')
+  const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+  if (idx > 0) Object.assign(merged, parseInlineAssignments(command.slice(0, idx)))
+
+  return merged
+}
+
+/**
+ * @param {Record<string, string>} env
+ * @param {Record<string, string>} matrixValues
+ * @returns {Record<string, string>}
+ */
+function expandMatrixExpressionsInEnv (env, matrixValues) {
+  /** @type {Record<string, string>} */
+  const expanded = {}
+  for (const [name, value] of Object.entries(env)) {
+    expanded[name] = expandMatrixExpressions(value, matrixValues)
+  }
+  return expanded
+}
+
+/**
+ * @typedef {{
+ *   workflowFile: string,
+ *   jobId: string,
+ *   run: string,
+ *   env: Record<string, string>,
+ *   sequence: number
+ * }} WorkflowRun
+ */
+
+/**
  * @param {string} repoRoot
  * @returns {{
- *   runs: { workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[],
- *   coverageUploadJobs: Set<string>
- * }}
+ *   runs: WorkflowRun[],
+ *   coverageUploadSequences: Map<string, number>,
+ *   opaqueActions: Map<string, Set<string>>
+ * }} `coverageUploadSequences` holds each job's last upload position on the same scale as
+ *   `WorkflowRun.sequence`.
  */
 function collectWorkflowRuns (repoRoot) {
-  /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
+  /** @type {WorkflowRun[]} */
   const out = []
-  const coverageUploadJobs = new Set()
+  /** @type {Map<string, number>} */
+  const coverageUploadSequences = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const opaqueActions = new Map()
 
   const files = findWorkflowFiles(repoRoot)
   for (const wf of files) {
@@ -815,85 +791,60 @@ function collectWorkflowRuns (repoRoot) {
         : {}
       const matrixCombinations = getMatrixCombinations(matrixData)
 
-      for (const stepVal of steps) {
-        const step = isPlainObject(stepVal) ? stepVal : {}
-        if (
-          typeof step.uses === 'string' &&
-          localActionUploadsCoverage(repoRoot, step.uses, new Set())
-        ) {
-          coverageUploadJobs.add(`${wf}#${jobId}`)
+      // Values can be strings or non-strings; we only keep string-ish.
+      /** @type {Record<string, string>} */
+      const jobEnvironment = {}
+      for (const [k, v] of Object.entries(topEnv)) jobEnvironment[k] = typeof v === 'string' ? v : String(v)
+      for (const [k, v] of Object.entries(jobEnv)) jobEnvironment[k] = typeof v === 'string' ? v : String(v)
+
+      /** @type {StepEvent[]} */
+      const events = []
+      for (const stepValue of steps) {
+        for (const event of collectStepEvents(stepValue, repoRoot, jobEnvironment, new Set())) {
+          events.push(event)
         }
+      }
 
-        // Merge env. Values can be strings or non-strings; we only keep string-ish.
-        /** @type {Record<string, string|undefined>} */
-        const env = {}
-        for (const [k, v] of Object.entries(topEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        for (const [k, v] of Object.entries(jobEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        if (isPlainObject(step.env)) {
-          for (const [k, v] of Object.entries(step.env)) env[k] = typeof v === 'string' ? v : String(v)
-        }
+      const jobKey = `${wf}#${jobId}`
 
-        if (typeof step.run === 'string') {
-          // Expand matrix expressions and emit one entry per combination.
-          const seenRuns = new Set()
-          for (const combo of matrixCombinations) {
-            const run = expandMatrixExpressions(step.run, combo)
-            if (seenRuns.has(run)) continue
-            seenRuns.add(run)
-
-            const stepEnv = { ...env }
-
-            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-            const exports = parseExportAssignments(run)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-            const idxYarn = run.indexOf('yarn ')
-            const idxNpm = run.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const prefix = run.slice(0, idx)
-              const assigns = parseInlineAssignments(prefix)
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-
-            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
-          }
+      for (const [sequence, event] of events.entries()) {
+        if (event.kind === 'upload') {
+          coverageUploadSequences.set(jobKey, sequence)
           continue
         }
 
-        if (typeof step.uses === 'string' && step.uses.startsWith('./')) {
-          const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, new Set())
-          for (const e of expanded) {
-            out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
+        if (event.kind === 'opaque') {
+          let actions = opaqueActions.get(jobKey)
+          if (actions === undefined) {
+            actions = new Set()
+            opaqueActions.set(jobKey, actions)
           }
+          actions.add(event.action)
+          continue
         }
 
-        // Third-party retry wrappers run their `with.command` like an inline `run:`.
-        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
-        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
-        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
-          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
-            ? step.with.command
-            : null
-          if (command) {
-            const stepEnv = { ...env }
-            const exports = parseExportAssignments(command)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-            const idxYarn = command.indexOf('yarn ')
-            const idxNpm = command.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const assigns = parseInlineAssignments(command.slice(0, idx))
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
-          }
+        // Deduplicated per event, not per job: the same command at a later position carries a
+        // later sequence, which is what tells an upload apart from the suites it leaves behind.
+        const seen = new Set()
+
+        for (const combo of matrixCombinations) {
+          // A matrix leg reaches the glob through the environment as often as through the command
+          // (`SPEC: ${{ matrix.spec }}`). Leaving the expression unresolved degrades the pattern to
+          // `*`, and every spec in the directory then looks exercised by every leg.
+          const run = expandMatrixExpressions(event.run, combo)
+          const env = expandMatrixExpressionsInEnv(event.env, combo)
+
+          const key = `${run}\0${JSON.stringify(env)}`
+          if (seen.has(key)) continue
+          seen.add(key)
+
+          out.push({ workflowFile: wf, jobId, run, env, sequence })
         }
       }
     }
   }
 
-  return { runs: out, coverageUploadJobs }
+  return { runs: out, coverageUploadSequences, opaqueActions }
 }
 
 /**
@@ -901,7 +852,7 @@ function collectWorkflowRuns (repoRoot) {
  * @returns {Set<string>}
  */
 function listPluginPackages (repoRoot) {
-  const entries = globSyncCached('packages/datadog-plugin-*', {
+  const entries = globSync('packages/datadog-plugin-*', {
     cwd: repoRoot,
     nodir: false,
     windowsPathsNoEscape: true,
@@ -989,18 +940,11 @@ function getTraceCoreCategoriesFromScripts (scripts) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function findDdTraceTestCategories (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: [
-      '**/node_modules/**',
-    ],
-  })
+function findDdTraceTestCategories (index) {
+  const files = index.match('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', NODE_MODULES_IGNORE_GLOBS)
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1017,27 +961,17 @@ function findDdTraceTestCategories (repoRoot) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {string} category
  * @returns {string[]}
  */
-function listDdTraceCategorySpecFiles (repoRoot, category) {
-  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: [
-      '**/node_modules/**',
-    ],
-  })
-  files.sort((a, b) => a.localeCompare(b, 'en'))
-  return files
+function listDdTraceCategorySpecFiles (index, category) {
+  return index.match(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, NODE_MODULES_IGNORE_GLOBS)
 }
 
 /**
  * @param {Set<string>} scriptPrefixes
  * @param {string} category
- * @returns {boolean}
  */
 function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   const aliases = {
@@ -1050,25 +984,27 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   if (Array.isArray(extra)) keys.push(...extra)
 
   for (const key of keys) {
-    if (scriptPrefixes.has(`test:${key}`)) return true
-    if (scriptPrefixes.has(`test:trace:${key}`)) return true
-    if (scriptPrefixes.has(`test:integration:${key}`)) return true
+    if (
+      scriptPrefixes.has(`test:${key}`) ||
+      scriptPrefixes.has(`test:trace:${key}`) ||
+      scriptPrefixes.has(`test:integration:${key}`)
+    ) {
+      return true
+    }
   }
 
   return false
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function buildAppsecPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: DEFAULT_IGNORE_GLOBS,
-  })
+function buildAppsecPluginTestSet (index) {
+  const files = index.match(
+    'packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)',
+    DEFAULT_IGNORE_GLOBS
+  )
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1082,16 +1018,14 @@ function buildAppsecPluginTestSet (repoRoot) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function buildLlmobsPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: DEFAULT_IGNORE_GLOBS,
-  })
+function buildLlmobsPluginTestSet (index) {
+  const files = index.match(
+    'packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)',
+    DEFAULT_IGNORE_GLOBS
+  )
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1105,13 +1039,17 @@ function buildLlmobsPluginTestSet (repoRoot) {
   return out
 }
 
-function main () {
+/**
+ * @param {string} [repoRootArg] Checkout to verify. Defaults to the repository this script lives in.
+ */
+function main (repoRootArg) {
   const startNs = process.hrtime.bigint()
 
-  const repoRoot = path.resolve(__dirname, '..')
+  const repoRoot = repoRootArg ? path.resolve(repoRootArg) : path.resolve(__dirname, '..')
   const packageJsonPath = path.join(repoRoot, 'package.json')
   const pluginsVar = '$' + '{PLUGINS}'
   const bracePluginsVar = '{' + pluginsVar + '}'
+  // eslint-disable-next-line unicorn/no-useless-concat -- Keep the GitHub expression marker non-contiguous.
   const ghaExprStart = '$' + '{{'
 
   /** @type {{ scripts?: Record<string, string> }} */
@@ -1145,8 +1083,9 @@ function main () {
     process.exit(1)
   }
 
-  const testFiles = findTestFiles(repoRoot)
-  const { globs, matchedFiles } = expandScriptGlobs(repoRoot, scripts)
+  const index = createTestFileIndex(repoRoot)
+  const testFiles = findTestFiles(index)
+  const { globs, matchedFiles } = expandScriptGlobs(index, scripts)
 
   /** @type {string[]} */
   const missing = []
@@ -1164,7 +1103,7 @@ function main () {
     process.exit(1)
   }
 
-  const { runs: workflowRuns, coverageUploadJobs } = collectWorkflowRuns(repoRoot)
+  const { runs: workflowRuns, coverageUploadSequences, opaqueActions } = collectWorkflowRuns(repoRoot)
 
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
@@ -1180,16 +1119,25 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
-  const coverageProducerJobs = new Set()
   const coverageScripts = findCoverageScripts(scripts, knownScripts)
   for (const run of workflowRuns) {
-    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
-      coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
+    if (!commandProducesCoverage(run.run, knownScripts, coverageScripts)) continue
+
+    const job = `${run.workflowFile}#${run.jobId}`
+    const uploadSequence = coverageUploadSequences.get(job)
+
+    if (uploadSequence === undefined) {
+      pushError(`${job}: generates coverage but does not upload it`)
+    } else if (run.sequence > uploadSequence) {
+      // The uploader has already collected the reports it will ever see, so this suite's report
+      // never leaves the runner even though the job looks like it uploads coverage.
+      pushError(`${job}: generates coverage after its last coverage upload`)
     }
   }
-  for (const job of coverageProducerJobs) {
-    if (!coverageUploadJobs.has(job)) {
-      pushError(`${job}: generates coverage but does not upload it`)
+
+  for (const [job, actions] of opaqueActions) {
+    for (const action of actions) {
+      pushError(`${job}: cannot inspect local action "${action}", which is not a composite action`)
     }
   }
 
@@ -1218,7 +1166,6 @@ function main () {
    * coverage/non-coverage definitions from each forcing their own CI step.
    *
    * @param {string} scriptName
-   * @returns {boolean}
    */
   const isInvokedOrCoverageSibling = (scriptName) => {
     if (invokedScripts.has(scriptName)) return true
@@ -1246,11 +1193,16 @@ function main () {
 
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
-    if (!name.startsWith('test:integration')) continue
     // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
     // running only plugin integration tests locally, but in CI these are already covered by
     // test:plugins:ci (which runs all plugin tests including integration tests).
-    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (
+      !name.startsWith('test:integration') ||
+      name === 'test:integration:plugins' ||
+      name === 'test:integration:plugins:coverage'
+    ) {
+      continue
+    }
     if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
@@ -1264,8 +1216,8 @@ function main () {
   const pluginPkgs = listPluginPackages(repoRoot)
   const versionsDeps = loadUpstreamPluginNames(repoRoot)
   const pluginExternals = loadUpstreamExternals(repoRoot)
-  const appsecPluginTests = buildAppsecPluginTestSet(repoRoot)
-  const llmobsPluginTests = buildLlmobsPluginTestSet(repoRoot)
+  const appsecPluginTests = buildAppsecPluginTestSet(index)
+  const llmobsPluginTests = buildLlmobsPluginTestSet(index)
 
   // Detect CI steps that will match no tests due to env/script mismatches.
   const testFileSet = new Set(testFiles)
@@ -1285,7 +1237,7 @@ function main () {
     // Only use literal PLUGINS for matching; expressions are unknown.
     if (env.PLUGINS && env.PLUGINS.includes(ghaExprStart)) env.PLUGINS = undefined
 
-    const { files, globs: invokedGlobs } = expandInvokedScript(repoRoot, scripts, knownScripts, i.script, env)
+    const { files, globs: invokedGlobs } = expandInvokedScript(index, scripts, knownScripts, i.script, env)
 
     // Only enforce "matches test files" when the (expanded) script actually contains globs.
     // Some scripts (e.g. `test:plugins:upstream`) run a suite runner and do not directly
@@ -1416,7 +1368,7 @@ function main () {
   let hasCategoryWarnings = false
   const traceCoreCats = getTraceCoreCategoriesFromScripts(scripts)
   if (traceCoreCats.size) {
-    const ddTraceCats = findDdTraceTestCategories(repoRoot)
+    const ddTraceCats = findDdTraceTestCategories(index)
     /** @type {string[]} */
     const missingFromTraceCore = []
 
@@ -1433,7 +1385,7 @@ function main () {
       // Only warn when the category is excluded from core AND we can't find any dedicated script
       // that appears to cover it. If it is covered elsewhere, it should not produce warnings.
       if (!covered) {
-        const files = listDdTraceCategorySpecFiles(repoRoot, cat)
+        const files = listDdTraceCategorySpecFiles(index, cat)
         const maxList = 25
         warnLines.push(`test:trace:core excludes "${cat}" (no dedicated test script found; files: ${files.length})`)
         for (let i = 0; i < files.length && i < maxList; i++) {
@@ -1472,9 +1424,8 @@ function main () {
 
   const durMs = Number(process.hrtime.bigint() - startNs) / 1e6
   process.stdout.write(`Runtime(ms): ${durMs.toFixed(1)}\n`)
-  process.stdout.write(`Glob cache: size=${globCache.size} hits=${globCacheHits} misses=${globCacheMisses}\n`)
 
   process.exit(hasCategoryWarnings ? 1 : 0)
 }
 
-main()
+main(process.argv[2])

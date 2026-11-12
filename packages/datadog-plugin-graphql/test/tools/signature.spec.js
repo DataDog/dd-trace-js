@@ -25,15 +25,71 @@ const loadableModule = /** @type {LoadableModule} */ (Module)
 const graphqlRoot = path.dirname(require.resolve('graphql'))
 const visitor = require(path.join(graphqlRoot, 'language/visitor.js'))
 const printer = require(path.join(graphqlRoot, 'language/printer.js'))
+const utilities = require(path.join(graphqlRoot, 'utilities/index.js'))
+const separateOperationsSpy = sinon.spy(utilities.separateOperations)
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
 ddGlobal.graphql_visitor = visitor
 ddGlobal.graphql_printer = printer
-ddGlobal.graphql_utilities = require('graphql/utilities')
+ddGlobal.graphql_utilities = { ...utilities, separateOperations: separateOperationsSpy }
 
 const { parse } = require('graphql')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { defaultEngineReportingSignature } = require('../../src/tools/signature')
+const { getCachedRequestOperation, getRequestCache, refineRequestSpan } = require('../../src/utils')
+
+const noop = () => {}
+
+/**
+ * @typedef {ReturnType<typeof getRequestCache>} RequestCache
+ */
+
+/**
+ * @param {RequestCache} requestCache
+ * @param {number} index
+ * @returns {{ operationName: string, source: string }}
+ */
+function cacheQuery (requestCache, index) {
+  const operationName = `CacheQuery${index}`
+  const source = `query ${operationName} { __typename }`
+  const document = parse(source)
+  refineRequestSpan({ setTag: noop }, document, source, operationName, false, true, requestCache)
+  return { operationName, source }
+}
+
+/**
+ * @param {boolean | number | undefined} configuredLimit
+ * @param {number} expectedLimit
+ */
+function assertRequestCacheLimit (configuredLimit, expectedLimit) {
+  const requestCache = getRequestCache({}, configuredLimit)
+
+  if (expectedLimit === 0) {
+    const entry = cacheQuery(requestCache, 0)
+    assert.equal(getCachedRequestOperation(entry.source, entry.operationName, false, requestCache), undefined)
+    return
+  }
+
+  let first
+  let last
+  for (let index = 0; index < expectedLimit; index++) {
+    const entry = cacheQuery(requestCache, index)
+    first ??= entry
+    last = entry
+  }
+
+  assert.deepStrictEqual(
+    getCachedRequestOperation(last.source, last.operationName, false, requestCache),
+    { signature: `query ${last.operationName}`, type: 'query', name: last.operationName }
+  )
+
+  const overflow = cacheQuery(requestCache, expectedLimit)
+  assert.equal(getCachedRequestOperation(first.source, first.operationName, false, requestCache), undefined)
+  assert.deepStrictEqual(
+    getCachedRequestOperation(overflow.source, overflow.operationName, false, requestCache),
+    { signature: `query ${overflow.operationName}`, type: 'query', name: overflow.operationName }
+  )
+}
 
 describe('graphql signature memoization', () => {
   let visitSpy
@@ -92,6 +148,145 @@ describe('graphql signature memoization', () => {
     assert.notEqual(sigA, sigB)
   })
 
+  it('does not separate every sibling operation to calculate one signature', () => {
+    const ast = parse('query A { a } query B { b } query C { c }')
+
+    const callsBefore = separateOperationsSpy.callCount
+    const signature = defaultEngineReportingSignature(ast, 'A')
+
+    assert.equal(signature, 'query A{a}')
+    assert.equal(separateOperationsSpy.callCount, callsBefore)
+  })
+
+  it('keeps the full document when the requested operation is missing', () => {
+    const ast = parse('query A { a } query B { b }')
+
+    assert.equal(defaultEngineReportingSignature(ast, 'Missing'), 'query A{a}query B{b}')
+  })
+
+  it('keeps only transitive fragments used by the selected operation', () => {
+    const ast = parse(`
+      query A { ...AFields ...SharedFields }
+      query B { ...BFields }
+      fragment AFields on Query { ...SharedFields }
+      fragment BFields on Query { b }
+      fragment SharedFields on Query { a }
+    `)
+
+    assert.equal(
+      defaultEngineReportingSignature(ast, 'A'),
+      'query A{...AFields...SharedFields}fragment AFields on Query{...SharedFields}fragment SharedFields on Query{a}'
+    )
+  })
+
+  it('calculates only the selected signature while refining a request', () => {
+    const source = 'query A { a } query B { b }'
+    const ast = parse(source)
+    const span = { setTag: sinon.spy() }
+
+    const printsBefore = printSpy.callCount
+    refineRequestSpan(span, ast, source, 'A', true, false, undefined)
+    assert.equal(printSpy.callCount - printsBefore, 1)
+    assert.deepStrictEqual(span.setTag.args, [
+      ['resource.name', 'query A{a}'],
+      ['graphql.operation.type', 'query'],
+      ['graphql.operation.name', 'A'],
+    ])
+  })
+
+  it('skips fragment definitions while selecting a request operation', () => {
+    const source = 'fragment Fields on Query { a } query Selected { ...Fields }'
+    const span = { setTag: sinon.spy() }
+
+    refineRequestSpan(span, parse(source), source, 'Selected', false, false, undefined)
+
+    assert.deepStrictEqual(span.setTag.args, [
+      ['resource.name', 'query Selected'],
+      ['graphql.operation.type', 'query'],
+      ['graphql.operation.name', 'Selected'],
+    ])
+  })
+
+  it('does not refine a request span for an unknown operation', () => {
+    const span = { setTag: sinon.spy() }
+    const source = 'query Known { a }'
+    const document = parse(source)
+    const requestCache = getRequestCache({}, undefined)
+    const printsBefore = printSpy.callCount
+
+    refineRequestSpan(span, document, source, 'Unknown', true, true, requestCache)
+
+    assert.strictEqual(span.setTag.callCount, 0)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+    assert.strictEqual(getCachedRequestOperation(source, 'Known', true, requestCache), undefined)
+  })
+
+  it('does not refine a request span for ambiguous operations without a name', () => {
+    const span = { setTag: sinon.spy() }
+    const document = parse('query First { a } query Second { b }')
+    const requestCache = getRequestCache({}, undefined)
+    const printsBefore = printSpy.callCount
+
+    refineRequestSpan(span, document, document, undefined, true, true, requestCache)
+
+    assert.strictEqual(span.setTag.callCount, 0)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+    assert.strictEqual(getCachedRequestOperation(document, 'First', true, requestCache), undefined)
+  })
+
+  it('keys request metadata by signature mode', () => {
+    const source = 'query Reconfigured { field(value: "secret") }'
+    const document = parse(source)
+    const requestCache = getRequestCache({}, undefined)
+
+    refineRequestSpan({ setTag: noop }, document, source, 'Reconfigured', false, true, requestCache)
+
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', false, requestCache), {
+      signature: 'query Reconfigured',
+      type: 'query',
+      name: 'Reconfigured',
+    })
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', true, requestCache), {
+      signature: 'query Reconfigured{field(value:"")}',
+      type: 'query',
+      name: 'Reconfigured',
+    })
+    assert.deepStrictEqual(getCachedRequestOperation(source, 'Reconfigured', false, requestCache), {
+      signature: 'query Reconfigured',
+      type: 'query',
+      name: 'Reconfigured',
+    })
+  })
+
+  it('does not cache an unknown operation after retaining a validated source', () => {
+    const source = 'query Known { field }'
+    const document = parse(source)
+    const requestCache = getRequestCache({}, undefined)
+
+    refineRequestSpan({ setTag: noop }, document, source, 'Known', true, true, requestCache)
+    const printsBefore = printSpy.callCount
+
+    assert.strictEqual(getCachedRequestOperation(source, 'Unknown', true, requestCache), undefined)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+  })
+
+  it('derives only valid siblings for a retained pre-parsed source', () => {
+    const document = parse('query First { first } query Second { second }')
+    const requestCache = getRequestCache({}, undefined)
+
+    refineRequestSpan({ setTag: noop }, document, document, 'First', true, true, requestCache)
+
+    assert.deepStrictEqual(getCachedRequestOperation(document, 'Second', true, requestCache), {
+      signature: 'query Second{second}',
+      type: 'query',
+      name: 'Second',
+    })
+    refineRequestSpan({ setTag: noop }, document, document, 'Second', true, true, requestCache)
+    const printsBefore = printSpy.callCount
+    assert.strictEqual(getCachedRequestOperation(document, 'Unknown', true, requestCache), undefined)
+    assert.strictEqual(printSpy.callCount, printsBefore)
+  })
+
   it('recomputes for a different document instance even if the source is identical', () => {
     const source = '{ x y }'
 
@@ -101,6 +296,51 @@ describe('graphql signature memoization', () => {
 
     assert.equal(printSpy.callCount - printsBefore, 2)
     assert.equal(sigA, sigB)
+  })
+})
+
+describe('graphql request signature cache limits', () => {
+  it('does not retain operations when Mercurius caching is disabled', () => {
+    assertRequestCacheLimit(false, 0)
+  })
+
+  it('uses the tracer limit for the default Mercurius cache', () => {
+    assertRequestCacheLimit(undefined, 500)
+  })
+
+  it('uses a configured Mercurius cache smaller than the tracer limit', () => {
+    assertRequestCacheLimit(1, 1)
+  })
+
+  it('does not fail for a fractional cache below one', () => {
+    assertRequestCacheLimit(0.5, 0)
+  })
+
+  it('accepts the exact tracer cache limit', () => {
+    assertRequestCacheLimit(500, 500)
+  })
+
+  it('caps a larger Mercurius cache at the tracer limit', () => {
+    assertRequestCacheLimit(501, 500)
+  })
+
+  it('keeps differently configured Mercurius apps isolated', () => {
+    const smallCache = getRequestCache({}, 1)
+    const largeCache = getRequestCache({}, 500)
+    const smallFirst = cacheQuery(smallCache, 0)
+    const largeFirst = cacheQuery(largeCache, 0)
+
+    cacheQuery(smallCache, 1)
+    cacheQuery(largeCache, 1)
+
+    assert.equal(
+      getCachedRequestOperation(smallFirst.source, smallFirst.operationName, false, smallCache),
+      undefined
+    )
+    assert.deepStrictEqual(
+      getCachedRequestOperation(largeFirst.source, largeFirst.operationName, false, largeCache),
+      { signature: 'query CacheQuery0', type: 'query', name: 'CacheQuery0' }
+    )
   })
 })
 
@@ -202,8 +442,8 @@ describe('graphql signature fallback', () => {
     try {
       const { getSignature } = require('../../src/utils')
 
-      assert.equal(getSignature({}, 'Q', 'query'), 'query Q')
-      assert.equal(getSignature({}, 'Q'), 'Q')
+      assert.equal(getSignature(parse('query Q { f }'), 'Q', 'query'), 'query Q')
+      assert.equal(getSignature(parse('{ f }'), undefined, 'query'), 'query')
     } finally {
       loadableModule._load = originalLoad
       delete require.cache[utilsPath]
@@ -260,8 +500,8 @@ describe('extractErrorIntoSpanEvent stack handling', () => {
    *
    * @param {{
    *   message?: string,
-   *   locations?: ReadonlyArray<{ line: number, column: number }>,
-   *   path?: ReadonlyArray<string | number>,
+   *   locations?: Readonly<Array<{ line: number, column: number }>>,
+   *   path?: Readonly<Array<string | number>>,
    *   originalError?: { stack?: string },
    * }} [shape]
    * @returns {{ error: object, getStackReads: () => number }}

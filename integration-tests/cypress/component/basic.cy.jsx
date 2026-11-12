@@ -1,4 +1,4 @@
-/* eslint-disable */
+// eslint-disable-next-line no-unused-vars -- The JSX transform consumes this binding.
 import React from 'react'
 
 function ValidationButton () {

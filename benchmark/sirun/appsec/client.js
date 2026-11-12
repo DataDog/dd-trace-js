@@ -1,36 +1,17 @@
 'use strict'
 
-const http = require('http')
-const { port, reqs } = require('./common')
+const runRequests = require('../http-client')
+const { port, reqs, warmup } = require('./common')
 
-// Reuse a single keep-alive connection so a high request count does not churn
-// ephemeral ports on localhost (which collapses throughput). 127.0.0.1 avoids
-// per-connection localhost -> ::1 lookups.
-const agent = new http.Agent({ keepAlive: true, maxSockets: 1 })
-
-let connectionsMade = 0
-
-function request (opts) {
-  http.get(opts, (res) => {
-    res.on('data', () => {})
-    res.on('end', () => {
-      if (++connectionsMade !== reqs) {
-        request(opts)
-      }
-    })
-  }).on('error', () => {
-    setTimeout(() => {
-      request(opts)
-    }, 10)
-  })
-}
+// Keep enough requests in flight that client scheduling does not leave the
+// measured server idle between responses.
+const concurrency = 4
 
 const opts = {
   host: '127.0.0.1',
   headers: {},
   port,
   path: '/',
-  agent,
 }
 
 if (Number(process.env.ATTACK_UA)) {
@@ -47,4 +28,4 @@ if (Number(process.env.ATTACK_QS)) {
   opts.path += '?k=<script>alert()</script>'
 }
 
-request(opts)
+runRequests(opts, warmup, reqs, concurrency)

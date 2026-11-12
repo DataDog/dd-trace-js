@@ -43,7 +43,7 @@ async function executeKnexAsyncNestedRawQuery (knex, taintedSql, notTaintedSql) 
 async function executeKnexAsyncNestedRawQueryAsAsyncTryCatch (knex, taintedSql, sqlToFail) {
   try {
     await knex.raw(sqlToFail)
-  } catch (e) {
+  } catch {
     await knex.raw(taintedSql)
   }
 }

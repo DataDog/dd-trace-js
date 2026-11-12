@@ -26,7 +26,7 @@ function streamAddVersion (input) {
       json.nodeVersion = process.versions.node
       // eslint-disable-next-line no-console
       console.log(JSON.stringify(json))
-    } catch (e) {
+    } catch {
       // eslint-disable-next-line no-console
       console.log(line)
     }

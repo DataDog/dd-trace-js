@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const net = require('node:net')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -364,7 +365,127 @@ describe('mysql2 instrumentation', () => {
         pool = mysql2.createPool(config)
       })
 
+      for (const method of ['query', 'execute']) {
+        it(`dispatches getConnection before ${method} returns`, async () => {
+          const getConnection = pool.getConnection
+          let methodReturned = false
+          let acquireDispatchedBeforeReturn = false
+
+          /**
+           * @param {...unknown} args
+           * @returns {unknown}
+           */
+          pool.getConnection = function (...args) {
+            if (!methodReturned) acquireDispatchedBeforeReturn = true
+            return getConnection.apply(this, args)
+          }
+
+          try {
+            const result = new Promise((resolve, reject) => {
+              pool[method](sql, error => error ? reject(error) : resolve())
+            })
+            methodReturned = true
+            await result
+
+            assert.strictEqual(acquireDispatchedBeforeReturn, true)
+          } finally {
+            pool.getConnection = getConnection
+          }
+        })
+      }
+
+      it('finishes callback and promise acquires when the stream factory throws synchronously', async () => {
+        const failure = new Error('stream factory failed')
+        const connectionStartCh = channel('apm:mysql2:connection:start')
+        const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+        const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+        const acquireStart = sinon.stub()
+        const acquireFinish = sinon.stub()
+        const throwingPool = mysql2.createPool({
+          ...config,
+          stream: () => { throw failure },
+        })
+        connectionStartCh.subscribe(noop)
+        acquireStartCh.subscribe(acquireStart)
+        acquireFinishCh.subscribe(acquireFinish)
+
+        try {
+          assert.throws(() => throwingPool.getConnection(noop), failure)
+
+          if (typeof throwingPool.promise === 'function') {
+            await assert.rejects(throwingPool.promise().getConnection(), failure)
+          }
+
+          const expectedAcquires = typeof throwingPool.promise === 'function' ? 2 : 1
+          sinon.assert.callCount(acquireStart, expectedAcquires)
+          sinon.assert.callCount(acquireFinish, expectedAcquires)
+          for (const call of acquireFinish.getCalls()) assert.strictEqual(call.args[0].error, failure)
+        } finally {
+          connectionStartCh.unsubscribe(noop)
+          acquireStartCh.unsubscribe(acquireStart)
+          acquireFinishCh.unsubscribe(acquireFinish)
+          await new Promise(resolve => throwingPool.end(resolve))
+        }
+      })
+
       describe('Pool.prototype.query', () => {
+        it('does not transfer an aborted query wait to the next connection user', async function () {
+          if (!semver.satisfies(mysql2Version, '>=3.11.5')) return this.skip()
+
+          startCh.subscribe(abort)
+          try {
+            const abortedQuery = pool.query(sql)
+            abortedQuery.once('error', noop)
+            await new Promise(resolve => abortedQuery.once('end', resolve))
+          } finally {
+            startCh.unsubscribe(abort)
+          }
+
+          const connection = await new Promise((resolve, reject) => {
+            pool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+          })
+          const directQuery = connection.query(sql)
+          await once(directQuery, 'end')
+          connection.release()
+
+          assert.strictEqual(apmQueryStart.lastCall.args[0].poolWaitTime, undefined)
+        })
+
+        it('treats an acquire reentered from enqueue as explicit', async () => {
+          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+          const acquireStart = sinon.stub()
+
+          const reentrantPool = mysql2.createPool({ ...config, connectionLimit: 1 })
+          const heldConnection = await new Promise((resolve, reject) => {
+            reentrantPool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+          })
+          acquireStartCh.subscribe(acquireStart)
+          let explicitAcquire
+
+          reentrantPool.once('enqueue', () => {
+            explicitAcquire = new Promise((resolve, reject) => {
+              reentrantPool.getConnection((error, connection) => {
+                if (error) return reject(error)
+                connection.release()
+                resolve()
+              })
+            })
+          })
+
+          try {
+            const query = new Promise((resolve, reject) => {
+              reentrantPool.query(sql, error => error ? reject(error) : resolve())
+            })
+            heldConnection.release()
+
+            await Promise.all([query, explicitAcquire])
+            sinon.assert.calledOnce(acquireStart)
+          } finally {
+            acquireStartCh.unsubscribe(acquireStart)
+            await new Promise(resolve => reentrantPool.end(resolve))
+          }
+        })
+
         describe('with object as query', () => {
           describe('with callback', () => {
             it('should abort the query on abortController.abort()', (done) => {
@@ -761,6 +882,44 @@ describe('mysql2 instrumentation', () => {
               done()
             })
           })
+        })
+      })
+
+      describe('PoolNamespace.prototype.getConnection failover', () => {
+        it('emits one acquire lifecycle per physical failover attempt', async () => {
+          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+          const acquireFinishCh = channel('apm:mysql2:pool:acquire:finish')
+          const acquireStart = sinon.stub()
+          const acquireFinish = sinon.stub()
+          acquireStartCh.subscribe(acquireStart)
+          acquireFinishCh.subscribe(acquireFinish)
+
+          const probe = net.createServer()
+          probe.listen(0, '127.0.0.1')
+          await once(probe, 'listening')
+          const deadPort = probe.address().port
+          await new Promise(resolve => probe.close(resolve))
+
+          const cluster = mysql2.createPoolCluster()
+          cluster.add('dead', { ...config, port: deadPort, connectionLimit: 1, connectTimeout: 500 })
+          cluster.add('live', { ...config, connectionLimit: 1 })
+          cluster.on('warn', () => {})
+
+          try {
+            const connection = await new Promise((resolve, reject) => {
+              cluster.of('*').getConnection((error, connection) => error ? reject(error) : resolve(connection))
+            })
+            connection.release()
+
+            sinon.assert.callCount(acquireStart, 2)
+            sinon.assert.callCount(acquireFinish, 2)
+            assert.ok(acquireFinish.firstCall.args[0].error)
+            assert.strictEqual(acquireFinish.secondCall.args[0].error, null)
+          } finally {
+            acquireStartCh.unsubscribe(acquireStart)
+            acquireFinishCh.unsubscribe(acquireFinish)
+            await new Promise(resolve => cluster.end(resolve))
+          }
         })
       })
     })

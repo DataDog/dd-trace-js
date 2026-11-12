@@ -1,9 +1,11 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { constants, performance } = require('node:perf_hooks')
 
 const { afterEach, describe, it } = require('mocha')
 const dc = require('dc-polyfill')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 require('../../setup/core')
 const { storage } = require('../../../../datadog-core')
@@ -45,7 +47,8 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
   try {
     startChannel.publish(ctx)
     finishChannel.publish(ctx)
-    return profiler.profile(true, startTime, new Date())()
+    const stopProfiling = profiler.profile(true, startTime, new Date())
+    return stopProfiling()
   } finally {
     profiler.stop()
   }
@@ -108,7 +111,8 @@ describe('profilers/events', () => {
           startCh.publish(ctx)
           finishCh.publish(ctx)
         }
-        const profile = profiler.profile(true, startTime, new Date())()
+        const stopProfiling = profiler.profile(true, startTime, new Date())
+        const profile = stopProfiling()
         const sampleCount = profile.sample.length
         assert.equal(sampleCount, expectedSampleCount)
       }
@@ -127,6 +131,51 @@ describe('profilers/events', () => {
     const labels = collectLabels(profile.sample[0], profile.stringTable)
     assert.equal(labels.event, 'zlib')
     assert.equal(labels.operation, 'gzip')
+  })
+
+  it('joins multiple GC reasons in their reported order', () => {
+    let observerCallback
+    /**
+     * @param {import('node:perf_hooks').PerformanceObserverCallback} callback
+     */
+    function PerformanceObserver (callback) {
+      observerCallback = callback
+      return { disconnect: () => {}, observe: () => {} }
+    }
+    const StubbedEventsProfiler = proxyquire('../../../src/profiling/profilers/events', {
+      perf_hooks: { constants, performance, PerformanceObserver },
+    })
+    const profiler = makeEvents(StubbedEventsProfiler, {
+      flushInterval: 65_000,
+      timelineSamplingEnabled: false,
+      codeHotspotsEnabled: false,
+    })
+    const startTime = new Date()
+    profiler.start()
+
+    try {
+      observerCallback({
+        getEntries () {
+          return [{
+            entryType: 'gc',
+            startTime: 0,
+            duration: 1,
+            detail: {
+              kind: constants.NODE_PERFORMANCE_GC_MINOR,
+              flags: constants.NODE_PERFORMANCE_GC_FLAGS_CONSTRUCT_RETAINED |
+                constants.NODE_PERFORMANCE_GC_FLAGS_FORCED,
+            },
+          }]
+        },
+      })
+      const stopProfiling = profiler.profile(true, startTime, new Date())
+      const profile = stopProfiling()
+      const labels = collectLabels(profile.sample[0], profile.stringTable)
+
+      assert.equal(labels['gc reason'], 'construct_retained,forced')
+    } finally {
+      profiler.stop()
+    }
   })
 
   it('captures async crypto events with per-op labels', () => {

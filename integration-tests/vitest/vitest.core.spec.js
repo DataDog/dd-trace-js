@@ -13,6 +13,7 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
+  stopCiVisTestEnv,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -22,6 +23,8 @@ const {
 } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -33,43 +36,35 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_NAME,
-  TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SUITE,
-  DI_ERROR_DEBUG_INFO_CAPTURED,
-  DI_DEBUG_ERROR_PREFIX,
-  DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX,
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
-  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
-  TEST_HAS_DYNAMIC_NAME,
   TEST_FINAL_STATUS,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_CODE_COVERAGE_ENABLED,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
+const { getVitestVersions } = require('./versions')
+const { describeDynamicAtr } = require('./dynamic-atr')
 
 const NUM_RETRIES_EFD = 3
-const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
-const FLAKY_EVENTUALLY_PASSING_RESOURCE =
-  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass'
-const FLAKY_NEVER_PASSING_RESOURCE =
-  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
-const FLAKY_UNNECESSARY_RETRY_RESOURCE =
-  'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
-function assertCompleteEventHierarchy (events, testOutput) {
+function assertCompleteTestSessionTrace (events, testOutput) {
   const testSessionEvent = events.find(event => event.type === 'test_session_end')
   const testModuleEvent = events.find(event => event.type === 'test_module_end')
   const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
@@ -106,22 +101,32 @@ function assertCompleteEventHierarchy (events, testOutput) {
   }
 }
 
-// vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = getVitestVersions()
+const requestedVersion = process.env.VITEST_VERSION
+const versions = requestedVersion && requestedVersion !== 'all'
+  ? [requestedVersion === 'oldest'
+      ? supportedVersions[0]
+      : requestedVersion === 'latest' ? supportedVersions.at(-1) : requestedVersion]
+  : supportedVersions
+const runVersionIndependentSuites = !requestedVersion || requestedVersion === 'all' || requestedVersion === 'latest'
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
+    // Native module loading was introduced in Vitest 4.1; Vitest 5 requires Node.js >=22.
     const typecheckIt = version === '1.6.0' ? it.skip : it
 
     useSandbox([
       `vitest@${version}`,
+      // Vite 8.3.5's source-map parser rejects the Buffers returned by Vitest's server runner.
+      // TODO: remove the pin once Vitest reads cached server modules as UTF-8.
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
       '@types/node',
       'tinypool',
-      'typescript',
+      'typescript@6.0.3',
     ], true)
 
     before(function () {
@@ -138,7 +143,229 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
+    for (const method of ['createVitest', 'startVitest']) {
+      for (const readonly of ['overrides', 'plugins']) {
+        it(`preserves read-only ${readonly} passed to ${method}`, async () => {
+          // Native success establishes that these inputs are supported by the actual framework version.
+          for (const traced of [false, true]) {
+            const script = 'ci-visibility/vitest-tests-programmatic-api/run-readonly-programmatic-api.mjs'
+            childProcess = exec(`${process.execPath} ${script}`, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: traced ? '--import dd-trace/register.js -r dd-trace/ci/init' : '',
+                READONLY_VITEST_OPTIONS: readonly,
+                VITEST_PROGRAMMATIC_METHOD: method,
+              },
+            })
+            let output = ''
+            childProcess.stdout.on('data', data => { output += data })
+            childProcess.stderr.on('data', data => { output += data })
+            const [exitCode] = await once(childProcess, 'exit')
+            assert.strictEqual(exitCode, 0, `${traced ? 'instrumented' : 'native'}: ${output}`)
+          }
+        })
+      }
+    }
+
     const poolConfig = ['forks', 'threads']
+
+    for (const pool of poolConfig) {
+      it(`reports tests with a mocked global URL and disabled DogStatsD (${pool})`, async () => {
+        testOutput = ''
+        receiver.setSettings({ itr_enabled: false })
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_INJECT_FORCE: 'true',
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+            DD_RUNTIME_METRICS_ENABLED: 'false',
+            TEST_DIR: 'ci-visibility/vitest-tests/mocked-url.mjs',
+            POOL_CONFIG: pool,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
+          payloads => {
+            const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
+            assert.strictEqual(metrics.length, 0, `unexpected DogStatsD telemetry: ${testOutput}`)
+
+            const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+            const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
+            for (const event of [testSession, testModule, testSuite]) {
+              assert.strictEqual(event.meta[TEST_STATUS], 'fail', testOutput)
+            }
+            assert.strictEqual(tests.length, 2, testOutput)
+            const passedTest = tests.find(test => test.meta[TEST_NAME].endsWith('is disabled'))
+            const failedTest = tests.find(test => test.meta[TEST_NAME].endsWith('original test failure'))
+            assert.ok(passedTest, testOutput)
+            assert.ok(failedTest, testOutput)
+            assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass', testOutput)
+            assert.strictEqual(passedTest.error, 0)
+            assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail', testOutput)
+            assert.strictEqual(failedTest.meta[ERROR_TYPE], 'Error')
+            assert.strictEqual(failedTest.meta[ERROR_MESSAGE], 'expected test failure')
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1, testOutput)
+        assert.doesNotMatch(testOutput, /URL is not a constructor/)
+      })
+    }
+
+    if (version === 'latest') {
+      for (const pool of poolConfig) {
+        describeDynamicAtr({
+          mode: pool,
+          getContext: () => ({
+            cwd,
+            receiver,
+            env: { POOL_CONFIG: pool },
+            onChildProcess: child => { childProcess = child },
+          }),
+        })
+      }
+    }
+
+    newerVitestIt('reports a failed session when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+            VITEST_THROWING_REPORTER: '1',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
+
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+          assert.deepStrictEqual(
+            [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
+            ['pass', 'skip']
+          )
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
+
+    for (const { mode, args, reason, exitCode: expectedExitCode } of [
+      { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'skip-suite', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'mixed', args: '', reason: undefined, exitCode: 0 },
+      { mode: 'mixed', args: '--testNamePattern never-matches', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'mixed', args: 'never-matches --passWithNoTests', reason: 'zero_tests', exitCode: 0 },
+      { mode: 'mixed', args: '--shard=2/2 --passWithNoTests', reason: 'zero_test_shard', exitCode: 0 },
+      { mode: 'mixed', args: 'never-matches', reason: undefined, exitCode: 1 },
+      { mode: 'error', args: '', reason: undefined, exitCode: 1 },
+    ]) {
+      it(`reports zero-execution sessions: ${mode} ${args}`, async () => {
+        receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+        childProcess = exec('./node_modules/.bin/vitest run ' + args, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/empty-session.mjs',
+            EMPTY_SESSION_MODE: mode,
+          },
+        })
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const event = events.find(event => event.type === type)?.content
+              assert.ok(event, testOutput)
+              const expectedStatus = expectedExitCode ? 'fail' : reason ? 'skip' : 'pass'
+              assert.strictEqual(event.meta[TEST_STATUS], expectedStatus, testOutput)
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason, testOutput)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+                ? 'All tests were skipped'
+                : reason === 'zero_test_shard'
+                  ? 'No tests were assigned to this shard'
+                  : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, expectedExitCode, testOutput)
+      })
+    }
+
+    typecheckIt('reports a failed typecheck suite when a custom reporter rejects onTestRunEnd', async function () {
+      this.timeout(20_000)
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose ' +
+          '--reporter=./ci-visibility/vitest-reporter-throws.mjs',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const { testSession, testModule, testSuite } = assertCompleteTestSessionTrace(events, testOutput)
+
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+          for (const event of [testSession, testModule]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.error, 1)
+            assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
+          }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+        },
+        { hardTimeout: 20_000 }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.notStrictEqual(exitCode, 0)
+    })
 
     poolConfig.forEach((poolConfig) => {
       it(`can run and report tests with pool=${poolConfig}`, async () => {
@@ -411,7 +638,7 @@ versions.forEach((version) => {
             testModule,
             testSuite,
             tests,
-          } = assertCompleteEventHierarchy(events, testOutput)
+          } = assertCompleteTestSessionTrace(events, testOutput)
           const passedTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report type assertion'
           )
@@ -459,6 +686,189 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(code, 0, testOutput)
+    })
+
+    /**
+     * Runs Vitest typechecking with TIA settings and gathers all TIA payloads.
+     *
+     * @param {{ suitesToSkip: string[], testFilter?: string, env?: typeof process.env }} options
+     * @param {(payloads: object[]) => void} assertPayloads
+     * @returns {Promise<void>}
+     */
+    async function runTypecheckTiaTest ({ suitesToSkip, testFilter = '', env = {} }, assertPayloads) {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        coverage_report_upload_enabled: false,
+        tests_skipping: true,
+      })
+      receiver.setSuitesToSkip(suitesToSkip.map(suite => ({
+        type: 'suite',
+        attributes: { suite },
+      })))
+      testOutput = ''
+
+      childProcess = exec(
+        `./node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs${testFilter} --reporter=verbose`,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+            ...env,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) =>
+          url === '/api/v2/citestcycle' ||
+          url === '/api/v2/citestcov' ||
+          url === '/api/v2/ci/tests/skippable',
+        assertPayloads,
+        { hardTimeout: 60_000 }
+      )
+
+      assert.strictEqual(childProcess.exitCode, 0, testOutput)
+    }
+
+    typecheckIt('does not advertise or enable TIA for typecheck-only runs', async () => {
+      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+      await runTypecheckTiaTest({
+        suitesToSkip: [typecheckSuite],
+        testFilter: ` ${typecheckSuite}`,
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false, testOutput)
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/citestcov'), false, testOutput)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+        assert.ok(metadataEntries.length > 0, testOutput)
+        for (const metadata of metadataEntries) {
+          assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+        }
+
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        assert.strictEqual(testSuites.length, 1, testOutput)
+        assert.strictEqual(testSuites[0].content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+      })
+    })
+
+    typecheckIt('applies TIA only to runtime suites in mixed typecheck runs', async () => {
+      const typecheckSuite = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+      const skippedRuntimeSuite = 'ci-visibility/vitest-tests/tia-first.mjs'
+      const runningRuntimeSuite = 'ci-visibility/vitest-tests/tia-second.mjs'
+      await runTypecheckTiaTest({
+        suitesToSkip: [typecheckSuite, skippedRuntimeSuite],
+        env: { TYPECHECK_MIXED: 'true' },
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), true)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const metadataEntries = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+        assert.ok(metadataEntries.length > 0, testOutput)
+        for (const metadata of metadataEntries) {
+          assert.strictEqual(metadata.test?.[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+        }
+
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        const typecheckEvent = testSuites.find(({ content }) => content.meta[TEST_SUITE] === typecheckSuite).content
+        const skippedRuntimeEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === skippedRuntimeSuite).content
+        const runningRuntimeEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === runningRuntimeSuite).content
+
+        assert.strictEqual(testSuites.length, 3, testOutput)
+        assert.strictEqual(typecheckEvent.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(skippedRuntimeEvent.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(skippedRuntimeEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+        assert.strictEqual(runningRuntimeEvent.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+        assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+        const suiteById = new Map(testSuites.map(({ content }) => [
+          Number(content.test_suite_id),
+          content.meta[TEST_SUITE],
+        ]))
+        const coverages = payloads
+          .filter(({ url }) => url === '/api/v2/citestcov')
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content }) => content.coverages)
+        const runtimeCoverage = coverages.find(coverage =>
+          suiteById.get(coverage.test_suite_id) === runningRuntimeSuite
+        )
+
+        assert.ok(runtimeCoverage, testOutput)
+        assert.deepStrictEqual(
+          runtimeCoverage.files.map(({ filename }) => filename).sort(),
+          [
+            runningRuntimeSuite,
+            'ci-visibility/vitest-tests/bad-sum.mjs',
+          ].sort()
+        )
+      })
+    })
+
+    typecheckIt('does not skip a runtime suite that is also selected for typechecking', async () => {
+      const runtimeOnlySuite = 'ci-visibility/vitest-tests/tia-first.mjs'
+      const overlappingSuite = 'ci-visibility/vitest-tests/tia-typescript.test.ts'
+      await runTypecheckTiaTest({
+        suitesToSkip: [runtimeOnlySuite, overlappingSuite],
+        env: {
+          TYPECHECK_MIXED: 'true',
+          TYPECHECK_OVERLAP: 'true',
+        },
+      }, (payloads) => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), true)
+
+        const cyclePayloads = payloads.filter(({ url }) => url === '/api/v2/citestcycle')
+        const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        const testSuites = events.filter(event => event.type === 'test_suite_end')
+        const runtimeOnlyEvent =
+            testSuites.find(({ content }) => content.meta[TEST_SUITE] === runtimeOnlySuite).content
+        const overlappingEvents =
+            testSuites.filter(({ content }) => content.meta[TEST_SUITE] === overlappingSuite)
+
+        assert.strictEqual(testSuites.length, 4, testOutput)
+        assert.strictEqual(runtimeOnlyEvent.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(runtimeOnlyEvent.meta[TEST_SKIPPED_BY_ITR], 'true')
+        assert.strictEqual(overlappingEvents.length, 2)
+        assert.ok(overlappingEvents.every(({ content }) => content.meta[TEST_STATUS] === 'pass'))
+        assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+        const suiteById = new Map(testSuites.map(({ content }) => [
+          Number(content.test_suite_id),
+          content.meta[TEST_SUITE],
+        ]))
+        const coverages = payloads
+          .filter(({ url }) => url === '/api/v2/citestcov')
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content }) => content.coverages)
+        const overlappingCoverage = coverages.find(coverage =>
+          suiteById.get(coverage.test_suite_id) === overlappingSuite
+        )
+
+        assert.ok(overlappingCoverage, testOutput)
+        assert.deepStrictEqual(
+          overlappingCoverage.files.map(({ filename }) => filename).sort(),
+          [
+            overlappingSuite,
+            'ci-visibility/vitest-tests/tia-typescript-source.ts',
+          ].sort()
+        )
+      })
     })
 
     typecheckIt('honors Known Tests metadata for typecheck tests', async () => {
@@ -593,6 +1003,12 @@ versions.forEach((version) => {
                     attempt_to_fix: true,
                   },
                 },
+                'typecheck can report skipped assertion': {
+                  properties: {
+                    attempt_to_fix: true,
+                    quarantined: true,
+                  },
+                },
                 'typecheck nested suite can report nested disabled assertion': {
                   properties: {
                     disabled: true,
@@ -617,6 +1033,9 @@ versions.forEach((version) => {
           const attemptToFixTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report attempt-to-fix assertion'
           )
+          const skippedAttemptToFixTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report skipped assertion'
+          )
           const nestedDisabledTest = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck nested suite can report nested disabled assertion'
           )
@@ -624,6 +1043,7 @@ versions.forEach((version) => {
           assert.ok(disabledTest, testOutput)
           assert.ok(quarantinedTest, testOutput)
           assert.ok(attemptToFixTest, testOutput)
+          assert.ok(skippedAttemptToFixTest, testOutput)
           assert.ok(nestedDisabledTest, testOutput)
 
           assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
@@ -636,6 +1056,10 @@ versions.forEach((version) => {
 
           assert.strictEqual(attemptToFixTest.meta[TEST_STATUS], 'pass')
           assert.strictEqual(attemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          assert.strictEqual(skippedAttemptToFixTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
 
           assert.strictEqual(nestedDisabledTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(nestedDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
@@ -659,10 +1083,15 @@ versions.forEach((version) => {
 
       const [[code]] = await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         eventsPromise,
       ])
 
       assert.strictEqual(code, 0, testOutput)
+      assert.match(testOutput, /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./)
+      assert.match(testOutput, /Disabled: 2 tests skipped\./)
+      assert.match(testOutput, /Quarantined: 1 test run; all passed\./)
     })
 
     typecheckIt('does not fail the typecheck run for Test Management managed failures', async () => {
@@ -843,7 +1272,7 @@ versions.forEach((version) => {
             testModule,
             testSuite,
             tests,
-          } = assertCompleteEventHierarchy(events, testOutput)
+          } = assertCompleteTestSessionTrace(events, testOutput)
           const test = tests.find(test =>
             test.meta[TEST_NAME] === 'typecheck can report failing assertion'
           )
@@ -1017,7 +1446,40 @@ versions.forEach((version) => {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
-      // No skippable_tests test: vitest does not request skippable suites (TIA unsupported).
+      it(
+        'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails',
+        async () => {
+          receiver.setSkippableSuitesResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+              const testModule = events.find(event => event.type === 'test_module_end')
+              assert.ok(testModule, 'should have test module event')
+              assert.strictEqual(
+                testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS],
+                'true'
+              )
+              const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+              assert.ok(testSuiteEvent, 'should have test suite event')
+              assert.strictEqual(
+                testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS],
+                'true'
+              )
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true')
+            })
+          childProcess = exec('./node_modules/.bin/vitest run', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          })
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
 
       it(
         'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
@@ -1118,231 +1580,6 @@ versions.forEach((version) => {
       ])
     })
 
-    context('flaky test retries', () => {
-      it('can retry flaky tests', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-          ({ url }) => url === '/api/v2/citestcycle',
-          payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testEvents = events.filter(event => event.type === 'test')
-            assert.strictEqual(testEvents.length, 11)
-            assertObjectContains(testEvents.map(test => test.content.resource), [
-              FLAKY_EVENTUALLY_PASSING_RESOURCE,
-              FLAKY_EVENTUALLY_PASSING_RESOURCE,
-              FLAKY_EVENTUALLY_PASSING_RESOURCE,
-              // passes at the third retry
-              FLAKY_NEVER_PASSING_RESOURCE,
-              FLAKY_NEVER_PASSING_RESOURCE,
-              FLAKY_NEVER_PASSING_RESOURCE,
-              FLAKY_NEVER_PASSING_RESOURCE,
-              FLAKY_NEVER_PASSING_RESOURCE,
-              FLAKY_EVENTUALLY_PASSING_RESOURCE,
-              // never passes
-              FLAKY_NEVER_PASSING_RESOURCE,
-              // passes on the first try
-              FLAKY_UNNECESSARY_RETRY_RESOURCE,
-            ])
-            const eventuallyPassingTest = testEvents.filter(
-              test => test.content.resource === FLAKY_EVENTUALLY_PASSING_RESOURCE
-            )
-            assert.strictEqual(eventuallyPassingTest.length, 4)
-            assert.strictEqual(
-              eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length,
-              3
-            )
-            assert.strictEqual(
-              eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length,
-              1
-            )
-            assert.strictEqual(
-              eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length,
-              3
-            )
-            assert.strictEqual(eventuallyPassingTest.filter(test =>
-              test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            ).length, 3)
-
-            const neverPassingTest = testEvents.filter(
-              test => test.content.resource === FLAKY_NEVER_PASSING_RESOURCE
-            )
-            assert.strictEqual(neverPassingTest.length, 6)
-            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
-            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
-            assert.strictEqual(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
-            assert.strictEqual(neverPassingTest.filter(test =>
-              test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-            ).length, 5)
-          }
-        )
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              CUSTOM_SEQUENCER: version === '1.6.0' ? undefined : 'true',
-              CUSTOM_SEQUENCER_MARKER: version === '1.6.0' ? undefined : CUSTOM_SEQUENCER_MARKER,
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            },
-          }
-        )
-        let childStdout = ''
-        childProcess.stdout?.on('data', chunk => { childStdout += chunk.toString() })
-
-        Promise.all([eventsPromise, once(childProcess, 'exit')]).then(() => {
-          if (version !== '1.6.0') {
-            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(childStdout)}`)
-          }
-          done()
-        }).catch(done)
-      })
-
-      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.strictEqual(testEvents.length, 3)
-          assertObjectContains(testEvents.map(test => test.content.resource), [
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
-          ])
-          assert.strictEqual(testEvents.filter(
-            test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-          ).length, 0)
-        }).then(() => done()).catch(done)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            },
-          }
-        )
-      })
-
-      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.strictEqual(testEvents.length, 5)
-          assertObjectContains(testEvents.map(test => test.content.resource), [
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
-          ])
-          assert.strictEqual(testEvents.filter(
-            test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-          ).length, 2)
-        }).then(() => done()).catch(done)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            },
-          }
-        )
-      })
-
-      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          flaky_test_retries_count: 2,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-          ({ url }) => url === '/api/v2/citestcycle',
-          payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const neverPassingTest = tests.filter(
-              test => test.resource ===
-                'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
-            )
-            assert.strictEqual(neverPassingTest.length, 3, '1 initial + 2 ATR retries')
-            neverPassingTest.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'fail'))
-
-            const lastAttempt = neverPassingTest[neverPassingTest.length - 1]
-            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-            for (let i = 0; i < neverPassingTest.length - 1; i++) {
-              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in neverPassingTest[i].meta))
-            }
-          }
-        )
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        await Promise.all([once(childProcess, 'exit'), eventsPromise])
-      })
-    })
-
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1377,11 +1614,12 @@ versions.forEach((version) => {
     // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
     // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
     // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
-    if (version === 'latest' && NODE_MAJOR >= 20) {
+    {
+      const coverageTest = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
-        it(`reports code coverage for ${coverageProvider} provider`, async () => {
+        coverageTest(`reports code coverage for ${coverageProvider} provider`, async () => {
           let codeCoverageExtracted
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1428,7 +1666,7 @@ versions.forEach((version) => {
         })
       })
 
-      it('reports zero code coverage for instanbul provider', async () => {
+      coverageTest('reports zero code coverage for instanbul provider', async () => {
         let codeCoverageExtracted
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1479,1310 +1717,101 @@ versions.forEach((version) => {
         )
       })
     }
-
-    context('early flake detection', () => {
-      it('retries new tests', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              // 'early flake detection can retry tests that eventually pass', // will be considered new
-              // 'early flake detection can retry tests that always pass', // will be considered new
-              // 'early flake detection can retry tests that eventually fail', // will be considered new
-              // 'early flake detection can retry tests that pass only on the last attempt', // will be considered new
-              // 'early flake detection does not retry if the test is skipped', // skipped so not retried
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 18)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that pass only on the last attempt',
-              'early flake detection can retry tests that pass only on the last attempt',
-              'early flake detection can retry tests that pass only on the last attempt',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that pass only on the last attempt',
-            ])
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            // 4 executions of the 4 new tests + 1 new skipped test (not retried)
-            assert.strictEqual(newTests.length, 17)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 12) // 3 retries of the 4 new tests
-
-            retriedTests.forEach(test => {
-              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
-            })
-
-            // exit code should be 0 and test session should be reported as passed,
-            // even though there are some failing executions
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 6)
-
-            // Verifies that task.result.state is reset before the last repetition runs.
-            // Without this reset, vitest keeps a stale 'fail' from prior repetitions and
-            // incorrectly reports the last execution as failed even when it succeeds.
-            const lastAttemptPassTests = tests
-              .filter(test =>
-                test.meta[TEST_NAME] === 'early flake detection can retry tests that pass only on the last attempt')
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-            assert.strictEqual(lastAttemptPassTests.length, NUM_RETRIES_EFD + 1)
-            assert.strictEqual(
-              lastAttemptPassTests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
-              NUM_RETRIES_EFD
-            )
-            assert.strictEqual(lastAttemptPassTests[lastAttemptPassTests.length - 1].meta[TEST_STATUS], 'pass')
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_ADD_EVENTUALLY_FAIL: '1',
-              SHOULD_ADD_LAST_ATTEMPT_PASS: '1',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 0)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('uses the retry count from the matching slow_test_retries bucket', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': 1,
-              '10s': 0,
-            },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {},
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            const instantTests = tests.filter(test =>
-              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
-            )
-            assert.strictEqual(instantTests.length, 2)
-            assert.strictEqual(
-              instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
-              1
-            )
-
-            const slowTests = tests.filter(test =>
-              test.meta[TEST_NAME] === 'early flake detection slightly slow duration bucket test'
-            )
-            assert.strictEqual(slowTests.length, 1)
-            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
-            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
-            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
-          }, 55_000)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run -t "can retry tests that always pass|slightly slow duration bucket test"',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_ADD_SLOW_DURATION_TEST: '1',
-            },
-          }
-        )
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-        assert.strictEqual(exitCode, 0)
-      })
-
-      it('reports the error from each failed EFD attempt', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': 9,
-            },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {},
-        })
-
-        const testName = 'early flake detection reports the current failed attempt error'
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(test => test.content)
-              .filter(test => test.meta[TEST_NAME] === testName)
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            assert.strictEqual(tests.length, 10)
-
-            const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.deepStrictEqual(
-              failedAttempts.map(test => ({
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-                errorType: test.meta[ERROR_TYPE],
-                errorMessage: test.meta[ERROR_MESSAGE],
-              })),
-              [
-                {
-                  isRetry: undefined,
-                  retryReason: undefined,
-                  errorType: 'Error',
-                  errorMessage: 'failure 0',
-                },
-                {
-                  isRetry: 'true',
-                  retryReason: TEST_RETRY_REASON_TYPES.efd,
-                  errorType: 'Error',
-                  errorMessage: 'failure 2',
-                },
-                {
-                  isRetry: 'true',
-                  retryReason: TEST_RETRY_REASON_TYPES.efd,
-                  errorType: 'Error',
-                  errorMessage: 'failure 5',
-                },
-                {
-                  isRetry: 'true',
-                  retryReason: TEST_RETRY_REASON_TYPES.efd,
-                  errorType: 'Error',
-                  errorMessage: 'failure 8',
-                },
-              ]
-            )
-            failedAttempts.forEach(test => {
-              assert.ok(
-                test.meta[ERROR_STACK],
-                `Expected failed attempt error stack. Test event: ${inspect(test)}`
-              )
-            })
-          }, 55_000)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run -t "reports the current failed attempt error"',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_ADD_CURRENT_ERROR_TEST: '1',
-            },
-          }
-        )
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-        assert.strictEqual(exitCode, 0)
-      })
-
-      newerVitestIt('disables manual Vitest retries for new tests retried by EFD', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': 2,
-            },
-            faulty_session_threshold: 100,
-          },
-          flaky_test_retries_enabled: false,
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {},
-        })
-
-        const testName = 'efd with manual vitest retries fails first then passes'
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(test => test.content)
-              .filter(test => test.meta[TEST_NAME] === testName)
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            const diagnosticTests = tests.map(test => ({
-              status: test.meta[TEST_STATUS],
-              isRetry: test.meta[TEST_IS_RETRY],
-              retryReason: test.meta[TEST_RETRY_REASON],
-            }))
-            assert.deepStrictEqual(diagnosticTests, [
-              { status: 'fail', isRetry: undefined, retryReason: undefined },
-              { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-              { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
-            ])
-          }, 55_000)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run --retry=1',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/fails-first-then-passes.mjs',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-        assert.strictEqual(exitCode, 0)
-      })
-
-      it('fails if all the attempts fail', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              // 'early flake detection can retry tests that eventually pass', // will be considered new
-              // 'early flake detection can retry tests that always pass', // will be considered new
-              // 'early flake detection does not retry if the test is skipped', // skipped so not retried
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 10)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-            ])
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            // 4 executions of the 2 new tests + 1 new skipped test (not retried)
-            assert.strictEqual(newTests.length, 9)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 6) // 3 retries of the 2 new tests
-
-            // the multiple attempts did not result in a single pass,
-            // so the test session should be reported as failed
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 6)
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-
-            // Check that TEST_HAS_FAILED_ALL_RETRIES is set for tests that fail all EFD attempts
-            const alwaysFailTests = tests.filter(test =>
-              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
-            )
-            assert.strictEqual(alwaysFailTests.length, 4) // 1 initial + 3 retries
-            // The last execution should have TEST_HAS_FAILED_ALL_RETRIES set
-            const testsWithFlag = alwaysFailTests.filter(test =>
-              test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-            )
-            assert.strictEqual(
-              testsWithFlag.length,
-              1,
-              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
-            )
-            // It should be the last one
-            const lastAttempt = alwaysFailTests[alwaysFailTests.length - 1]
-            assert.strictEqual(
-              lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES],
-              'true',
-              'Last attempt should have the flag'
-            )
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              ALWAYS_FAIL: 'true',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('bails out of EFD if the percentage of new tests is too high', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-            faulty_session_threshold: 0,
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {},
-        }) // tests from ci-visibility/vitest-tests/early-flake-detection.mjs will be new
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 4)
-
-            const newTests = tests.filter(
-              test => test.meta[TEST_IS_NEW] === 'true'
-            )
-            // no new tests
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              // 'early flake detection can retry tests that eventually pass', // will be considered new
-              // 'early flake detection can retry tests that always pass', // will be considered new
-              // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 4)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-            ])
-
-            // new tests are detected but not retried
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 3)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 1)
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('does not run EFD if the known tests request fails', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTestsResponseCode(500)
-        receiver.setKnownTests({})
-
-        // Request module waits before retrying — need longer gather timeout
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 4)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-            ])
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 1)
-            const testSessionEnd = events.find(event => event.type === 'test_session_end')
-            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
-            const testSessionEvent = testSessionEnd.content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
-          }, 60000)
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('works when the cwd is not the repository root', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/subproject/vitest-test.mjs': [
-              'context can report passed test', // no test will be considered new
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            // no retries
-            assert.strictEqual(tests.length, 1)
-
-            assert.strictEqual(tests[0].meta[TEST_SUITE], 'ci-visibility/subproject/vitest-test.mjs')
-            // it's not considered new
-            assert.ok(!(TEST_IS_NEW in tests[0].meta))
-          })
-
-        childProcess = exec(
-          '../../node_modules/.bin/vitest run',
-          {
-            cwd: `${cwd}/ci-visibility/subproject`,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-              TEST_DIR: './vitest-test.mjs',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 0)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('works with repeats config when EFD is disabled', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: false,
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              // 'early flake detection can retry tests that eventually pass', // will be considered new
-              // 'early flake detection can retry tests that always pass', // will be considered new
-              // 'early flake detection can retry tests that eventually fail', // will be considered new
-              // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 8)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that eventually pass', // repeated twice
-              'early flake detection can retry tests that always pass', // repeated twice
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-            ])
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            // all but one are considered new
-            assert.strictEqual(newTests.length, 7)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 4) // 2 repetitions on 2 tests
-
-            // vitest reports the test as failed if any of the repetitions fail, so we'll follow that
-            // TODO: we might want to improve this
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 3)
-
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_REPEAT: '1',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('disables early flake detection if known tests should not be requested', (done) => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: false,
-        })
-
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              // 'early flake detection can retry tests that eventually pass', // will be considered new
-              // 'early flake detection can retry tests that always pass', // will be considered new
-              // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const tests = events.filter(event => event.type === 'test').map(test => test.content)
-
-            assert.strictEqual(tests.length, 4)
-
-            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that always pass',
-              'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped',
-            ])
-
-            // new tests are not detected and not retried
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 1)
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        childProcess.on('exit', (exitCode) => {
-          eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('does not detect new tests if the response is invalid', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          'not-vitest': {},
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 4)
-
-            const newTests = tests.filter(
-              test => test.meta[TEST_IS_NEW] === 'true'
-            )
-            // no new tests
-            assert.strictEqual(newTests.length, 0)
-          })
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-        await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
-      })
-
-      it('tags new tests with dynamic names and logs a warning', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: { '5s': 1 },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-        receiver.setKnownTests({ vitest: {} })
-
-        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-          ({ url }) => url === '/api/v2/citestcycle',
-          (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const uniqueTests = new Map()
-            for (const test of tests) {
-              if (!uniqueTests.has(test.meta[TEST_NAME])) {
-                uniqueTests.set(test.meta[TEST_NAME], test)
-              }
-            }
-
-            const dynamicTests = [...uniqueTests.values()]
-              .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
-            assert.strictEqual(dynamicTests.length, 8)
-
-            dynamicTests.forEach(test => {
-              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
-            })
-          }
-        )
-
-        childProcess = exec(
-          './node_modules/.bin/vitest run',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-name-test*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            },
-          }
-        )
-
-        let testOutput = ''
-        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-
-        await Promise.all([once(childProcess, 'exit'), eventsPromise])
-
-        assert.match(testOutput, /detected as new but their names contain dynamic data/)
-      })
+  })
+})
+
+versions.forEach(version => {
+  describe(`vitest@${version} empty-session reporting`, function () {
+    this.timeout(60_000)
+    let receiver, childProcess
+
+    useSandbox([
+      `vitest@${version}`,
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
+    ], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
+
+    beforeEach(async () => {
+      receiver = await new FakeCiVisIntake().start()
+      receiver.setSettings({ itr_enabled: false })
     })
 
-    // dynamic instrumentation only supported from >=2.0.0
-    if (version === 'latest') {
-      context('dynamic instrumentation', () => {
-        it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
+    afterEach(async () => {
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: false,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('runs retries with dynamic instrumentation', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          let snapshotIdByTest, snapshotIdByLog
-          let spanIdByTest, spanIdByLog, traceIdByTest, traceIdByLog
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
-
-              assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-                .endsWith('ci-visibility/vitest-tests/bad-sum.mjs'), true)
-              assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
-
-              const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
-              assert.ok(retriedTest.meta[snapshotIdKey])
-
-              snapshotIdByTest = retriedTest.meta[snapshotIdKey]
-              spanIdByTest = retriedTest.span_id.toString()
-              traceIdByTest = retriedTest.trace_id.toString()
-
-              const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
-
-              assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              const [{ logMessage: [diLog] }] = payloads
-              assertObjectContains(diLog, {
-                ddsource: 'dd_debugger',
-                level: 'error',
-              })
-              assert.match(diLog.ddtags, /git.repository_url:/)
-              assert.match(diLog.ddtags, /git.commit.sha:/)
-              assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-              assertObjectContains(diLog.debugger.snapshot.captures.lines['4'].locals, {
-                a: {
-                  type: 'number',
-                  value: '11',
-                },
-                b: {
-                  type: 'number',
-                  value: '2',
-                },
-                localVar: {
-                  type: 'number',
-                  value: '10',
-                },
-              })
-              spanIdByLog = diLog.dd.span_id
-              traceIdByLog = diLog.dd.trace_id
-              snapshotIdByLog = diLog.debugger.snapshot.id
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              assert.strictEqual(snapshotIdByTest, snapshotIdByLog)
-              assert.strictEqual(spanIdByTest, spanIdByLog)
-              assert.strictEqual(traceIdByTest, traceIdByLog)
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('runs multiple retries with dynamic instrumentation', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const retrySpanIdsWithDebugInfo = new Set()
-          const diLogSpanIds = []
-          let testOutput = ''
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 3)
-              for (const retriedTest of retriedTests) {
-                if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
-                  retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
-                }
-              }
-              assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
-              assert.strictEqual(diLogs.length, 2)
-              for (const diLog of diLogs) {
-                diLogSpanIds.push(diLog.dd.span_id)
-              }
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=3',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-              },
-            }
-          )
-
-          childProcess.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
-          const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-            logsPromise,
-            stdoutEndPromise,
-            stderrEndPromise,
-          ])
-          assert.strictEqual(exitCode, 0, testOutput)
-          assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
-          for (const diLogSpanId of diLogSpanIds) {
-            assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+    const scenarios = [
+      'empty-shard', 'empty-shard-default', 'empty-file', 'empty-file-disallowed', 'setup-error', 'normal', 'skipped',
+      'no-candidates', 'no-candidates-default', 'no-candidates-sharded', 'no-candidates-sharded-default',
+      'collected-only',
+    ]
+    for (const scenario of scenarios) {
+      // Vitest 1.6 aborts global setup before the session finalizer can be installed.
+      const scenarioIt = version === '1.6.0' && scenario === 'setup-error' ? it.skip : it
+      scenarioIt(`reports ${scenario} with the correct session status`, async () => {
+        // Unlike 1.6, newer Vitest versions reject excess shards unless passWithNoTests is enabled.
+        const isFailure = scenario === 'empty-file-disallowed' || scenario === 'setup-error' ||
+          (scenario.startsWith('no-candidates') && scenario.endsWith('default')) ||
+          (scenario === 'empty-shard-default' && version !== '1.6.0')
+        const reason = isFailure
+          ? undefined
+          : scenario.startsWith('empty-shard')
+            ? 'zero_test_shard'
+            : scenario === 'empty-file' || scenario.startsWith('no-candidates')
+              ? 'zero_tests'
+              : ['skipped', 'collected-only'].includes(scenario) ? 'all_tests_skipped' : undefined
+        const skipReason = reason === 'zero_test_shard'
+          ? 'No tests were assigned to this shard'
+          : reason === 'zero_tests'
+            ? 'No tests were detected'
+            : reason === 'all_tests_skipped' ? 'All tests were skipped' : undefined
+        const expectedStatus = isFailure ? 'fail' : reason ? 'skip' : 'pass'
+        const shard = scenario.startsWith('empty-shard') || scenario.includes('sharded') ? ' --shard=2/2' : ''
+        let output = ''
+        childProcess = exec(
+          `./node_modules/.bin/vitest run --config vitest-empty-sessions/config.mjs${shard}`,
+          {
+            cwd: sandboxCwd(),
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DD_INJECT_FORCE: 'true',
+              EMPTY_SESSION_SCENARIO: scenario,
+            },
           }
-        })
-
-        it('does not run Failed Test Replay for files with concurrent tests', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-              assert.strictEqual(
-                retriedTest.meta[TEST_NAME],
-                'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
-              )
-
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/concurrent-ftr-disabled.mjs',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
+        )
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessions = events.filter(event => event.type === 'test_session_end')
+            const modules = events.filter(event => event.type === 'test_module_end')
+            const tests = events.filter(event => event.type === 'test')
+            assert.strictEqual(sessions.length, 1, output)
+            assert.strictEqual(modules.length, 1, output)
+            assert.strictEqual(tests.length, ['normal', 'skipped', 'collected-only'].includes(scenario) ? 1 : 0, output)
+            if (scenario === 'collected-only') {
+              assert.strictEqual(tests[0].content.meta[TEST_STATUS], 'skip', output)
             }
-          )
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-            logsPromise,
-          ])
-          assert.strictEqual(exitCode, 0)
-        })
-
-        it('does not crash if the retry does not hit the breakpoint', (done) => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.strictEqual(retriedTests.length, 1)
-              const [retriedTest] = retriedTests
-
-              const hasDebugTags = Object.keys(retriedTest.meta)
-                .some(property =>
-                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                )
-
-              assert.strictEqual(hasDebugTags, false)
-            })
-
-          const logsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-              if (payloads.length > 0) {
-                throw new Error('Unexpected logs')
-              }
-            }, 5000)
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
+            for (const event of [...sessions, ...modules]) {
+              assert.strictEqual(event.content.meta[TEST_STATUS], expectedStatus, output)
+              assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], reason, output)
+              assert.strictEqual(event.content.meta[TEST_SKIP_REASON], skipReason, output)
             }
-          )
-
-          childProcess.on('exit', () => {
-            Promise.all([eventsPromise, logsPromise]).then(() => {
-              done()
-            }).catch(done)
-          })
-        })
-
-        it('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
-          receiver.setSettings({
-            flaky_test_retries_enabled: true,
-            di_enabled: true,
-          })
-
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.strictEqual(tests.length, 2)
-              const retriedTests = tests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
-              assert.strictEqual(retriedTests.length, 1)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/vitest run --retry=1',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/fake-timers-di*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              },
-            }
-          )
-
-          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-          assert.strictEqual(exitCode, 1)
-        })
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, isFailure ? 1 : 0, output)
       })
     }
   })
 })
 
-const describeCloudflareWorkers = NODE_MAJOR < 20 ? describe.skip : describe
+const describeCloudflareWorkers = NODE_MAJOR < 20 || !runVersionIndependentSuites ? describe.skip : describe
 
 describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.12.21', () => {
   let cwd, receiver, childProcess, testOutput
@@ -2834,3 +1863,113 @@ describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.1
     assert.strictEqual(code, 0, testOutput)
   })
 })
+
+// Vite's loader can notify ESM hooks more than once for the same runner.
+// Cover the original reproducer and the latest supported Vitest release.
+// Vitest 4 requires Node >=20; Vitest 5 requires Node >=22.
+for (const version of ['4.1.10', 'latest']) {
+  let describeRunnerReuse = describe
+  if (!runVersionIndependentSuites || NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
+    describeRunnerReuse = describe.skip
+  }
+
+  describeRunnerReuse(`vitest@${version} runner reuse`, () => {
+    let cwd, receiver, childProcess, output
+    useSandbox([`vitest@${version}`, 'jsdom@26.1.0', '@testing-library/jest-dom@6.9.1'])
+
+    before(() => {
+      cwd = sandboxCwd()
+    })
+    beforeEach(async () => {
+      output = ''
+      receiver = await new FakeCiVisIntake().start()
+    })
+    afterEach(async () => {
+      childProcess?.kill()
+      await receiver.stop()
+    })
+
+    for (const pool of ['forks', 'threads']) {
+      for (const feature of ['atr', 'efd', 'atf']) {
+        for (const passAttempt of [2, 3]) {
+          const title = `reports each ${feature} attempt once when attempt ${passAttempt} passes with jsdom and ${pool}`
+          it(title, async () => {
+            receiver.setSettings({
+              itr_enabled: false,
+              tests_skipping: false,
+              code_coverage: false,
+              flaky_test_retries_enabled: feature === 'atr',
+              test_management: { enabled: feature === 'atf', attempt_to_fix_retries: 2 },
+              known_tests_enabled: feature === 'efd',
+              early_flake_detection: { enabled: feature === 'efd', slow_test_retries: { '5s': 2 } },
+            })
+            receiver.setKnownTests({ vitest: {} })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/efd-retries.mjs': {
+                    tests: { 'EFD retries': { properties: { attempt_to_fix: true } } },
+                  },
+                },
+              },
+            })
+            childProcess = exec('./node_modules/.bin/vitest run --environment jsdom', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+                EFD_PASS_ATTEMPT: String(passAttempt),
+                POOL_CONFIG: pool,
+                VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/runner-reuse-setup.mjs',
+              },
+            })
+            childProcess.stdout.on('data', data => { output += data })
+            childProcess.stderr.on('data', data => { output += data })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test').map(event => event.content)
+                  .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+                const attempts = feature === 'atr' ? passAttempt : 3
+                const expected = Array.from({ length: attempts }, (_, index) => {
+                  return index + 1 === passAttempt ? 'pass' : 'fail'
+                })
+                assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expected, output)
+                assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+                for (const test of tests.slice(1)) {
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES[feature])
+                }
+
+                const suites = events.filter(event => event.type === 'test_suite_end')
+                assert.strictEqual(suites.length, 1, output)
+                const suite = suites[0].content
+                assert.strictEqual(suite.meta[TEST_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                if (feature === 'atf') {
+                  const failedAttempt = passAttempt === 3 ? tests[0] : tests.at(-1)
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.ok(failedAttempt.meta[field], output)
+                    assert.strictEqual(suite.meta[field], failedAttempt.meta[field], output)
+                  }
+                }
+                if (tests.at(-1).meta[TEST_STATUS] === 'pass') {
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.strictEqual(tests.at(-1).meta[field], undefined, output)
+                  }
+                }
+              }
+            )
+            const [[code, signal]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(signal, null, output)
+            assert.strictEqual(code, feature === 'atf' ? 1 : 0, output)
+          })
+        }
+      }
+    }
+  })
+}

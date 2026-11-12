@@ -16,6 +16,8 @@ class ElectronExporter {
   }
 
   export (spans) {
+    if (!traceChannel.hasSubscribers) return
+
     this.#traces.push(spans)
 
     const { flushInterval } = this._config
@@ -35,7 +37,8 @@ class ElectronExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    const traces = this.#traces.splice(0)
+    const traces = this.#traces
+    this.#traces = []
 
     if (traces.length > 0 && traceChannel.hasSubscribers) {
       const formattedTraces = traces.map(spans => spans.map(span => normalizeSpan(truncateSpan(span))))

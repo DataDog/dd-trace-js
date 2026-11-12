@@ -25,7 +25,7 @@ function wrapAddCommand (addCommand) {
     return startCh.runStores(ctx, () => {
       const res = addCommand.apply(this, arguments)
 
-      res.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
+      res.then(() => finish(ctx), err => finish(ctx, err))
 
       return res
     })
@@ -85,13 +85,11 @@ addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', vers
 
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', internalSendCommand => function (options) {
-    if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
-
-    if (!options.callback) return internalSendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers || !options.callback) return internalSendCommand.apply(this, arguments)
 
     const ctx = getStartCtx(this, options.command, options.args)
     return startCh.runStores(ctx, () => {
-      options.callback = wrapCallback(finishCh, errorCh, ctx, options.callback)
+      options.callback = wrapCallback(ctx, options.callback)
 
       try {
         return internalSendCommand.apply(this, arguments)
@@ -114,11 +112,11 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
     const ctx = getStartCtx(this, command, args)
     return startCh.runStores(ctx, () => {
       if (typeof callback === 'function') {
-        arguments[2] = wrapCallback(finishCh, errorCh, ctx, callback)
+        arguments[2] = wrapCallback(ctx, callback)
       } else if (Array.isArray(args) && typeof args.at(-1) === 'function') {
-        args[args.length - 1] = wrapCallback(finishCh, errorCh, ctx, args.at(-1))
+        args[args.length - 1] = wrapCallback(ctx, args.at(-1))
       } else {
-        arguments[2] = wrapCallback(finishCh, errorCh, ctx)
+        arguments[2] = wrapCallback(ctx)
       }
 
       try {
@@ -155,20 +153,36 @@ function getStartCtx (client, command, args, argsStartIndex) {
   }
 }
 
-function wrapCallback (finishCh, errorCh, ctx, callback) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Function} [callback]
+ */
+function wrapCallback (ctx, callback) {
   if (typeof callback !== 'function') return callback
   return function (err) {
-    return finish(finishCh, errorCh, ctx, err, callback, this, arguments)
+    return finish(ctx, err, callback, this, arguments)
   }
 }
 
-function finish (finishCh, errorCh, ctx, error, callback, thisArg, args) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Error} [error]
+ * @param {Function} [callback]
+ * @param {object} [thisArg]
+ * @param {Iterable<unknown>} [args]
+ */
+function finish (ctx, error, callback, thisArg, args) {
   if (error) {
     ctx.error = error
     errorCh.publish(ctx)
   }
   if (callback) {
-    return finishCh.runStores(ctx, callback, thisArg, ...args)
+    return finishCh.runStores(
+      ctx,
+      /** @type {Parameters<typeof finishCh.runStores>[1]} */ (callback),
+      thisArg,
+      ...(/** @type {Iterable<unknown>} */ (args))
+    )
   }
-  finishCh.publish(ctx)
+  return finishCh.publish(ctx)
 }

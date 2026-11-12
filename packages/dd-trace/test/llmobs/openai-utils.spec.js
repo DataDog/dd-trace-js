@@ -1,9 +1,28 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { getOpenAIModelProvider } = require('../../src/llmobs/plugins/openai/utils')
+const {
+  extractContentParts,
+  getOpenAIModelProvider,
+  getServerToolUsageMetrics,
+} = require('../../src/llmobs/plugins/openai/utils')
 const OpenAiLLMObsPlugin = require('../../src/llmobs/plugins/openai')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../src/llmobs/constants/tags')
+
+describe('extractContentParts', () => {
+  it('preserves empty text and formats every multimodal fallback', () => {
+    assert.deepStrictEqual(extractContentParts([
+      { type: 'text' },
+      { type: 'image_url' },
+      { type: 'input_audio' },
+      { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
+      null,
+    ]), {
+      content: '\n[image]\n[audio]\n[]',
+      audioParts: [{ content: 'aGVsbG8=', mimeType: 'audio/wav' }],
+    })
+  })
+})
 
 describe('getOpenAIModelProvider', () => {
   it('returns openai for openai.com URLs', () => {
@@ -67,4 +86,90 @@ describe('OpenAiLLMObsPlugin#_getModelProviderAndClient', () => {
       { modelProvider: UNKNOWN_MODEL_PROVIDER, client: 'OpenAI' }
     )
   })
+})
+
+describe('getServerToolUsageMetrics', () => {
+  const webSearchCall = (status = 'completed', actionType = 'search') =>
+    ({ type: 'web_search_call', id: 'ws_1', status, action: { type: actionType } })
+  const fileSearchCall = (status = 'completed', queries = ['company holiday policy']) =>
+    ({ type: 'file_search_call', id: 'fs_1', status, queries, results: null })
+  const message = { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hi' }] }
+
+  it('omits metrics when there are no tool calls', () => {
+    assert.deepStrictEqual(getServerToolUsageMetrics({ output: [message] }), {})
+    assert.deepStrictEqual(getServerToolUsageMetrics({ output: [] }), {})
+    assert.deepStrictEqual(getServerToolUsageMetrics({}), {})
+    assert.deepStrictEqual(getServerToolUsageMetrics(), {})
+  })
+
+  it('omits metrics for chat completions, which have no output array', () => {
+    assert.deepStrictEqual(getServerToolUsageMetrics({ choices: [{ message: { content: 'hi' } }] }), {})
+  })
+
+  it('counts both tools interleaved with messages', () => {
+    // Observed real-world order: tool calls are not grouped ahead of the messages.
+    const response = { output: [webSearchCall(), message, fileSearchCall(), message] }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 1, storageSearchCount: 1 })
+  })
+
+  it('counts only search actions', () => {
+    // Observed on gpt-5: 2 search + 3 open_page items were billed as 2 searches.
+    const response = {
+      output: [
+        webSearchCall('completed', 'search'),
+        webSearchCall('completed', 'open_page'),
+        webSearchCall('completed', 'open_page'),
+        webSearchCall('completed', 'find_in_page'),
+        webSearchCall('completed', 'search'),
+      ],
+    }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 2 })
+  })
+
+  it('omits the metric when only non-search actions are present', () => {
+    const response = { output: [webSearchCall('completed', 'open_page'), webSearchCall('completed', 'find_in_page')] }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
+  })
+
+  it('counts a web search without an action', () => {
+    const response = { output: [{ type: 'web_search_call', id: 'ws_1', status: 'completed' }] }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 1 })
+  })
+
+  it('counts a call with several queries once', () => {
+    const response = { output: [fileSearchCall('completed', ['a', 'b', 'c'])] }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { storageSearchCount: 1 })
+  })
+
+  for (const status of ['in_progress', 'searching', 'incomplete', 'failed']) {
+    it(`does not count calls with status ${status}`, () => {
+      const response = { output: [webSearchCall(status), fileSearchCall(status)] }
+      assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
+    })
+  }
+
+  it('does not count calls without a status', () => {
+    const response = { output: [{ type: 'web_search_call' }, { type: 'file_search_call' }, null] }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
+  })
+
+  it('reads web searches from tool_usage over the item count', () => {
+    const response = {
+      output: [webSearchCall(), fileSearchCall()],
+      tool_usage: { image_gen: { total_tokens: 0 }, web_search: { num_requests: 3 } },
+    }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 3, storageSearchCount: 1 })
+  })
+
+  it('omits the metric when tool_usage reports zero web searches', () => {
+    const response = { output: [webSearchCall()], tool_usage: { web_search: { num_requests: 0 } } }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
+  })
+
+  for (const toolUsage of [undefined, null, {}, { image_gen: { total_tokens: 0 } }, { web_search: {} }]) {
+    it(`falls back to counting search actions when tool_usage is ${JSON.stringify(toolUsage)}`, () => {
+      const response = { output: [webSearchCall(), webSearchCall('completed', 'open_page')], tool_usage: toolUsage }
+      assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 1 })
+    })
+  }
 })

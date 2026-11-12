@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const iast = require('../../../../../src/appsec/iast')
@@ -11,6 +10,8 @@ const overheadController = require('../../../../../src/appsec/iast/overhead-cont
 const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
 const { getConfigFresh } = require('../../../../helpers/config')
 const agent = require('../../../../plugins/agent')
+const { invokeCommandInjectionSink } = require('../../utils')
+const httpRequest = require('../../../../setup/helpers/http-client')
 const schema = `
 type Book {
   title: String,
@@ -47,8 +48,7 @@ const books = [
 const resolvers = {
   Query: {
     books: (root, args, context) => {
-      const { execSync } = require('child_process')
-      execSync(args.title)
+      invokeCommandInjectionSink(args.title)
       return books.filter(book => {
         return book.title.includes(args.title)
       })
@@ -61,7 +61,7 @@ async function makeGraphqlRequest (port, query, variables = {}) {
     'content-type': 'application/json',
   }
 
-  return axios.post(`http://localhost:${port}/graphql`, {
+  return httpRequest.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
     variables,

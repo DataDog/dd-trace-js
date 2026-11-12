@@ -16,7 +16,6 @@ const require = Module.createRequire(import.meta.url)
 const isInitializeMainThread = isMainThread && import.meta.url.endsWith('?initialize')
 let syncImportInTheMiddleHook
 
-let getValueFromEnvSources
 let regexpEscape
 
 // Substrings of resolved URLs that import-in-the-middle must never wrap: re-export
@@ -32,13 +31,12 @@ const includeModuleNames = new Set()
 let moduleNameAlternation = ''
 
 if (!isInitializeMainThread) {
+  require('./packages/dd-trace/src/guardrails/apply-pm2-env.js')
   const regexpEscapeModule = require('./vendor/dist/escape-string-regexp/index.js')
   const hooks = require('./packages/datadog-instrumentations/src/helpers/hooks.js')
-  const configHelper = require('./packages/dd-trace/src/config/helper.js')
   const { isRelativeRequire } = require('./packages/datadog-instrumentations/src/helpers/shared-utils.js')
 
   regexpEscape = regexpEscapeModule.default
-  getValueFromEnvSources = configHelper.getValueFromEnvSources
 
   for (const moduleName of Object.keys(hooks)) {
     // Relative hooks resolve outside node_modules and are not instrumented here.
@@ -54,16 +52,60 @@ if (!isInitializeMainThread) {
 
 const nodeModulesIncludeSource = `node_modules/(?:${moduleNameAlternation})/(?!node_modules).+`
 
+const NODE_MODULES = '/node_modules/'
+
+// Package roots already reported, so each package costs a single report however many of its files load.
+const reportedPackageRoots = new Set()
+/** @type {((url: string) => void) | undefined} */
+let reportModuleLoad
+
 function initialize (data = {}) {
+  const { moduleLoadPort } = data
+  if (moduleLoadPort) {
+    // A MessagePort, not a timer; optional chaining would break the Node.js 12 syntax this file supports.
+    // eslint-disable-next-line eslint-rules/eslint-timer-unref
+    moduleLoadPort.unref()
+    reportModuleLoad = (url) => moduleLoadPort.postMessage(url)
+  }
+
   prepareImportInTheMiddleOptions(data)
   return origInitialize(data)
+}
+
+/**
+ * Reports the first loaded file of each `node_modules` package, so packages that
+ * import-in-the-middle leaves unwrapped reach `dd-trace:moduleLoadStart` too. Wrapped
+ * modules are also published through iitm's `addHook`; dependency telemetry deduplicates.
+ *
+ * @param {string} url Loaded module URL.
+ */
+function reportUnwrappedPackage (url) {
+  if (!reportModuleLoad || !url.startsWith('file:') || url.includes('iitm=true')) return
+
+  const nodeModulesIndex = url.lastIndexOf(NODE_MODULES)
+  if (nodeModulesIndex === -1) return
+
+  const nameStart = nodeModulesIndex + NODE_MODULES.length
+  let nameEnd = url.indexOf('/', nameStart)
+  if (url[nameStart] === '@' && nameEnd !== -1) nameEnd = url.indexOf('/', nameEnd + 1)
+  if (nameEnd === -1) return
+
+  const packageRoot = url.slice(0, nameEnd)
+  if (reportedPackageRoots.has(packageRoot)) return
+
+  reportedPackageRoots.add(packageRoot)
+  reportModuleLoad(url)
 }
 
 function prepareImportInTheMiddleOptions (data = {}) {
   // A consumer-owned shouldInclude predicate takes over the wrapping decision, so
   // iitm ignores the include/exclude arrays. Building the matcher here keeps the
   // synchronous and asynchronous loaders on one matching implementation.
-  data.shouldInclude = createShouldInclude(getValueFromEnvSources('DD_IAST_SECURITY_CONTROLS_CONFIGURATION'))
+  // Lazily required and read without its registered default so a loader worker
+  // never loads the configuration defaults table. The default is unset regardless.
+  const { getValueFromEnvSources } = require('./packages/dd-trace/src/config/helper.js')
+
+  data.shouldInclude = createShouldInclude(getValueFromEnvSources('DD_IAST_SECURITY_CONTROLS_CONFIGURATION', true))
 
   return data
 }
@@ -114,10 +156,14 @@ function buildIncludeSource (securityControlsConfig) {
 }
 
 function load (url, context, nextLoad) {
+  reportUnwrappedPackage(url)
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
 }
 
 function loadSync (url, context, nextLoad) {
+  // require() loads are already published by require-in-the-middle.
+  if (!hasRequireCondition(context)) reportUnwrappedPackage(url)
+
   if (isCommonJSLoad(context)) {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
@@ -133,6 +179,13 @@ function isCommonJSLoad (context) {
   // Sync hooks report CommonJS require() dependency loads with a `require`
   // condition but no format. If a format is present, trust it instead: ESM
   // loaded through require() reports `format: 'module'` and still needs rewrite.
+  return hasRequireCondition(context)
+}
+
+/**
+ * @param {import('node:module').LoadHookContext} context
+ */
+function hasRequireCondition (context) {
   const conditions = context.conditions
   if (!conditions) return false
 
@@ -182,6 +235,8 @@ function registerSyncLoaderHooks (data = {}) {
   // synchronous and asynchronous loaders share the same option preparation so
   // that `import http from 'node:http'` is wrapped on both paths.
   syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  // The synchronous hooks run on the application thread, so publish directly.
+  reportModuleLoad = require('./packages/dd-trace/src/esm-module-load.js').publishModuleLoad
   Module.registerHooks({
     resolve: syncHook.resolveSync,
     load: loadSync,

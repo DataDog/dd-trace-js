@@ -24,12 +24,13 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { NODE_MAJOR } = require('../../version')
+const { isLatestCucumberSupported } = require('../cucumber/versions')
 
 const webAppServer = require('../ci-visibility/web-app-server')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 
-const versionRange = ['4.11.0', 'latest']
-const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+const versionRange = require('./versions')
+const mochaDependency = `mocha@${getLatestMochaSpecifier()}`
 
 versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {
@@ -39,9 +40,9 @@ versionRange.forEach(version => {
     let webAppPort
 
     useSandbox([
-      'mocha',
+      mochaDependency,
       'jest',
-      ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
+      ...(isLatestCucumberSupported() ? ['@cucumber/cucumber'] : []),
       `selenium-webdriver@${version}`,
     ])
 
@@ -86,7 +87,7 @@ versionRange.forEach(version => {
       },
     ]
     testFrameworks.forEach(({ name, command }) => {
-      if (!isLatestCucumberSupported && name === 'cucumber') return
+      if (!isLatestCucumberSupported() && name === 'cucumber') return
 
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', async () => {

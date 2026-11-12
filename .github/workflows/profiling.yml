@@ -32,6 +32,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run test:profiler:ci
       - run: npm run test:integration:profiler:coverage
+      - run: npm run test:otel-thread-ctx
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-macos
@@ -60,6 +61,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: npm run test:profiler:ci
       - run: npm run test:integration:profiler:coverage
+      - run: npm run test:otel-thread-ctx
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-ubuntu
@@ -118,6 +120,7 @@ jobs:
           ) | ForEach-Object { "$_=" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
       - run: npm run test:profiler:ci
       - run: npm run test:integration:profiler:coverage
+      - run: npm run test:otel-thread-ctx
       - uses: ./.github/actions/node-crash-report
         if: failure()
       # Upload any WER minidumps that landed during this job, even on
@@ -125,7 +128,7 @@ jobs:
       # we want to inspect.
       - name: Upload Windows crash dumps
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-crash-dumps-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.WER_DUMP_DIR }}/*.dmp

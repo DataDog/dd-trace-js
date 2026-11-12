@@ -46,6 +46,86 @@ describe('TraceState', () => {
     assert.strictEqual(called, true)
   })
 
+  it('should parse more than 32 fields within a vendor member', () => {
+    const fields = Array.from({ length: 40 }, (_, index) => `k${index}:v`).join(';')
+    const ts = TraceState.fromString(`ot=${fields}`)
+
+    ts.forVendor('ot', state => {
+      assert.strictEqual(state.size, 40)
+      assert.strictEqual(state.get('k39'), 'v')
+    })
+  })
+
+  it('should accept 256-character member values and reject 257-character member values', () => {
+    const accepted = 'x'.repeat(256)
+    const ts = TraceState.fromString(`a=${accepted},b=${'x'.repeat(257)},c=ok`)
+
+    assert.strictEqual(ts.get('a'), accepted)
+    assert.strictEqual(ts.get('b'), undefined)
+    assert.strictEqual(ts.get('c'), 'ok')
+  })
+
+  it('should accept 256-character updates and reject 257-character updates', () => {
+    const accepted = 'x'.repeat(256)
+    const ts = TraceState.fromString('a=original')
+
+    ts.set('a', accepted)
+    ts.set('a', 'x'.repeat(257))
+
+    assert.strictEqual(ts.get('a'), accepted)
+  })
+
+  it('should remove a vendor member when required fields exceed the value limit', () => {
+    const ts = TraceState.fromString('dd=required:original')
+
+    ts.forVendor('dd', state => state.set('required', 'x'.repeat(250)), () => false)
+
+    assert.strictEqual(ts.get('dd'), undefined)
+  })
+
+  it('should not inspect optional fields when an update fits the value limit', () => {
+    const ts = TraceState.fromString('dd=required:original')
+    let calls = 0
+
+    ts.forVendor('dd', state => state.set('required', 'updated'), () => {
+      calls++
+      return true
+    })
+
+    assert.strictEqual(calls, 0)
+    assert.strictEqual(ts.get('dd'), 'required:updated')
+  })
+
+  it('should remove a vendor member when its only field is optional and exceeds the value limit', () => {
+    const ts = TraceState.fromString('dd=optional:original')
+
+    ts.forVendor('dd', state => state.set('optional', 'x'.repeat(250)), () => true)
+
+    assert.strictEqual(ts.get('dd'), undefined)
+  })
+
+  for (const valueLength of [226, 227]) {
+    it(`should prune optional fields once in reverse order at ${valueLength + 30} characters`, () => {
+      const ts = new TraceState()
+      const inspected = new Set()
+      const value = 'x'.repeat(valueLength)
+
+      ts.forVendor('dd', state => {
+        state.set('t.keep', value)
+        state.set('s', '1')
+        state.set('t.drop1', 'x'.repeat(20))
+        state.set('p', '0123456789abcdef')
+        state.set('t.drop2', 'x'.repeat(20))
+      }, key => {
+        assert.strictEqual(inspected.has(key), false)
+        inspected.add(key)
+        return key.startsWith('t.')
+      })
+
+      assert.strictEqual(ts.get('dd'), 'p:0123456789abcdef;s:1' + (valueLength === 226 ? `;t.keep:${value}` : ''))
+    })
+  }
+
   it('should mutate value in tracestate when changing value', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
@@ -76,6 +156,14 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'dd=s:2;t.dm:-4,other=bleh')
   })
 
+  it('should not rewrite a vendor after deleting a missing value', () => {
+    const ts = TraceState.fromString('other=bleh,dd=s:2')
+
+    ts.forVendor('dd', state => state.delete('missing'))
+
+    assert.strictEqual(ts.toString(), 'dd=s:2,other=bleh')
+  })
+
   it('should remove value from tracestate when clearing values', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
@@ -91,10 +179,161 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'other=bleh')
   })
 
+  it('should clone without sharing mutations', () => {
+    const original = TraceState.fromString('other=bleh,dd=s:2')
+    const clone = original.clone()
+
+    clone.delete('other')
+    clone.set('dd', 's:1')
+
+    assert.strictEqual(original.toString(), 'dd=s:2,other=bleh')
+    assert.strictEqual(clone.toString(), 'dd=s:1')
+  })
+
   it('should cap parsing at 32 list-members per W3C Trace Context §3.3.1.2', () => {
     const header = Array.from({ length: 33 }, (_, index) => `k${index}=v${index}`).join(',')
     const ts = TraceState.fromString(header)
     assert.strictEqual(ts.size, 32)
+  })
+
+  it('should cap constructor entries at 32 list-members', () => {
+    const entries = Array.from({ length: 33 }, (_, index) => [`k${32 - index}`, `v${32 - index}`])
+    const ts = new TraceState(entries)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.get('k32'), undefined)
+    assert.strictEqual(ts.toString().split(',').at(-1), 'k31=v31')
+  })
+
+  it('should keep the 32 leftmost list-members after updates', () => {
+    const header = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(header)
+    ts.set('ot', 'rv:f0948a54d43b8e;th:8')
+    ts.set('dd', 's:1')
+
+    const members = ts.toString().split(',')
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(members.length, 32)
+    assert.deepStrictEqual(members.slice(0, 3), ['dd=s:1', 'ot=rv:f0948a54d43b8e;th:8', 'k0=v0'])
+    assert.strictEqual(members[31], 'k29=v29')
+
+    ts.delete('dd')
+    const remainingMembers = ts.toString().split(',')
+    assert.strictEqual(remainingMembers.length, 31)
+    assert.strictEqual(remainingMembers[30], 'k29=v29')
+  })
+
+  it('should not impose an aggregate length limit', () => {
+    const value = 'x'.repeat(170)
+    const ts = TraceState.fromString(`a=${value},b=${value},c=${value}`)
+
+    assert.strictEqual(ts.toString().length, 518)
+  })
+
+  it('should put dd first without changing the order of other members', () => {
+    const ts = TraceState.fromString('a=1,dd=s:2,b=2')
+
+    assert.strictEqual(ts.toString(), 'dd=s:2,a=1,b=2')
+  })
+
+  it('should keep the first valid dd member within the limit', () => {
+    const ts = TraceState.fromString('dd=s:1,other=value,dd=s:2')
+
+    assert.strictEqual(ts.toString(), 'dd=s:1,other=value')
+  })
+
+  it('should keep dd beyond the first 32 members in place of the last other member', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k32=v32`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should keep all 31 other members when dd is the 32nd member', () => {
+    const other = Array.from({ length: 31 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k31=v31`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
+  })
+
+  it('should ignore invalid dd after the limit and keep the first 32 other members', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue`)
+
+    assert.strictEqual(ts.toString(), other.join(','))
+  })
+
+  it('should accept the first valid dd after an invalid one beyond the limit', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue,dd=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  for (const otherCount of [0, 32]) {
+    it(`should enforce the dd value length limit after ${otherCount} other members`, () => {
+      const other = Array.from({ length: otherCount }, (_, index) => `k${index}=v${index}`)
+      const prefix = other.length ? `${other.join(',')},` : ''
+      const accepted = 'x'.repeat(256)
+      const oversized = 'x'.repeat(257)
+
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${oversized}`).get('dd'), undefined)
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${accepted}`).get('dd'), accepted)
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${oversized},dd=${accepted}`).get('dd'), accepted)
+    })
+  }
+
+  it('should skip dd text inside other members and accept surrounding whitespace', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},vendor=prefixdd=s:1,ddx=s:1, \tdd \t=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should not prioritize dd inside vendor data', () => {
+    const ts = TraceState.fromString('other=a:1;dd:2;b:3')
+
+    ts.forVendor('other', state => state.set('c', '4'))
+
+    assert.strictEqual(ts.toString(), 'other=c:4;a:1;dd:2;b:3')
+  })
+
+  it('should ignore missing or empty keys without consuming a later member separator', () => {
+    const ts = TraceState.fromString('missing,=missing,,a=1,missing,b=2,missing,missing')
+
+    assert.strictEqual(ts.toString(), 'a=1,b=2')
+  })
+
+  it('should ignore missing or empty keys in vendor data', () => {
+    const ts = TraceState.fromString('other=missing;:missing;;a:1;missing;b:2;missing;missing')
+
+    ts.forVendor('other', state => state.set('c', '3'))
+
+    assert.strictEqual(ts.toString(), 'other=c:3;a:1;b:2')
+  })
+
+  it('should count empty members toward the limit when retaining dd', () => {
+    const ts = TraceState.fromString(`${','.repeat(32)}other=value,dd=s:2`)
+
+    assert.strictEqual(ts.toString(), 'dd=s:2')
+  })
+
+  it('should skip incomplete dd members beyond the limit', () => {
+    const ts = TraceState.fromString(`${','.repeat(32)}dd-missing,=dd,dd=,dd=s:2,dd=s:1`)
+
+    assert.strictEqual(ts.toString(), 'dd=s:2')
+  })
+
+  it('should preserve 256-character vendor keys', () => {
+    const other = Array.from({ length: 31 }, (_, index) => {
+      const key = `k${index}`.padEnd(256, 'x')
+      return `${key}=value`
+    })
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {

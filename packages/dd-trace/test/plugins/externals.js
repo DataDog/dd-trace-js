@@ -3,6 +3,7 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
       name: '@aws/durable-execution-sdk-js-testing',
@@ -10,6 +11,7 @@ module.exports = {
       forced: true,
     },
   ],
+  '@openai/agents-realtime': [{ name: 'zod', dep: true }],
   aerospike: [
     {
       name: 'aerospike',
@@ -45,7 +47,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0'],
+      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
     },
     {
       name: 'graphql',
@@ -78,6 +80,10 @@ module.exports = {
       versions: ['>=3'],
     },
     {
+      name: '@aws-sdk/client-eventbridge',
+      versions: ['>=3'],
+    },
+    {
       name: '@aws-sdk/client-sfn',
       versions: ['>=3'],
     },
@@ -95,10 +101,14 @@ module.exports = {
     },
     {
       name: '@aws-sdk/client-bedrock-runtime',
-      versions: ['>=3.422.0'],
+      versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
   bullmq: [
+    {
+      name: 'ioredis',
+      dep: true,
+    },
     {
       name: 'redis',
       versions: ['>=4'],
@@ -297,6 +307,19 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: [
+        '>=0.8.0 <0.8.5',
+        '>=0.8.5 <0.8.7',
+      ],
+    },
+  ],
+  'graphql-jit': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
   ],
   'apollo-server-core': [
     {
@@ -363,6 +386,15 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -376,6 +408,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -449,20 +482,32 @@ module.exports = {
       versions: ['>= 2'],
     },
     {
+      // TODO: ldapjs-promise 4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet.
       name: 'ldapjs-promise',
-      versions: ['>=2'],
+      versions: ['>=2 <4'],
     },
   ],
   'light-my-request': [
     {
       name: 'fastify',
+      versions: ['>=3 <5'],
+      node: '<22.12.0',
+    },
+    {
+      name: 'fastify',
       versions: ['>=3'],
+      node: '>=22.12.0',
     },
   ],
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0'],
+      versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
+    },
+    {
+      name: 'mariadb',
+      versions: ['3.5.3'],
+      node: '>=20',
     },
   ],
   mercurius: [
@@ -470,6 +515,7 @@ module.exports = {
       // mercurius peers graphql; pin the only supported major (16) so the
       // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
       name: 'graphql',
+      dep: true,
       versions: ['^16.0.0'],
     },
     {
@@ -542,18 +588,35 @@ module.exports = {
       dep: true,
     },
   ],
+  openai: [
+    {
+      name: '@openai/agents-realtime',
+      versions: ['>=0.20.0'],
+      node: '>=22',
+    },
+    {
+      // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
+      // it is not installed into the version folders by default and `require('ws')` inside
+      // `openai/realtime/ws.js` would throw. Dependency-only, so it adds no version matrix.
+      name: 'ws',
+      dep: true,
+    },
+  ],
   'openai-agents': [
     {
       name: '@openai/agents',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
     {
       name: '@openai/agents-core',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
     {
       name: '@openai/agents-openai',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
   ],
   passport: [
@@ -619,6 +682,12 @@ module.exports = {
       versions: ['8.0.0'],
     },
   ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
+    },
+  ],
   '@prisma/client': [
     {
       name: 'prisma',
@@ -671,6 +740,16 @@ module.exports = {
       versions: ['2'],
     },
   ],
+  'react-router': [
+    {
+      name: 'axios',
+      versions: ['>=1.0.0'],
+    },
+    {
+      name: 'react',
+      dep: true,
+    },
+  ],
   redis: [
     {
       name: 'redis',
@@ -689,8 +768,24 @@ module.exports = {
       versions: ['>=4'],
     },
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
+    },
+    {
+      name: 'pg',
+      dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',
@@ -709,6 +804,14 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
+    },
+  ],
+  supabase: [
+    {
+      name: '@supabase/supabase-js',
+      versions: ['>=2.112.2'],
+      // This package is the Supabase test target even though it differs from the integration key above.
+      honourEnvRange: true,
     },
   ],
 }

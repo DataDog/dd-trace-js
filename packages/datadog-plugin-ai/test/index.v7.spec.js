@@ -106,32 +106,35 @@ describe('Plugin', () => {
       await checkTraces
     })
 
-    it('creates a span for embedMany', async function () {
-      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+    {
+      const embedManyTest = semifies(resolvedVersion, '>=7.0.23') ? it : it.skip
 
-      const checkTraces = agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-        const embedManySpan = spans.find(s => s.name === 'embedMany')
+      // embedMany is only available from ai 7.0.23.
+      embedManyTest('creates a span for embedMany', async function () {
+        const checkTraces = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          const embedManySpan = spans.find(s => s.name === 'embedMany')
 
-        assertObjectContains(embedManySpan, {
-          name: 'embedMany',
-          resource: 'embedMany',
-          meta: {
-            'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai',
-          },
+          assertObjectContains(embedManySpan, {
+            name: 'embedMany',
+            resource: 'embedMany',
+            meta: {
+              'ai.request.model': 'text-embedding-ada-002',
+              'ai.request.model_provider': 'openai',
+            },
+          })
         })
+
+        const result = await ai.embedMany({
+          model: openai.embedding('text-embedding-ada-002'),
+          values: ['hello world', 'goodbye world'],
+        })
+
+        assert.ok(result.embeddings, 'Expected result to be truthy')
+
+        await checkTraces
       })
-
-      const result = await ai.embedMany({
-        model: openai.embedding('text-embedding-ada-002'),
-        values: ['hello world', 'goodbye world'],
-      })
-
-      assert.ok(result.embeddings, 'Expected result to be truthy')
-
-      await checkTraces
-    })
+    }
 
     it('creates spans for streamText', async () => {
       const checkTraces = agent.assertSomeTraces(traces => {

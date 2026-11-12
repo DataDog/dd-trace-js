@@ -2,6 +2,8 @@
 
 require('./mocha-hooks')
 
+const { runBeforeExitHandlers } = require('../../src/before-exit')
+
 if (process.env.CI) {
   const fs = require('fs')
   const os = require('os')
@@ -38,9 +40,7 @@ if (!globalThis[Symbol.for('dd-trace')]) {
     // Only run the beforeExit handlers if the object is still the same.
     // That way we run the original beforeExit handler if it was added after this one.
     if (globalThis[Symbol.for('dd-trace')] === object) {
-      for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
-        handler()
-      }
+      runBeforeExitHandlers(globalThis[Symbol.for('dd-trace')].beforeExitHandlers)
     }
   })
 }
@@ -126,8 +126,7 @@ process.on('warning', (warning) => {
  * same emitter for event `error`. Once the upstream fix ships the duplicates
  * disappear and this returns false again, so real leaks resume throwing.
  *
- * @param {Error & { emitter?: NodeJS.EventEmitter, type?: string }} warning
- * @returns {boolean}
+ * @param {Error & { emitter?: import('node:events').EventEmitter, type?: string }} warning
  */
 function isNodeHttpSocketLeak (warning) {
   if (warning.type !== 'error' || typeof warning.emitter?.listeners !== 'function') {

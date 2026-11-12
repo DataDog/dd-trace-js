@@ -25,8 +25,8 @@ describe('Plugin', () => {
       assert.strictEqual(plugins['node:fs'], FsPlugin)
     })
 
-    it('marks the fs plugin experimental so it stays disabled by default', () => {
-      assert.strictEqual(FsPlugin.experimental, true)
+    it('marks the fs plugin opt-in so it stays disabled by default', () => {
+      assert.strictEqual(FsPlugin.optIn, true)
     })
   })
 
@@ -307,7 +307,7 @@ describe('Plugin', () => {
           const filename = path.join(__filename, Math.random().toString())
           try {
             fs.openSync(filename, 'r')
-          } catch (err) {
+          } catch {
             expectOneSpan(agent, done, {
               resource: 'openSync',
               error: 0,
@@ -386,7 +386,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -425,7 +425,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(filename)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -477,7 +477,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1000,7 +1000,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1025,7 +1025,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1054,10 +1054,10 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(sourceFile)
-          } catch (e) { /* */ }
+          } catch { /* */ }
           try {
             realFS.unlinkSync(link)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1084,7 +1084,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1112,7 +1112,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.unlinkSync(dest)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1190,7 +1190,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(dir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1315,7 +1315,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1347,7 +1347,7 @@ describe('Plugin', () => {
         afterEach(() => {
           try {
             realFS.rmdirSync(tmpdir)
-          } catch (e) { /* */ }
+          } catch { /* */ }
         })
 
         it('should be instrumented', (done) => {
@@ -1647,7 +1647,7 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
-            } catch (e) { /* */ }
+            } catch { /* */ }
             await fs.promises.unlink(filename)
           })
 

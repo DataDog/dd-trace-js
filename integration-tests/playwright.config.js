@@ -9,6 +9,7 @@ const projects = [
     use: {
       ...devices['Desktop Chrome'],
       screenshot: process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_MODE || 'off',
+      video: process.env.PLAYWRIGHT_FAILURE_VIDEO_MODE || 'off',
     },
   },
 ]
@@ -40,7 +41,13 @@ const config = {
   timeout: Number(process.env.TEST_TIMEOUT) || 30000,
   fullyParallel: process.env.FULLY_PARALLEL === 'true',
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
-  reporter: 'line',
+  reporter: process.env.PLAYWRIGHT_FROZEN_REPORTER
+    ? './ci-visibility/playwright-reporter-frozen.js'
+    : process.env.PLAYWRIGHT_THROWING_REPORTER
+      ? './ci-visibility/playwright-reporter-throws.js'
+      : process.env.PLAYWRIGHT_LOGGING_REPORTER
+        ? './ci-visibility/playwright-reporter-logs-error.js'
+        : 'line',
   /* Configure projects for major browsers */
   projects,
   testMatch: '**/*-test.js',
@@ -48,6 +55,14 @@ const config = {
 
 if (process.env.MAX_FAILURES) {
   config.maxFailures = Number(process.env.MAX_FAILURES)
+}
+
+if (process.env.FAIL_ON_FLAKY_TESTS) {
+  config.failOnFlakyTests = true
+}
+
+if (process.env.FAIL_GLOBAL_TEARDOWN) {
+  config.globalTeardown = './ci-visibility/playwright-tests-test-management/global-teardown.js'
 }
 
 module.exports = config

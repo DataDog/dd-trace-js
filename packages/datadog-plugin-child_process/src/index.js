@@ -52,7 +52,7 @@ class ChildProcessPlugin extends TracingPlugin {
     }
 
     if (truncated) {
-      meta['cmd.truncated'] = `${truncated}`
+      meta['cmd.truncated'] = 'true'
     }
 
     this.startSpan('command_execution', {
@@ -81,7 +81,7 @@ class ChildProcessPlugin extends TracingPlugin {
 
     const span = ctx.currentStore?.span || this.activeSpan
 
-    span?.setTag('cmd.exit_code', `${exitCode}`)
+    span?.setTag('cmd.exit_code', String(exitCode))
     span?.finish()
 
     return ctx.parentStore
@@ -112,7 +112,7 @@ class ChildProcessPlugin extends TracingPlugin {
 
     const span = ctx.currentStore?.span || this.activeSpan
 
-    span?.setTag('cmd.exit_code', `${exitCode}`)
+    span?.setTag('cmd.exit_code', String(exitCode))
     span?.finish()
 
     return ctx.parentStore

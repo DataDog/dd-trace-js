@@ -1,6 +1,8 @@
 'use strict'
 
-const os = require('os')
+const { logs } = require('@opentelemetry/api-logs')
+
+const { buildResourceAttributes, registerResourceAttributeRefresh } = require('../resource-attributes')
 
 /**
  * @typedef {import('../../config')} Config
@@ -27,6 +29,7 @@ const os = require('os')
  * @package
  */
 
+const { registerTelemetryFlusher } = require('../../flush')
 const LoggerProvider = require('./logger_provider')
 const BatchLogRecordProcessor = require('./batch_log_processor')
 const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
@@ -34,37 +37,17 @@ const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 /**
  * Initializes OpenTelemetry Logs support
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {import('../startup-config').InitializedExporter | undefined} Startup reporting metadata
+ * with the effective protocol and resource, or undefined when another provider owns the global Logs API.
  */
 function initializeOpenTelemetryLogs (config) {
-  // Build resource attributes
-  const resourceAttributes = {
-    'service.name': config.service,
-    'service.version': config.version,
-    'deployment.environment': config.env,
-  }
-
-  // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
-  // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
-  if (config.tags) {
-    const filteredTags = { ...config.tags }
-    delete filteredTags.service
-    delete filteredTags.version
-    delete filteredTags.env
-    Object.assign(resourceAttributes, filteredTags)
-  }
-
-  // Add host.name if reportHostname is enabled
-  if (config.reportHostname) {
-    resourceAttributes['host.name'] = os.hostname()
-  }
-
   // Create OTLP exporter using resolved config values
   const exporter = new OtlpHttpLogExporter(
     config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
     config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
     config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
-    resourceAttributes
+    buildResourceAttributes(config)
   )
 
   // Create batch processor for exporting logs to Datadog Agent
@@ -77,8 +60,20 @@ function initializeOpenTelemetryLogs (config) {
   // Create logger provider with processor for Datadog Agent export
   const loggerProvider = new LoggerProvider({ processor })
 
-  // Register the logger provider globally with OpenTelemetry API
+  // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
+  // Registration can leave an existing global provider in place; only report ours when it is active.
+  const registered = logs.getLoggerProvider() === loggerProvider
+
+  // Include final log batches in lifecycle retention with trace delivery.
+  registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
+
+  registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
+  if (!registered) return
+  return {
+    protocol: exporter.transformer.protocol,
+    resourceAttributes: exporter.getStartupResourceAttributes(),
+  }
 }
 
 module.exports = {

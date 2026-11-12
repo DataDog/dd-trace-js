@@ -10,6 +10,7 @@ const pathModule = require('node:path')
 const fs = require('node:fs')
 
 const { describe, before, it } = require('mocha')
+const semver = require('semver')
 
 // sub process must be executed inside TEST_DIR
 const TEST_DIR = pathModule.join(__dirname, '.')
@@ -95,12 +96,6 @@ esbuildVersions.forEach((version) => {
       })
     })
 
-    it('bundles the optional OpenFeature peer so it survives bundle relocation', () => {
-      execSync('node ./build-and-test-openfeature.js', {
-        timeout,
-      })
-    })
-
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout,
@@ -112,6 +107,15 @@ esbuildVersions.forEach((version) => {
         timeout,
       })
     })
+
+    for (const format of ['cjs', 'esm']) {
+      it(`instruments Orchestrion integrations in ${format} bundles`, function () {
+        const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/@langchain/core/package.json'))
+        if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
+        execSync(`node ./build-and-test-orchestrion.js ${format}`, { timeout })
+      })
+    }
 
     describe('ESM', () => {
       afterEach(() => {
@@ -125,6 +129,48 @@ esbuildVersions.forEach((version) => {
         execSync('npm run built:esm', {
           timeout,
         })
+      })
+
+      it('bundles instrumented Node.js subpaths', async () => {
+        delete require.cache[require.resolve('esbuild')]
+        const esbuild = require('esbuild')
+        const ddPlugin = require('../../esbuild')
+        const { version: installedVersion } = JSON.parse(
+          fs.readFileSync(require.resolve('esbuild/package.json'), 'utf8')
+        )
+
+        assert.strictEqual(esbuild.version, installedVersion)
+
+        const result = await esbuild.build({
+          absWorkingDir: pathModule.dirname(process.cwd()),
+          stdin: {
+            contents: `
+              import dns from 'node:dns/promises'
+              import http from 'node:http'
+              console.log(typeof dns.lookup, typeof http.createServer)
+            `,
+            loader: 'js',
+            resolveDir: process.cwd(),
+            sourcefile: 'builtin-subpath.mjs',
+          },
+          bundle: true,
+          format: 'esm',
+          platform: 'node',
+          plugins: [ddPlugin],
+          write: false,
+        })
+
+        const output = result.outputFiles[0].text
+        assert.match(
+          output,
+          /register.*"node:dns\/promises".*"node:dns\/promises"\);$/m,
+          'Bundle should contain the node:dns/promises instrumentation'
+        )
+        assert.match(
+          output,
+          /register.*"node:http".*"node:http"\);$/m,
+          'Bundle should contain the node:http instrumentation'
+        )
       })
 
       it('runs minified ESM bundles without ReferenceError on arguments', () => {
@@ -145,7 +191,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /\/\* js test \*\//m)
+        assert.match(builtFile, /\/\* js test \*\//)
       })
 
       it('should contain the definitions when esm is inferred from outfile', () => {
@@ -154,7 +200,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should contain the definitions when esm is inferred from format', () => {
@@ -163,7 +209,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should contain the definitions when format is inferred from out extension', () => {
@@ -172,7 +218,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./basic-test.mjs').toString()
-        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should not contain the definitions when no esm is specified', () => {
@@ -181,7 +227,7 @@ esbuildVersions.forEach((version) => {
         })
 
         const builtFile = readFileSync('./out.js').toString()
-        assert.doesNotMatch(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
+        assert.doesNotMatch(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/)
       })
 
       it('should not crash when it is already patched using global', () => {

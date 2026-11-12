@@ -4,14 +4,14 @@ const assert = require('node:assert/strict')
 const { Agent } = require('node:http')
 
 const { describe, it, afterEach } = require('mocha')
-const axios = require('axios')
 
 require('../../setup/core')
 const agent = require('../agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const httpRequest = require('../../setup/helpers/http-client')
 
-// Create axios instance with no connection pooling
-const httpClient = axios.create({
+// Create httpRequest instance with no connection pooling
+const httpClient = httpRequest.create({
   httpAgent: new Agent({ keepAlive: false }),
   timeout: 5000,
 })
@@ -271,8 +271,13 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         await agent.assertSomeTraces(traces => {
           const proxySpan = traces[0][0]
 
-          assert.strictEqual(proxySpan.name, config.expectedSpanName)
+          assert.strictEqual(proxySpan.type, undefined)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'operation.name'), false)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'span.type'), false)
           assertObjectContains(proxySpan, {
+            name: 'GET /test',
+            resource: 'GET /test',
+            service: 'aws-server',
             meta: {
               'span.kind': 'server',
               'http.request.method': 'GET',
@@ -338,6 +343,18 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               'http.status_code': '200',
             },
           })
+        })
+      })
+
+      it('should fall back to the tracer service when the proxy domain is missing', async () => {
+        const headers = { ...config.headers }
+        delete headers['x-dd-proxy-domain-name']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, { headers })
+
+        await agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].service, 'aws-server')
         })
       })
 

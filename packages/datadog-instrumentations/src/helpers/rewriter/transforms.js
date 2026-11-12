@@ -10,52 +10,744 @@
 
 const assert = require('node:assert')
 
-const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../../vendor/dist/rfdc')
+const clone = createRfdc({ proto: false, circles: false })
 
 const { parse, query } = require('./compiler')
 
-module.exports = { waitForAsyncEnd }
+const functionTypes = new Set(['ArrowFunctionExpression', 'FunctionDeclaration', 'FunctionExpression'])
+const identifierPattern = /^[$A-Z_a-z][$\w]*$/
+
+module.exports = {
+  awaitContextCallback,
+  configureGraphqlJitCompileObject,
+  configureGraphqlJitDeferredField,
+  configureGraphqlJitExecute,
+  configureGraphqlJitRuntime,
+  configureGraphqlFastPath,
+  configureMercuriusRequest,
+  publishDurableOrchestrationFailure,
+  waitForAsyncEnd,
+}
 
 /**
- * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
- * wrapper's native-Promise fulfillment handler.
+ * Publishes the error captured by Durable Functions immediately before its
+ * executor converts that error into a serialized failed orchestration state.
  *
- * @param {object} _state
- * @param {import('estree').CallExpression} node
- * @returns {void}
+ * @param {{
+ *   channelName: string,
+ *   transforms: { tracingChannelDeclaration: Function }
+ * }} state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
  */
-function waitForAsyncEnd (_state, node) {
-  const onFulfilled = node.arguments[0]
-  const statements = onFulfilled?.body?.body
+function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
+  // Class queries also visit the owning ClassDeclaration so Orchestrion can
+  // synthesize missing methods. This transform targets the concrete method only.
+  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') return
 
-  if (!statements || query(onFulfilled.body, '[id.name=__apm$asyncEndPromise]').length > 0) {
+  const failureBranches = query(node, 'IfStatement').filter(({ test }) =>
+    test.type === 'BinaryExpression' &&
+    test.operator === '!==' &&
+    test.left?.type === 'MemberExpression' &&
+    test.left.object?.type === 'ThisExpression' &&
+    test.left.property?.name === 'exception' &&
+    test.right?.type === 'Identifier' &&
+    test.right.name === 'undefined'
+  )
+
+  assert.strictEqual(
+    failureBranches.length,
+    1,
+    'publishDurableOrchestrationFailure: executor failure branch not found'
+  )
+  assert.strictEqual(
+    failureBranches[0].consequent.type,
+    'BlockStatement',
+    'publishDurableOrchestrationFailure: expected a block failure branch'
+  )
+
+  const program = ancestry.at(-1)
+  state.transforms.tracingChannelDeclaration(state, program)
+
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const publishStatements = parse(`
+    if (${channelVariable}.end.hasSubscribers) {
+      ${channelVariable}.end.publish({
+        arguments: [context, history],
+        error: this.exception
+      })
+    }
+  `).body
+
+  failureBranches[0].consequent.body.unshift(...publishStatements)
+}
+
+/**
+ * Awaits an optional context callback at the start of a matched function or block, or before continuing through a
+ * matched conditional branch.
+ *
+ * A matched conditional branch is checked again after the callback settles so its original body does not run
+ * against state that changed while awaiting.
+ *
+ * @param {{
+ *   transformOptions?: {
+ *     callbackArgumentNames?: string[],
+ *     callbackName?: string,
+ *     callbackThis?: boolean
+ *   }
+ * }} state
+ * @param {
+ *   import('estree').ArrowFunctionExpression|
+ *   import('estree').BlockStatement|
+ *   import('estree').FunctionDeclaration|
+ *   import('estree').FunctionExpression|
+ *   import('estree').IfStatement
+ * } node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function awaitContextCallback (state, node, _parent, ancestry) {
+  let insertionTarget
+  let callbackAncestry = ancestry
+
+  if (node.type === 'BlockStatement') {
+    insertionTarget = node
+  } else if (functionTypes.has(node.type)) {
+    let callbackFunction = node
+    callbackAncestry = [node, ...ancestry]
+
+    if (!node.async) {
+      // Built-in function transforms run before later custom transforms. Keep knowledge of their generated wrapper
+      // here so instrumentation queries can continue to target the original function.
+      const [wrappedFunction] = query(node,
+        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
+        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
+        ':matches(ArrowFunctionExpression, FunctionDeclaration, FunctionExpression)[async=true]')
+      if (wrappedFunction) {
+        callbackFunction = wrappedFunction
+        callbackAncestry.unshift(wrappedFunction)
+      }
+    }
+
+    assert(callbackFunction.async && callbackFunction.body?.type === 'BlockStatement',
+      'awaitContextCallback: expected an async function with a block body')
+    insertionTarget = callbackFunction.body
+  }
+
+  if (insertionTarget) {
+    const generatedCallback = createAwaitedContextCallback(
+      state,
+      insertionTarget,
+      callbackAncestry
+    )
+    if (!generatedCallback) return
+
+    let insertionIndex = 0
+    while (typeof insertionTarget.body[insertionIndex]?.directive === 'string') insertionIndex++
+    insertionTarget.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
     return
   }
 
-  const returnIndex = statements.findIndex(statement =>
-    statement.type === 'ReturnStatement' && statement.argument
+  assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
+    'awaitContextCallback: expected a function, a block, or an if statement with a block body')
+
+  const originalStatements = node.consequent.body
+  const generatedCallback = createAwaitedContextCallback(
+    state,
+    node.consequent,
+    ancestry
+  )
+  if (!generatedCallback) return
+
+  const { callbackStatements, callbackVariable } = generatedCallback
+  const callbackBranch = parse(`
+    if (typeof ${callbackVariable} === 'function') {
+    } else {
+    }
+  `).body[0]
+  callbackBranch.consequent.body.push(clone(node))
+  callbackBranch.alternate = {
+    type: 'BlockStatement',
+    body: originalStatements,
+  }
+  node.consequent.body = [...callbackStatements, callbackBranch]
+}
+
+/**
+ * @param {Parameters<typeof awaitContextCallback>[0]} state
+ * @param {import('estree').BlockStatement} insertionTarget
+ * @param {import('estree').Node[]} ancestry
+ * @returns {{
+ *   callbackStatements: import('estree').Statement[],
+ *   callbackVariable: string
+ * }|undefined}
+ */
+function createAwaitedContextCallback (state, insertionTarget, ancestry) {
+  const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
+
+  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
+  assert(Array.isArray(callbackArgumentNames) && callbackArgumentNames.every(name => identifierPattern.test(name)),
+    'awaitContextCallback: callbackArgumentNames must be identifiers')
+
+  let enclosingFunction
+  let hasTraceWrapper = false
+  for (const ancestor of ancestry) {
+    if (!functionTypes.has(ancestor.type)) continue
+
+    enclosingFunction ??= ancestor
+    if (ancestor.body?.type !== 'BlockStatement') continue
+
+    let hasContextBinding = false
+    let hasTracedBinding = false
+    for (const statement of ancestor.body.body) {
+      if (statement.type !== 'VariableDeclaration') continue
+
+      for (const declaration of statement.declarations) {
+        hasContextBinding ||= declaration.id?.name === '__apm$ctx'
+        hasTracedBinding ||= declaration.id?.name === '__apm$traced'
+      }
+    }
+    hasTraceWrapper ||= hasContextBinding && hasTracedBinding
+  }
+
+  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
+  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
+
+  const callbackVariable = `__apm$${callbackName}`
+  if (query(insertionTarget, `[id.name="${callbackVariable}"]`).length > 0) return
+
+  const callbackArguments = callbackArgumentNames.join(', ')
+  const callbackInvocation = callbackThis
+    ? `${callbackVariable}.call(this${callbackArguments ? `, ${callbackArguments}` : ''})`
+    : `${callbackVariable}(${callbackArguments})`
+  const callbackStatements = parse(`
+    async function wrapper () {
+      let ${callbackVariable};
+      try {
+        ${callbackVariable} = __apm$ctx.${callbackName};
+        if (typeof ${callbackVariable} === 'function') {
+          await ${callbackInvocation};
+        }
+      } catch {}
+    }
+  `).body[0].body.body
+
+  return {
+    callbackStatements,
+    callbackVariable,
+  }
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlJitCompileObject (_state, node, _parent, ancestry) {
+  const resolverConditions = query(node, 'IfStatement[test.name="resolver"]')
+  const compileTypeCalls = query(node, 'CallExpression[callee.name="compileType"]')
+
+  assert.strictEqual(
+    resolverConditions.length,
+    1,
+    'configureGraphqlJitCompileObject: resolver condition not found'
+  )
+  assert.strictEqual(
+    compileTypeCalls.length,
+    1,
+    'configureGraphqlJitCompileObject: inline compile call not found'
   )
 
-  // The generated fulfillment handler always ends in a return; a miss means the
+  const [resolverCondition] = resolverConditions
+  const [compileTypeCall] = compileTypeCalls
+  const inlineCompileCall = clone(compileTypeCall)
+  const argumentProperties = query(resolverCondition.consequent, 'Property[key.name="args"]')
+  assert.strictEqual(
+    argumentProperties.length,
+    1,
+    'configureGraphqlJitCompileObject: argument compiler not found'
+  )
+
+  const defaultSetup = parse(`
+    const ddTraceDefault = context.ddTraceDefaultResolvers && !resolver && alwaysDefer === false
+    const ddTraceArguments = ddTraceDefault ? DD_ARGUMENTS : undefined
+  `).body
+  replaceIdentifier(defaultSetup[1], 'DD_ARGUMENTS', argumentProperties[0].value)
+  const [inlineField] = parse(`
+    const ddTraceInline = ddTraceDefault
+      ? context.ddTraceRuntime.compileDefaultField(
+        context,
+        DD_PATH,
+        type,
+        field,
+        DD_FIELD_NODES,
+        originPaths,
+        ddTraceArguments,
+        DD_STRINGIFY,
+        DD_COMPILED
+      )
+      : undefined
+  `).body
+  replaceIdentifier(inlineField, 'DD_PATH', clone(compileTypeCall.arguments[6]))
+  replaceIdentifier(inlineField, 'DD_FIELD_NODES', clone(compileTypeCall.arguments[3]))
+  replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
+
+  const program = ancestry.find(ancestor => ancestor.type === 'Program')
+  let stringify = parse('objectStringify').body[0].expression
+  if (query(program, 'FunctionDeclaration[id.name="objectStringify"]').length === 0) {
+    const values = queryOne(
+      program,
+      'FunctionDeclaration[id.name="compileArguments"][params.1.name="args"]' +
+      ':has(VariableDeclarator[id.name="bind"]) VariableDeclarator[id.name="valuesExpression"]'
+    )
+    assert(values?.init, 'configureGraphqlJitCompileObject: argument serializer not found')
+    stringify = parse(`
+      (values, hoist) => {
+        const args = { values, types: ddTraceArguments.types }
+        const bind = value => '__context.literals.' + hoist(value)
+        return DD_VALUES
+      }
+    `).body[0].expression
+    replaceIdentifier(stringify, 'DD_VALUES', values.init)
+  }
+  replaceIdentifier(inlineField, 'DD_STRINGIFY', stringify)
+
+  assert(
+    insertBeforeStatement(node.body, resolverCondition, [...defaultSetup, inlineField]),
+    'configureGraphqlJitCompileObject: could not insert default field setup'
+  )
+  resolverCondition.test = parse('resolver || ddTraceDefault').body[0].expression
+
+  const includedConditions = query(resolverCondition.consequent, 'IfStatement[test.name="alwaysIncluded"]')
+  let defaultBody
+  if (includedConditions.length === 1) {
+    defaultBody = parse(`
+      if (alwaysIncluded) {
+        body(ddTraceInline)
+      } else {
+        body(\`? \${ddTraceInline} : undefined\`)
+      }
+    `).body
+  } else {
+    assert.strictEqual(
+      includedConditions.length,
+      0,
+      'configureGraphqlJitCompileObject: ambiguous included condition'
+    )
+    defaultBody = parse(`
+      body(\`? \${ddTraceInline} : undefined\`)
+    `).body
+  }
+
+  const originalResolverBody = resolverCondition.consequent
+  const [defaultCondition] = parse(`
+    if (ddTraceDefault) {}
+  `).body
+  defaultCondition.consequent.body.push(...defaultBody)
+  defaultCondition.alternate = originalResolverBody
+  resolverCondition.consequent = {
+    type: 'BlockStatement',
+    body: [defaultCondition],
+  }
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {string} name
+ * @param {import('estree').Node} replacement
+ */
+function replaceIdentifier (root, name, replacement) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (!value || typeof value !== 'object') continue
+    if (value.type === 'Identifier' && value.name === name) {
+      root[key] = clone(replacement)
+    } else {
+      replaceIdentifier(value, name, replacement)
+    }
+  }
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {import('estree').Node} target
+ * @param {import('estree').Node[]} statements
+ */
+function insertBeforeStatement (root, target, statements) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (Array.isArray(value)) {
+      const index = value.indexOf(target)
+      if (index !== -1) {
+        value.splice(index, 0, ...statements)
+        return true
+      }
+      for (const entry of value) {
+        if (entry && typeof entry === 'object' && insertBeforeStatement(entry, target, statements)) return true
+      }
+    } else if (value && typeof value === 'object' && insertBeforeStatement(value, target, statements)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {string} selector
+ * @returns {import('estree').Node}
+ */
+function queryOne (root, selector) {
+  const matches = query(root, selector)
+  assert.strictEqual(matches.length, 1, `expected one match for ${selector}`)
+  return matches[0]
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlFastPath (_state, node, parent, ancestry) {
+  assert.strictEqual(node.type, 'FunctionDeclaration', 'configureGraphqlFastPath: expected a function declaration')
+  assert(identifierPattern.test(node.id?.name), 'configureGraphqlFastPath: expected a named function')
+
+  const insertionRoot = Array.isArray(parent?.body)
+    ? parent
+    : ancestry.find(ancestor => Array.isArray(ancestor?.body) && ancestor.body.includes(parent))
+  assert(insertionRoot, 'configureGraphqlFastPath: expected an enclosing statement list')
+  const insertionTarget = insertionRoot === parent ? node : parent
+
+  const originalName = `__apm$original_${node.id.name}`
+  assert.strictEqual(
+    query(insertionRoot, `VariableDeclarator[id.name="${originalName}"]`).length,
+    0,
+    'configureGraphqlFastPath: original function binding already exists'
+  )
+  configureGraphqlTraceFastPath(
+    node,
+    insertionRoot,
+    insertionTarget,
+    originalName,
+    'configureGraphqlFastPath'
+  )
+}
+
+/**
+ * @param {import('estree').Function} node
+ * @param {import('estree').Node} insertionRoot
+ * @param {import('estree').Node} insertionTarget
+ * @param {string} originalName
+ * @param {string} transformName
+ */
+function configureGraphqlTraceFastPath (node, insertionRoot, insertionTarget, originalName, transformName) {
+  const tracedDeclaration = queryOne(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
+  )
+  const tracedBody = queryOne(
+    tracedDeclaration,
+    'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement'
+  )
+  const wrappedDeclaration = queryOne(
+    tracedBody,
+    'VariableDeclaration:has(VariableDeclarator[id.name="__apm$wrapped"])'
+  )
+  const wrapped = queryOne(wrappedDeclaration, 'VariableDeclarator[id.name="__apm$wrapped"]')
+  const subscriberGuard = queryOne(
+    node,
+    'IfStatement[test.operator="!"][consequent.type="ReturnStatement"]' +
+      ':has(CallExpression[callee.name="__apm$traced"])'
+  )
+  const fastCall = subscriberGuard.consequent.argument
+  const tracedCalls = query(node, 'CallExpression[callee.name="__apm$traced"]')
+  assert.strictEqual(tracedCalls.length, 2, `${transformName}: expected inactive and active traced calls`)
+  const activeCall = tracedCalls.find(call => call !== fastCall)
+  assert(activeCall, `${transformName}: active traced call not found`)
+  assert(functionTypes.has(wrapped.init?.type), `${transformName}: expected a wrapped function`)
+
+  wrapped.id.name = originalName
+  assert(
+    insertBeforeStatement(insertionRoot, insertionTarget, [wrappedDeclaration]),
+    `${transformName}: could not hoist original function`
+  )
+
+  fastCall.callee = parse(`${originalName}.apply`).body[0].expression
+  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
+  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
+  activeCall.callee = parse(`${originalName}.apply`).body[0].expression
+  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
+
+  const statements = node.body.body
+  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
+  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
+  assert.notStrictEqual(subscriberGuardIndex, -1, `${transformName}: subscriber guard is not top-level`)
+  assert.notStrictEqual(tracedDeclarationIndex, -1, `${transformName}: traced declaration is not top-level`)
+  statements.splice(subscriberGuardIndex, 1)
+  statements.splice(statements.indexOf(tracedDeclaration), 1)
+  statements.unshift(subscriberGuard)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const wrapped = queryOne(node, 'VariableDeclarator[id.name="__apm$wrapped"]')
+
+  const createBoundQuery = ancestry.find(ancestor =>
+    ancestor.type === 'FunctionDeclaration' && ancestor.id?.name === 'createBoundQuery'
+  )
+  assert(createBoundQuery, 'configureGraphqlJitExecute: createBoundQuery not found')
+
+  const retDeclaration = queryOne(
+    createBoundQuery,
+    'VariableDeclaration:has(VariableDeclarator[id.name="ret"])'
+  )
+  assert.strictEqual(
+    query(createBoundQuery, 'VariableDeclarator[id.name="__apm$wrapped"]').length,
+    1,
+    'configureGraphqlJitExecute: ambiguous wrapped query declaration'
+  )
+  assert.strictEqual(
+    query(wrapped.init, 'ThisExpression, Super, MetaProperty, Identifier[name="arguments"]').length,
+    0,
+    'configureGraphqlJitExecute: original query depends on its invocation scope'
+  )
+
+  const bindings = parse(`
+    const ddResolvers = compilationContext.resolvers
+    const ddSchema = compilationContext.schema
+  `).body
+  const properties = parse(`({
+    ddDocument: document,
+    ddOperationName: operationName,
+    ddPlan,
+    ddResolvers,
+    ddSchema
+  })`).body[0].expression.properties
+
+  context.properties.push(...properties)
+
+  assert(
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, bindings),
+    'configureGraphqlJitExecute: could not insert query bindings'
+  )
+  configureGraphqlTraceFastPath(
+    node,
+    createBoundQuery.body,
+    retDeclaration,
+    '__apm$wrapped',
+    'configureGraphqlJitExecute'
+  )
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitDeferredField (_state, node) {
+  const declarations = query(node, 'VariableDeclaration:has(VariableDeclarator[id.name="resolverCall"])')
+  const resolverCalls = query(node, 'VariableDeclarator[id.name="resolverCall"]')
+  const executionErrorDeclarations = query(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="executionError"])'
+  )
+  const executionErrors = query(node, 'VariableDeclarator[id.name="executionError"]')
+  const emptyErrors = query(node, 'VariableDeclarator[id.name="emptyError"]')
+  assert.strictEqual(
+    declarations.length,
+    1,
+    'configureGraphqlJitDeferredField: resolver call declaration not found'
+  )
+  assert.strictEqual(
+    resolverCalls.length,
+    1,
+    'configureGraphqlJitDeferredField: resolver call not found'
+  )
+  assert.strictEqual(
+    executionErrorDeclarations.length,
+    1,
+    'configureGraphqlJitDeferredField: execution error declaration not found'
+  )
+  assert.strictEqual(executionErrors.length, 1, 'configureGraphqlJitDeferredField: execution error not found')
+  assert.strictEqual(emptyErrors.length, 1, 'configureGraphqlJitDeferredField: empty error not found')
+
+  const [resolverCall] = resolverCalls
+  assertGraphqlJitResolverCall(resolverCall.init)
+
+  const [descriptor] = parse(`
+    const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
+      fieldName,
+      fieldNodes,
+      returnType: fieldType,
+      parentType
+    })
+  `).body
+  assert(
+    insertBeforeStatement(node.body, executionErrorDeclarations[0], [descriptor]),
+    'configureGraphqlJitDeferredField: could not insert descriptor'
+  )
+
+  executionErrors[0].init.arguments[4] = parse(`
+    ddTraceDescriptorId === undefined
+      ? 'err'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), err)'
+  `).body[0].expression
+  emptyErrors[0].init.arguments[3] = parse(`
+    ddTraceDescriptorId === undefined
+      ? '""'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), "")'
+  `).body[0].expression
+
+  const replacement = parse(`
+    context.ddTraceRuntime === undefined
+      ? DD_CALL
+      : context.ddTraceRuntime.compileResolverCall(context, DD_CALL, resolverName, ddTraceDescriptorId)
+  `).body[0].expression
+  replaceIdentifier(replacement, 'DD_CALL', resolverCall.init)
+  resolverCall.init = replacement
+}
+
+/**
+ * @param {import('estree').Expression | null} source
+ */
+function assertGraphqlJitResolverCall (source) {
+  assert.strictEqual(source?.type, 'TemplateLiteral', 'configureGraphqlJitDeferredField: unsupported resolver call')
+
+  const { expressions, quasis } = source
+  assert.ok(expressions.length >= 2, 'configureGraphqlJitDeferredField: resolver call expressions not found')
+  assert.ok(quasis.length >= 3, 'configureGraphqlJitDeferredField: resolver call segments not found')
+  assert.strictEqual(
+    expressions[0].name,
+    'GLOBAL_EXECUTION_CONTEXT',
+    'configureGraphqlJitDeferredField: execution context not found'
+  )
+  assert.strictEqual(
+    quasis[1].value.raw,
+    '.resolvers.',
+    'configureGraphqlJitDeferredField: resolver map access not found'
+  )
+  assert.strictEqual(
+    expressions[1].name,
+    'resolverName',
+    'configureGraphqlJitDeferredField: resolver name not found'
+  )
+  assert.ok(quasis[2].value.raw.startsWith('('), 'configureGraphqlJitDeferredField: resolver call not found')
+  assert.ok(quasis.at(-1).value.raw.endsWith(')'), 'configureGraphqlJitDeferredField: resolver call end not found')
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitRuntime (_state, node) {
+  node.body.body.unshift(...parse(`
+    const ddTraceRuntime = compilationContext.ddTraceRuntime
+    const ddPlan = ddTraceRuntime?.finalizeCompilation(compilationContext)
+  `).body)
+
+  const contexts = query(node, 'VariableDeclarator[id.name="executionContext"] > ObjectExpression')
+  assert.strictEqual(
+    contexts.length,
+    1,
+    'configureGraphqlJitRuntime: execution context not found'
+  )
+
+  const properties = parse(`({
+    ddTrace: ddTraceRuntime?.startExecution(parsedVariables.coerced)
+  })`).body[0].expression.properties
+  contexts[0].properties.push(...properties)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').ObjectExpression} node
+ */
+function configureMercuriusRequest (_state, node) {
+  const properties = parse('({ ddCacheLimit: opts.cache })').body[0].expression.properties
+  node.properties.push(...properties)
+}
+
+/**
+ * Injects settlement-specific asyncEnd waits into a generated `tracePromise`
+ * wrapper's native-Promise handlers.
+ *
+ * @param {object} _state
+ * @param {import('estree').CallExpression} node
+ */
+function waitForAsyncEnd (_state, node) {
+  const onFulfilled = node.arguments[0]
+  const onRejected = node.arguments[1]
+
+  if (!onFulfilled?.body || !onRejected?.body) {
+    return
+  }
+
+  injectAsyncEndCallbackWait(onFulfilled.body, 'ReturnStatement', 'resolveCallback')
+  injectAsyncEndCallbackWait(onRejected.body, 'ThrowStatement', 'rejectCallback')
+}
+
+/**
+ * Injects a settlement-specific callback wait before an exit.
+ *
+ * @param {import('estree').BlockStatement} body
+ * @param {'ReturnStatement'|'ThrowStatement'} exitType
+ * @param {'resolveCallback'|'rejectCallback'} callbackProperty
+ */
+function injectAsyncEndCallbackWait (body, exitType, callbackProperty) {
+  const callbackVariable = `__apm$${callbackProperty}`
+  if (query(body, `[id.name=${callbackVariable}]`).length > 0) {
+    return
+  }
+
+  const exitIndex = body.body.findIndex(statement =>
+    statement.type === exitType && statement.argument
+  )
+
+  // The generated settlement handlers always end in a return or throw; a miss means the
   // upstream template changed and the caller's try/catch falls back to the
   // unwrapped source.
-  assert(returnIndex !== -1, 'waitForAsyncEnd: no return statement to wait on')
+  assert(exitIndex !== -1, `waitForAsyncEnd: no ${exitType} to wait on`)
 
+  // This runs inside tracePromise's native-Promise settlement handler. The
+  // Promise adapts subscriber callback completion to that existing chain.
   const waitStatements = parse(`
     function wrapper () {
-      const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
-      if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-        return __apm$asyncEndPromise.then(() => __apm$result, () => __apm$result);
+      const ${callbackVariable} = __apm$ctx.${callbackProperty};
+      if (typeof ${callbackVariable} === 'function') {
+        return new Promise(${callbackVariable}).then(() => __apm$result, () => __apm$result);
       }
     }
   `).body[0].body.body
 
-  // Resolve to whatever the fulfillment handler returns (its return argument),
-  // so a subscriber that reassigned `__apm$ctx.result` in `asyncEnd` still wins.
-  const returnArgument = statements[returnIndex].argument
-  const { arguments: onSettled } = waitStatements[1].consequent.body[0].argument
-  onSettled[0].body = clone(returnArgument)
-  onSettled[1].body = clone(returnArgument)
+  const exitArgument = body.body[exitIndex].argument
+  const callbackIf = waitStatements[1]
+  const { arguments: onCallbackSettled } = callbackIf.consequent.body[0].argument
 
-  statements.splice(returnIndex, 0, ...waitStatements)
+  if (exitType === 'ThrowStatement') {
+    for (const handler of onCallbackSettled) {
+      handler.body = {
+        type: 'BlockStatement',
+        body: [{
+          type: 'ThrowStatement',
+          argument: clone(exitArgument),
+        }],
+      }
+    }
+  } else {
+    onCallbackSettled[0].body = clone(exitArgument)
+    onCallbackSettled[1].body = clone(exitArgument)
+  }
+
+  body.body.splice(exitIndex, 0, ...waitStatements)
 }

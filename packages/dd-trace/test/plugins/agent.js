@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { once } = require('node:events')
 const http = require('http')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
@@ -12,6 +13,8 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const { httpAgent } = require('../../src/exporters/common/agents')
+const { usesOtlpTraceExporter } = require('../../src/exporter')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -55,15 +58,24 @@ let loaded = false
 const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
+  'AWS_LAMBDA_INITIALIZATION_TYPE',
   'FUNCTION_NAME',
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
   'FUNCTIONS_WORKER_RUNTIME',
+  // azure container app detection (azure-functions plugin aas/aca prefix)
+  'CONTAINER_APP_NAME',
   'GCP_PROJECT',
   'K_SERVICE',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_PROJECT_ID',
+  'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
   'LAMBDA_TASK_ROOT',
+  // MicroVM clone-resume identity reseed hook registration
+  'AWS_LAMBDA_MICROVM_IMAGE_ARN',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',
   // azure metadata payload (cached at first build)
@@ -73,8 +85,14 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_OWNER_NAME',
   'WEBSITE_OS',
   'WEBSITE_RESOURCE_GROUP',
+  // LLM judge provider defaults
+  'AWS_DEFAULT_REGION',
+  'AWS_REGION',
+  'GCLOUD_PROJECT',
+  'GOOGLE_CLOUD_REGION',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
+  'JEST_JASMINE',
   'JEST_WORKER_ID',
   'MOCHA_WORKER_ID',
   'TINYPOOL_WORKER_ID',
@@ -134,6 +152,38 @@ function envChangedSince (snapshot) {
   return false
 }
 
+/**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForExporterTransition (socket) {
+  return new Promise(resolve => {
+    function done () {
+      socket.removeListener('close', done)
+      socket.removeListener('free', done)
+      resolve()
+    }
+
+    socket.once('close', done)
+    socket.once('free', done)
+  })
+}
+
+/**
+ * @param {import('node:net').Socket} socket
+ */
+function waitForSocketClose (socket) {
+  return new Promise(resolve => socket.once('close', resolve))
+}
+
+/**
+ * @param {string} origin
+ */
+async function waitForExporterIdle (origin) {
+  while (httpAgent.sockets[origin]) {
+    await waitForExporterTransition(httpAgent.sockets[origin][0])
+  }
+}
+
 // Captured at agent.js evaluation, before any `before` hook runs.
 let envSnapshot = captureEnvSnapshot()
 // Stored as a JSON snapshot rather than a reference: a spec that keeps the
@@ -159,9 +209,9 @@ function isMatchingTrace (spans, spanResourceMatch) {
  * without it having to be `traces[0][0]`. Without a matcher the first span of the
  * first trace is used.
  *
- * @param {import('../../src/opentracing/span')[][]} traces
+ * @param {SerializedSpan[][]} traces
  * @param {RegExp} [spanResourceMatch]
- * @returns {import('../../src/opentracing/span')}
+ * @returns {SerializedSpan}
  */
 function findFirstTraceSpan (traces, spanResourceMatch) {
   if (spanResourceMatch) {
@@ -193,7 +243,6 @@ function ciVisRequestHandler (request, response) {
  * @param {import('../../src/index')} agent
  * @param {string} expectedHash
  * @param {string[]} expectedEdgeTags
- * @returns {boolean}
  */
 function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
@@ -224,7 +273,6 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
  *
  * @param {import('../../src/index')} agent
  * @param {string} expectedParentHash
- * @returns {boolean}
  */
 function dsmStatsExistWithParentHash (agent, expectedParentHash) {
   const dsmStats = agent.getDsmStats()
@@ -247,8 +295,8 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
 /**
  * Unformats span events.
  *
- * @param {import('../../src/opentracing/span')} span
- * @returns {import('../../src/opentracing/span')[]}
+ * @param {SerializedSpan} span
+ * @returns {SerializedSpanEvent[]}
  */
 function unformatSpanEvents (span) {
   if (span.meta?.events) {
@@ -269,13 +317,79 @@ function unformatSpanEvents (span) {
 }
 
 /**
+ * @typedef {object} OtlpAttribute
+ * @property {string} key
+ * @property {{ stringValue?: string, intValue?: number|string, doubleValue?: number, boolValue?: boolean }} value
+ * @typedef {object} OtlpSpan
+ * @property {string} traceId
+ * @property {string} spanId
+ * @property {string} [parentSpanId]
+ * @property {string} name
+ * @property {number} kind
+ * @property {number|string} startTimeUnixNano
+ * @property {number|string} endTimeUnixNano
+ * @property {OtlpAttribute[]} attributes
+ * @property {{ code: number }} status
+ * @typedef {object} OtlpTraceRequest
+ * @property {{ resource: { attributes: OtlpAttribute[] }, scopeSpans: { spans: OtlpSpan[] }[] }[]} resourceSpans
+ */
+
+/** @param {OtlpTraceRequest} payload */
+function decodeOtlpTraces (payload) {
+  const traces = new Map()
+  const kinds = ['', 'internal', 'server', 'client', 'producer', 'consumer']
+
+  for (const { resource, scopeSpans } of payload.resourceSpans) {
+    for (const { spans } of scopeSpans) {
+      for (const span of spans) {
+        const meta = {}
+        const metrics = {}
+        for (const { key, value } of [...resource.attributes, ...span.attributes]) {
+          if (value.stringValue !== undefined) {
+            meta[key] = value.stringValue
+          } else if (value.boolValue !== undefined) {
+            meta[key] = String(value.boolValue)
+          } else if (value.intValue !== undefined || value.doubleValue !== undefined) {
+            metrics[key] = Number(value.intValue ?? value.doubleValue)
+          }
+        }
+        if (kinds[span.kind]) meta['span.kind'] = kinds[span.kind]
+        const decoded = {
+          trace_id: BigInt(`0x${span.traceId.slice(-16)}`),
+          span_id: BigInt(`0x${span.spanId}`),
+          parent_id: span.parentSpanId ? BigInt(`0x${span.parentSpanId}`) : 0n,
+          name: meta['operation.name'] ?? span.name,
+          resource: span.name,
+          service: meta['service.name'],
+          type: meta['span.type'],
+          error: span.status.code === 2 ? 1 : 0,
+          meta,
+          metrics,
+          start: Number(span.startTimeUnixNano),
+          duration: Number(span.endTimeUnixNano) - Number(span.startTimeUnixNano),
+        }
+        let trace = traces.get(span.traceId)
+        if (!trace) {
+          trace = []
+          traces.set(span.traceId, trace)
+        }
+        trace.push(decoded)
+      }
+    }
+  }
+
+  return [...traces.values()]
+}
+
+/**
  * @param {express.Request} req
  * @param {express.Response} res
  */
 function handleTraceRequest (req, res) {
-  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  const otlp = req.is('application/json')
+  const trace = otlp ? decodeOtlpTraces(JSON.parse(req.body)) : req.body
+  res.status(200).send(otlp ? {} : { rate_by_service: { 'service:,env:': 1 } })
   for (const { handler, spanResourceMatch } of traceHandlers) {
-    const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
@@ -299,7 +413,7 @@ function getCurrentIntegrationName () {
 }
 
 /**
- * @param {import('../../src/opentracing/span')[][]} traces
+ * @param {SerializedSpan[][]} traces
  */
 function assertIntegrationName (traces) {
   // we want to assert that all spans generated by an instrumentation have the right `_dd.integration` tag set
@@ -342,9 +456,25 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
- * @typedef {import('../../src/opentracing/span')} Span
+ * @typedef {object} SerializedSpan
+ * @property {bigint} trace_id
+ * @property {bigint} span_id
+ * @property {bigint} parent_id
+ * @property {string} name
+ * @property {string} resource
+ * @property {string} service
+ * @property {string} type
+ * @property {number} error
+ * @property {Record<string, string>} meta
+ * @property {Record<string, number>} metrics
+ * @property {number} start
+ * @property {number} duration
+ * @typedef {object} SerializedSpanEvent
+ * @property {string} name
+ * @property {number} startTime
+ * @property {Record<string, unknown> | undefined} attributes
  * For a given payload, an array of traces, each trace is an array of spans.
- * @typedef {(traces: Span[][]) => void} TracesCallback
+ * @typedef {(traces: SerializedSpan[][]) => void} TracesCallback
  * @typedef {(agentlessPayload: {events: Event[]}, request: Request) => void} AgentlessCallback
  * @typedef {TracesCallback | AgentlessCallback} RunCallbackAgainstTracesCallback
  */
@@ -509,7 +639,6 @@ function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
  * `subscribe` handlers have no timer and no promise, so they are cleared but never counted.
  *
  * @param {Set<{ cancel?: () => void }>} handlers
- * @returns {number}
  */
 function disarmHandlers (handlers) {
   let armed = 0
@@ -625,11 +754,17 @@ module.exports = {
       })
     })
 
-    agent.put('/v0.5/traces', (req, res) => {
+    // v0.5 is not implemented here: answer 404 so a writer probing it falls back
+    // to v0.4, as it would against an Agent that does not advertise the endpoint.
+    agent.all('/v0.5/traces', (req, res) => {
       res.status(404).end()
     })
 
+    // Both methods the Agent accepts for trace intake: the legacy writer sends
+    // PUT, and a writer built on libdatadog sends POST.
     agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v0.4/traces', handleTraceRequest)
+    agent.post('/v1/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
@@ -676,7 +811,9 @@ module.exports = {
           ...tracerConfig,
         })
 
-        tracer.setUrl(`http://127.0.0.1:${port}`)
+        const createConfig = require('../../src/config')
+        const path = usesOtlpTraceExporter(createConfig()) ? '/v1/traces' : ''
+        tracer.setUrl(`http://127.0.0.1:${port}${path}`)
 
         for (const [name, pluginConfig] of loadedPlugins) {
           tracer.use(name, pluginConfig)
@@ -732,7 +869,7 @@ module.exports = {
    * Callback for running test assertions against a span.
    *
    * @callback testAssertionSpanCallback
-   * @param {Span} span - For a given payload, the first span of the first trace.
+   * @param {SerializedSpan} span - For a given payload, the first span of the first trace.
    */
 
   /**
@@ -742,7 +879,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
@@ -772,7 +908,6 @@ module.exports = {
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
@@ -799,7 +934,6 @@ module.exports = {
    *
    * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
    * @param {RunCallbackAgainstTracesOptions} [options] - An options object
-   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
@@ -860,17 +994,15 @@ module.exports = {
    * The next `agent.load` decides for itself whether to reuse the cached
    * tracer or rebuild it; tests do not pass options here.
    */
-  close () {
+  async close () {
     if (listener === null) {
-      return Promise.resolve()
+      return
     }
 
-    listener.close()
+    const closingListener = listener
+    const closingServer = this.server
+    const origin = httpAgent.getName({ host: '127.0.0.1', port: this.port })
     listener = null
-    for (const socket of sockets) {
-      socket.end()
-    }
-    sockets = []
     agent = null
     disarmHandlers(traceHandlers)
     disarmHandlers(statsHandlers)
@@ -880,6 +1012,9 @@ module.exports = {
       tracer.use(plugin, { enabled: false })
     }
     loadedPlugins.clear()
+    // The propagation-hash singleton is not in `RELOAD_EVICTION_IDS`, so the
+    // `Config` this tracer installed would stay live for every later spec file.
+    require('../../src/propagation-hash').configure(null)
     // Force the next `agent.load` through the gate-fired rebuild path
     // so cross-file leaks (`code_origin` tags sticking across files,
     // `router`'s path-stack accumulating, …) cannot silently inherit
@@ -891,14 +1026,22 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
-      this.server.on('close', () => {
-        this.server = null
-        this.port = null
+    const serverClosed = once(closingServer, 'close')
 
-        resolve()
-      })
-    }))
+    closingListener.close()
+    for (const socket of sockets) {
+      socket.end()
+    }
+    sockets = []
+
+    await waitForExporterIdle(origin)
+
+    const exporterSockets = httpAgent.freeSockets[origin] ?? []
+    const exporterSocketsClosed = exporterSockets.map(waitForSocketClose)
+
+    await Promise.all([serverClosed, ...exporterSocketsClosed])
+    this.server = null
+    this.port = null
   },
 
   setAvailableEndpoints (newEndpoints) {

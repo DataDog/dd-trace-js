@@ -2,6 +2,7 @@
 
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { finalizeAfterUserHandlers, runUserHandler } = require('./finalization')
 
 /**
  * Cypress plugin handles setup-node-events from the instrumentation layer
@@ -25,16 +26,18 @@ class CypressPlugin extends Plugin {
         userAfterRunHandlers,
         userAfterScreenshotHandlers,
         cleanupWrapper,
+        registerBeforeRun,
       } = payload
 
       const registerAfterRunWithCleanup = (afterRunHandler) => {
         on('after:run', (results) => {
           const chain = userAfterRunHandlers.reduce(
-            (p, h) => p.then(() => h(results)),
+            (p, h) => p.then(() => runUserHandler(() => h(results))),
             Promise.resolve()
           )
           if (afterRunHandler) {
-            return chain.then(() => afterRunHandler(results)).finally(cleanupWrapper)
+            return finalizeAfterUserHandlers(chain, userError => afterRunHandler(results, userError))
+              .finally(cleanupWrapper)
           }
           return chain.finally(cleanupWrapper)
         })
@@ -50,12 +53,12 @@ class CypressPlugin extends Plugin {
       // downstream steps — then run the plugin's afterScreenshot on those
       // details and propagate the value back to Cypress. The user handler runs
       // regardless of whether screenshot upload is enabled.
-      const registerAfterScreenshot = (afterScreenshotHandler) => {
+      const registerAfterScreenshot = () => {
         const filteredUserAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
-          handler => handler !== afterScreenshotHandler
+          handler => handler !== datadogAfterScreenshotHandler
         )
         if (filteredUserAfterScreenshotHandlers.length === 0) {
-          if (afterScreenshotHandler) on('after:screenshot', afterScreenshotHandler)
+          if (datadogAfterScreenshotHandler) on('after:screenshot', datadogAfterScreenshotHandler)
           return
         }
 
@@ -70,47 +73,52 @@ class CypressPlugin extends Plugin {
             Promise.resolve(details)
           )
           return chain.then((finalDetails) => {
-            if (afterScreenshotHandler) afterScreenshotHandler(finalDetails)
+            if (datadogAfterScreenshotHandler) datadogAfterScreenshotHandler(finalDetails)
             return finalDetails
           })
         })
       }
 
       if (cypressPlugin._isInit) {
+        registerBeforeRun()
         // Already initialized by manual plugin call — just chain user handlers.
         // Pass the plugin's afterScreenshot so chaining a user handler doesn't drop the upload
         // (the chained registration replaces the one plugin.js set, so it must include it).
         if (userAfterSpecHandlers.length > 0) {
           on('after:spec', (spec, results) => userAfterSpecHandlers.reduce(
-            (chain, handler) => chain.then(() => handler(spec, results)),
+            (chain, handler) => chain.then(() => runUserHandler(() => handler(spec, results))),
             Promise.resolve()
           ))
         }
-        registerAfterScreenshot(datadogAfterScreenshotHandler)
+        registerAfterScreenshot()
         registerAfterRunWithCleanup()
         payload.registered = true
         return
       }
 
-      on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-      registerAfterScreenshot(datadogAfterScreenshotHandler)
+      registerBeforeRun(cypressPlugin.beforeRun.bind(cypressPlugin))
+      registerAfterScreenshot()
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(
-          (p, h) => p.then(() => h(spec, results)),
+          (p, h) => p.then(() => runUserHandler(() => h(spec, results))),
           Promise.resolve()
         )
-        return chain.then(() => cypressPlugin.afterSpec(spec, results))
+        return finalizeAfterUserHandlers(chain, userError => cypressPlugin.afterSpec(spec, results, userError))
+          .catch((error) => {
+            cleanupWrapper()
+            throw error
+          })
       })
 
-      registerAfterRunWithCleanup((results) => cypressPlugin.afterRun(results))
+      registerAfterRunWithCleanup((results, userError) => cypressPlugin.afterRun(results, userError))
 
       on('task', cypressPlugin.getTasks())
 
       payload.registered = true
       // cypressPlugin.init expects the proxy tracer (with ._tracer._exporter),
       // not the unwrapped internal tracer that this.tracer returns.
-      payload.configPromise = Promise.resolve(cypressPlugin.init(this._tracer, config)).then(() => config)
+      payload.configPromise = Promise.resolve(cypressPlugin.init(this._tracer, config))
     })
   }
 }

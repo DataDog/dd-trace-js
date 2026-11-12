@@ -89,9 +89,7 @@ function setupResponseInstrumentation (ctx, res) {
   const collectChunk = chunk => {
     if (!bodyChunks || !chunk) return
 
-    if (typeof chunk === 'string') {
-      bodyChunks.push(chunk)
-    } else if (Buffer.isBuffer(chunk)) {
+    if (typeof chunk === 'string' || Buffer.isBuffer(chunk)) {
       bodyChunks.push(chunk)
     } else {
       // Handle Uint8Array or other array-like types

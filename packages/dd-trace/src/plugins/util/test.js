@@ -3,21 +3,24 @@
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
+const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
+const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
+const { parse } = require('../../../../../vendor/dist/jest-docblock')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../carrier')
 const id = require('../../id')
 const {
   incrementCountMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../ci-visibility/telemetry')
-
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
@@ -45,6 +48,7 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
@@ -89,20 +93,26 @@ const {
 const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
+const TEST_FRAMEWORK_ADAPTER = 'test.framework_adapter'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
+const TEST_SUITE_EXECUTION_ID = '_dd.test_suite_execution_id'
 const TEST_STATUS = 'test.status'
 const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
+const TEST_SESSION_EMPTY_REASON = 'test.session.empty_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const TEST_SOURCE_START = 'test.source.start'
 const TEST_FAILURE_SCREENSHOT_UPLOADED = 'test.failure_screenshot.uploaded'
 const TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR = 'test.failure_screenshot.upload_error'
+const TEST_FAILURE_VIDEO_UPLOADED = 'test.failure_video.uploaded'
+const TEST_FAILURE_VIDEO_UPLOAD_ERROR = 'test.failure_video.upload_error'
+const TEST_FAILURE_VIDEO_SCOPE = 'test.failure_video.scope'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -120,13 +130,10 @@ const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
-const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
-  { limitMs: 5 * 1000, key: '5s' },
-  { limitMs: 10 * 1000, key: '10s' },
-  { limitMs: 30 * 1000, key: '30s' },
-  { limitMs: 5 * 60 * 1000, key: '5m' },
-]
 const CI_APP_ORIGIN = 'ciapp-test'
+// eslint-disable-next-line no-control-regex
+const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/g
+const TEST_OPTIMIZATION_NAME_WHITESPACE_RE = /\s+/g
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
 // - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
@@ -159,6 +166,7 @@ const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
 const ITR_CORRELATION_ID = 'itr_correlation_id'
+const TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE = 'Test Impact Analysis skipped all tests.'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -177,16 +185,24 @@ const JEST_WORKER_QUARANTINE_PAYLOAD_CODE = 64
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
+const CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE = 71
 
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
+const MOCHA_WORKER_LOGS_PAYLOAD_CODE = 81
+const MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE = 82
 
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+const PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE = 91
 
 // vitest worker variables
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
+const VITEST_WORKER_COVERAGE_PAYLOAD_CODE = 101
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
+const VITEST_WORKER_TELEMETRY_PAYLOAD_CODE = 103
+const VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE = 104
+const VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE = 105
 
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
@@ -207,7 +223,7 @@ const DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS = '_dd.ci.library_configurat
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS =
   '_dd.ci.library_configuration_error.test_management_tests'
 
-const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'webdriverio'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -235,8 +251,11 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end',
 ]
+const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
+const TEST_PARALLELIZATION_PLAN_TAG_PREFIX = 'test.parallelization.plan.'
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
+  TEST_PARALLELIZATION_ENABLED,
   CI_JOB_ID,
   CI_JOB_NAME,
   CI_JOB_URL,
@@ -244,6 +263,7 @@ const TEST_LEVELS_METADATA_TAGS = [
   CI_NODE_NAME,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
@@ -290,12 +310,17 @@ const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
 // Test Management tags
 const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION = 'test.test_management.prevent_failure_suppression'
+const TEST_MANAGEMENT_NO_AUTO_RETRY = 'test.test_management.no_auto_retry'
 const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
+const MAX_TEST_MANAGEMENT_REPORT_ITEMS = 5
+const MAX_TEST_OPTIMIZATION_NAME_LENGTH = 160
 const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
+const testManagementExecutions = new Map()
 
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
@@ -422,10 +447,21 @@ function addTestOptimizationRequest (requestPromises, responseNames, responseNam
   }
 }
 
+/**
+ * Builds the internal key used to correlate a worker test with one suite execution.
+ *
+ * @param {string} testSuite
+ * @param {string|undefined} testSuiteExecutionId
+ */
+function getTestSuiteExecutionKey (testSuite, testSuiteExecutionId) {
+  return testSuiteExecutionId ? `${testSuite}\0${testSuiteExecutionId}` : testSuite
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
@@ -435,16 +471,23 @@ module.exports = {
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
+  TEST_SUITE_EXECUTION_ID,
+  getTestSuiteExecutionKey,
   TEST_STATUS,
   TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
+  TEST_SESSION_EMPTY_REASON,
   TEST_IS_RUM_ACTIVE,
   setRumTestCorrelation,
   setRumTestTags,
+  setExpectedEmptyTestSessionTags,
   TEST_SOURCE_FILE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -453,10 +496,18 @@ module.exports = {
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_LOGS_PAYLOAD_CODE,
+  MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
+  VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
@@ -472,6 +523,7 @@ module.exports = {
   getTestParametersString,
   finishAllTraceSpans,
   getTestParentSpan,
+  isMarkedAsUnskippable,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -495,6 +547,7 @@ module.exports = {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
+  TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   getCoveredFilesFromCoverage,
@@ -502,6 +555,7 @@ module.exports = {
   getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
@@ -511,9 +565,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getFailedTestReplayPromise,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -541,6 +593,8 @@ module.exports = {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -564,8 +618,10 @@ module.exports = {
   collectDynamicNamesFromTraces,
   collectTestOptimizationSummariesFromTraces,
   logDynamicNamesWarning,
+  recordTestManagementExecution,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
+  formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   formatDynamicNamesSummary,
@@ -712,6 +768,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
  *
  * @param {string=} testFramework
  * @param {TestEnvironmentConfig=} config
+ * @param {boolean=} shouldSkipGitMetadataExtraction
  * @returns {TestEnvironmentMetadata}
  */
 function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
@@ -746,6 +803,8 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       commitMessage,
       ciWorkspacePath,
       headCommitSha,
+      pullRequestBaseBranchSha: userProvidedGitMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA] ||
+        ciMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA],
     })
   }
 
@@ -760,10 +819,47 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
+  if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
+    metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
+    Object.assign(metadata, getTestParallelizationPlanMetadata())
+  }
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
   return removeInvalidMetadata(metadata)
+}
+
+/** @returns {Record<string, string>} */
+function getTestParallelizationPlanMetadata () {
+  try {
+    let metadataFile = getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE')
+    if (!metadataFile) {
+      // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      const env = process.env
+      const manifestFile = env.TEST_OPTIMIZATION_MANIFEST_FILE || env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile
+        ? path.dirname(resolveRunfilePath(manifestFile, env))
+        : path.join(process.cwd(), '.testoptimization')
+      metadataFile = path.join(planDirectory, 'plan-metadata.json')
+    }
+    const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
+        Object.values(tags).some(value => typeof value !== 'string')) {
+      return {}
+    }
+    const metadata = {}
+    for (const [tag, value] of Object.entries(tags)) {
+      if (tag.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) &&
+          tag.length > TEST_PARALLELIZATION_PLAN_TAG_PREFIX.length && value) {
+        metadata[tag] = value
+      }
+    }
+    return metadata
+  } catch (err) {
+    log.debug('Failed to read DDTest plan metadata: %s', err.message)
+    return {}
+  }
 }
 
 function getTestParametersString (parametersByTestName, testName) {
@@ -796,11 +892,16 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
       testLevelsMetadataTags[key] = value
     }
   }
+  for (const [key, value] of Object.entries(testEnvironmentMetadata)) {
+    if (key.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) && value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
   return testLevelsMetadataTags
 }
 
 function getTestTypeFromFramework (testFramework) {
-  if (testFramework === 'playwright' || testFramework === 'cypress') {
+  if (testFramework === 'playwright' || testFramework === 'cypress' || testFramework === 'webdriverio') {
     return 'browser'
   }
   return 'test'
@@ -811,7 +912,7 @@ function getTestTypeFromFramework (testFramework) {
  */
 function finishAllTraceSpans (span) {
   for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span) {
+    if (traceSpan !== span && traceSpan._duration === undefined) {
       traceSpan.finish()
     }
   }
@@ -821,7 +922,6 @@ function finishAllTraceSpans (span) {
  * @param {import('../../opentracing/span')} testSpan
  * @param {boolean|undefined} isRumActive
  * @param {string} [browserVersion]
- * @returns {void}
  */
 function setRumTestTags (testSpan, isRumActive, browserVersion) {
   if (isRumActive) {
@@ -829,6 +929,29 @@ function setRumTestTags (testSpan, isRumActive, browserVersion) {
   }
   if (browserVersion) {
     testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  }
+}
+
+/**
+ * Marks a successful test session that did not execute any tests.
+ *
+ * @param {import('../../opentracing/span')} testSessionSpan
+ * @param {import('../../opentracing/span')|undefined} testModuleSpan
+ * @param {'zero_tests'|'all_tests_skipped'|'zero_test_shard'|'test_discovery'} emptyReason
+ */
+function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, emptyReason) {
+  const skipReason = emptyReason === 'test_discovery'
+    ? 'Test discovery only (--list)'
+    : emptyReason === 'zero_test_shard'
+      ? 'No tests were assigned to this shard'
+      : emptyReason === 'all_tests_skipped' ? 'All tests were skipped' : 'No tests were detected'
+
+  for (const span of [testSessionSpan, testModuleSpan]) {
+    if (!span) continue
+
+    span.setTag(TEST_STATUS, 'skip')
+    span.setTag(TEST_SKIP_REASON, skipReason)
+    span.setTag(TEST_SESSION_EMPTY_REASON, emptyReason)
   }
 }
 
@@ -860,17 +983,25 @@ function setRumTestCorrelation (context, activeSpan) {
   return testSpan
 }
 
-function getTestParentSpan (tracer) {
-  return tracer.extract('text_map', {
-    'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000',
-  })
+/**
+ * Returns the synthetic parent that makes a test event the root of its trace.
+ *
+ * @param {import('../../tracer')} tracer
+ * @param {string} [testExecutionId]
+ * @returns {import('../../opentracing/span_context')}
+ */
+function getTestParentSpan (tracer, testExecutionId) {
+  const carrier = /** @type {Record<string, unknown>} */ ({})
+  writeDatadogTraceId(carrier, testExecutionId || id().toString(10))
+  writeDatadogParentId(carrier, '0000000000000000')
+  return tracer.extract('text_map', carrier)
 }
 
 function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
+    [TEST_FRAMEWORK]: testFramework,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
@@ -884,6 +1015,9 @@ function getTestCommonTags (name, suite, version, testFramework) {
 /**
  * We want to make sure that test suites are reported the same way for
  * every OS, so we replace `path.sep` by `/`
+ *
+ * @param {string | undefined} testSuiteAbsolutePath
+ * @param {string} sourceRoot
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
@@ -894,6 +1028,62 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replaceAll(path.sep, '/')
+}
+
+const globalDocblockRegExp = /^\s*(\/\*\*?(.|\r?\n)*?\*\/)/
+const MAX_COMMENTS_CHECKED = 10
+
+function isMarkedAsUnskippable (test) {
+  let testSource
+
+  try {
+    testSource = fs.readFileSync(test.path, 'utf8')
+  } catch {
+    return false
+  }
+
+  const re = globalDocblockRegExp
+  re.lastIndex = 0
+  let commentsChecked = 0
+
+  while (testSource.length) {
+    const match = re.exec(testSource)
+    if (!match) break
+    const comment = match[1]
+
+    let docblocks
+    try {
+      docblocks = parse(comment)
+    } catch {
+      // Skip unparsable comment and continue scanning
+      if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+        return false
+      }
+      continue
+    }
+
+    if (docblocks?.datadog) {
+      try {
+        // @ts-expect-error The datadog type is defined by us and may only be a string.
+        return JSON.parse(docblocks.datadog).unskippable
+      } catch {
+        // If the @datadog block comment is present but malformed, we'll run the suite
+        log.warn('@datadog block comment is malformed.')
+        return true
+      }
+    }
+
+    if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
+      return false
+    }
+
+    // To stop as soon as no doc blocks are found, slice the source. That way the
+    // regexp works by using the `^` anchor. Without it, it would continue
+    // scanning the rest of the file.
+    testSource = testSource.slice(match[0].length)
+  }
+
+  return false
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
@@ -941,8 +1131,7 @@ function getCodeOwnersFileEntries (rootDir) {
   const lines = codeOwnersContent.split('\n')
 
   for (const line of lines) {
-    const [content] = line.split('#')
-    const trimmed = content.trim()
+    const trimmed = getSegment(line, '#', 0).trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
     entries.push(setCodeOwnersPatternRegex({ pattern, owners }))
@@ -955,7 +1144,6 @@ const codeOwnersPerEntries = new WeakMap()
 
 /**
  * @param {string} character
- * @returns {string}
  */
 function escapeRegexCharacter (character) {
   return character.replaceAll(/[|\\{}()[\]^$+*?.]/g, String.raw`\$&`)
@@ -963,7 +1151,6 @@ function escapeRegexCharacter (character) {
 
 /**
  * @param {string} pattern
- * @returns {boolean}
  */
 function hasUnescapedWildcard (pattern) {
   for (let i = 0; i < pattern.length; i++) {
@@ -979,7 +1166,6 @@ function hasUnescapedWildcard (pattern) {
 
 /**
  * @param {string} pattern
- * @returns {string}
  */
 function codeOwnersPatternToRegexSource (pattern) {
   let source = ''
@@ -988,9 +1174,7 @@ function codeOwnersPatternToRegexSource (pattern) {
 
     if (character === '\\') {
       const escapedCharacter = pattern[i + 1]
-      source += escapedCharacter === undefined
-        ? escapeRegexCharacter(character)
-        : escapeRegexCharacter(escapedCharacter)
+      source += escapeRegexCharacter(escapedCharacter ?? character)
       i++
     } else if (character === '*') {
       if (pattern[i + 1] === '*') {
@@ -1023,7 +1207,10 @@ function getCodeOwnersPatternRegex (pattern) {
   }
 
   const directoryOnly = pattern.endsWith('/')
-  const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
+  let normalizedPattern = pattern.replace(/^\/+/, '')
+  let normalizedPatternEnd = normalizedPattern.length
+  while (normalizedPatternEnd > 0 && normalizedPattern[normalizedPatternEnd - 1] === '/') normalizedPatternEnd--
+  normalizedPattern = normalizedPattern.slice(0, normalizedPatternEnd)
   const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
 
   if (!normalizedPattern) {
@@ -1057,7 +1244,6 @@ function setCodeOwnersPatternRegex (entry) {
  *
  * @param {RegExp|null} regex
  * @param {string} filename
- * @returns {boolean}
  */
 function isCodeOwnersPatternMatch (regex, filename) {
   if (!regex || !filename) {
@@ -1101,6 +1287,7 @@ function getCodeOwnersForFilename (filename, entries) {
 
 function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
+    [TEST_FRAMEWORK]: testFramework,
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
@@ -1184,7 +1371,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
 }
 
 function getCoverageMap (coverage) {
-  if (coverage?.files && coverage?.fileCoverageFor) {
+  if (coverage?.files && coverage.fileCoverageFor) {
     return coverage
   }
   return istanbul.createCoverageMap(coverage)
@@ -1253,6 +1440,34 @@ function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
   return bitmap
 }
 
+function getLineCoverageBitmaps (lineCoverage) {
+  let maxLine = 0
+  const entries = Object.entries(lineCoverage)
+
+  for (const [line] of entries) {
+    const lineNumber = Number(line)
+    if (Number.isSafeInteger(lineNumber) && lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+  if (maxLine === 0) return {}
+
+  const length = Math.ceil((maxLine + 1) / 8)
+  const coveredBitmap = Buffer.alloc(length)
+  const executableBitmap = Buffer.alloc(length)
+  for (const [line, hits] of entries) {
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    const byteIndex = lineNumber >> 3
+    const bit = 1 << (lineNumber % 8)
+    executableBitmap[byteIndex] |= bit
+    if (hits) coveredBitmap[byteIndex] |= bit
+  }
+
+  return { coveredBitmap, executableBitmap }
+}
+
 function mergeCoverageBitmaps (targetBitmap, bitmap) {
   if (!targetBitmap) {
     return Buffer.from(bitmap)
@@ -1313,16 +1528,6 @@ function getCoverageFileBitmap (bitmap) {
   }
 }
 
-function addCoverageFilesToMap (files, targetMap, rootDir) {
-  for (const file of files) {
-    const bitmap = getCoverageFileBitmap(file.bitmap)
-    if (!bitmap) continue
-
-    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
-    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
-  }
-}
-
 function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   if (!skippedCoverage) return
 
@@ -1333,27 +1538,57 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
-function hasSkippedCoverage (skippedCoverage) {
-  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
-}
+/**
+ * Calculates line coverage and optionally returns executable-line coverage files in the same traversal.
+ * @param {object} coverage
+ * @param {object} [skippedCoverage]
+ * @param {string} [rootDir]
+ * @param {boolean} [includeExecutableFiles]
+ * @returns {{ percentage: number, executableFiles?: Array<{ filename: string, bitmap: Buffer }> }}
+ */
+function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeExecutableFiles = false) {
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  const coverageByFilename = new Map()
+  const executableFiles = includeExecutableFiles ? [] : undefined
 
-function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
-  const executableLinesByFile = new Map()
-  const coveredLinesByFile = new Map()
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const { coveredBitmap, executableBitmap } = getLineCoverageBitmaps(fileCoverage.getLineCoverage())
+    if (!executableBitmap) continue
 
-  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
-  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
-  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const existingCoverage = coverageByFilename.get(relativeFilename)
+    if (existingCoverage) {
+      existingCoverage.coveredBitmap = mergeCoverageBitmaps(existingCoverage.coveredBitmap, coveredBitmap)
+      existingCoverage.executableBitmap = mergeCoverageBitmaps(existingCoverage.executableBitmap, executableBitmap)
+    } else {
+      coverageByFilename.set(relativeFilename, { coveredBitmap, executableBitmap })
+    }
+  }
 
   let totalExecutableLines = 0
   let totalCoveredLines = 0
-
-  for (const [filename, executableLines] of executableLinesByFile) {
-    totalExecutableLines += countBitmapBits(executableLines)
-    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  for (const [filename, { coveredBitmap, executableBitmap }] of coverageByFilename) {
+    const skippedBitmap = skippedCoverageByFilename.get(filename)
+    const combinedCoveredBitmap = skippedBitmap
+      ? mergeCoverageBitmaps(coveredBitmap, skippedBitmap)
+      : coveredBitmap
+    totalExecutableLines += countBitmapBits(executableBitmap)
+    totalCoveredLines += countCoveredExecutableBits(combinedCoveredBitmap, executableBitmap)
+    if (executableFiles) {
+      executableFiles.push({ filename, bitmap: executableBitmap })
+    }
   }
 
-  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  const percentage = totalExecutableLines === 0
+    ? 0
+    : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  return { percentage, executableFiles }
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  return getTestCoverageLinesData(coverage, skippedCoverage, rootDir).percentage
 }
 
 function isLineCoveredByBitmap (bitmap, line) {
@@ -1373,8 +1608,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || fileCoverage.data.s[statementId] > 0) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -1387,13 +1621,12 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @param {object} coverage
  * @param {object} skippedCoverage
  * @param {string} [rootDir]
- * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
-  if (!hasSkippedCoverage(skippedCoverage)) return false
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  if (skippedCoverageByFilename.size === 0) return false
 
   const coverageMap = getCoverageMap(coverage)
-  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
   let matched = false
 
   for (const filename of coverageMap.files()) {
@@ -1450,19 +1683,76 @@ function fromCoverageMapToCoverage (coverageMap) {
   }, {})
 }
 
+/**
+ * @param {number} code
+ */
+function isAsciiDigit (code) {
+  return code >= 0x30 && code <= 0x39
+}
+
+/**
+ * Parse a V8 stack frame into its file path and 1-based line number.
+ *
+ * Stack text includes caller-controlled function names and can be overwritten. Scan numeric suffixes
+ * right-to-left and discard V8's trailing anonymous location for eval frames.
+ * @param {string} frame
+ * @param {string} expectedPath A known path contained in the frame.
+ * @returns {{ file: string, line: number } | null}
+ */
+function parseStackFrameLocation (frame, expectedPath) {
+  let pathStart = frame.lastIndexOf(expectedPath)
+  while (frame.charCodeAt(pathStart - 1) !== 0x28 /* ( */ &&
+        !frame.startsWith('at ', pathStart - 3) &&
+        !frame.startsWith('file://', pathStart - 7)) {
+    const previousPathStart = frame.lastIndexOf(expectedPath, pathStart - 1)
+    if (previousPathStart === -1) break
+    pathStart = previousPathStart
+  }
+  const scope = frame.slice(pathStart)
+  let end = scope.length
+  if (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+
+  while (true) {
+    let lastNumberStart = end
+    while (lastNumberStart > 0 && isAsciiDigit(scope.charCodeAt(lastNumberStart - 1))) {
+      lastNumberStart--
+    }
+    if (lastNumberStart === end || scope.charCodeAt(lastNumberStart - 1) !== 0x3A /* : */) {
+      return null
+    }
+    const colonBeforeLast = lastNumberStart - 1
+    let lineStart = colonBeforeLast
+    while (lineStart > 0 && isAsciiDigit(scope.charCodeAt(lineStart - 1))) {
+      lineStart--
+    }
+    if (lineStart < colonBeforeLast && scope.charCodeAt(lineStart - 1) === 0x3A /* : */) {
+      const fileEnd = lineStart - 1
+      const anonymousStart = fileEnd - 11
+      if (scope.charCodeAt(fileEnd - 1) === 0x3E /* > */ && anonymousStart >= 3 &&
+          scope.startsWith('<anonymous>', anonymousStart) &&
+          scope.charCodeAt(anonymousStart - 1) === 0x20 /* space */ &&
+          scope.charCodeAt(anonymousStart - 2) === 0x2C /* , */ &&
+          scope.charCodeAt(anonymousStart - 3) === 0x29 /* ) */) {
+        end = anonymousStart - 3
+        while (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+        continue
+      }
+      return { file: scope.slice(0, fileEnd), line: Number(scope.slice(lineStart, colonBeforeLast)) }
+    }
+    return { file: scope.slice(0, colonBeforeLast), line: Number(scope.slice(lastNumberStart, end)) }
+  }
+}
+
 // Get the start line of a test by inspecting a given error's stack trace
 function getTestLineStart (err, testSuitePath) {
   if (!err.stack) {
     return null
   }
-  // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
-  try {
-    const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
-    return Number.parseInt(testFileLineMatch[3], 10) || null
-  } catch {
+  if (!testFileLine) {
     return null
   }
+  return parseStackFrameLocation(testFileLine, testSuitePath)?.line || null
 }
 
 // Get the end line of a test by inspecting a given function's source code
@@ -1485,7 +1775,7 @@ function parseAnnotations (annotations) {
     }
     const { type, description } = annotation
     if (type.startsWith('DD_TAGS')) {
-      const regex = /\[(.*?)\]/
+      const regex = /^DD_TAGS\[([^\]]*)\]/
       const match = regex.exec(type)
       let tagValue = ''
       if (match) {
@@ -1500,43 +1790,19 @@ function parseAnnotations (annotations) {
 }
 
 /**
- * Given a test's first-execution duration (ms) and the slow_test_retries map
- * from the backend, return how many EFD retries to run.
+ * Combines the optional Failed Test Replay operations that must settle before a retry.
  *
- * Returns 0 when the test is too slow to retry (≥ 5 min).
- *
- * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
+ * @param {{setProbePromise?: Promise<void>, finishTestPromise?: Promise<void>}} promises
+ * @returns {Promise<void>|undefined}
  */
-function getEfdRetryCount (durationMs, slowTestRetries) {
-  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
-    if (durationMs < limitMs) {
-      return slowTestRetries[key] ?? 0
-    }
+function getFailedTestReplayPromise (promises) {
+  if (promises.setProbePromise && promises.finishTestPromise) {
+    return Promise.all([
+      promises.setProbePromise,
+      promises.finishTestPromise,
+    ]).then(() => {})
   }
-  return 0 // ≥ 5 min — abort
-}
-
-/**
- * Returns the maximum retry count configured by the backend for EFD.
- *
- * @param {Record<string, number> | undefined} slowTestRetries
- * @returns {number | undefined}
- */
-function getMaxEfdRetryCount (slowTestRetries) {
-  if (slowTestRetries === undefined) return
-
-  const retryCounts = Object.values(slowTestRetries)
-  if (retryCounts.length === 0) return
-
-  let maxRetries = 0
-  for (const retryCount of retryCounts) {
-    if (retryCount > maxRetries) {
-      maxRetries = retryCount
-    }
-  }
-  return maxRetries
+  return promises.setProbePromise || promises.finishTestPromise
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -1613,15 +1879,9 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   }
 
   const topFrame = frames[topRelevantFrameIndex]
-  // Regular expression to match the file path, line number, and column number
-  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
-  const match = topFrame.match(regex)
-
-  if (match) {
-    const filePath = match[1]
-    const lineNumber = Number(match[2])
-
-    return [filePath, lineNumber, topRelevantFrameIndex]
+  const location = parseStackFrameLocation(topFrame, repositoryRoot)
+  if (location) {
+    return [location.file, location.line, topRelevantFrameIndex]
   }
   return []
 }
@@ -1680,7 +1940,8 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
 
 function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = {}) {
   return {
-    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: !options.omitTestImpactAnalysis &&
+      isTiaSupported(testFramework)
       ? '1'
       : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionSupported(testFramework, frameworkVersion)
@@ -1737,6 +1998,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   }
 
   const metrics = {}
+  let hasMetrics = false
   for (const candidate of candidateBranches) {
     // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch)
@@ -1755,6 +2017,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       ahead,
       baseSha,
     }
+    hasMetrics = true
   }
 
   function isDefaultBranch (branch) {
@@ -1763,7 +2026,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     )
   }
 
-  if (Object.keys(metrics).length === 0) {
+  if (!hasMetrics) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
@@ -1789,6 +2052,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
 function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
+  let hasModifiedFiles = false
 
   const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
   const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
@@ -1803,6 +2067,7 @@ function getModifiedFilesFromDiff (diff) {
     if (fileMatch && fileMatch.groups.file) {
       currentFile = fileMatch.groups.file
       result[currentFile] = []
+      hasModifiedFiles = true
       continue
     }
 
@@ -1811,6 +2076,10 @@ function getModifiedFilesFromDiff (diff) {
     if (lineMatch && currentFile) {
       const start = Number(lineMatch.groups.start)
       const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
+      if (count === 0) {
+        // Keep the surviving line before a deletion so line-based consumers can match its scope.
+        result[currentFile].push(start)
+      }
       for (let j = 0; j < count; j++) {
         result[currentFile].push(start + j)
       }
@@ -1821,7 +2090,7 @@ function getModifiedFilesFromDiff (diff) {
     linesRegex.lastIndex = 0
   }
 
-  if (Object.keys(result).length === 0) {
+  if (!hasModifiedFiles) {
     return null
   }
   return result
@@ -1841,28 +2110,115 @@ function getModifiedFilesFromDiff (diff) {
  */
 
 /**
+ * Returns a collision-free identity for a test's suite and name.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ */
+function getTestOptimizationIdentity (testSuite, testName) {
+  return JSON.stringify([testSuite, testName])
+}
+
+/**
  * Formats a test name for user-facing Test Optimization summaries.
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function formatTestOptimizationName (testSuite, testName) {
   return testSuite ? `${testSuite} › ${testName}` : testName
 }
 
 /**
+ * Replaces characters that could make one test occupy multiple CI log lines.
+ *
+ * @param {string} value
+ */
+function sanitizeTestOptimizationName (value) {
+  return stripVTControlCharacters(value)
+    .replaceAll(TEST_OPTIMIZATION_NAME_CONTROL_RE, '')
+    .replaceAll(TEST_OPTIMIZATION_NAME_WHITESPACE_RE, ' ')
+    .trim()
+}
+
+/**
+ * Truncates the beginning of a value while preserving its distinguishing suffix.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ */
+function truncateTestOptimizationNameStart (value, maxLength) {
+  if (value.length <= maxLength) return value
+
+  let start = value.length - maxLength + 1
+  const code = value.charCodeAt(start)
+  if (code >= 0xDC_00 && code <= 0xDF_FF) start++
+  return `…${value.slice(start)}`
+}
+
+/**
+ * Truncates the middle of a value while preserving both its context and suffix.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ */
+function truncateTestOptimizationNameMiddle (value, maxLength) {
+  if (value.length <= maxLength) return value
+
+  let prefixLength = Math.ceil((maxLength - 1) / 2)
+  let suffixLength = maxLength - prefixLength - 1
+  const prefixCode = value.charCodeAt(prefixLength - 1)
+  if (prefixCode >= 0xD8_00 && prefixCode <= 0xDB_FF) prefixLength--
+  const suffixCode = value.charCodeAt(value.length - suffixLength)
+  if (suffixCode >= 0xDC_00 && suffixCode <= 0xDF_FF) suffixLength--
+  return `${value.slice(0, prefixLength)}…${value.slice(-suffixLength)}`
+}
+
+/**
+ * Formats a bounded, single-line test name for CI output.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ */
+function formatTestOptimizationDisplayName (testSuite, testName) {
+  const sanitizedSuite = testSuite ? sanitizeTestOptimizationName(testSuite) : ''
+  const sanitizedName = sanitizeTestOptimizationName(testName)
+  if (!sanitizedSuite) {
+    return truncateTestOptimizationNameMiddle(sanitizedName, MAX_TEST_OPTIMIZATION_NAME_LENGTH)
+  }
+
+  const separator = ' › '
+  if (sanitizedSuite.length + separator.length + sanitizedName.length <= MAX_TEST_OPTIMIZATION_NAME_LENGTH) {
+    return `${sanitizedSuite}${separator}${sanitizedName}`
+  }
+
+  const suiteLength = Math.min(60, sanitizedSuite.length)
+  const testNameLength = MAX_TEST_OPTIMIZATION_NAME_LENGTH - separator.length - suiteLength
+  return truncateTestOptimizationNameStart(sanitizedSuite, suiteLength) +
+    `${separator}${truncateTestOptimizationNameMiddle(sanitizedName, testNameLength)}`
+}
+
+/**
  * Renders a bounded bullet list for Test Optimization summaries.
  *
  * @param {Array<{ text: string, suffix?: string }>} items
- * @returns {string}
  */
 function formatTestOptimizationList (items) {
   const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
 
-  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const { text, suffix } of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${truncateTestOptimizationNameMiddle(
+      sanitizeTestOptimizationName(text),
+      MAX_TEST_OPTIMIZATION_NAME_LENGTH
+    )}${suffix ? ` (${suffix})` : ''}`
+    isFirstItem = false
+  }
+  return formattedItems + moreSuffix
 }
 
 /**
@@ -1875,15 +2231,67 @@ function formatTestOptimizationList (items) {
 function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTests) {
   if (!testName) return
 
-  const name = formatTestOptimizationName(testSuite, testName)
   if (loggedAttemptToFixTests) {
-    if (loggedAttemptToFixTests.has(name)) return
+    const identity = getTestOptimizationIdentity(testSuite, testName)
+    if (loggedAttemptToFixTests.has(identity)) return
 
-    loggedAttemptToFixTests.add(name)
+    loggedAttemptToFixTests.add(identity)
   }
 
   // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
-  console.warn(`Datadog Test Optimization: attempting to fix ${name}`)
+  console.warn(`Datadog Test Optimization: attempting to fix ${formatTestOptimizationDisplayName(testSuite, testName)}`)
+}
+
+/**
+ * @typedef {object} TestManagementExecutionResult
+ * @property {string} name
+ * @property {'disabled'|'quarantined'} action
+ * @property {boolean} failed
+ */
+
+/**
+ * @typedef {Map<string, TestManagementExecutionResult>} TestManagementExecutions
+ */
+
+/**
+ * Records the effective non-Attempt-to-Fix Test Management action for one execution.
+ *
+ * @param {{
+ *   testSuite?: string,
+ *   testName: string,
+ *   status?: string,
+ *   isAttemptToFix?: boolean,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }} execution
+ * @param {TestManagementExecutions} [executions]
+ */
+function recordTestManagementExecution (execution, executions = testManagementExecutions) {
+  if (!execution?.testName || execution.isAttemptToFix) return
+
+  const action = execution.isDisabled
+    ? 'disabled'
+    : execution.isQuarantined ? 'quarantined' : undefined
+  if (!action) return
+  if (action === 'quarantined' && execution.status !== 'pass' && execution.status !== 'fail') return
+  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+
+  const identity = getTestOptimizationIdentity(execution.testSuite, execution.testName)
+  const name = formatTestOptimizationName(execution.testSuite, execution.testName)
+  let result = executions.get(identity)
+
+  if (!result) {
+    result = {
+      name,
+      action,
+      failed: false,
+    }
+    executions.set(identity, result)
+  } else if (action === 'disabled') {
+    result.action = action
+  }
+
+  result.failed ||= execution.status === 'fail'
 }
 
 /**
@@ -1899,11 +2307,12 @@ function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTe
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
+  if (!execution?.testName || getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
+  const identity = getTestOptimizationIdentity(testSuite, testName)
   const name = formatTestOptimizationName(testSuite, testName)
-  let result = attemptToFixExecutions.get(name)
+  let result = attemptToFixExecutions.get(identity)
 
   if (!result) {
     result = {
@@ -1913,12 +2322,12 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
       isDisabled: false,
       isQuarantined: false,
     }
-    attemptToFixExecutions.set(name, result)
+    attemptToFixExecutions.set(identity, result)
   }
 
   result.executions++
-  result.isDisabled = result.isDisabled || !!isDisabled
-  result.isQuarantined = result.isQuarantined || !!isQuarantined
+  result.isDisabled ||= !!isDisabled
+  result.isQuarantined ||= !!isQuarantined
 
   if (status === 'fail') {
     result.failedCount++
@@ -1938,15 +2347,41 @@ function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
 
 function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
   const meta = span.meta
-  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true' ||
+    meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true') return
 
   recordAttemptToFixExecution(attemptToFixExecutions, {
     testSuite: meta[TEST_SUITE],
     testName: meta[TEST_NAME],
     status: meta[TEST_STATUS],
-    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
   })
+}
+
+/**
+ * Records a Test Management execution from a serialized worker trace span.
+ *
+ * @param {{ meta?: Record<string, string> }} span
+ * @param {TestManagementExecutions} executions
+ */
+function collectTestManagementExecutionFromTraceSpan (span, executions) {
+  const meta = span.meta
+  if (!meta) return
+
+  recordTestManagementExecution({
+    testSuite: meta[TEST_SUITE],
+    testName: meta[TEST_NAME],
+    status: meta[TEST_STATUS],
+    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
+      meta[TEST_MANAGEMENT_NO_AUTO_RETRY] !== 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+  }, executions)
 }
 
 /**
@@ -1956,22 +2391,38 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
  * @param {string} data - JSON-serialized traces from a worker
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
- *   attemptToFixExecutions?: AttemptToFixExecutions
+ *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
+ *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
  */
 function collectTestOptimizationSummariesFromTraces (data, summaries) {
-  const { newTestsWithDynamicNames, attemptToFixExecutions } = summaries
+  const {
+    newTestsWithDynamicNames,
+    attemptToFixExecutions,
+    testManagementExecutions: executions = testManagementExecutions,
+    testAnnotations,
+  } = summaries
 
   try {
     const traces = JSON.parse(data)
     for (const trace of traces) {
       for (const span of trace) {
+        if (testAnnotations && span.type === 'test' &&
+          (span.meta?.[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true' ||
+            span.meta?.[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true')) {
+          testAnnotations.set(`${span.meta[TEST_SUITE]} › ${span.meta[TEST_NAME]}`, {
+            mustFail: span.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true',
+            noAutoRetry: span.meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true',
+          })
+        }
         if (newTestsWithDynamicNames) {
           collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
         }
         if (attemptToFixExecutions) {
           collectAttemptToFixExecutionFromTraceSpan(span, attemptToFixExecutions)
         }
+        collectTestManagementExecutionFromTraceSpan(span, executions)
       }
     }
   } catch {
@@ -2018,7 +2469,10 @@ function hasAttemptToFixManagementNotes (result) {
 }
 
 function addAttemptToFixResultLine (lines, result) {
-  lines.push(`  • ${result.name}`)
+  lines.push(`  • ${truncateTestOptimizationNameMiddle(
+    sanitizeTestOptimizationName(result.name),
+    MAX_TEST_OPTIMIZATION_NAME_LENGTH
+  )}`)
 
   for (const note of getAttemptToFixManagementNotes(result)) {
     lines.push(`    ${note}`)
@@ -2029,9 +2483,9 @@ function addAttemptToFixResultLine (lines, result) {
  * Formats the attempt-to-fix end-of-session summary.
  *
  * @param {AttemptToFixExecutions} attemptToFixExecutions
- * @returns {string}
+ * @param {boolean} [includeTestNames]
  */
-function formatAttemptToFixSummary (attemptToFixExecutions) {
+function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = true) {
   if (attemptToFixExecutions.size === 0) return ''
 
   const results = [...attemptToFixExecutions.values()]
@@ -2043,9 +2497,11 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
       `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`,
     ]
 
-    for (const result of results) {
-      if (hasAttemptToFixManagementNotes(result)) {
-        addAttemptToFixResultLine(lines, result)
+    if (includeTestNames) {
+      for (const result of results) {
+        if (hasAttemptToFixManagementNotes(result)) {
+          addAttemptToFixResultLine(lines, result)
+        }
       }
     }
 
@@ -2061,12 +2517,65 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
       `across ${failedResults.length} of ${results.length} test(s).`,
   ]
 
-  for (const result of failedResults) {
-    addAttemptToFixResultLine(lines, result)
-  }
-  for (const result of results) {
-    if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+  if (includeTestNames) {
+    for (const result of failedResults) {
       addAttemptToFixResultLine(lines, result)
+    }
+    for (const result of results) {
+      if (result.failedCount === 0 && hasAttemptToFixManagementNotes(result)) {
+        addAttemptToFixResultLine(lines, result)
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Formats the disabled and quarantined Test Management summary.
+ *
+ * @param {TestManagementExecutions} executions
+ * @param {boolean} [includeTestNames]
+ */
+function formatTestManagementSummary (executions, includeTestNames = true) {
+  if (executions.size === 0) return ''
+
+  const results = [...executions.values()]
+  const disabledResults = results.filter(result => result.action === 'disabled')
+  const quarantinedResults = results.filter(result => result.action === 'quarantined')
+  const failedQuarantinedResults = quarantinedResults.filter(result => result.failed)
+  const lines = ['Test Management']
+
+  if (disabledResults.length > 0) {
+    const testLabel = disabledResults.length === 1 ? 'test' : 'tests'
+    lines.push(`  Disabled: ${disabledResults.length} ${testLabel} skipped.`)
+  }
+  if (quarantinedResults.length > 0) {
+    const testLabel = quarantinedResults.length === 1 ? 'test' : 'tests'
+    if (failedQuarantinedResults.length > 0) {
+      const failureLabel = failedQuarantinedResults.length === 1 ? 'failure' : 'failures'
+      lines.push(
+        `  Quarantined: ${quarantinedResults.length} ${testLabel} run; ` +
+        `${failedQuarantinedResults.length} ${failureLabel} did not affect the test session.`
+      )
+    } else {
+      lines.push(`  Quarantined: ${quarantinedResults.length} ${testLabel} run; all passed.`)
+    }
+  }
+
+  if (includeTestNames) {
+    lines.push('', '  Affected tests:')
+    results.sort((a, b) => a.name.localeCompare(b.name))
+    for (const result of results) {
+      const status = result.action === 'disabled'
+        ? 'disabled'
+        : result.failed ? 'quarantined, failed' : 'quarantined, passed'
+      lines.push(
+        `  • [${status}] ${truncateTestOptimizationNameMiddle(
+          sanitizeTestOptimizationName(result.name),
+          MAX_TEST_OPTIMIZATION_NAME_LENGTH
+        )}`
+      )
     }
   }
 
@@ -2077,7 +2586,6 @@ function formatAttemptToFixSummary (attemptToFixExecutions) {
  * Formats the dynamic-name warning section of the Test Optimization summary.
  *
  * @param {Set<string>} newTestsWithDynamicNames
- * @returns {string}
  */
 function formatDynamicNamesSummary (newTestsWithDynamicNames) {
   if (newTestsWithDynamicNames.size === 0) return ''
@@ -2098,25 +2606,57 @@ function formatDynamicNamesSummary (newTestsWithDynamicNames) {
  *
  * @param {{
  *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   testManagementExecutions?: TestManagementExecutions,
  *   newTestsWithDynamicNames?: Set<string>,
  *   extraSections?: string[]
  * }} summary
  */
 function logTestOptimizationSummary (summary) {
-  const { attemptToFixExecutions, newTestsWithDynamicNames, extraSections = [] } = summary
+  const {
+    attemptToFixExecutions,
+    testManagementExecutions: executions = testManagementExecutions,
+    newTestsWithDynamicNames,
+    extraSections = [],
+  } = summary
   const sections = []
-  const attemptToFixSummary = attemptToFixExecutions
-    ? formatAttemptToFixSummary(attemptToFixExecutions)
+  const isTestManagementReportEnabled =
+    getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') !== false
+  const testManagementTestCount = (attemptToFixExecutions?.size || 0) + executions.size
+  const includeTestNames = testManagementTestCount <= MAX_TEST_MANAGEMENT_REPORT_ITEMS
+  const attemptToFixSummary = isTestManagementReportEnabled && attemptToFixExecutions
+    ? formatAttemptToFixSummary(attemptToFixExecutions, includeTestNames)
+    : ''
+  const testManagementSummary = isTestManagementReportEnabled
+    ? formatTestManagementSummary(executions, includeTestNames)
     : ''
   const dynamicNamesSummary = newTestsWithDynamicNames
     ? formatDynamicNamesSummary(newTestsWithDynamicNames)
     : ''
 
   if (attemptToFixSummary) sections.push(attemptToFixSummary)
+  if (testManagementSummary) sections.push(testManagementSummary)
+  if (attemptToFixSummary || testManagementSummary) {
+    if (!includeTestNames) {
+      sections.push(`Individual test names omitted because ${testManagementTestCount} tests were affected.`)
+    }
+    sections.push('Hide this report: DD_TEST_MANAGEMENT_REPORT_ENABLED=false')
+  }
   sections.push(...extraSections.filter(Boolean))
   if (dynamicNamesSummary) sections.push(dynamicNamesSummary)
 
-  if (sections.length === 0) return
+  if (sections.length === 0) {
+    executions.clear()
+    if (executions !== testManagementExecutions) {
+      testManagementExecutions.clear()
+    }
+    if (attemptToFixExecutions) {
+      attemptToFixExecutions.clear()
+    }
+    if (newTestsWithDynamicNames) {
+      newTestsWithDynamicNames.clear()
+    }
+    return
+  }
 
   const line = '-'.repeat(50)
   // eslint-disable-next-line no-console -- Intentional user-facing session summary
@@ -2124,6 +2664,10 @@ function logTestOptimizationSummary (summary) {
 
   if (attemptToFixExecutions) {
     attemptToFixExecutions.clear()
+  }
+  executions.clear()
+  if (executions !== testManagementExecutions) {
+    testManagementExecutions.clear()
   }
   if (newTestsWithDynamicNames) {
     newTestsWithDynamicNames.clear()

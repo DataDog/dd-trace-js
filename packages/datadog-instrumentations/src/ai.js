@@ -6,113 +6,109 @@ const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
-const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
-const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
-const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
+
+// Published synchronously per model call with the native call data. A subscriber may set either
+// callback and this instrumentation applies it, so the wrapping stays here and only the policy
+// lives outside:
+//   beforeResult () => Promise<void>|undefined     holds the result back until it settles
+//   onResult (result) => unknown|Promise<unknown>  inspects or replaces the delivered result
+const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
+
+const INTERCEPTED_MODEL_METHODS = ['doGenerate', 'doStream']
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
+ * Wraps a language model's call methods so subscribers can interpose on each call.
  *
- * Subscribers push async work into `pending` synchronously during publication and
- * abort `abortController` with an error before the pushed promise resolves to block.
- *
- * @param {object} lifecycleChannel
- * @param {object} payload
- * @returns {Promise<void>}
+ * @param {object} model
  */
-function publishLifecycle (lifecycleChannel, payload) {
-  const abortController = new AbortController()
-  const ctx = { ...payload, abortController, pending: [] }
-
-  lifecycleChannel.publish(ctx)
-
-  return Promise.all(ctx.pending).then(() => {
-    if (abortController.signal.aborted) {
-      throw abortController.signal.reason
-    }
-  })
-}
-
-/**
- * Wraps a Vercel AI language model's doGenerate and doStream lifecycle methods.
- *
- * @param {object} model - A Vercel AI language model instance
- */
-function wrapModelWithLifecycle (model) {
+function wrapModel (model) {
   if (!model || wrappedModels.has(model)) return
   wrappedModels.add(model)
 
-  if (typeof model.doGenerate === 'function') {
-    shimmer.wrap(model, 'doGenerate', function (original) {
-      return function (options) {
-        const originalResult = original.call(this, options)
+  for (const method of INTERCEPTED_MODEL_METHODS) {
+    if (typeof model[method] !== 'function') continue
 
-        if (!doGenerateBeforeChannel.hasSubscribers && !doGenerateAfterChannel.hasSubscribers) return originalResult
-        if (!options.prompt?.length) return originalResult
+    shimmer.wrap(model, method, original => function (...args) {
+      const result = original.apply(this, args)
+      if (!modelInterceptChannel.hasSubscribers) return result
 
-        const beforeEvaluation = doGenerateBeforeChannel.hasSubscribers
-          ? publishLifecycle(doGenerateBeforeChannel, { prompt: options.prompt, options })
-          : Promise.resolve()
+      const interceptCtx = { method, arguments: args }
+      modelInterceptChannel.publish(interceptCtx)
 
-        return Promise.all([beforeEvaluation, originalResult])
-          .then(([, result]) => {
-            if (!doGenerateAfterChannel.hasSubscribers || !result.content?.length) return result
-            const payload = { prompt: options.prompt, options, result }
-            return publishLifecycle(doGenerateAfterChannel, payload).then(() => result)
-          })
-      }
+      if (!interceptCtx.beforeResult && !interceptCtx.onResult) return result
+
+      // A model may return any thenable, so normalize before attaching handlers.
+      const settled = Promise.resolve(result)
+      // The interceptor's rejection wins over an earlier SDK rejection.
+      settled.catch(() => {})
+
+      return Promise.resolve(interceptCtx.beforeResult?.())
+        .then(() => settled)
+        .then(value => (interceptCtx.onResult ? interceptCtx.onResult(value) : value))
     })
   }
+}
 
-  if (typeof model.doStream === 'function') {
-    shimmer.wrap(model, 'doStream', function (original) {
-      return function (options) {
-        const originalResult = original.call(this, options)
-
-        if (!doStreamBeforeChannel.hasSubscribers && !doStreamAfterChannel.hasSubscribers) return originalResult
-        if (!options.prompt?.length) return originalResult
-
-        const beforeEvaluation = doStreamBeforeChannel.hasSubscribers
-          ? publishLifecycle(doStreamBeforeChannel, { prompt: options.prompt, options })
-          : Promise.resolve()
-
-        return Promise.all([beforeEvaluation, originalResult])
-          .then(([, result]) => {
-            if (!doStreamAfterChannel.hasSubscribers) return result
-
-            const chunks = []
-            const reader = result.stream.getReader()
-
-            function readAll () {
-              return reader.read().then(({ done, value }) => {
-                if (done) return
-                chunks.push(value)
-                return readAll()
-              })
-            }
-
-            return readAll().then(() => {
-              return publishLifecycle(doStreamAfterChannel, { prompt: options.prompt, options, chunks })
-                .then(() => {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  const stream = new ReadableStream({
-                    start (controller) {
-                      for (const chunk of chunks) {
-                        controller.enqueue(chunk)
-                      }
-                      controller.close()
-                    },
-                  })
-                  return { ...result, stream }
-                })
-            })
-          })
-      }
-    })
+/**
+ * Wraps an OTel span without changing its method receivers.
+ *
+ * OTel spans may use private fields, so methods must run against the original
+ * span. A per-invocation wrapper also preserves `ctx` without mutating the AI
+ * SDK's shared no-op span.
+ *
+ * @param {import('@opentelemetry/api').Span} span
+ * @param {object} ctx
+ * @returns {import('@opentelemetry/api').Span}
+ */
+function createDelegatingSpan (span, ctx) {
+  return {
+    spanContext () {
+      return span.spanContext.apply(span, arguments)
+    },
+    setAttribute () {
+      span.setAttribute.apply(span, arguments)
+      return this
+    },
+    setAttributes (attributes) {
+      vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+      span.setAttributes.apply(span, arguments)
+      return this
+    },
+    addEvent () {
+      span.addEvent.apply(span, arguments)
+      return this
+    },
+    addLink () {
+      span.addLink.apply(span, arguments)
+      return this
+    },
+    addLinks () {
+      span.addLinks.apply(span, arguments)
+      return this
+    },
+    setStatus () {
+      span.setStatus.apply(span, arguments)
+      return this
+    },
+    updateName () {
+      span.updateName.apply(span, arguments)
+      return this
+    },
+    isRecording () {
+      return span.isRecording.apply(span, arguments)
+    },
+    recordException (exception) {
+      ctx.error = exception
+      vercelAiTracingChannel.error.publish(ctx)
+      return span.recordException.apply(span, arguments)
+    },
+    end () {
+      vercelAiTracingChannel.asyncEnd.publish(ctx)
+      return span.end.apply(span, arguments)
+    },
   }
 }
 
@@ -136,40 +132,7 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // A plain delegating wrapper is used instead of Object.create(span) because
-          // Object.create (and Proxy) cannot cross private-field brand checks — any span
-          // method that reads a private field (e.g. BridgeSpanBase#statusCode) would throw
-          // "Cannot read private member" on a prototype clone. Every method here calls
-          // through to the real span instance so private fields always resolve correctly.
-          const freshSpan = {
-            spanContext () { return span.spanContext() },
-            setAttribute (key, value) { span.setAttribute(key, value); return freshSpan },
-            setAttributes (attributes) {
-              vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              span.setAttributes(attributes)
-              return freshSpan
-            },
-            addEvent (name, attributesOrStartTime, startTime) {
-              span.addEvent(name, attributesOrStartTime, startTime)
-              return freshSpan
-            },
-            addLink (link, attrs) { span.addLink(link, attrs); return freshSpan },
-            addLinks (links) { span.addLinks(links); return freshSpan },
-            setStatus (status) { span.setStatus(status); return freshSpan },
-            updateName (spanName) { span.updateName(spanName); return freshSpan },
-            isRecording () { return span.isRecording() },
-            recordException (exception, timeInput) {
-              ctx.error = exception
-              vercelAiTracingChannel.error.publish(ctx)
-              span.recordException(exception, timeInput)
-            },
-            end (...endArgs) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              span.end(...endArgs)
-            },
-          }
-
-          return originalCb.call(this, freshSpan)
+          return originalCb.call(this, createDelegatingSpan(span, ctx))
         }
       })
 
@@ -182,7 +145,9 @@ function wrapTracer (tracer) {
   })
 }
 
-for (const hook of getHooks('ai')) {
+let orchestrionSubscribed = false
+
+for (const hook of getHooks('ai').values()) {
   if (hook.file === 'dist/index.js') {
     // if not removed, the below hook will never match correctly
     // however, it is still needed in the orchestrion definition
@@ -190,6 +155,9 @@ for (const hook of getHooks('ai')) {
   }
 
   addHook(hook, exports => {
+    if (orchestrionSubscribed) return exports
+    orchestrionSubscribed = true
+
     const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
     getTracerChannel.subscribe({
       end (ctx) {
@@ -226,16 +194,45 @@ for (const hook of getHooks('ai')) {
       },
     })
 
+    tracingChannel('orchestrion:ai:includeRuntimeContext').subscribe({
+      start (ctx) {
+        const options = ctx.arguments[0]
+        const runtimeContext = options?.runtimeContext
+        const telemetry = options?.telemetry ?? options?.experimental_telemetry
+
+        if (!runtimeContext || typeof runtimeContext !== 'object' || telemetry?.isEnabled === false) return
+
+        const keys = Object.keys(runtimeContext)
+        if (!keys.length) return
+
+        const includeRuntimeContext = { ...telemetry?.includeRuntimeContext }
+        for (const key of keys) {
+          if (includeRuntimeContext[key] === undefined) includeRuntimeContext[key] = true
+        }
+
+        ctx.arguments[0] = {
+          ...options,
+          telemetry: {
+            ...telemetry,
+            includeRuntimeContext,
+          },
+        }
+      },
+    })
+
     // resolveLanguageModel is called by all LLM entry points (generateText, streamText,
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
         const model = ctx.arguments[0]
-        if (typeof model !== 'string' && model !== ctx.result) {
-          wrapModelWithLifecycle(model)
-          wrappedModels.add(ctx.result)
+
+        // The SDK builds a model from a string id, in which case only the resolved instance is
+        // worth wrapping; when the caller passed an instance, that is the one the SDK calls.
+        if (typeof model === 'string' || model === ctx.result) {
+          wrapModel(ctx.result)
         } else {
-          wrapModelWithLifecycle(ctx.result)
+          wrapModel(model)
+          wrappedModels.add(ctx.result)
         }
       },
     })
@@ -288,5 +285,3 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
 
   return exports
 })
-
-module.exports = { wrapModelWithLifecycle }

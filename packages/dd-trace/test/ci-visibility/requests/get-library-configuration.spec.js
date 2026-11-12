@@ -3,11 +3,13 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const nock = require('nock')
 
 require('../../setup/core')
 
 const getConfig = require('../../../src/config')
 const {
+  getLibraryConfiguration,
   parseLibraryConfigurationResponse,
 } = require('../../../src/ci-visibility/requests/get-library-configuration')
 
@@ -37,15 +39,50 @@ const COMPLETE_SETTINGS_ATTRIBUTES = {
 
 describe('get-library-configuration', () => {
   beforeEach(() => {
+    getConfig().DD_API_KEY = 'test-api-key'
     getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
 
   afterEach(() => {
+    getConfig().DD_API_KEY = undefined
     getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
+    nock.cleanAll()
+  })
+
+  it('fetches library configuration with an API key', (done) => {
+    nock('https://api.datadoghq.com')
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, { data: { attributes: COMPLETE_SETTINGS_ATTRIBUTES } })
+
+    getLibraryConfiguration({
+      url: new URL('https://api.datadoghq.com'),
+      isEvpProxy: false,
+      evpProxyPrefix: '',
+    }, (error, settings) => {
+      assert.strictEqual(error, null)
+      assert.strictEqual(settings.isCodeCoverageEnabled, true)
+      done()
+    })
+  })
+
+  it('does not fetch library configuration without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getLibraryConfiguration({
+      url: new URL('https://api.datadoghq.com'),
+      isEvpProxy: false,
+      evpProxyPrefix: '',
+    }, (error) => {
+      assert.strictEqual(
+        error.message,
+        'Request to settings endpoint was not done because Datadog API key is not defined.'
+      )
+      done()
+    })
   })
 
   describe('parseLibraryConfigurationResponse', () => {
@@ -62,10 +99,14 @@ describe('get-library-configuration', () => {
         isItrEnabled: true,
         requireGit: false,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 4,
-        earlyFlakeDetectionSlowTestRetries: {
-          '5s': 4,
-          '10s': 3,
+        earlyFlakeDetectionRetryPolicy: {
+          durationRetryCounts: [
+            { durationLimitMs: 5000, retryCount: 4 },
+            { durationLimitMs: 10_000, retryCount: 3 },
+            { durationLimitMs: 30_000, retryCount: 0 },
+            { durationLimitMs: 300_000, retryCount: 0 },
+          ],
+          schedulingRetryCount: 4,
         },
         earlyFlakeDetectionFaultyThreshold: 12,
         isFlakyTestRetriesEnabled: true,
@@ -77,7 +118,8 @@ describe('get-library-configuration', () => {
         isCoverageReportUploadEnabled: true,
       })
       assert.strictEqual(Object.isFrozen(settings), true)
-      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionSlowTestRetries), true)
+      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy), true)
+      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy.durationRetryCounts), true)
     })
 
     it('accepts bare settings attributes like the Ruby cache reader', () => {
@@ -153,7 +195,7 @@ describe('get-library-configuration', () => {
         })
 
         assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
-        assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionSlowTestRetries), true)
+        assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy), true)
       }
     })
 
@@ -172,8 +214,15 @@ describe('get-library-configuration', () => {
       })
 
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, true)
-      assert.strictEqual(settings.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(settings.earlyFlakeDetectionSlowTestRetries, { '5s': 0 })
+      assert.deepStrictEqual(settings.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 0 },
+          { durationLimitMs: 10_000, retryCount: 0 },
+          { durationLimitMs: 30_000, retryCount: 0 },
+          { durationLimitMs: 300_000, retryCount: 0 },
+        ],
+        schedulingRetryCount: 0,
+      })
     })
 
     it('disables test management when its retry policy is malformed', () => {
@@ -214,22 +263,28 @@ describe('get-library-configuration', () => {
       })
 
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, true)
-      assert.strictEqual(settings.earlyFlakeDetectionNumRetries, 100)
+      assert.strictEqual(settings.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 100)
       assert.strictEqual(settings.isTestManagementEnabled, true)
       assert.strictEqual(settings.testManagementAttemptToFixRetries, 100)
     })
 
-    it('defaults missing EFD retry budgets without replacing an explicit zero', () => {
+    it('normalizes missing, empty, sparse, and all-zero EFD retry budgets', () => {
       const missingRetryBudget = parseLibraryConfigurationResponse({
         early_flake_detection: {
           enabled: true,
         },
       })
-      const missingFiveSecondRetryBudget = parseLibraryConfigurationResponse({
+      const emptyRetryBudget = parseLibraryConfigurationResponse({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {},
+        },
+      })
+      const sparseRetryBudget = parseLibraryConfigurationResponse({
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '10s': 1,
+            '10s': 3,
           },
         },
       })
@@ -238,13 +293,15 @@ describe('get-library-configuration', () => {
           enabled: true,
           slow_test_retries: {
             '5s': 0,
+            '10s': 0,
           },
         },
       })
 
-      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionNumRetries, 2)
-      assert.strictEqual(missingFiveSecondRetryBudget.earlyFlakeDetectionNumRetries, 2)
-      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionNumRetries, 0)
+      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 10)
+      assert.strictEqual(emptyRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
+      assert.strictEqual(sparseRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 3)
+      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
     })
 
     it('validates complete cached settings attributes', () => {

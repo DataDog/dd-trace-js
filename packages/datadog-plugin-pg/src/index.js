@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class PGPlugin extends DatabasePlugin {
@@ -16,6 +16,53 @@ class PGPlugin extends DatabasePlugin {
       ctx.parentStore = storage('legacy').getStore()
     })
     this.addBind('apm:pg:pool:connect:finish', ctx => ctx.parentStore)
+
+    this.addSub('apm:pg:pool:acquire:start', ctx => {
+      const params = ctx.poolOptions
+      const operationName = this.operationName({ operation: 'pool.acquire' })
+      const deferServiceResolution = typeof this.config.service === 'function'
+      const service = deferServiceResolution
+        ? undefined
+        : this.serviceName({ pluginConfig: this.config, params })
+      ctx.deferServiceResolution = deferServiceResolution
+
+      this.startSpan(operationName, {
+        service,
+        resource: operationName,
+        startTime: ctx.startTime,
+        type: 'sql',
+        kind: 'client',
+        meta: {
+          'db.type': 'postgres',
+          ...connectionMeta(params),
+        },
+      }, ctx)
+    })
+    this.addSub('apm:pg:pool:acquire:finish', ctx => {
+      const span = ctx.currentStore?.span
+      if (span === undefined) return
+
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
+      span.setTag('db.pool.wait_time_ms', ctx.poolWaitTime)
+      // `Pool` options carry only what the caller passed, so anything pg resolves later - a
+      // connection string, the default port, `PG*` environment variables - is known once the
+      // client exists.
+      if (ctx.params !== undefined) {
+        span.addTags(connectionMeta(ctx.params))
+        if (ctx.deferServiceResolution) {
+          const service = this.serviceName({ pluginConfig: this.config, params: ctx.params })
+          // A `service` callback may return no name, and the start-time fallback already carries
+          // the schema default every other pg span falls back to.
+          if (service.name) {
+            this.setServiceName(span, service.name)
+            span.setTag(SVC_SRC_KEY, service.source)
+          }
+        }
+      }
+      this.finish(ctx)
+    })
   }
 
   bindStart (ctx) {
@@ -42,9 +89,27 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
+    if (ctx.poolWaitTime !== undefined) {
+      span.setTag('db.pool.wait_time_ms', ctx.poolWaitTime)
+    }
+
     ctx.injected = this.injectDbmQuery(span, originalText, service.name, !!query.name)
 
     return ctx.currentStore
+  }
+}
+
+/**
+ * `Pool.options` and `Client.connectionParameters` are pg internals, so either can be missing.
+ *
+ * @param {{ database?: string, user?: string, host?: string, port?: number } | undefined} params
+ */
+function connectionMeta (params) {
+  return {
+    'db.name': params?.database,
+    'db.user': params?.user,
+    'out.host': params?.host,
+    [CLIENT_PORT_KEY]: params?.port,
   }
 }
 

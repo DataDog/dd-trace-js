@@ -3,7 +3,25 @@
 // Control-plane HTTP client for LLM Obs Experiments. Uses the global `fetch`,
 // so this module adds no new dependency; credentials and site come from config.
 
+const { Dataset, DatasetRecord } = require('./dataset')
+const { ExperimentResult } = require('./result')
+const { RemoteEvaluatorError } = require('./remote-evaluator')
+
 const API_BASE_PATH = '/api/v2/llm-obs/v1'
+const EVALUATOR_INFERENCE_API_BASE_PATH = '/api/unstable/llm-obs/v1'
+
+class ExperimentsRequestError extends Error {
+  /**
+   * @param {string} message
+   * @param {number} statusCode
+   * @param {object} responseBody
+   */
+  constructor (message, statusCode, responseBody) {
+    super(message)
+    this.statusCode = statusCode
+    this.responseBody = responseBody
+  }
+}
 
 // Control-plane host for a Datadog site, e.g.
 //   datadoghq.com        -> api.datadoghq.com
@@ -14,10 +32,67 @@ function apiHost (site) {
 }
 
 // Web-app host for dashboard URLs. Single-level sites (datadoghq.com,
-// ddog-gov.com) are served from the `app.` subdomain; regional sites
-// (us3.datadoghq.com, ap1.datadoghq.com) are used as-is.
+// ddog-gov.com) are served from the `app.` subdomain; staging uses
+// dd.datad0g.com; regional sites (us3.datadoghq.com, ap1.datadoghq.com)
+// are used as-is.
 function appHost (site) {
+  if (site === 'datad0g.com') return 'dd.datad0g.com'
   return site.split('.').length === 2 ? `app.${site}` : site
+}
+
+function datasetRecordFromResource (resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  const id = String(resource?.id ?? attrs.id ?? '')
+  if (id === '') throw new Error('Dataset record response is missing an id')
+  return new DatasetRecord(
+    attrs.input ?? null,
+    attrs.expected_output ?? null,
+    attrs.metadata ?? {},
+    id,
+    attrs.tags ?? []
+  )
+}
+
+function datasetVersionFromResource (resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  return attrs.valid_from_version ?? attrs.version ?? null
+}
+
+function datasetVersionFromResources (resources) {
+  const versions = resources
+    .map(datasetVersionFromResource)
+    .filter(version => version != null)
+    .map(Number)
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
+}
+
+function datasetMutationResultFromResources (resources) {
+  return {
+    records: resources.map(datasetRecordFromResource),
+    version: datasetVersionFromResources(resources),
+  }
+}
+
+function datasetFromResource (client, projectId, resource) {
+  const attrs = resource?.attributes ?? resource ?? {}
+  const version = attrs.current_version ?? null
+  return Dataset.fromExisting(
+    client,
+    String(attrs.name ?? ''),
+    String(attrs.description ?? ''),
+    resource?.id ?? attrs.id ?? null,
+    projectId,
+    [],
+    version,
+    version
+  )
+}
+
+function experimentFromResource (client, resource) {
+  const id = resource?.id
+  return new ExperimentResult(id, [], id == null ? null : `${client.appBase}/llm/experiments/${id}`)
 }
 
 class ExperimentsClient {
@@ -26,6 +101,7 @@ class ExperimentsClient {
   #site
   #projectName
   #timeout
+  apiBase
   #cachedProjectId
 
   constructor ({ apiKey, appKey, site, projectName, timeout = 30_000 } = {}) {
@@ -34,6 +110,7 @@ class ExperimentsClient {
     this.#site = site
     this.#projectName = projectName
     this.#timeout = timeout
+    this.apiBase = `https://${apiHost(this.#site)}`
     this.#cachedProjectId = null
   }
 
@@ -44,6 +121,10 @@ class ExperimentsClient {
 
   get site () {
     return this.#site
+  }
+
+  get projectName () {
+    return this.#projectName
   }
 
   // Dashboard URL base for the configured site, e.g. https://app.datadoghq.com
@@ -59,7 +140,7 @@ class ExperimentsClient {
   // Low-level request. Builds https://api.<site><path>, attaches both keys, and
   // returns the parsed JSON body. Throws with status + body on a non-2xx.
   async request (method, path, body) {
-    const url = `https://${apiHost(this.#site)}${path}`
+    const url = `${this.apiBase}${path}`
     const headers = {
       'DD-API-KEY': this.#apiKey,
       'DD-APPLICATION-KEY': this.#appKey,
@@ -85,9 +166,156 @@ class ExperimentsClient {
 
     const text = await response.text()
     if (!response.ok) {
-      throw new Error(`${method} ${path} failed: HTTP ${response.status} ${text}`)
+      let responseBody = {}
+      try {
+        responseBody = text ? JSON.parse(text) : {}
+      } catch {}
+      throw new ExperimentsRequestError(
+        `${method} ${path} failed: HTTP ${response.status} ${text}`,
+        response.status,
+        responseBody
+      )
     }
     return text ? JSON.parse(text) : {}
+  }
+
+  jsonApiRequest (method, path, type, attributes) {
+    return this.request(method, path, {
+      data: { type, attributes },
+    })
+  }
+
+  async createProject (name) {
+    const response = await this.jsonApiRequest('POST', `${API_BASE_PATH}/projects`, 'projects', { name })
+    return response?.data ?? null
+  }
+
+  async createDataset (projectId, attributes) {
+    const response = await this.jsonApiRequest('POST', `${API_BASE_PATH}/${projectId}/datasets`, 'datasets', attributes)
+    return datasetFromResource(this, projectId, response?.data ?? null)
+  }
+
+  deleteDataset (projectId, datasetId) {
+    return this.jsonApiRequest('POST', `${API_BASE_PATH}/${projectId}/datasets/delete`, 'datasets', {
+      type: 'soft',
+      dataset_ids: [datasetId],
+    })
+  }
+
+  async listDatasets (projectId, options = {}) {
+    const query = new URLSearchParams()
+    if (options.name !== undefined) query.set('filter[name]', options.name)
+    const response = await this.request('GET', `${API_BASE_PATH}/${projectId}/datasets?${query.toString()}`)
+    const resources = Array.isArray(response?.data) ? response.data : []
+    return resources.map(resource => datasetFromResource(this, projectId, resource))
+  }
+
+  async appendDatasetRecords (projectId, datasetId, records) {
+    const response = await this.jsonApiRequest(
+      'POST',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records`,
+      'datasets',
+      { records }
+    )
+    // The append-records response has used both a top-level `records` array
+    // and JSON:API `data` resources. Accept either so generated/custom record
+    // ids are preserved for experiment row tagging.
+    const resources = Array.isArray(response?.records)
+      ? response.records
+      : (Array.isArray(response?.data) ? response.data : [])
+    return datasetMutationResultFromResources(resources)
+  }
+
+  async batchUpdateDatasetRecords (projectId, datasetId, attributes) {
+    const response = await this.request(
+      'POST',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/batch_update`,
+      {
+        data: {
+          type: 'datasets',
+          id: datasetId,
+          attributes: {
+            insert_records: attributes.insert_records ?? [],
+            update_records: attributes.update_records ?? [],
+            delete_records: attributes.delete_records ?? [],
+            deduplicate: attributes.deduplicate !== false,
+            create_new_version: attributes.create_new_version !== false,
+          },
+        },
+      }
+    )
+    const resources = Array.isArray(response?.records)
+      ? response.records
+      : (Array.isArray(response?.data) ? response.data : [])
+    return datasetMutationResultFromResources(resources)
+  }
+
+  async listDatasetRecords (projectId, datasetId, options = {}) {
+    const query = new URLSearchParams()
+    if (options.cursor) query.set('page[cursor]', options.cursor)
+    if (options.version !== undefined && options.version !== null) query.set('filter[version]', String(options.version))
+    if (Array.isArray(options.tags)) {
+      for (const tag of options.tags) query.append('filter[tags]', tag)
+    }
+    const response = await this.request(
+      'GET',
+      `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
+    )
+    const records = Array.isArray(response?.data) ? response.data.map(datasetRecordFromResource) : []
+    return { records, after: response?.meta?.after ?? '' }
+  }
+
+  async createExperiment (attributes) {
+    const response = await this.jsonApiRequest('POST', `${API_BASE_PATH}/experiments`, 'experiments', attributes)
+    return experimentFromResource(this, response?.data ?? null)
+  }
+
+  /**
+   * @param {string} evalName
+   * @param {object} context
+   */
+  evaluatorInfer (evalName, context) {
+    const encodedName = encodeURIComponent(evalName)
+    const path = `${EVALUATOR_INFERENCE_API_BASE_PATH}/evaluators/${encodedName}/infer`
+    return this.jsonApiRequest('POST', path, 'evaluator_inference', { context }).then(response => {
+      const attributes = response?.data?.attributes ?? {}
+      return {
+        value: attributes.value,
+        reasoning: attributes.reasoning,
+        assessment: attributes.assessment,
+        status: attributes.status,
+      }
+    }).catch(err => {
+      const attributes = err.responseBody?.data?.attributes ?? {}
+      const backendError = attributes.error
+      if (backendError !== null && typeof backendError === 'object' && !Array.isArray(backendError)) {
+        const fallback = err.statusCode === undefined ? err.message : `HTTP ${err.statusCode}`
+        throw new RemoteEvaluatorError(
+          `Remote evaluator '${evalName}' failed: ${backendError.message ?? fallback}`,
+          { status: attributes.status, backendError }
+        )
+      }
+
+      const apiError = Array.isArray(err.responseBody?.errors) ? err.responseBody.errors[0] : undefined
+      const detail = apiError !== null && typeof apiError === 'object'
+        ? apiError.detail ?? apiError.title
+        : undefined
+      const fallback = err.statusCode === undefined ? err.message : `HTTP ${err.statusCode}`
+      throw new Error(`Failed to call evaluator '${evalName}': ${detail ?? fallback}`)
+    })
+  }
+
+  postExperimentEvents (experimentId, attributes) {
+    return this.jsonApiRequest(
+      'POST',
+      `${API_BASE_PATH}/experiments/${experimentId}/events`,
+      'experiments',
+      attributes
+    )
+  }
+
+  updateExperiment (experimentId, attributes) {
+    return this.jsonApiRequest('PATCH', `${API_BASE_PATH}/experiments/${experimentId}`, 'experiments', attributes)
   }
 
   // Resolve the project id for `name`, creating it if absent. The create
@@ -98,16 +326,20 @@ class ExperimentsClient {
 
     let response
     try {
-      response = await this.request('POST', `${API_BASE_PATH}/projects`, {
-        data: { type: 'projects', attributes: { name } },
-      })
+      response = await this.createProject(name)
     } catch (err) {
       throw new Error(`Failed to create or get project '${name}': ${err.message}`)
     }
 
-    this.#cachedProjectId = response?.data?.id ?? null
+    this.#cachedProjectId = response?.id ?? null
     return this.#cachedProjectId
   }
 }
 
-module.exports = { ExperimentsClient, apiHost, appHost, API_BASE_PATH }
+module.exports = {
+  ExperimentsClient,
+  apiHost,
+  appHost,
+  API_BASE_PATH,
+  EVALUATOR_INFERENCE_API_BASE_PATH,
+}

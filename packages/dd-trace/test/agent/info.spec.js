@@ -15,6 +15,8 @@ describe('agent/info', () => {
 
   describe('fetchAgentInfo', () => {
     afterEach(() => {
+      nock.abortPendingRequests()
+      nock.cleanAll()
       clearCache()
     })
 
@@ -61,8 +63,62 @@ describe('agent/info', () => {
       })
     })
 
+    it('allows the agent info request to be aborted by finalization', (done) => {
+      const controller = new AbortController()
+      nock(url)
+        .get('/info')
+        .delayConnection(1000)
+        .reply(200, JSON.stringify({ endpoints: ['/evp_proxy/v2'] }))
+      let callbackCount = 0
+
+      fetchAgentInfo(new URL(url), (err) => {
+        callbackCount++
+        assert.strictEqual(err.code, 'ABORT_ERR')
+        setImmediate(() => {
+          assert.strictEqual(callbackCount, 1)
+          done()
+        })
+      }, { deadline: Date.now() + 1000, signal: controller.signal })
+      controller.abort()
+    })
+
+    it('uses an injected Test Optimization request implementation', (done) => {
+      const request = sinon.stub().yieldsAsync(null, JSON.stringify({ endpoints: ['/evp_proxy/v4'] }))
+      const options = { deadline: Date.now() + 1000 }
+
+      fetchAgentInfo(new URL(url), (err, response) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v4'])
+        sinon.assert.calledOnceWithMatch(request, '', {
+          ...options,
+          path: '/info',
+          url: new URL(url),
+        })
+        done()
+      }, options, request)
+    })
+
+    it('preserves a caller-supplied information path', (done) => {
+      const request = sinon.stub().yieldsAsync(null, JSON.stringify({ endpoints: ['/evp_proxy/v4'] }))
+      const options = { path: '/agent-prefix/info', retry: false }
+
+      fetchAgentInfo(new URL(url), (err, response) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v4'])
+        sinon.assert.calledOnceWithMatch(request, '', {
+          path: '/agent-prefix/info',
+          retry: false,
+          url: new URL(url),
+        })
+        done()
+      }, options, request)
+    })
+
     describe('caching', () => {
       let clock
+      const fetchInfo = (agentUrl, options) => new Promise((resolve, reject) => {
+        fetchAgentInfo(agentUrl, (error, result) => error ? reject(error) : resolve(result), options)
+      })
 
       beforeEach(() => {
         clearCache()
@@ -75,6 +131,36 @@ describe('agent/info', () => {
         clock.restore()
         clearCache()
       })
+
+      for (const [firstOptions, secondOptions] of [
+        [{}, { path: '/agent-prefix/info' }],
+        [{ path: '/agent-prefix/info' }, {}],
+      ]) {
+        it(`invalidates cached ${firstOptions.path ?? '/info'} when the request path changes`, async () => {
+          const agentUrl = new URL(`${url}/agent-prefix/`)
+          const firstInfo = { endpoints: ['/evp_proxy/v2'] }
+          const secondInfo = { endpoints: ['/evp_proxy/v4'] }
+          const first = nock(url).get(firstOptions.path ?? '/info').reply(200, firstInfo)
+          const second = nock(url).get(secondOptions.path ?? '/info').reply(200, secondInfo)
+
+          assert.deepStrictEqual(await fetchInfo(agentUrl, firstOptions), firstInfo)
+          assert.deepStrictEqual(await fetchInfo(agentUrl, secondOptions), secondInfo)
+          first.done()
+          second.done()
+        })
+      }
+
+      for (const path of ['/info', '/agent-prefix/info']) {
+        it(`reuses cached ${path} for the same effective request path`, async () => {
+          const agentUrl = new URL(`${url}/agent-prefix/`)
+          const agentInfo = { endpoints: ['/evp_proxy/v4'] }
+          const scope = nock(url).get(path).once().reply(200, agentInfo)
+
+          assert.deepStrictEqual(await fetchInfo(agentUrl, path === '/info' ? {} : { path }), agentInfo)
+          assert.deepStrictEqual(await fetchInfo(agentUrl, { path }), agentInfo)
+          scope.done()
+        })
+      }
 
       it('should cache responses for 1 minute', (done) => {
         const agentInfo = { endpoints: ['/evp_proxy/v2'] }

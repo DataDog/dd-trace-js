@@ -7,6 +7,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { getAgent } = require('../../src/ci-visibility/exporters/agents')
 require('../setup/core')
 
 describe('sendData', () => {
@@ -15,6 +16,7 @@ describe('sendData', () => {
     tracer_version: 'version',
   }
   const host = { hostname: 'test-host' }
+  const tracing = { DD_TRACE_EXPERIMENTAL_EXPORTER: '' }
 
   let sendDataModule
   let request
@@ -31,6 +33,7 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
       tags: { 'runtime-id': '123' },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -51,12 +54,14 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
     })
+    assert.strictEqual(options.agent, undefined)
   })
 
   it('sends telemetry to the configured socket url', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
       tags: { 'runtime-id': '123' },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -79,11 +84,26 @@ describe('sendData', () => {
     })
   })
 
+  it('does not send the API key to the Agent', () => {
+    sendDataModule.sendData({
+      DD_API_KEY: 'secret-key',
+      url: new URL('https://agent.example:8126'),
+      tags: { 'runtime-id': '123' },
+      tracing,
+    }, application, host, 'req-type')
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+
+    assert.strictEqual(options.headers['dd-api-key'], undefined)
+  })
+
   it('adds the debug header when telemetry debug mode is enabled', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
       telemetry: { DD_TELEMETRY_DEBUG: true },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -97,6 +117,7 @@ describe('sendData', () => {
       url: '/test',
       tags: { 'runtime-id': 'child-runtime-id' },
       DD_ROOT_JS_SESSION_ID: 'root-runtime-id',
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -113,7 +134,7 @@ describe('sendData', () => {
       tags: {},
       serviceMapping: {},
     }
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, application, host, 'req-type', payload)
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' }, tracing }, application, host, 'req-type', payload)
 
     sinon.assert.calledOnce(request)
     const data = JSON.parse(request.getCall(0).args[0])
@@ -135,7 +156,7 @@ describe('sendData', () => {
 
     }, retryObjData]
 
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' }, tracing },
       application, host, 'message-batch', payload)
 
     sinon.assert.calledOnce(request)
@@ -160,9 +181,11 @@ describe('sendData', () => {
   it('uses the CI Visibility agentless intake when agentless mode is enabled', () => {
     sendDataModule.sendData(
       {
+        DD_API_KEY: 'secret-key',
         isCiVisibility: true,
         testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
+        tracing,
         site: 'datadoghq.eu',
       },
       application,
@@ -178,6 +201,8 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.agent, getAgent(url))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
   })
 
   it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
@@ -189,6 +214,7 @@ describe('sendData', () => {
           DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
         },
         tags: { 'runtime-id': '123' },
+        tracing,
         site: 'datadoghq.eu',
       },
       application,
@@ -200,6 +226,126 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
+    assert.strictEqual(options.agent, getAgent(url))
+  })
+
+  it('uses the dedicated Test Optimization agent in agent-proxy mode', () => {
+    const url = new URL('http://127.0.0.1:8126')
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
+        tags: { 'runtime-id': '123' },
+        tracing,
+        url,
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.firstCall.args[1]
+    assert.strictEqual(options.path, '/telemetry/proxy/api/v2/apmtelemetry')
+    assert.strictEqual(options.agent, getAgent(url))
+  })
+
+  it('selects the HTTPS Test Optimization agent when falling back to the agentless backend', () => {
+    request.onFirstCall().yields(new Error('agent unreachable'))
+    request.onSecondCall().yields(null)
+
+    const url = new URL('http://127.0.0.1:8126')
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        isCiVisibility: true,
+        site: 'datadoghq.eu',
+        tags: { 'runtime-id': '123' },
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
+        tracing,
+        url,
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    assert.strictEqual(request.callCount, 2)
+    assert.strictEqual(request.firstCall.args[1].agent, getAgent(url))
+    const fallbackUrl = new URL('https://instrumentation-telemetry-intake.datadoghq.eu')
+    assert.strictEqual(request.secondCall.args[1].agent, getAgent(fallbackUrl))
+  })
+
+  it('uses the direct telemetry intake for APM agentless mode without contacting the Agent', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.strictEqual(options.path, '/api/v2/apmtelemetry')
+    assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
+  })
+
+  it('uses the staging telemetry intake for APM agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datad0g.com',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.deepStrictEqual(options.url, new URL('https://all-http-intake.logs.datad0g.com'))
+  })
+
+  it('rejects an APM agentless site that could redirect the API key', () => {
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.com@evil.example',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.notCalled(request)
+  })
+
+  it('does not fall back to the Agent after an APM agentless telemetry failure', () => {
+    request.yields(new Error('intake unavailable'))
+
+    sendDataModule.sendData(
+      {
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
   })
 
   it('sends the agentless backend telemetry with a URL object when the agent request fails', () => {
@@ -210,6 +356,7 @@ describe('sendData', () => {
         DD_API_KEY: 'secret-key',
         site: 'datadoghq.eu',
         tags: { 'runtime-id': '123' },
+        tracing,
       },
       application,
       host,
@@ -222,6 +369,31 @@ describe('sendData', () => {
     assert.strictEqual(backendOptions.headers['DD-API-KEY'], 'secret-key')
   })
 
+  it('restores Agent telemetry mode after the Agent recovers', () => {
+    const log = {
+      info: sinon.stub(),
+      warn: sinon.stub(),
+    }
+    request.onFirstCall().yields(new Error('agent unreachable'))
+    request.onThirdCall().yields()
+    sendDataModule = proxyquire('../../src/telemetry/send-data', {
+      '../exporters/common/request': request,
+      '../log': log,
+    })
+    const config = {
+      DD_API_KEY: 'secret-key',
+      site: 'datadoghq.eu',
+      tags: { 'runtime-id': '123' },
+      tracing,
+    }
+
+    sendDataModule.sendData(config, application, host, 'req-type')
+    sendDataModule.sendData(config, application, host, 'req-type')
+
+    sinon.assert.calledOnceWithExactly(log.warn, 'Agent telemetry failed, started agentless telemetry')
+    sinon.assert.calledOnceWithExactly(log.info, 'Started agent telemetry')
+  })
+
   it('skips the agentless backend request when the endpoint URL is invalid', () => {
     request.yields(new Error('agent unreachable'))
 
@@ -230,6 +402,7 @@ describe('sendData', () => {
         DD_API_KEY: 'secret-key',
         site: 'x:notaport',
         tags: { 'runtime-id': '123' },
+        tracing,
       },
       application,
       host,

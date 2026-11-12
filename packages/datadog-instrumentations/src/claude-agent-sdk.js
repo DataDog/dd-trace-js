@@ -2,7 +2,6 @@
 
 const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 
 const stepCh = tracingChannel('apm:claude-agent-sdk:step')
@@ -12,6 +11,67 @@ const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 const LOCAL_LIFECYCLE_LOOKAHEAD = 4
 
 const chunkEmitTimes = new WeakMap()
+
+/**
+ * @typedef {{ session_id?: string } & Record<string, unknown>} Chunk
+ */
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   name?: string,
+ *   input?: unknown,
+ *   output?: unknown,
+ *   error?: unknown,
+ *   isInterrupt?: boolean,
+ *   sessionId?: string,
+ *   hookStartTime?: number,
+ *   hookFinishTime?: number,
+ * }} ToolState
+ */
+
+/**
+ * @typedef {{ taskStartedChunk?: Chunk, toolResultIndex?: number }} ToolLifecycle
+ */
+
+/**
+ * @typedef {(startIndex: number, toolUseId: string) => ToolLifecycle} GetLifecycle
+ */
+
+/**
+ * @typedef {{
+ *   tools: Map<string, ToolState>,
+ *   subagents: Map<string, Record<string, unknown>>,
+ *   prompt?: string,
+ *   systemPrompt?: string | string[] | { type: string, prompt?: string | string[], append?: string },
+ *   model?: string,
+ *   resume?: string,
+ *   maxTurns?: number,
+ *   permissionMode?: string,
+ *   sessionId?: string,
+ *   source?: string,
+ *   cwd?: string,
+ *   transcriptPath?: string,
+ *   agentType?: string,
+ *   endReason?: string,
+ *   stopReason?: string,
+ *   lastAssistantMessage?: string,
+ * }} SessionContext
+ */
+
+/**
+ * @typedef {{
+ *   stepIndex: number,
+ *   startTime?: number,
+ *   finishTime?: number,
+ *   parentToolUseId?: string,
+ *   sessionId?: string,
+ *   chunks?: Chunk[],
+ *   llmStartIdx?: number,
+ *   llmEndIdx?: number,
+ *   toolOutputs?: unknown[],
+ * }} StepContext
+ */
 
 function hasDownstreamSubscribers () {
   return queryChannel.asyncEnd.hasSubscribers ||
@@ -54,7 +114,7 @@ function buildTracerHooks (sessionCtx) {
     sessionCtx.cwd = input.cwd
     sessionCtx.transcriptPath = input.transcript_path
     sessionCtx.agentType = input.agent_type
-    sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
+    sessionCtx.permissionMode ||= input.permission_mode
     return {}
   }
 
@@ -64,8 +124,8 @@ function buildTracerHooks (sessionCtx) {
   }
 
   function onUserPromptSubmit (input) {
-    sessionCtx.sessionId = sessionCtx.sessionId || input.session_id
-    sessionCtx.prompt = sessionCtx.prompt || input.prompt
+    sessionCtx.sessionId ||= input.session_id
+    sessionCtx.prompt ||= input.prompt
     return {}
   }
 
@@ -175,6 +235,7 @@ function onQueryStart (ctx) {
   const prompt = queryArg.prompt
   const sessionCtx = {
     prompt: typeof prompt === 'string' ? prompt : undefined,
+    systemPrompt: options.systemPrompt,
     model: options.model,
     resume: options.resume,
     maxTurns: options.maxTurns,
@@ -254,7 +315,7 @@ function createStreamLookup (chunks) {
     scanLocalLifecycle(chunks, startIndex, toolUseId, localLifecycle)
     if (localLifecycle.toolResultIndex !== undefined) return localLifecycle
 
-    streamIndex = streamIndex || buildStreamIndex(chunks)
+    streamIndex ||= buildStreamIndex(chunks)
     const indexedLifecycle = streamIndex.get(toolUseId)
     return {
       taskStartedChunk: localLifecycle.taskStartedChunk || indexedLifecycle?.taskStartedChunk,
@@ -287,11 +348,12 @@ function getToolResultContent (chunk, toolUseId) {
 }
 
 /**
- *
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
  * @param {number} startIndex
  * @param {string} toolUseId
- * @returns {number} index in chunks where the next step should start iteration
+ * @param {SessionContext | null | undefined} sessionCtx
+ * @param {GetLifecycle} getLifecycle
+ * @param {ToolLifecycle} lifecycle
  */
 function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
   let chunkIndex = startIndex
@@ -342,10 +404,14 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
 }
 
 /**
- *
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
  * @param {number} startIndex
- * @returns {number} index in chunks where the next step should start iteration
+ * @param {number | undefined} stepStartTime
+ * @param {string | null | undefined} parentToolUseId
+ * @param {string | undefined} initialPrompt
+ * @param {StepContext | null | undefined} stepCtx
+ * @param {SessionContext | null | undefined} sessionCtx
+ * @param {GetLifecycle} getLifecycle
  */
 function processStep (
   chunks,
@@ -386,6 +452,7 @@ function processStep (
     llmCh.traceSync(() => {}, {
       model,
       usage,
+      systemPrompt: parentToolUseId ? undefined : sessionCtx?.systemPrompt,
       startTime: stepStartTime,
       finishTime: chunkEmitTimes.get(chunks[messageEndIdx - 1]),
       chunks,
@@ -447,7 +514,16 @@ function processStep (
 }
 
 /**
- * @param {Array<Record<string, unknown>>} chunks
+ * @param {Chunk[]} chunks
+ * @param {{
+ *   sessionCtx?: SessionContext,
+ *   session_id?: string,
+ *   cwd?: string,
+ *   permissionMode?: string,
+ *   output?: unknown,
+ *   arguments?: Array<{ prompt?: string }>,
+ *   runInContext?: (fn: () => number) => number,
+ * }} agentCtx
  */
 function processChunks (chunks, agentCtx) {
   let chunkIndex = 0
@@ -455,7 +531,8 @@ function processChunks (chunks, agentCtx) {
   const sessionCtx = agentCtx.sessionCtx
   const getLifecycle = createStreamLookup(chunks)
 
-  const { type, subtype, ...rest } = chunks[0]
+  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init') || chunks[0]
+  const { type, subtype, ...rest } = initChunk
   Object.assign(agentCtx, rest)
   if (sessionCtx) {
     if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
@@ -560,28 +637,15 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
   }
 }
 
-let querySubscribed = false
+queryChannel.subscribe({
+  start: onQueryStart,
+  end (ctx) {
+    if (!ctx.claudeAgentSdkTracing) return
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
-  hook.file = null
+    const { result } = ctx
 
-  addHook(hook, exports => {
-    if (!querySubscribed) {
-      querySubscribed = true
-      queryChannel.subscribe({
-        start: onQueryStart,
-        end (ctx) {
-          if (!ctx.claudeAgentSdkTracing) return
+    ctx.streamResolved = false
 
-          const { result } = ctx
-
-          ctx.streamResolved = false
-
-          shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
-        },
-      })
-    }
-
-    return exports
-  })
-}
+    shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
+  },
+})

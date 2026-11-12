@@ -102,7 +102,6 @@ function recordResponseBodyIgnored (req, tag) {
 /**
  * @param {import('http').IncomingMessage} originatingReq inbound request (for metrics).
  * @param {import('http').IncomingMessage} res downstream response.
- * @returns {boolean} whether downstream response body should be collected for AppSec.
  */
 function evaluateResponseBodyCollection (originatingReq, res) {
   const maxBytes = config.appsec.DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES
@@ -131,7 +130,6 @@ function evaluateResponseBodyCollection (originatingReq, res) {
  * Probabilistic gate for downstream response body capture (rate + per-request cap).
  * Only used from {@link planResponseBodyCollection}; does not increment {@link bodyAnalysisCount}.
  * @param {import('http').IncomingMessage} req originating server request.
- * @returns {boolean}
  */
 function shouldSampleBody (req) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
@@ -150,7 +148,6 @@ function shouldSampleBody (req) {
 
 /**
  * @param {import('http').IncomingMessage} res downstream HTTP response.
- * @returns {boolean}
  */
 function isRedirectResponse (res) {
   const location = res.headers?.location || ''
@@ -166,15 +163,7 @@ function isRedirectResponse (res) {
  * @param {object} ctx http client instrumentation context (mutated).
  */
 function planResponseBodyCollection (originatingReq, res, ctx) {
-  if (!config) {
-    return
-  }
-
-  if (isRedirectResponse(res)) {
-    return
-  }
-
-  if (!shouldSampleBody(originatingReq)) {
+  if (!config || isRedirectResponse(res) || !shouldSampleBody(originatingReq)) {
     return
   }
 
@@ -271,7 +260,6 @@ function incrementDownstreamAnalysisCount (req) {
 /**
  * Returns the HTTP method to use for a downstream request, defaulting to GET.
  * @param {string} method method supplied in the outgoing request options.
- * @returns {string} validated HTTP method.
  */
 function getMethod (method) {
   return typeof method === 'string' && method ? method : 'GET'
@@ -307,7 +295,7 @@ function parseBody (body, contentType) {
       const formBody = Buffer.isBuffer(body) ? body.toString('utf8') : String(body)
       const params = new URLSearchParams(formBody)
       const result = {}
-      for (const [key, value] of params.entries()) {
+      for (const [key, value] of params) {
         if (key in result) {
           const existing = result[key]
           if (Array.isArray(existing)) {
@@ -351,6 +339,7 @@ module.exports = {
   disable,
   planResponseBodyCollection,
   incrementDownstreamAnalysisCount,
+  extractMimeType,
   extractRequestData,
   extractResponseData,
 }

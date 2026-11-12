@@ -167,7 +167,8 @@ describe('child process', () => {
             if (methodName !== 'spawn') {
               describe(`method ${methodName} with promisify`, () => {
                 it('should execute success callbacks', async () => {
-                  await promisify(childProcess[methodName])('echo')
+                  const promisifiedMethod = promisify(childProcess[methodName])
+                  await promisifiedMethod('echo')
 
                   assertObjectContains(start.firstCall.firstArg, {
                     command: 'echo',
@@ -189,8 +190,9 @@ describe('child process', () => {
 
                 it('should execute error callback', async () => {
                   try {
-                    await promisify(childProcess[methodName])('invalid_command_test')
-                  } catch (e) {
+                    const promisifiedMethod = promisify(childProcess[methodName])
+                    await promisifiedMethod('invalid_command_test')
+                  } catch {
                     sinon.assert.calledOnce(start)
                     assertObjectContains(start.firstCall.firstArg, { command: 'invalid_command_test', shell: false })
 
@@ -219,8 +221,9 @@ describe('child process', () => {
                   errStub.cmd = 'node -e "process.exit(1)"'
 
                   try {
-                    await promisify(childProcess[methodName])('node -e "process.exit(1)"', { shell: true })
-                  } catch (e) {
+                    const promisifiedMethod = promisify(childProcess[methodName])
+                    await promisifiedMethod('node -e "process.exit(1)"', { shell: true })
+                  } catch {
                     sinon.assert.calledOnce(start)
                     assertObjectContains(start.firstCall.firstArg, {
                       command: 'node -e "process.exit(1)"',
@@ -321,7 +324,8 @@ describe('child process', () => {
 
             describe(`method ${methodName} with promisify`, () => {
               it('should execute success callbacks', async () => {
-                await promisify(childProcess[methodName])('echo')
+                const promisifiedMethod = promisify(childProcess[methodName])
+                await promisifiedMethod('echo')
                 sinon.assert.calledOnce(start)
                 sinon.assert.calledWithMatch(start, {
                   command: 'echo',
@@ -340,9 +344,10 @@ describe('child process', () => {
 
               it('should execute error callback', async () => {
                 try {
-                  await promisify(childProcess[methodName])('invalid_command_test')
+                  const promisifiedMethod = promisify(childProcess[methodName])
+                  await promisifiedMethod('invalid_command_test')
                   return Promise.reject(new Error('Command expected to fail'))
-                } catch (e) {
+                } catch {
                   sinon.assert.calledOnce(start)
                   sinon.assert.calledWithMatch(start, {
                     command: 'invalid_command_test',
@@ -357,9 +362,10 @@ describe('child process', () => {
 
               it('should execute error callback with `exit 1` command', async () => {
                 try {
-                  await promisify(childProcess[methodName])('node -e "process.exit(1)"')
+                  const promisifiedMethod = promisify(childProcess[methodName])
+                  await promisifiedMethod('node -e "process.exit(1)"')
                   return Promise.reject(new Error('Command expected to fail'))
-                } catch (e) {
+                } catch {
                   sinon.assert.calledOnce(start)
                   sinon.assert.calledWithMatch(start, {
                     command: 'node -e "process.exit(1)"',
@@ -713,7 +719,7 @@ describe('child process', () => {
         })
 
         after(() => {
-          try { fs.unlinkSync(tmpScript) } catch (e) { /* ignore */ }
+          try { fs.unlinkSync(tmpScript) } catch { /* ignore */ }
         })
 
         it('should execute success callbacks', (done) => {

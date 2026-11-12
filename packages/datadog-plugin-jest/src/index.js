@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { writeDatadogParentId, writeDatadogTraceId } = require('../../dd-trace/src/carrier')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
@@ -35,11 +36,14 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -115,11 +119,20 @@ class JestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      testSessionEmptyReason,
       onDone,
     }) => {
       const finishSession = () => {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
+
+        if (testSessionEmptyReason) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            testSessionEmptyReason
+          )
+        }
 
         if (error) {
           this.testSessionSpan.setTag('error', error)
@@ -197,12 +210,14 @@ class JestPlugin extends CiPlugin {
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
+        config._ddEarlyFlakeDetectionRetryPolicy = this.libraryConfig?.earlyFlakeDetectionRetryPolicy
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDynamicAtrEnabled = this.libraryConfig?.isDynamicAtrEnabled ?? false
+        config._ddDynamicAtrBuckets = this.libraryConfig?.dynamicAtrBuckets
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
@@ -230,16 +245,15 @@ class JestPlugin extends CiPlugin {
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
       } = testEnvironmentOptions
 
-      const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': testSessionId,
-        'x-datadog-parent-id': testModuleId,
-      })
+      const carrier = /** @type {Record<string, unknown>} */ ({})
+      writeDatadogTraceId(carrier, testSessionId)
+      writeDatadogParentId(carrier, testModuleId)
+      const testSessionSpanContext = this.tracer.extract('text_map', carrier)
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
-        // requestErrorTags from test env options may be undefined
-        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
-        ...(itrSkippingEnabledTags !== undefined && itrSkippingEnabledTags !== null ? itrSkippingEnabledTags : {}),
+        ...requestErrorTags,
+        ...itrSkippingEnabledTags,
       }
 
       if (_ddUnskippable) {
@@ -297,23 +311,6 @@ class JestPlugin extends CiPlugin {
       }))
       for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      }
-    })
-
-    this.addSub('ci:jest:worker-report:telemetry', data => {
-      const telemetryEvents = JSON.parse(data)
-      for (const event of telemetryEvents) {
-        if (event.type === 'ciVisEvent') {
-          this.telemetry.ciVisEvent(event.name, event.testLevel, {
-            ...event.tags,
-            testFramework: event.testFramework,
-            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
-          })
-        } else if (event.type === 'count') {
-          this.telemetry.count(event.name, event.tags, event.value)
-        } else if (event.type === 'distribution') {
-          this.telemetry.distribution(event.name, event.tags, event.measure)
-        }
       }
     })
 
@@ -441,6 +438,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      deferredFinish,
       earlyFlakeAbortReason,
       promises,
     }) => {
@@ -472,6 +470,20 @@ class JestPlugin extends CiPlugin {
         'test',
         this.getTestTelemetryTags(span)
       )
+
+      if (deferredFinish) {
+        // Native describe retries can stop after later process errors or hooks.
+        // Delay publication, not the execution's monotonic end time or child cleanup.
+        const finishTime = span._getTime()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
+        deferredFinish.finish = finalStatus => {
+          if (finalStatus) span.setTag(TEST_FINAL_STATUS, finalStatus)
+          span.finish(finishTime)
+          if (finalStatus) this.cancelDiBreakpointHitWait()
+        }
+        return
+      }
 
       const finish = () => {
         span.finish()
@@ -567,6 +579,9 @@ class JestPlugin extends CiPlugin {
       isQuarantined,
       isModified,
       hasDynamicName,
+      mustFail,
+      noAutoRetry,
+      assignedManagementProperties,
       testSuiteAbsolutePath,
     } = test
 
@@ -575,6 +590,8 @@ class JestPlugin extends CiPlugin {
       [TEST_PARAMETERS]: testParameters,
       [TEST_FRAMEWORK_VERSION]: frameworkVersion,
     }
+    if (mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+    if (noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
     }
@@ -585,7 +602,7 @@ class JestPlugin extends CiPlugin {
       extraTags[JEST_DISPLAY_NAME] = displayName
     }
 
-    if (isAttemptToFix) {
+    if (assignedManagementProperties?.isAttemptToFix ?? isAttemptToFix) {
       extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
     }
 
@@ -600,11 +617,11 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
-    if (isDisabled) {
+    if (assignedManagementProperties?.isDisabled ?? isDisabled) {
       extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
     }
 
-    if (isQuarantined) {
+    if (assignedManagementProperties?.isQuarantined ?? isQuarantined) {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 

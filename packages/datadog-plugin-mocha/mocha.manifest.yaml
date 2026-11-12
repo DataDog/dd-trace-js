@@ -1,0 +1,15 @@
+_v: 1
+name: mocha
+display_name: Mocha
+description: Instruments Mocha and WebdriverIO Mocha/Jasmine test execution for Test Optimization, including lifecycle
+  spans, results, coverage, skipping, retries, failed-test replay, failure screenshots, videos, and browser RUM
+  correlation.
+packages:
+- name: '@wdio/local-runner'
+- name: mocha
+- name: mocha-each
+- name: workerpool
+category:
+- test.execution
+systems: []
+creation_date: '2021-01-07'

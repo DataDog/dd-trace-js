@@ -10,7 +10,7 @@ const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
-const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
+const { prepareTestServerForIast, copyFileToTmp, invokeCommandInjectionSink } = require('../utils')
 const commands = [
   '  ls -la  ',
   '  ls -la',
@@ -68,12 +68,7 @@ describe('TaintTracking lodash', () => {
               const commandResultOrig = propFnOriginal(_, commandTainted)
               assert.strictEqual(commandResult, commandResultOrig)
 
-              try {
-                const childProcess = require('child_process')
-                childProcess.execSync(commandResult, { stdio: 'ignore' })
-              } catch (e) {
-                // do nothing
-              }
+              invokeCommandInjectionSink(commandResult)
             }, 'COMMAND_INJECTION')
           })
         })

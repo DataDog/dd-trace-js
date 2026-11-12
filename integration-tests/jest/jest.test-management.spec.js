@@ -7,6 +7,9 @@ const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const { inspect } = require('node:util')
+
+const satisfies = require('semifies')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -52,14 +55,18 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
+const { getBabelDependencies } = require('./babel-dependencies')
+const { oldest: oldestJestVersion } = require('./versions')
 
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
-const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const supportsImportedGlobals = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.0.0')
+const supportsConcurrentSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=28.0.0')
+// Jest resets the snapshot state of retried tests since 24.9.0
+const itIfRetriesResetSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=24.9.0') ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
@@ -75,12 +82,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
-    '@babel/core',
-    '@babel/preset-typescript',
+    ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'office-addin-mock',
-    'winston',
     'jest-image-snapshot',
+    'office-addin-mock',
   ].filter(Boolean), true)
 
   before(function () {
@@ -293,6 +298,673 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  context('test automation exclusions', () => {
+    const preventFailureSuppressionTag = 'test.test_management.prevent_failure_suppression'
+    const noAutoRetryTag = 'test.test_management.no_auto_retry'
+
+    const setProperties = (file, names, properties) => {
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            [`ci-visibility/test-management/${file}.js`]: {
+              tests: Object.fromEntries(names.map(name => [name, { properties }])),
+            },
+          },
+        },
+      })
+    }
+
+    const runExclusions = async (file, expectedExit, check, extraEnv = {}) => {
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length > 0)
+          for (const test of tests) {
+            assert.strictEqual(test.meta['test.test_management.must_fail'], undefined)
+          }
+          check(tests, events)
+        }
+      )
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: `test-management/${file}`,
+          SHOULD_CHECK_RESULTS: '1',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+          ...extraEnv,
+        },
+      })
+      let output = ''
+      childProcess.stderr.on('data', chunk => { output += chunk })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+        error.message += `\nJest output:\n${output}`
+        throw error
+      })
+      assert.strictEqual(exitCode, expectedExit, output)
+    }
+
+    for (const annotated of [false, true]) {
+      it(`supports non-extensible custom environments (annotated=${annotated})`, async () => {
+        const env = {
+          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
+          DYNAMIC_ATR_PREVENT_EXTENSIONS: '1',
+          EXCLUSIONS_ANNOTATED_ENVIRONMENT: annotated ? '1' : '0',
+        }
+        // Establish the native environment contract before checking the traced run.
+        execSync(runTestsCommand, {
+          cwd,
+          env: {
+            ...process.env,
+            ...env,
+            NODE_OPTIONS: '',
+            TESTS_TO_RUN: 'test-management/test-exclusions-environment',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+          stdio: 'pipe',
+        })
+        await runExclusions('test-exclusions-environment', 0, spans => {
+          assert.strictEqual(spans.length, 1)
+          assert.strictEqual(spans[0].meta[TEST_STATUS], 'pass')
+          assert.strictEqual(spans[0].meta[noAutoRetryTag], annotated ? 'true' : undefined)
+        }, env)
+      })
+    }
+
+    for (const policy of ['retries', 'quarantine', 'disable']) {
+      for (const serialFirst of [false, true]) {
+        it(`scopes concurrent annotations by declaration (policy=${policy}, serialFirst=${serialFirst})`, async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: policy === 'retries',
+            test_management: { enabled: true },
+          })
+          const properties = policy === 'quarantine'
+            ? { quarantined: true }
+            : policy === 'disable' ? { disabled: true } : {}
+          setProperties('test-concurrent-annotation-collision', ['same name'], properties)
+          await runExclusions('test-concurrent-annotation-collision', 0, spans => {
+            const tag = policy === 'retries' ? noAutoRetryTag : preventFailureSuppressionTag
+            const concurrent = spans.filter(span => span.meta[tag] === 'true')
+            const serial = spans.filter(span => span.meta[tag] === undefined)
+            assert.strictEqual(concurrent.length, 1)
+            assert.strictEqual(concurrent[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(serial.length, policy === 'retries' ? 3 : 1)
+            assert.deepStrictEqual(serial.map(span => span.meta[TEST_STATUS]).sort(),
+              policy === 'retries' ? ['fail', 'fail', 'pass'] : policy === 'quarantine' ? ['fail'] : ['skip'])
+            if (policy === 'quarantine') {
+              assert.strictEqual(serial[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+            if (policy === 'disable') {
+              assert.strictEqual(serial[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            }
+          }, {
+            EXCLUSIONS_COLLISION_POLICY: policy,
+            EXCLUSIONS_SERIAL_FIRST: serialFirst ? '1' : '0',
+          })
+        })
+      }
+    }
+
+    it('overrides quarantine and disable without reversing developer skips', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      const file = 'test-exclusions-policy'
+      const names = ['protected disabled', 'protected quarantined', 'protected both',
+        'protected case 1', 'protected case 2', 'protected done']
+      const tests = Object.fromEntries(names.map(name => [name, { properties: { disabled: true, quarantined: true } }]))
+      tests['ordinary disabled'] = { properties: { disabled: true } }
+      tests['ordinary quarantined'] = { properties: { quarantined: true } }
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            [`ci-visibility/test-management/${file}.js`]: { tests },
+          },
+        },
+      })
+      await runExclusions(file, 1, (spans, events) => {
+        assert.strictEqual(spans.length, 9)
+        for (const name of names) {
+          const span = spans.find(span => span.meta[TEST_NAME] === name)
+          assert.ok(span, name)
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail', name)
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail', name)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true', name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_DISABLED], 'true', name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true', name)
+        }
+        assert.strictEqual(spans.find(span => span.meta[TEST_NAME] === 'ordinary disabled').meta[TEST_STATUS], 'skip')
+        const quarantined = spans.find(span => span.meta[TEST_NAME] === 'ordinary quarantined')
+        assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        assert.strictEqual(quarantined.meta[preventFailureSuppressionTag], undefined)
+        const skipped = spans.find(span => span.meta[TEST_NAME] === 'developer skipped')
+        assert.strictEqual(skipped.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(skipped.meta[preventFailureSuppressionTag], 'true')
+        for (const event of events.filter(event => event.type.endsWith('_end'))) {
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail', event.type)
+        }
+      })
+    })
+
+    for (const feature of ['ATR', 'dynamic ATR', 'EFD', 'Attempt to Fix']) {
+      it(`blocks ${feature} retries and keeps unannotated behavior`, async () => {
+        const file = 'test-exclusions-retries'
+        const names = ['excluded', 'control', 'must fail still retries', 'excluded case 1', 'excluded case 2',
+          'excluded template 1', 'excluded template 2']
+        receiver.setSettings({
+          flaky_test_retries_enabled: feature.endsWith('ATR'),
+          known_tests_enabled: feature === 'EFD',
+          early_flake_detection: { enabled: feature === 'EFD', slow_test_retries: { '5s': 2 } },
+          test_management: { enabled: feature === 'Attempt to Fix', attempt_to_fix_retries: 2 },
+        })
+        if (feature === 'EFD') {
+          receiver.setKnownTests({ jest: { 'other.js': ['known test'] } })
+        }
+        if (feature === 'Attempt to Fix') setProperties(file, names, { attempt_to_fix: true })
+        await runExclusions(file, 1, spans => {
+          assert.strictEqual(spans.length, 11, JSON.stringify(spans.map(span => ({
+            name: span.meta[TEST_NAME], retry: span.meta[TEST_RETRY_REASON], excluded: span.meta[noAutoRetryTag],
+          }))))
+          for (const name of names) {
+            const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+            const excluded = name.startsWith('excluded')
+            assert.strictEqual(attempts.length, excluded ? 1 : 3, name)
+            for (const span of attempts) {
+              assert.strictEqual(span.meta[TEST_STATUS], 'fail', name)
+              assert.strictEqual(span.meta[noAutoRetryTag], excluded ? 'true' : undefined, name)
+              if (excluded) {
+                assert.strictEqual(span.meta[TEST_IS_RETRY], undefined, name)
+                assert.strictEqual(span.meta[TEST_HAS_FAILED_ALL_RETRIES], undefined, name)
+                assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                  feature === 'Attempt to Fix' ? 'true' : undefined, name)
+                assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail', name)
+                if (feature === 'EFD') assert.strictEqual(span.meta[TEST_IS_NEW], 'true', name)
+              }
+            }
+          }
+        }, feature === 'dynamic ATR'
+          ? {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+            }
+          : {})
+      })
+    }
+
+    it('resolves disabling and quarantine after excluding Attempt to Fix', async () => {
+      const file = 'test-exclusions-management'
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        test_management: { enabled: true, attempt_to_fix_retries: 2 },
+      })
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            [`ci-visibility/test-management/${file}.js`]: {
+              tests: {
+                'excluded disabled': { properties: { disabled: true, attempt_to_fix: true } },
+                'excluded quarantined': { properties: { quarantined: true, attempt_to_fix: true } },
+                'protected passing': { properties: { disabled: true, quarantined: true } },
+              },
+            },
+          },
+        },
+      })
+      await runExclusions(file, 0, (spans, events) => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) {
+          const name = span.meta[TEST_NAME]
+          const excluded = name.startsWith('excluded')
+          assert.strictEqual(span.meta[TEST_STATUS],
+            name === 'excluded disabled' ? 'skip' : name === 'excluded quarantined' ? 'fail' : 'pass', name)
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], excluded ? 'skip' : 'pass', name)
+          assert.strictEqual(span.meta[noAutoRetryTag], excluded ? 'true' : undefined, name)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], excluded ? undefined : 'true', name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], excluded ? 'true' : undefined, name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_DISABLED],
+            name === 'excluded quarantined' ? undefined : 'true', name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED],
+            name === 'excluded disabled' ? undefined : 'true', name)
+          assert.strictEqual(span.meta[TEST_IS_RETRY], undefined, name)
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined, name)
+        }
+        for (const event of events.filter(event => event.type.endsWith('_end'))) {
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'pass', event.type)
+        }
+      })
+    })
+
+    it('preserves protected failures across worker processes', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      const names = ['protected disabled', 'protected quarantined', 'protected both',
+        'protected case 1', 'protected case 2', 'protected done', 'ordinary disabled', 'ordinary quarantined']
+      const tests = Object.fromEntries(names.map(name => [name, { properties: { disabled: true, quarantined: true } }]))
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            'ci-visibility/test-management/test-exclusions-policy.js': { tests },
+            'ci-visibility/test-management/test-exclusions-worker.js': { tests },
+          },
+        },
+      })
+      await runExclusions('test-exclusions-(policy|worker)', 1, (spans, events) => {
+        assert.strictEqual(spans.length, 18)
+        assert.strictEqual(new Set(spans.map(span => span.meta[TEST_SUITE])).size, 2)
+        for (const span of spans.filter(span => span.meta[TEST_NAME].startsWith('protected'))) {
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true')
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+        }
+        const session = events.find(event => event.type === 'test_session_end')
+        assert.ok(session)
+        assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+      }, { RUN_IN_PARALLEL: '1' })
+    })
+
+    it('observes annotation removal on a second run without stale policy', async () => {
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+      setProperties('test-exclusions-removal', ['annotation removal'], { disabled: true, quarantined: true })
+      await runExclusions('test-exclusions-removal', 0, spans => {
+        assert.strictEqual(spans.length, 2)
+        const protectedSpan = spans.find(span => span.meta[preventFailureSuppressionTag] === 'true')
+        const removedSpan = spans.find(span => span.meta[preventFailureSuppressionTag] === undefined)
+        assert.ok(protectedSpan)
+        assert.ok(removedSpan)
+        assert.strictEqual(protectedSpan.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(protectedSpan.meta[noAutoRetryTag], 'true')
+        assert.strictEqual(removedSpan.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(removedSpan.meta[noAutoRetryTag], undefined)
+      }, { RUN_JEST_TWICE: '1' })
+    })
+
+    it('resets annotation observations before repeated runCLI reconciliation', async () => {
+      receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
+      setProperties('test-exclusions-repeated', ['annotation removal'], { quarantined: true, attempt_to_fix: true })
+      await runExclusions('test-exclusions-repeated', 1, (spans, events) => {
+        assert.strictEqual(spans.length, 4)
+        assert.strictEqual(spans.filter(span => span.meta[noAutoRetryTag] === 'true').length, 1)
+        const sessions = events.filter(event => event.type === 'test_session_end')
+        assert.strictEqual(sessions.length, 2)
+        assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(sessions[1].content.meta[TEST_STATUS], 'fail')
+      }, { RUN_JEST_TWICE: '1' })
+    })
+
+    it('preserves only/skip modifiers and parameterized done callbacks', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      setProperties('test-exclusions-modifiers', ['selected 1', 'selected 2', 'skipped 1', 'skipped 2'],
+        { disabled: true, quarantined: true })
+      await runExclusions('test-exclusions-modifiers', 1, spans => {
+        assert.strictEqual(spans.length, 6)
+        for (const span of spans) {
+          const name = span.meta[TEST_NAME]
+          const status = name.startsWith('selected') ? 'fail' : name.startsWith('skipped') ? 'skip' : 'pass'
+          assert.strictEqual(span.meta[TEST_STATUS], status, name)
+          const expectedAnnotation = !name.startsWith('ordinary') ? 'true' : undefined
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], expectedAnnotation, name)
+        }
+      })
+    })
+
+    const importedEachIt = supportsImportedGlobals ? it : it.skip
+    importedEachIt('preserves serial each annotations with injectGlobals disabled', async () => {
+      const file = 'test-exclusions-imported'
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      setProperties(file, ['selected 1', 'selected 2', 'skipped 1', 'skipped 2'],
+        { disabled: true, quarantined: true })
+      await runExclusions(file, 1, spans => {
+        assert.strictEqual(spans.length, 6)
+        for (const span of spans) {
+          const name = span.meta[TEST_NAME]
+          assert.strictEqual(span.meta[TEST_STATUS],
+            name.startsWith('selected') ? 'fail' : name.startsWith('skipped') ? 'skip' : 'pass', name)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            name.startsWith('ordinary') ? undefined : 'true', name)
+          if (name.startsWith('selected')) assert.strictEqual(span.meta[noAutoRetryTag], 'true', name)
+        }
+      }, { DO_NOT_INJECT_GLOBALS: '1' })
+    })
+
+    // test.failing.each was added in Jest 29 (jestjs/jest#13142).
+    const failingExclusionsIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29 ? it : it.skip
+    failingExclusionsIt('preserves expected-failure semantics for annotated test.failing.each', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      setProperties('test-exclusions-failing', ['expected failure 1', 'expected failure 2'], { disabled: true })
+      await runExclusions('test-exclusions-failing', 0, spans => {
+        assert.strictEqual(spans.length, 2)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+        }
+      })
+    })
+
+    for (const hookFailure of [false, true]) {
+      it(`keeps a sole protected failure fatal with bail (hook=${hookFailure})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+        setProperties('test-exclusions-single', ['sole protected failure'],
+          { disabled: true, quarantined: true, attempt_to_fix: true })
+        await runExclusions('test-exclusions-single', 1, (spans, events) => {
+          assert.strictEqual(spans.length, 1)
+          assert.strictEqual(spans[0].meta[TEST_STATUS], 'fail')
+          assert.strictEqual(spans[0].meta[TEST_FINAL_STATUS], 'fail')
+          assert.strictEqual(spans[0].meta[TEST_IS_RETRY], undefined)
+          const session = events.find(event => event.type === 'test_session_end')
+          assert.ok(session)
+          assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+        }, { JEST_BAIL: '1', ...(hookFailure ? { EXCLUSIONS_HOOK_FAILURE: '1' } : {}) })
+      })
+    }
+
+    for (const parallel of [false, true]) {
+      for (const protectedLast of [false, true]) {
+        it('keeps duplicate declarations distinct (parallel=' + parallel + ', protectedLast=' + protectedLast + ')',
+          async () => {
+            receiver.setSettings({ test_management: { enabled: true } })
+            const tests = { 'same name': { properties: { quarantined: true } } }
+            receiver.setTestManagementTests({
+              jest: {
+                suites: {
+                  'ci-visibility/test-management/test-exclusions-duplicates.js': { tests },
+                  'ci-visibility/test-management/test-exclusions-collision-worker.js': { tests },
+                },
+              },
+            })
+            const file = parallel ? 'test-exclusions-(duplicates|collision-worker)' : 'test-exclusions-duplicates'
+            await runExclusions(file,
+              1, (spans, events) => {
+                assert.strictEqual(spans.length, parallel ? 6 : 3)
+                const protectedSpans = spans.filter(
+                  span => span.meta[preventFailureSuppressionTag] === 'true')
+                assert.strictEqual(protectedSpans.length, parallel ? 2 : 1)
+                for (const span of protectedSpans) {
+                  assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+                }
+                const session = events.find(event => event.type === 'test_session_end')
+                assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+              }, {
+                ...(parallel ? { RUN_IN_PARALLEL: '1', EXCLUSIONS_REQUIRE_WORKER: '1' } : {}),
+                EXCLUSIONS_PROTECTED_LAST: protectedLast ? '1' : '0',
+              })
+          })
+      }
+    }
+
+    for (const combined of [false, true]) {
+      for (const excludedLast of [false, true]) {
+        it(`keeps excluded duplicate-name failures out of EFD summaries (combined=${combined}, last=${excludedLast})`,
+          async () => {
+            receiver.setSettings({
+              known_tests_enabled: true,
+              early_flake_detection: { enabled: true, slow_test_retries: { '5s': 2 } },
+            })
+            receiver.setKnownTests({ jest: { 'other.js': ['known test'] } })
+            await runExclusions('test-exclusions-efd-duplicates', 1, (spans, events) => {
+              const excluded = spans.filter(span => span.meta[noAutoRetryTag] === 'true')
+              const ordinary = spans.filter(span => span.meta[noAutoRetryTag] !== 'true')
+              assert.strictEqual(excluded.length, 1)
+              assert.strictEqual(excluded[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(excluded[0].meta[TEST_FINAL_STATUS], 'fail')
+              assert.strictEqual(excluded[0].meta[preventFailureSuppressionTag], combined ? 'true' : undefined)
+              assert.strictEqual(ordinary.length, 3)
+              for (const span of ordinary) assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+              const session = events.find(event => event.type === 'test_session_end')
+              assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+            }, { EXCLUSIONS_COMBINED: combined ? '1' : '0', EXCLUSIONS_EXCLUDED_LAST: excludedLast ? '1' : '0' })
+          })
+      }
+    }
+
+    it('finalizes annotated tests when beforeAll prevents explicit retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-exclusions-hook-terminal', 1, spans => {
+        assert.strictEqual(spans.length, 1)
+        assert.strictEqual(spans[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(spans[0].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(spans[0].meta[noAutoRetryTag], 'true')
+      })
+    })
+
+    // Jest 30.5.2 supports describe-level retry configuration independently of per-test retries.
+    const describeRetriesIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=30.5.2') ? it : it.skip
+    describeRetriesIt('keeps describe retries separate from automatic sibling retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-exclusions-describe', 1, spans => {
+        const sibling = spans.filter(span => span.meta[TEST_NAME] === 'excluded sibling')
+        const native = spans.filter(span => span.meta[TEST_NAME] === 'native group native retry')
+        assert.strictEqual(sibling.length, 1)
+        assert.strictEqual(sibling[0].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(native.length, 2)
+        for (const span of spans) assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+      })
+    })
+
+    for (const mode of ['recover', 'exhaust', 'zero', 'zero-with-global']) {
+      describeRetriesIt(`finalizes excluded describe retries only at their terminal attempt (${mode})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        await runExclusions('test-group-annotation-status', 1, spans => {
+          const expectedAttempts = mode.startsWith('zero') ? 1 : 2
+          for (const name of ['native group bare', 'native group combined']) {
+            const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, expectedAttempts)
+            assert.strictEqual(attempts[0].meta[TEST_STATUS], 'fail')
+            for (const attempt of attempts.slice(0, -1)) {
+              assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+            }
+            const terminal = mode === 'recover' ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_STATUS], terminal)
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], terminal)
+            for (const attempt of attempts) assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+          }
+          assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'native group ordinary sibling').length,
+            expectedAttempts)
+          const outside = spans.filter(span => span.meta[TEST_NAME] === 'outside excluded')
+          assert.strictEqual(outside.length, mode === 'zero-with-global' ? 2 : 1)
+          assert.strictEqual(outside.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+        }, { EXCLUSIONS_DESCRIBE_MODE: mode })
+      })
+    }
+
+    for (const replay of [false, true]) {
+      describeRetriesIt(`finalizes passing excluded describe executions only after actual replay (replay=${replay})`,
+        async () => {
+          const file = 'test-group-annotation-passing'
+          receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+          setProperties(file, ['native passing quarantined'], { quarantined: true })
+          await runExclusions(file, 0, spans => {
+            const marker = spans.find(span => span.meta[TEST_NAME] === 'later marker')
+            for (const name of ['bare', 'combined', 'quarantined']) {
+              const attempts = spans.filter(span => span.meta[TEST_NAME] === `native passing ${name}`)
+              assert.strictEqual(attempts.length, replay ? 2 : 1)
+              for (const attempt of attempts) {
+                assert.strictEqual(attempt.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+                assert.ok(BigInt(attempt.start) + BigInt(attempt.duration) <= BigInt(marker.start))
+              }
+              for (const attempt of attempts.slice(0, -1)) {
+                assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+              }
+              assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], name === 'quarantined' ? 'skip' : 'pass')
+            }
+            assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'native passing ordinary sibling').length,
+              replay ? 2 : 1)
+          }, { EXCLUSIONS_PASSING_REPLAY: replay ? '1' : '0' })
+        })
+    }
+
+    for (const mode of ['external-expect', 'uncaught-body', 'uncaught-after-all', 'owned-body']) {
+      describeRetriesIt(`finalizes terminal excluded describe failures (${mode})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        await runExclusions('test-group-annotation-terminal', 1, spans => {
+          const expectedAttempts = mode === 'owned-body' ? 3 : 1
+          assert.strictEqual(spans.length, 2 * expectedAttempts + 1)
+          const marker = spans.find(span => span.meta[TEST_NAME] === 'later marker')
+          assert.ok(marker)
+          assert.strictEqual(marker.meta[TEST_STATUS], 'pass')
+          for (const name of ['native terminal bare', 'native terminal combined']) {
+            const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, expectedAttempts)
+            for (const attempt of attempts) {
+              assert.strictEqual(attempt.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+              assert.ok(BigInt(attempt.start) + BigInt(attempt.duration) <= BigInt(marker.start),
+                'a completed test must end before the later marker starts')
+            }
+            for (const attempt of attempts.slice(0, -1)) {
+              assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+            }
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+          }
+        }, { EXCLUSIONS_TERMINAL_MODE: mode })
+      })
+    }
+
+    describeRetriesIt('tracks nested describe retry attempts after earlier successful attempts', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-group-annotation-nested', 1, spans => {
+        for (const name of ['outer inner bare', 'outer inner combined']) {
+          const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+          assert.strictEqual(attempts.length, 4)
+          assert.deepStrictEqual(attempts.map(span => span.meta[TEST_STATUS]), ['fail', 'pass', 'fail', 'fail'])
+          assert.strictEqual(attempts[0].meta[TEST_FINAL_STATUS], undefined)
+          assert.strictEqual(attempts[2].meta[TEST_FINAL_STATUS], undefined)
+          assert.strictEqual(attempts[3].meta[TEST_FINAL_STATUS], 'fail')
+        }
+        assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'outer inner ordinary sibling').length, 4)
+        assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'outside excluded').length, 1)
+      })
+    })
+
+    for (const protect of [false, true]) {
+      describeRetriesIt(`preserves native describe quarantine policy (protected=${protect})`, async () => {
+        const file = 'test-group-annotation-quarantine'
+        receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+        setProperties(file, ['native group quarantined'], { quarantined: true })
+        await runExclusions(file, protect ? 1 : 0, spans => {
+          assert.strictEqual(spans.length, protect ? 2 : 1)
+          assert.strictEqual(spans.at(-1).meta[TEST_FINAL_STATUS], protect ? 'fail' : 'skip')
+          if (protect) assert.strictEqual(spans[0].meta[TEST_FINAL_STATUS], undefined)
+          for (const span of spans) {
+            assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+            assert.strictEqual(span.meta[preventFailureSuppressionTag], protect ? 'true' : undefined)
+          }
+        }, { EXCLUSIONS_PROTECT_QUARANTINE: protect ? '1' : '0' })
+      })
+    }
+
+    failingExclusionsIt('preserves no-done semantics for failing parameterized callbacks', async () => {
+      await runExclusions('test-failing-table-annotations', 1, spans => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+        }
+      })
+    })
+
+    it('executes frozen ordinary callbacks with either annotation', async () => {
+      await runExclusions('test-exclusions-frozen', 0, spans => {
+        assert.strictEqual(spans.length, 4)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'pass')
+          const name = span.meta[TEST_NAME]
+          assert.strictEqual(span.meta[noAutoRetryTag], ['noAutoRetry', 'combined'].includes(name) ? 'true' : undefined)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            ['preventFailureSuppression', 'combined'].includes(name) ? 'true' : undefined)
+        }
+      })
+    })
+
+    it('executes annotated generator callbacks through Jest generator handling', async () => {
+      await runExclusions('test-exclusions-generators', 0, spans => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+      })
+    })
+
+    it('preserves explicit Jest retries even when ATR is enabled', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-exclusions-native', 0, spans => {
+        assert.strictEqual(spans.length, 3)
+        assert.deepStrictEqual(spans.map(span => span.meta[TEST_STATUS]).sort(), ['fail', 'fail', 'pass'])
+        for (const span of spans) {
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.notStrictEqual(span.meta[TEST_RETRY_REASON], 'auto_test_retry')
+        }
+      })
+    })
+
+    it('observes annotations on developer-skipped concurrent parameterized callbacks', async () => {
+      await runExclusions('test-skipped-concurrent-annotations', 0, spans => {
+        assert.strictEqual(spans.length, 5)
+        for (const span of spans.filter(span => span.meta[TEST_NAME] !== 'ordinary control')) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            span.meta[TEST_NAME].startsWith('protected') ? 'true' : undefined)
+        }
+      })
+    })
+
+    // @jest/globals was introduced in Jest 26; all other annotation cases also run on Jest 24.
+    const concurrentExclusionsIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 26 ? it : it.skip
+    // injectGlobals: false was introduced in Jest 26.5.
+    const esmConcurrentIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.5.0') ? it : it.skip
+    esmConcurrentIt('protects ESM concurrent rows without injected globals', async () => {
+      const file = 'test-esm-concurrent-annotations'
+      const names = ['protected ESM row 1', 'protected ESM row 2']
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            [`ci-visibility/test-management/${file}.mjs`]: {
+              tests: Object.fromEntries(names.map(name => [name, {
+                properties: { disabled: true, quarantined: true },
+              }])),
+            },
+          },
+        },
+      })
+      await runExclusions(file, 1, spans => {
+        assert.strictEqual(spans.length, 2)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        }
+      }, {
+        DO_NOT_INJECT_GLOBALS: '1',
+        JEST_MODULE_FILE_EXTENSIONS: 'js,mjs,jsx,ts,tsx,json,node',
+        NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+      })
+    })
+
+    concurrentExclusionsIt('protects concurrent parameterized callbacks imported from Jest globals', async () => {
+      const file = 'test-exclusions-concurrent'
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      setProperties(file, ['protected concurrent', 'protected concurrent case 1', 'protected concurrent case 2'],
+        { disabled: true, quarantined: true, attempt_to_fix: true })
+      await runExclusions(file, 1, spans => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        }
+      })
+    })
+  })
+
   context('test management', () => {
     context('attempt to fix', () => {
       beforeEach(() => {
@@ -482,7 +1154,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'across 1 of 1 test\\(s\\)\\.'
                   )
                 )
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -507,6 +1179,53 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           }).catch(done)
         })
       }
+
+      it('reports skipped and todo attempt to fix tests', async () => {
+        const testSuite = 'ci-visibility/test-management/test-attempt-to-fix-skip.js'
+        let testOutput = ''
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              [testSuite]: {
+                tests: {
+                  'skipped attempt to fix tests can skip': {
+                    properties: { attempt_to_fix: true },
+                  },
+                  'skipped attempt to fix tests can be todo': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-attempt-to-fix-skip',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(
+          testOutput,
+          /Attempt to fix passed: all 2 execution\(s\) passed for 2 test\(s\)\./
+        )
+      })
 
       it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
@@ -766,6 +1485,68 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               assert.ok(
                 !(TEST_IS_NEW in test.meta),
                 'ATF test that is in known tests should not be tagged as new'
+              )
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-fails.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
+      it('does not tag unknown attempt to fix tests as new', async () => {
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-fails.js': {
+                tests: {
+                  'test-flaky-test-retries can retry failed tests': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 3)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.ok(
+                !(TEST_IS_NEW in test.meta),
+                'attempt to fix takes precedence over early flake detection, so the test is not reported as new'
               )
             }
           })
@@ -1382,7 +2163,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           })
 
-      const runDisableTest = (done, isDisabling, extraEnvVars = {}, isParallel = false) => {
+      const runDisableTest = (
+        done,
+        isDisabling,
+        extraEnvVars = {},
+        isParallel = false,
+        isReportEnabled = true
+      ) => {
         let stdout = ''
         const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
 
@@ -1408,6 +2195,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
               assert.doesNotMatch(stdout, /I am running/)
+              if (isReportEnabled) {
+                assert.match(stdout, /Disabled: 1 test skipped\./)
+              } else {
+                assert.doesNotMatch(stdout, /Datadog Test Optimization/)
+              }
               // even though a test fails, the exit code is 0 because the test is disabled
               assert.strictEqual(exitCode, 0)
             } else {
@@ -1423,6 +2215,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runDisableTest(done, true)
+      })
+
+      it('can disable the Test Management report without disabling Test Management', (done) => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        runDisableTest(done, true, { DD_TEST_MANAGEMENT_REPORT_ENABLED: 'false' }, false, false)
       })
 
       onlyLatestIt('skips disabled concurrent test bodies before they run', async () => {
@@ -1747,9 +2545,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(exitCode, 0)
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
-          assert.match(stdout, /\d+ test failure\(s\) were ignored/)
-          assert.match(stdout, /Quarantine/)
-          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
+          assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+          assert.match(stdout, /test-quarantine-1[^\n\r\u2028\u2029›]*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }
@@ -1942,6 +2739,106 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 0)
       })
 
+      for (const parallel of [false, true]) {
+        it(`preserves quarantine with dynamic ATR and bail (parallel=${parallel})`, async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const quarantined = tests.filter(test => test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true')
+              assert.strictEqual(quarantined.length, 2)
+              assert.ok(quarantined.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.strictEqual(quarantined.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+              assert.strictEqual(quarantined.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(tests.filter(test => test.meta[TEST_NAME].startsWith('quarantine tests 2')).length, 2)
+              const session = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            }
+          )
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine',
+              TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
+              JEST_BAIL: '1',
+              SHOULD_CHECK_RESULTS: '1',
+              ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            },
+          })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 0)
+        })
+      }
+
+      onlyLatestIt('reports failed ATR attempts when a quarantined test eventually passes', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-passes.js': {
+                tests: {
+                  'test-flaky-test-retries can retry flaky tests': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === 'test-flaky-test-retries can retry flaky tests')
+
+            assert.strictEqual(tests.length, 3)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+              RUN_IN_PARALLEL: 'true',
+              TESTS_TO_RUN: 'jest-flaky/flaky-passes.js',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+      })
+
       it('session passes when EFD flaky retries and quarantine failures are combined', async () => {
         const NUM_RETRIES_EFD = 3
 
@@ -2023,6 +2920,67 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // - The flaky test has at least one passing retry (EFD considers it OK)
         // - The always-failing test is quarantined
         assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('does not report passing EFD retries as ignored failures', async () => {
+        receiver.setKnownTests({ jest: {} })
+        receiver.setSettings({
+          test_management: { enabled: true },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-quarantine-1.js': {
+                tests: {
+                  'quarantine tests can quarantine a test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
+        assert.doesNotMatch(stdout, /0 test failure\(s\) were ignored/)
+        assert.doesNotMatch(stdout, /Early Flake Detection/)
       })
 
       it('does not flip exit code to 0 when a test suite fails to parse', async () => {
@@ -2132,6 +3090,287 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
         assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error)')
       })
+
+      context('snapshot assertions', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-snapshot-quarantine.js': {
+                  tests: {
+                    'quarantine snapshot fails a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails before a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails a snapshot before passing': { properties: { quarantined: true } },
+                    'quarantine snapshot passes with an unused snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-snapshot-image.js': {
+                  tests: {
+                    'snapshot can match': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-mixed-snapshot-quarantine.js': {
+                  tests: {
+                    'mixed snapshots quarantined snapshot': { properties: { quarantined: true } },
+                    'mixed snapshots quarantined unused snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-mixed-snapshot-overlap.js': {
+                  tests: {
+                    'overlapping snapshots quarantined snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-snapshot-ownership.js': {
+                  tests: {
+                    'snapshot ownership ordinary: quarantined': { properties: { quarantined: true } },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const runSnapshotTests = async (env, onEvents) => {
+          let stdout = ''
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              const executions = {}
+              for (const { content } of events.filter(event => event.type === 'test')) {
+                executions[content.meta[TEST_NAME]] ??= []
+                executions[content.meta[TEST_NAME]].push(
+                  [content.meta[TEST_STATUS], content.meta[TEST_MANAGEMENT_IS_QUARANTINED]]
+                )
+              }
+              onEvents(testSession, executions)
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                SHOULD_CHECK_RESULTS: '1',
+                ...env,
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          return { exitCode, stdout }
+        }
+
+        const snapshotModes = [
+          { parallel: false, injectGlobals: true },
+          { parallel: true, injectGlobals: true },
+          { parallel: false, injectGlobals: false },
+          { parallel: true, injectGlobals: false },
+        ]
+        for (const { parallel, injectGlobals, mixed } of snapshotModes.flatMap(mode => [
+          { ...mode, mixed: false },
+          { ...mode, mixed: true },
+        ])) {
+          const modeIt = (injectGlobals || supportsImportedGlobals) && (!mixed || supportsConcurrentSnapshots)
+            ? it
+            : it.skip
+          const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, mixed=${mixed}`
+          modeIt(`ignores quarantined snapshots (${mode})`, async () => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const { exitCode, stdout } = await runSnapshotTests(
+              {
+                TESTS_TO_RUN: 'test-management/test-snapshot-(quarantine|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                MIXED_SNAPSHOT_SUITE: mixed ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              },
+              (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+                assert.deepStrictEqual(executions, {
+                  'quarantine snapshot fails a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails before a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails a snapshot before passing': [['fail', 'true']],
+                  'quarantine snapshot can pass normally': [['pass', undefined]],
+                  'quarantine snapshot passes with an unused snapshot': [['pass', 'true']],
+                  'snapshot can match': [['fail', 'true']],
+                  ...(mixed
+                    ? {
+                        'quarantine snapshot concurrent passing sibling': [['pass', undefined]],
+                        'snapshot concurrent passing sibling': [['pass', undefined]],
+                      }
+                    : {}),
+                })
+              }
+            )
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Quarantined: 5 tests run; 4 failures did not affect the test session\./)
+            assert.doesNotMatch(stdout, /snapshots? failed/)
+            assert.doesNotMatch(stdout, /obsolete/)
+          })
+        }
+
+        for (const { parallel, injectGlobals } of snapshotModes) {
+          const ownershipIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          for (const unused of [false, true]) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, unused=${unused}`
+            ownershipIt(`preserves snapshots shared with shorter ordinary names (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-snapshot-(ownership|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                SKIP_ORDINARY_HINT: unused ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], unused ? 'fail' : 'pass')
+                assert.deepStrictEqual(executions, {
+                  'snapshot ownership ordinary: quarantined': [['pass', 'true']],
+                  'snapshot ownership ordinary': [['pass', undefined]],
+                  'snapshot can match': [['fail', 'true']],
+                })
+              })
+
+              assert.strictEqual(exitCode, unused ? 1 : 0, stdout)
+              assert.doesNotMatch(stdout, /snapshots? failed/)
+              if (unused) {
+                assert.match(stdout, /3 snapshots obsolete/)
+              } else {
+                assert.doesNotMatch(stdout, /obsolete/)
+              }
+            })
+          }
+
+          const modeIt = supportsConcurrentSnapshots && (injectGlobals || supportsImportedGlobals) ? it : it.skip
+          for (const ordinaryFailure of ['none', 'serial', 'concurrent', 'obsolete', 'prefixed-obsolete']) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, ordinaryFailure=${ordinaryFailure}`
+            modeIt(`reports serial snapshot quarantine in mixed files (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+                MIXED_SNAPSHOT_SUITE: 'true',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                FAIL_ORDINARY_SNAPSHOT: ordinaryFailure === 'serial' ? 'true' : undefined,
+                FAIL_CONCURRENT_SNAPSHOT: ordinaryFailure === 'concurrent' ? 'true' : undefined,
+                SKIP_ORDINARY_SNAPSHOT: ordinaryFailure === 'obsolete' ? 'true' : undefined,
+                SKIP_PREFIXED_SNAPSHOT: ordinaryFailure === 'prefixed-obsolete' ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], ordinaryFailure === 'none' ? 'pass' : 'fail')
+                assert.deepStrictEqual(executions, {
+                  'mixed snapshots quarantined snapshot': [['fail', 'true']],
+                  'mixed snapshots quarantined unused snapshot': [['pass', 'true']],
+                  'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
+                  'mixed snapshots ordinary snapshot': [[ordinaryFailure === 'serial' ? 'fail' : 'pass', undefined]],
+                  'mixed snapshots concurrent sibling': [
+                    [ordinaryFailure === 'concurrent' ? 'fail' : 'pass', undefined],
+                  ],
+                })
+              })
+              assert.strictEqual(exitCode, ordinaryFailure === 'none' ? 0 : 1, stdout)
+              if (ordinaryFailure === 'obsolete' || ordinaryFailure === 'prefixed-obsolete') {
+                const obsoleteCount = ordinaryFailure === 'obsolete' ? 3 : 2
+                assert.match(stdout, new RegExp(`${obsoleteCount} snapshots obsolete`))
+                assert.doesNotMatch(stdout, /snapshots? failed/)
+              } else if (ordinaryFailure !== 'none') {
+                assert.match(stdout, /1 snapshot failed/)
+                assert.doesNotMatch(stdout, /obsolete/)
+              } else {
+                assert.doesNotMatch(stdout, /snapshots? failed/)
+                assert.doesNotMatch(stdout, /obsolete/)
+              }
+            })
+          }
+
+          // Before Jest 30, concurrent bodies can run while a serial test is awaiting.
+          const overlapIt = (JEST_VERSION !== 'latest' && satisfies(JEST_VERSION, '<30.0.0')) ? modeIt : it.skip
+          overlapIt(`preserves overlapping snapshots (parallel=${parallel}, injectGlobals=${injectGlobals})`,
+            async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-overlap',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+                assert.deepStrictEqual(executions, {
+                  'overlapping snapshots quarantined snapshot': [['fail', 'true']],
+                  'overlapping snapshots ordinary concurrent image snapshot': [['fail', undefined]],
+                })
+              })
+              assert.strictEqual(exitCode, 1, stdout)
+              assert.match(stdout, /1 snapshot failed/)
+              assert.doesNotMatch(stdout, /obsolete/)
+            })
+        }
+
+        itIfRetriesResetSnapshots('does not fail the run when ATR retries quarantined snapshot tests', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+          })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            {
+              TESTS_TO_RUN: 'test-management/test-snapshot-quarantine',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
+            },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              assert.deepStrictEqual(executions, {
+                'quarantine snapshot fails a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails before a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails a snapshot before passing': [['fail', 'true'], ['pass', 'true']],
+                'quarantine snapshot can pass normally': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'quarantine snapshot concurrent passing sibling': [['pass', undefined]] }
+                  : {}),
+                'quarantine snapshot passes with an unused snapshot': [['pass', 'true']],
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 0)
+          assert.doesNotMatch(stdout, /snapshots? failed/)
+          assert.doesNotMatch(stdout, /obsolete/)
+        })
+
+        it('fails the run when snapshot assertions fail and quarantine is not enabled', async () => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            {
+              TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
+            },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+              assert.deepStrictEqual(executions, {
+                'mixed snapshots quarantined snapshot': [['fail', undefined]],
+                'mixed snapshots quarantined unused snapshot': [['pass', undefined]],
+                'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
+                'mixed snapshots ordinary snapshot': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'mixed snapshots concurrent sibling': [['pass', undefined]] }
+                  : {}),
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 1)
+          assert.match(stdout, /1 snapshot failed/)
+          assert.match(stdout, /4 snapshots obsolete/)
+        })
+      })
     })
 
     context('jest --bail option', () => {
@@ -2179,7 +3418,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
-      const runJestWithBail = async (testsToRun) => {
+      const runJestWithBail = async (testsToRun, extraEnv = {}) => {
         let output = ''
         childProcess = exec(
           runTestsCommand,
@@ -2190,6 +3429,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: testsToRun,
               JEST_BAIL: '1',
               SHOULD_CHECK_RESULTS: '1',
+              ...extraEnv,
             },
           }
         )
@@ -2216,19 +3456,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       })
 
-      it('bails when attempt to fix makes quarantine and disabled a noop', async () => {
-        for (const bailCase of bailCases) {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
-          setManagedTest(bailCase, true)
+      for (const dynamicAtrEnabled of [false, true]) {
+        it(`bails for attempt to fix despite quarantine or disabled (dynamic ATR=${dynamicAtrEnabled})`, async () => {
+          for (const bailCase of bailCases) {
+            receiver.setSettings({
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+              flaky_test_retries_enabled: dynamicAtrEnabled,
+            })
+            setManagedTest(bailCase, true)
 
-          const { exitCode, output } = await runJestWithBail(bailCase.testsToRun)
+            const { exitCode, output } = await runJestWithBail(bailCase.testsToRun, {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamicAtrEnabled),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            })
 
-          assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
-          assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
-          assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
-          assert.strictEqual(exitCode, 1, bailCase.label)
-        }
-      })
+            assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
+            assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
+            assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
+            assert.strictEqual(exitCode, 1, bailCase.label)
+          }
+        })
+      }
     })
 
     it('does not crash if the request to get test management tests fails', async () => {
@@ -2411,6 +3659,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         jest: {
           'ci-visibility/test-impacted-test/test-impacted-1.js': [
             'impacted tests can pass normally',
+            'impacted tests use their duration retry budget',
+            'root-level impacted test declared last',
           ],
           'ci-visibility/test-impacted-test/test-impacted-2.js': [
             'impacted tests 2 can pass normally',
@@ -2418,6 +3668,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           'ci-visibility/test-impacted-test/test-impacted-concurrent.js': [
             'impacted concurrent tests can pass normally',
             'impacted concurrent tests parameterized row can pass normally',
+            'impacted concurrent tests uses its duration retry budget',
           ],
         },
       })
@@ -2438,7 +3689,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           it('can fail', () => {
             assert.strictEqual(1 + 2, 4)
           })
-        })`
+          const slowIt = process.env.RUN_SLOW_IMPACTED_TEST ? it : it.skip
+          // Runs past the 5s bucket, so the timeout has to exceed Jest's 5s default.
+          slowIt('use their duration retry budget', (done) => {
+            setTimeout(done, 5_100)
+          }, 20_000)
+        })
+
+        if (process.env.RUN_ROOT_LEVEL_IMPACTED_TEST) {
+          it('root-level impacted test declared last', () => {
+            assert.strictEqual(1 + 2, 3)
+          })
+        }`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
 
@@ -2466,6 +3728,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         impactedConcurrentTest
           .replace("const label = 'sum'", "const label = 'result'")
           .replace("const eachLabel = 'each-sum'", "const eachLabel = 'each-result'")
+          .replace("const slowLabel = 'slow'", "const durationLabel = 'slow'")
+          .replace('expect(slowLabel)', 'expect(durationLabel)')
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2477,14 +3741,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
     })
 
-    const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+    /**
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     */
+    const getTestAssertions = ({ isModified, isEfd, isEfdEnabled = isEfd, isNew, isParallel }) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          if (isEfd) {
+          if (isEfdEnabled) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
@@ -2553,12 +3825,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           }
         })
 
+    /**
+     * @param {(error?: Error) => void} done
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     * @param {Record<string, string>} [extraEnvVars]
+     */
     const runImpactedTest = (
       done,
-      { isModified, isEfd = false, isParallel = false, isNew = false },
+      { isModified, isEfd = false, isEfdEnabled = isEfd, isParallel = false, isNew = false },
       extraEnvVars = {}
     ) => {
-      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isEfdEnabled, isParallel, isNew })
 
       childProcess = exec(
         runTestsCommand,
@@ -2584,6 +3866,208 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         runImpactedTest(done, { isModified: true })
       })
+
+      for (const isParallel of [false, true]) {
+        it(`does not retry impacted tests when the EFD retry budget is zero${
+          isParallel ? ' in parallel' : ''
+        }`, (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const extraEnvVars = isParallel
+            ? {
+                TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+                RUN_IN_PARALLEL: 'true',
+              }
+            : {}
+          runImpactedTest(done, { isModified: true, isEfdEnabled: true, isParallel }, extraEnvVars)
+        })
+      }
+
+      it('retries a root-level impacted test declared last', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const testName = 'root-level impacted test declared last'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, NUM_RETRIES + 1)
+            assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+            for (const retryTest of tests.slice(1)) {
+              assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            }
+          }, 30_000)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+              GITHUB_BASE_REF: '',
+              RUN_ROOT_LEVEL_IMPACTED_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('retries a root-level attempt-to-fix test declared last', async () => {
+        const testName = 'root-level impacted test declared last'
+        receiver.setSettings({
+          test_management: {
+            enabled: true,
+            attempt_to_fix_retries: NUM_RETRIES,
+          },
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-impacted-test/test-impacted-1.js': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, NUM_RETRIES + 1)
+            for (const retryTest of tests.slice(1)) {
+              assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+            }
+          }, 30_000)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+              GITHUB_BASE_REF: '',
+              RUN_ROOT_LEVEL_IMPACTED_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      for (const isParallel of [false, true]) {
+        it(`selects the impacted test retry budget after its first execution${
+          isParallel ? ' in parallel' : ''
+        }`, async () => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 2,
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const tests = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+                  test.meta[TEST_NAME] === 'impacted tests use their duration retry budget'
+                )
+
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+              assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+              assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+            }, 30_000)
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: isParallel
+                  ? 'test-impacted-test/test-impacted'
+                  : 'test-impacted-test/test-impacted-1',
+                GITHUB_BASE_REF: '',
+                RUN_IN_PARALLEL: isParallel ? 'true' : '',
+                RUN_SLOW_IMPACTED_TEST: '1',
+              },
+            }
+          )
+
+          let output = ''
+          childProcess.stdout?.on('data', chunk => {
+            output += chunk.toString()
+          })
+          childProcess.stderr?.on('data', chunk => {
+            output += chunk.toString()
+          })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+
+          assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
+        })
+      }
 
       it('attempt to fix takes precedence over EFD for impacted tests', async () => {
         const NUM_RETRIES_EFD = 2
@@ -2758,6 +4242,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               for (const retryTest of retryTests) {
                 assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
               }
+              assert.strictEqual(
+                impactedConcurrentTests.filter(test => test.meta[TEST_FINAL_STATUS] === 'pass').length,
+                1
+              )
             }
           })
 
@@ -2785,6 +4273,144 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           eventsPromise,
         ])
 
+        assert.doesNotMatch(output, /I am running concurrent hooks/)
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('discards surplus concurrent impacted test retries after measuring duration', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const testName = 'impacted concurrent tests uses its duration retry budget'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+            assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+          }, 30_000)
+
+        let output = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              RUN_SLOW_CONCURRENT_IMPACTED_TEST: '1',
+              GITHUB_BASE_REF: '',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          output += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.doesNotMatch(output, /I am running concurrent hooks/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('runs only the duration-selected number of concurrent retries', async () => {
+        const durationRetryCount = 2
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            // Retries are pre-registered from the largest bucket because the test tree is
+            // frozen before any duration is known. The 5s bucket then selects far fewer,
+            // so the surplus has to disappear from the tree instead of running.
+            slow_test_retries: {
+              '5s': durationRetryCount,
+              '10s': 5,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const concurrentTestNames = [
+          'impacted concurrent tests can pass normally',
+          'impacted concurrent tests parameterized row can pass normally',
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js'
+              )
+
+            for (const testName of concurrentTestNames) {
+              const concurrentTests = tests.filter(test => test.meta[TEST_NAME] === testName)
+              assert.strictEqual(concurrentTests.length, durationRetryCount + 1)
+
+              const retryTests = concurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retryTests.length, durationRetryCount)
+              for (const retryTest of retryTests) {
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
+
+              // Exactly one execution closes the EFD attempt group, and it is not a slow abort.
+              assert.strictEqual(concurrentTests.filter(test => TEST_FINAL_STATUS in test.meta).length, 1)
+              assert.ok(concurrentTests.every(test => !(TEST_EARLY_FLAKE_ABORT_REASON in test.meta)))
+            }
+          })
+
+        let output = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              GITHUB_BASE_REF: '',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
+          output += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        // Discarded retries must leave the test tree, not surface as skipped tests.
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
+        // Retries must not run the *Each hooks Jest skips for their concurrent original.
         assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)
       })
@@ -2931,25 +4557,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // All retries should pass, so exit code should be 0
         assert.strictEqual(exitCode[0], 0)
       })
-    })
-  })
-
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
-          },
-        }
-      )
-
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 

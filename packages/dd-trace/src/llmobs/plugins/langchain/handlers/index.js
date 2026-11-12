@@ -12,6 +12,16 @@ class LangChainLLMObsHandler {
 
   setMetaTags () {}
 
+  /**
+   * Token usage for a chat or LLM result. Subclasses widen this where the provider reports usage
+   * somewhere other than `llmOutput`.
+   *
+   * @param {object} results
+   */
+  getTokenUsage (results) {
+    return this.checkTokenUsageChatOrLLMResult(results)
+  }
+
   checkTokenUsageChatOrLLMResult (results) {
     const llmOutput = results.llmOutput
     const tokens = {
@@ -36,7 +46,7 @@ class LangChainLLMObsHandler {
     const runIdBase = runId ? runId.split('-').slice(0, -1).join('-') : ''
 
     const responseMetadata = message.response_metadata || {}
-    usage = usage || responseMetadata.usage || responseMetadata.tokenUsage || {}
+    usage ||= responseMetadata.usage || responseMetadata.tokenUsage || {}
 
     const inputTokens = usage.promptTokens || usage.inputTokens || usage.prompt_tokens || usage.input_tokens || 0
     const outputTokens =

@@ -26,6 +26,7 @@ const GIT_PULL_REQUEST_BASE_BRANCH = 'git.pull_request.base_branch'
 
 const CI_PIPELINE_ID = 'ci.pipeline.id'
 const CI_PIPELINE_NAME = 'ci.pipeline.name'
+const CI_PIPELINE_DISPLAY_NAME = 'ci.pipeline.display_name'
 const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
 const CI_PIPELINE_URL = 'ci.pipeline.url'
 const CI_PROVIDER_NAME = 'ci.provider.name'
@@ -66,6 +67,7 @@ module.exports = {
   GIT_PULL_REQUEST_BASE_BRANCH,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,

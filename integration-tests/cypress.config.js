@@ -2,20 +2,30 @@
 
 const { defineConfig } = require('cypress')
 
+const getCypressTestEnvironment = require('./cypress-test-environment')
+
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
+const experimentalRetries = process.env.CYPRESS_EXPERIMENTAL_RETRIES === 'true' && {
+  experimentalStrategy: 'detect-flake-but-always-fail',
+  experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+  runMode: true,
+  openMode: false,
+}
 
 module.exports = defineConfig({
+  ...getCypressTestEnvironment(),
   defaultCommandTimeout: 1000,
-  retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
+  retries: experimentalRetries || (process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
     ? { runMode: retries, openMode: 0 }
-    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER),
+    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER)),
   e2e: {
     ...(process.env.CYPRESS_TEST_ISOLATION === undefined
       ? {}
       : { testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false' }),
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
-        require('cypress-fail-fast/plugin')(on, config)
+        const createPlugin = require('cypress-fail-fast/plugin')
+        createPlugin(on, config)
       }
       if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
         const ddAfterRun = require('dd-trace/ci/cypress/after-run')
@@ -58,13 +68,14 @@ module.exports = defineConfig({
         return ddTracePlugin(wrappedOn, config)
       }
       if (process.env.CYPRESS_ENABLE_MANUAL_PLUGIN) {
-        return require('dd-trace/ci/cypress/plugin')(on, config)
+        const createPlugin = require('dd-trace/ci/cypress/plugin')
+        return createPlugin(on, config)
       }
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
   },
   // Off by default so most specs do not capture screenshots; the failure-screenshot
   // upload tests set CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
-  video: false,
+  video: process.env.CYPRESS_ENABLE_FAILURE_VIDEOS === 'true',
   screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
 })

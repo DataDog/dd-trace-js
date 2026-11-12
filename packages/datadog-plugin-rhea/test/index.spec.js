@@ -458,7 +458,7 @@ describe('Plugin', () => {
                 Session.prototype.on_transfer = function onTransferWrapped (...args) {
                   try {
                     return onTransfer.apply(this, args)
-                  } catch (e) {
+                  } catch {
                     // this is just to prevent mocha from crashing
                   }
                 }

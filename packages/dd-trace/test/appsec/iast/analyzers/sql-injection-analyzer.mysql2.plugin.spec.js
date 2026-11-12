@@ -42,7 +42,7 @@ describe('sql-injection-analyzer with mysql2', () => {
 
           try {
             fs.unlinkSync(tmpFilePath)
-          } catch (e) {
+          } catch {
             // ignore the error
           }
           const src = path.join(__dirname, 'resources', vulnerableMethodFilename)
@@ -53,7 +53,7 @@ describe('sql-injection-analyzer with mysql2', () => {
         afterEach(() => {
           try {
             fs.unlinkSync(tmpFilePath)
-          } catch (e) {
+          } catch {
             // ignore the error
           }
         })

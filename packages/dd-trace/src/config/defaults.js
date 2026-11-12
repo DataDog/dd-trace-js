@@ -32,18 +32,28 @@ const parseErrors = new Map()
  * @param {string} source - The source of the value.
  * @param {string} baseMessage - The base message to use for the warning.
  * @param {Error} [error] - An error that was thrown while parsing the value.
+ * @param {string} [outcome] - The outcome after the invalid value is rejected.
  */
-function warnInvalidValue (value, optionName, source, baseMessage, error) {
-  const canonicalName = (optionsTable[optionName]?.canonicalName ?? optionName) + source
+function warnInvalidValue (value, optionName, source, baseMessage, error, outcome = 'picked default') {
+  const canonicalName = optionsTable[optionName]?.canonicalName ?? optionName
+  const displayValue = sensitiveConfigurations.has(canonicalName) ? '<redacted>' : value
+  const telemetryKey = canonicalName + source
+  const telemetryEntry = configWithOrigin.get(telemetryKey)
   // Lazy load log module to avoid circular dependency
-  if (!parseErrors.has(canonicalName)) {
-    // TODO: Rephrase: It will fallback to former source (or default if not set)
-    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source}), picked default`
+  if (!parseErrors.has(telemetryKey) && !telemetryEntry?.error) {
+    // TODO: Report the prior source when an invalid value does not use the default.
+    let message = `${baseMessage}: ${util.inspect(displayValue)} for ${optionName} (source: ${source})`
+    if (outcome) message += `, ${outcome}`
     if (error) {
       error.stack = error.toString()
       message += `\n\n${util.inspect(error)}`
     }
-    parseErrors.set(canonicalName, { message })
+    const telemetryError = { code: null, message }
+    if (telemetryEntry) {
+      telemetryEntry.error = telemetryError
+    } else {
+      parseErrors.set(telemetryKey, telemetryError)
+    }
     log ??= require('../log')
     const logLevel = error ? 'error' : 'warn'
     log[logLevel](message)
@@ -60,10 +70,10 @@ const defaults = {
   logger: undefined,
 }
 
-for (const [name, value] of Object.entries(defaults)) {
+for (const [name, value = null] of Object.entries(defaults)) {
   configWithOrigin.set(`${name}default`, {
     name,
-    value: value ?? null,
+    value,
     origin: 'default',
     seq_id: seqId++,
   })
@@ -182,10 +192,10 @@ const optionsTable = {
   },
 }
 
-const parser = (value, optionName, source) => {
+const parser = (value, optionName, source, reportInvalid = true) => {
   const { type, canonicalName = optionName } = configurationsTable[optionName]
   const parsed = parsers[type](value, canonicalName)
-  if (parsed === undefined) {
+  if (parsed === undefined && reportInvalid) {
     warnInvalidValue(value, optionName, source, `Invalid ${type} input`)
   }
   return parsed
@@ -240,13 +250,13 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       regExps[entry.allowed] ??= new RegExp(`^(${entry.allowed})$`, 'i')
       const allowed = regExps[entry.allowed]
       const originalTransform = transformer
-      transformer = (value, optionName, source) => {
+      transformer = (value, optionName, source, reportInvalid = true) => {
         if (!allowed.test(value)) {
-          warnInvalidValue(value, optionName, source, 'Invalid value')
+          if (reportInvalid) warnInvalidValue(value, optionName, source, 'Invalid value')
           return
         }
         if (originalTransform) {
-          value = originalTransform(value)
+          value = originalTransform(value, optionName, source, reportInvalid)
         }
         return value
       }

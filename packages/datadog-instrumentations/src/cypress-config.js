@@ -7,15 +7,26 @@ const { pathToFileURL } = require('url')
 
 const log = require('../../dd-trace/src/log')
 const { getSegment } = require('../../dd-trace/src/util')
+const {
+  finalizeAfterUserHandlers,
+  manualPluginOwner,
+  runUserHandler,
+} = require('../../datadog-plugin-cypress/src/finalization')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const DD_SUPPORT_OWNER = Symbol.for('dd-trace.cypress.support-owner')
+const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
+const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
+const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
+const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
   'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
 const generatedFilesForExitCleanup = new Set()
 let exitCleanupRegistered = false
+let stopManualSupportSetup
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -30,6 +41,7 @@ if (loadCh.hasSubscribers) {
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
+  'dd:testDeclarations': () => null,
   'dd:beforeEach': () => ({}),
   'dd:afterEach': () => null,
   'dd:addTags': () => null,
@@ -42,7 +54,6 @@ const noopTask = {
 /**
  * @param {FileSystemError} error filesystem error
  * @param {string} fallbackPath path used when the error does not include one
- * @returns {string} concise error description
  */
 function formatFileSystemError (error, fallbackPath) {
   const code = error?.code || error?.name || 'UNKNOWN'
@@ -55,10 +66,15 @@ function formatFileSystemError (error, fallbackPath) {
  * @param {FileCreationFailure[]} failures failed directory attempts
  * @param {string} consequence effect on Cypress instrumentation
  * @param {boolean} [customerVisible] whether to report the failure without requiring debug logging
- * @returns {void}
  */
 function warnFileCreationFailures (artifact, failures, consequence, customerVisible = false) {
-  const details = failures.map(({ directory, error }) => formatFileSystemError(error, directory)).join('; ')
+  let details = ''
+  let isFirstFailure = true
+  for (const { directory, error } of failures) {
+    if (!isFirstFailure) details += '; '
+    details += formatFileSystemError(error, directory)
+    isFirstFailure = false
+  }
   const message = 'Datadog could not create %s. Attempts failed: %s. %s'
 
   if (customerVisible) {
@@ -74,7 +90,6 @@ function warnFileCreationFailures (artifact, failures, consequence, customerVisi
  *
  * @param {string} message printf-style error message
  * @param {...unknown} args message arguments
- * @returns {void}
  */
 function logBrowserInstrumentationError (message, ...args) {
   // eslint-disable-next-line no-console
@@ -83,7 +98,6 @@ function logBrowserInstrumentationError (message, ...args) {
 
 /**
  * @param {string} filePath generated file to remove
- * @returns {void}
  */
 function removeGeneratedFile (filePath) {
   try {
@@ -103,7 +117,6 @@ function removeGeneratedFile (filePath) {
  * Removes project-local support files when Cypress exits without firing
  * after:run, as happens in open mode without experimental run events.
  *
- * @returns {void}
  */
 function removeGeneratedFilesAtExit () {
   exitCleanupRegistered = false
@@ -113,7 +126,6 @@ function removeGeneratedFilesAtExit () {
 
 /**
  * @param {string[]} filePaths generated support files
- * @returns {void}
  */
 function registerGeneratedFilesForExitCleanup (filePaths) {
   for (const filePath of filePaths) generatedFilesForExitCleanup.add(filePath)
@@ -125,7 +137,6 @@ function registerGeneratedFilesForExitCleanup (filePaths) {
 
 /**
  * @param {string[]} filePaths generated support files
- * @returns {void}
  */
 function cleanupGeneratedFiles (filePaths) {
   for (const filePath of filePaths) {
@@ -145,7 +156,6 @@ function cleanupGeneratedFiles (filePaths) {
  *
  * @param {string} filePath generated file path
  * @param {string} content generated file content
- * @returns {void}
  */
 function writeExclusiveFile (filePath, content) {
   let descriptor
@@ -174,7 +184,6 @@ function writeExclusiveFile (filePath, content) {
 
 /**
  * @param {unknown} handler Cypress task registration
- * @returns {boolean}
  */
 function isDatadogTaskRegistration (handler) {
   return !!handler && typeof handler === 'object' &&
@@ -185,8 +194,43 @@ function isDatadogTaskRegistration (handler) {
 }
 
 /**
+ * @param {unknown} handler Cypress after:run handler
+ */
+function isDatadogAfterRunHandler (handler) {
+  return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_RUN_HANDLER] === true
+}
+
+/**
+ * @param {unknown} handler Cypress after:spec handler
+ */
+function isDatadogAfterSpecHandler (handler) {
+  return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_SPEC_HANDLER] === true
+}
+
+/**
+ * @param {object} manualPlugin manual plugin registration state
+ */
+function supportsErrorAwareFinalization (manualPlugin) {
+  return isDatadogAfterSpecHandler(manualPlugin.afterSpecHandler) &&
+    isDatadogAfterRunHandler(manualPlugin.afterRunHandler)
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ */
+function isCurrentDatadogTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_TASK_HANDLER] === manualPluginOwner
+}
+
+/**
+ * @param {unknown} handler Cypress task handler map
+ */
+function isDatadogNoopTaskRegistration (handler) {
+  return !!handler && handler[DD_CYPRESS_NOOP_TASK_HANDLER] === true
+}
+
+/**
  * @param {unknown} value
- * @returns {boolean}
  */
 function isPlainObject (value) {
   if (!value || typeof value !== 'object') return false
@@ -209,20 +253,26 @@ function mergeReturnedConfig (config, updatedConfig) {
   }
 
   const mergedConfig = { ...config }
+  // Retain the values already read for the reply, rather than invoking user getters again at IPC.
+  const returnedConfig = Object.fromEntries(Object.entries(updatedConfig))
 
-  for (const [key, value] of Object.entries(updatedConfig)) {
-    mergedConfig[key] = isPlainObject(value) && isPlainObject(mergedConfig[key])
-      ? mergeReturnedConfig(mergedConfig[key], value)
-      : value
+  for (const [key, value] of Object.entries(returnedConfig)) {
+    if (isPlainObject(value) && isPlainObject(mergedConfig[key]) && value !== mergedConfig[key]) {
+      mergedConfig[key] = mergeReturnedConfig(mergedConfig[key], value)
+      // Keep only the returned overrides, using values already read by the recursive merge.
+      returnedConfig[key] = mergedConfig[key][Symbol.for('dd-trace.cypress.returned-config')]
+    } else {
+      mergedConfig[key] = value
+    }
   }
 
+  Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: returnedConfig })
   return mergedConfig
 }
 
 /**
  * @param {string} rootPath parent path
  * @param {string} candidatePath path that should be inside rootPath
- * @returns {boolean}
  */
 function isPathInside (rootPath, candidatePath) {
   const relativePath = path.relative(path.resolve(rootPath), path.resolve(candidatePath))
@@ -232,7 +282,6 @@ function isPathInside (rootPath, candidatePath) {
 /**
  * @param {string} fromDirectory directory containing the importing file
  * @param {string} importedFile file to import
- * @returns {string}
  */
 function getRelativeImportPath (fromDirectory, importedFile) {
   let relativePath = path.relative(fromDirectory, importedFile).split(path.sep).join('/')
@@ -250,9 +299,13 @@ function getRelativeImportPath (fromDirectory, importedFile) {
  * @param {string} directory writable directory inside the Cypress project
  * @param {string|false|undefined} originalSupportFile user's support file
  * @param {string} browserHooksSource Datadog browser-side support hooks
+ * @param {boolean} deferLifecycle whether manual support owns lifecycle registration
+ * @param {string} lifecycleOwnerSource browser lifecycle ownership detection
  * @returns {string[]} generated files
  */
-function createSupportWrapper (directory, originalSupportFile, browserHooksSource) {
+function createSupportWrapper (
+  directory, originalSupportFile, browserHooksSource, deferLifecycle, lifecycleOwnerSource
+) {
   const suffix = `${process.pid}-${randomUUID()}`
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
@@ -266,9 +319,47 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
 
   const generatedFiles = []
   try {
-    writeExclusiveFile(browserHooksFile, browserHooksSource)
+    const guardedSource = `const ddSupportRoot = Cypress.mocha.getRootSuite()
+const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
+const ddHasLifecycle = (() => {
+const module = { exports: {} }
+${lifecycleOwnerSource}
+return module.exports
+})()
+ddSupportRoot[Symbol.for('dd-trace.cypress.has-lifecycle')] = ddHasLifecycle
+if (!ddSupportRoot[ddSupportKey] && !ddHasLifecycle(ddSupportRoot)) {
+const positions = {}
+for (const key of ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']) {
+  positions[key] = Array.isArray(ddSupportRoot[key]) ? ddSupportRoot[key].length : 0
+}
+ddSupportRoot[Symbol.for('dd-trace.cypress.lifecycle-positions')] = positions
+ddSupportRoot[Symbol.for('dd-trace.cypress.defer-lifecycle')] = ${deferLifecycle}
+${browserHooksSource}
+ddSupportRoot[ddSupportKey] = true
+}
+`
+    writeExclusiveFile(browserHooksFile, guardedSource)
     generatedFiles.push(browserHooksFile)
-    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n`)
+    const finalize = `const root = Cypress.mocha.getRootSuite()
+const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
+const hasLifecycle = root[Symbol.for('dd-trace.cypress.has-lifecycle')]
+if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) {
+  const phases = ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']
+  const lengths = {}
+  for (const key of phases) lengths[key] = Array.isArray(root[key]) ? root[key].length : 0
+  install()
+  // A Node-only manual plugin needs automatic browser hooks before user hooks.
+  // Move only the hooks just installed; an actual manual owner never enters here.
+  const positions = root[Symbol.for('dd-trace.cypress.lifecycle-positions')]
+  for (const key of phases) {
+    if (positions && Array.isArray(root[key])) {
+      const added = root[key].splice(lengths[key])
+      root[key].splice(positions[key], 0, ...added)
+    }
+  }
+}
+`
+    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
   } catch (error) {
     for (const generatedFile of generatedFiles) removeGeneratedFile(generatedFile)
@@ -284,21 +375,26 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
  * generated paths for cleanup, or undefined if injection was skipped.
  *
  * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
  * @returns {string[]|undefined} generated file paths, or undefined if skipped
  */
-function injectSupportFile (config) {
+function injectSupportFile (config, manualLifecycle = false) {
   const originalSupportFile = config.supportFile
+
+  const supportOwner = config[DD_SUPPORT_OWNER]
+  if (generatedFilesForExitCleanup.has(originalSupportFile) &&
+      (!manualLifecycle || (supportOwner?.path === originalSupportFile && supportOwner.deferLifecycle))) return
+  let deferLifecycle = manualLifecycle ||
+    (supportOwner && supportOwner.path === originalSupportFile && supportOwner.deferLifecycle)
 
   if (originalSupportFile) {
     try {
       const content = fs.readFileSync(originalSupportFile, 'utf8')
-      // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
-      const hasActiveDdTraceImport = content.split('\n').some(line => {
+      deferLifecycle ||= content.split('\n').some(line => {
         const trimmed = line.trim()
         return trimmed.includes('dd-trace/ci/cypress/support') &&
           !trimmed.startsWith('//') && !trimmed.startsWith('*')
       })
-      if (hasActiveDdTraceImport) return
     } catch (error) {
       logBrowserInstrumentationError(
         'Datadog could not read the Cypress support file %s: %s. %s',
@@ -312,9 +408,11 @@ function injectSupportFile (config) {
 
   let browserHooksSource
   let browserHooksPath
+  let lifecycleOwnerSource
   try {
     browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
     browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
+    lifecycleOwnerSource = fs.readFileSync(require.resolve('../../datadog-plugin-cypress/src/lifecycle-owner'), 'utf8')
   } catch (error) {
     logBrowserInstrumentationError(
       'Datadog could not read its Cypress browser support hooks: %s. %s',
@@ -333,8 +431,12 @@ function injectSupportFile (config) {
   for (const directory of new Set(candidateDirectories)) {
     if (projectRoot && !isPathInside(projectRoot, directory)) continue
     try {
-      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource)
+      const generatedFiles = createSupportWrapper(
+        directory, originalSupportFile, browserHooksSource, !!deferLifecycle, lifecycleOwnerSource
+      )
       config.supportFile = generatedFiles[1]
+      // Shared across SDK copies, but scoped to this exact generated support path.
+      config[DD_SUPPORT_OWNER] = { path: config.supportFile, deferLifecycle: !!deferLifecycle }
       return generatedFiles
     } catch (error) {
       failures.push({ directory, error })
@@ -358,13 +460,96 @@ function injectSupportFile (config) {
 }
 
 /**
+ * Installs browser hooks before user support, including manual SDK imports.
+ *
+ * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
+ * @returns {string[]|undefined} generated files owned until cleanup or process exit
+ */
+function installSupportFile (config, manualLifecycle = false) {
+  const files = injectSupportFile(config, manualLifecycle)
+  if (files) registerGeneratedFilesForExitCleanup(files)
+  return files
+}
+
+/**
+ * Keeps early browser instrumentation in the actual manual setup return value.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {(() => void)|undefined} cleanup for the one-shot setup observer
+ */
+function installManualSupportFile (config) {
+  stopManualSupportSetup?.()
+  installSupportFile(config, true)
+  const originalSend = process.send
+  if (typeof originalSend !== 'function') return
+
+  let active = true
+  const stop = () => {
+    active = false
+    if (process.send === send) process.send = originalSend
+    if (stopManualSupportSetup === stop) stopManualSupportSetup = undefined
+  }
+  const send = function (message) {
+    let forwarded = message
+    if (active && (message?.event === 'setupTestingType:reply' || message?.event === 'setupTestingType:error')) {
+      try {
+        const reply = message.event === 'setupTestingType:reply' && message.args?.[0]
+        const supplied = reply?.setupConfig
+        if (reply && (supplied == null || (supplied && typeof supplied === 'object' && !Array.isArray(supplied)))) {
+          // Snapshot own enumerable values once, as native IPC serialization would.
+          const returnedConfig = Object.fromEntries(Object.entries(supplied ?? {}))
+          const supportOwner = supplied && Object.getOwnPropertyDescriptor(supplied, DD_SUPPORT_OWNER)
+          if (supportOwner && 'value' in supportOwner) {
+            Object.defineProperty(returnedConfig, DD_SUPPORT_OWNER, supportOwner)
+          }
+          const projectRoot = returnedConfig.projectRoot ?? config.projectRoot
+          const supportFile = returnedConfig.supportFile === undefined ? config.supportFile : returnedConfig.supportFile
+          // Leave invalid user configuration for Cypress's native validator.
+          if (typeof projectRoot === 'string' &&
+              (supportFile === undefined || supportFile === false || typeof supportFile === 'string')) {
+            const supportConfig = {
+              projectRoot,
+              supportFile: typeof supportFile === 'string' ? path.resolve(projectRoot, supportFile) : supportFile,
+              [DD_SUPPORT_OWNER]: returnedConfig[DD_SUPPORT_OWNER] ?? config[DD_SUPPORT_OWNER],
+            }
+            installSupportFile(supportConfig, true)
+            if (generatedFilesForExitCleanup.has(supportConfig.supportFile)) {
+              const args = [...message.args]
+              args[0] = {
+                ...reply,
+                setupConfig: {
+                  ...returnedConfig,
+                  supportFile: supportConfig.supportFile,
+                  [DD_SUPPORT_OWNER]: supportConfig[DD_SUPPORT_OWNER],
+                },
+              }
+              forwarded = { ...message, args }
+            }
+          }
+        }
+      } catch (error) {
+        log.warn('Datadog could not retain the Cypress support wrapper in the setup reply: %s.', error)
+      } finally {
+        stop()
+      }
+    }
+    const args = [...arguments]
+    args[0] = forwarded
+    return originalSend.apply(this, args)
+  }
+  stopManualSupportSetup = stop
+  process.send = send
+  return stop
+}
+
+/**
  * Registers screenshot handlers collected from a manual plugin call. User
  * handlers run first so a renamed screenshot path reaches the Datadog handler.
  *
  * @param {Function} on Cypress event registration function
  * @param {Function[]} handlers collected after:screenshot handlers
  * @param {Function|undefined} datadogHandler manual Datadog screenshot handler
- * @returns {void}
  */
 function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
   const userHandlers = handlers.filter(handler => handler !== datadogHandler)
@@ -388,20 +573,69 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
 }
 
 /**
- * Registers one Cypress after:spec handler that runs every collected handler
+ * Registers one Cypress lifecycle handler that runs every collected handler
  * in registration order. Cypress 10+ otherwise keeps only the last handler.
  *
  * @param {Function} on Cypress event registration function
- * @param {Function[]} handlers collected after:spec handlers
- * @returns {void}
+ * @param {'before:run'|'after:spec'} event lifecycle event
+ * @param {Function[]} handlers collected lifecycle handlers
+ * @param {Function} [datadogHandler] Datadog lifecycle handler
+ * @param {Function} [cleanup] removes generated support files after an error
  */
-function registerAfterSpecHandlers (on, handlers) {
-  if (handlers.length === 0) return
+function registerLifecycleHandlers (on, event, handlers, datadogHandler, cleanup) {
+  const userHandlers = datadogHandler
+    ? handlers.filter(handler => handler !== datadogHandler)
+    : handlers
 
-  on('after:spec', (spec, results) => handlers.reduce(
-    (chain, handler) => chain.then(() => handler(spec, results)),
-    Promise.resolve()
-  ))
+  if (userHandlers.length === 0) {
+    if (datadogHandler) {
+      if (cleanup) {
+        on(event, (...args) => Promise.resolve().then(() => datadogHandler(...args)).catch((error) => {
+          cleanup()
+          throw error
+        }))
+      } else {
+        on(event, datadogHandler)
+      }
+    }
+    return
+  }
+
+  on(event, (...args) => {
+    const callHandler = datadogHandler
+      ? handler => runUserHandler(() => handler(...args))
+      : handler => handler(...args)
+    const chain = userHandlers.reduce(
+      (promise, handler) => promise.then(() => callHandler(handler)),
+      Promise.resolve()
+    )
+    if (!datadogHandler) return chain
+    const finalization = finalizeAfterUserHandlers(chain, (...errors) => {
+      // A failed setup hook must abort the run before Datadog starts its session.
+      if (event === 'before:run' && errors.length > 0) return
+      return datadogHandler(...args, ...errors)
+    })
+    if (!cleanup) return finalization
+    return finalization.catch((error) => {
+      cleanup()
+      throw error
+    })
+  })
+}
+
+/**
+ * Enables the Cypress lifecycle events needed to finish Test Optimization
+ * sessions in interactive mode.
+ *
+ * @param {object} config Cypress resolved config object
+ */
+function enableInteractiveRunEvents (config) {
+  if (config.isInteractive && config.experimentalInteractiveRunEvents !== true) {
+    config.experimentalInteractiveRunEvents = true
+    log.warn(
+      'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.'
+    )
+  }
 }
 
 /**
@@ -412,6 +646,7 @@ function registerAfterSpecHandlers (on, handlers) {
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
+ * @param {Function[]} userBeforeRunHandlers user's before:run handlers collected from wrappedOn
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
  * @param {Function[]} userAfterScreenshotHandlers user's after:screenshot handlers collected from wrappedOn
@@ -421,40 +656,79 @@ function registerAfterSpecHandlers (on, handlers) {
 function registerDdTraceHooks (
   on,
   config,
+  userBeforeRunHandlers,
   userAfterSpecHandlers,
   userAfterRunHandlers,
   userAfterScreenshotHandlers,
   manualPlugin
 ) {
-  const generatedSupportFiles = injectSupportFile(config)
-  if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
+  const generatedSupportFiles = installSupportFile(config, manualPlugin.detected)
 
   const cleanupWrapper = () => {
+    // Open mode reuses this support file across runs, including failed setup attempts.
+    // The registered process-exit cleanup owns its lifetime instead.
+    if (config.isInteractive) return
     if (generatedSupportFiles) cleanupGeneratedFiles(generatedSupportFiles)
   }
 
-  const registerAfterRunWithCleanup = () => {
+  const registerAfterRunWithCleanup = (datadogHandler) => {
+    const handlers = datadogHandler
+      ? userAfterRunHandlers.filter(handler => handler !== datadogHandler)
+      : userAfterRunHandlers
+
     on('after:run', (results) => {
-      const chain = userAfterRunHandlers.reduce(
-        (p, h) => p.then(() => h(results)),
+      const callHandler = datadogHandler
+        ? handler => runUserHandler(() => handler(results))
+        : handler => handler(results)
+      const chain = handlers.reduce(
+        (promise, handler) => promise.then(() => callHandler(handler)),
         Promise.resolve()
       )
-      return chain.finally(cleanupWrapper)
+      if (!datadogHandler) return chain.finally(cleanupWrapper)
+
+      return finalizeAfterUserHandlers(chain, (...args) => datadogHandler(results, ...args))
+        .finally(cleanupWrapper)
     })
   }
 
+  const registerBeforeRun = handler => {
+    registerLifecycleHandlers(on, 'before:run', userBeforeRunHandlers, handler, cleanupWrapper)
+  }
+
   const registerNoopHandlers = () => {
-    registerAfterSpecHandlers(on, userAfterSpecHandlers)
+    registerBeforeRun()
+    registerLifecycleHandlers(on, 'after:spec', userAfterSpecHandlers)
     for (const h of userAfterScreenshotHandlers) on('after:screenshot', h)
     registerAfterRunWithCleanup()
     on('task', noopTask)
   }
 
-  if (manualPlugin.detected) {
-    registerAfterSpecHandlers(on, userAfterSpecHandlers)
+  if (manualPlugin.detected &&
+    (manualPlugin.isNoop ||
+      manualPlugin.ownsCurrentPlugin ||
+      supportsErrorAwareFinalization(manualPlugin) ||
+      !setupNodeEventsCh.hasSubscribers)) {
+    if (manualPlugin.afterRunHandler) {
+      enableInteractiveRunEvents(config)
+      if (manualPlugin.initialConfig !== config) {
+        manualPlugin.initialConfig.experimentalInteractiveRunEvents = config.experimentalInteractiveRunEvents
+      }
+    }
+    registerBeforeRun(manualPlugin.beforeRunHandler)
+    registerLifecycleHandlers(on, 'after:spec', userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
-    registerAfterRunWithCleanup()
+    registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
+    on('task', manualPlugin.taskHandler)
     return config
+  }
+
+  if (manualPlugin.detected) {
+    userBeforeRunHandlers = userBeforeRunHandlers.filter(handler => handler !== manualPlugin.beforeRunHandler)
+    userAfterSpecHandlers = userAfterSpecHandlers.filter(handler => handler !== manualPlugin.afterSpecHandler)
+    userAfterRunHandlers = userAfterRunHandlers.filter(handler => handler !== manualPlugin.afterRunHandler)
+    userAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
+      handler => handler !== manualPlugin.afterScreenshotHandler
+    )
   }
 
   if (!setupNodeEventsCh.hasSubscribers) {
@@ -471,6 +745,7 @@ function registerDdTraceHooks (
     userAfterSpecHandlers,
     userAfterRunHandlers,
     userAfterScreenshotHandlers,
+    registerBeforeRun,
     cleanupWrapper,
     registered: false,
     configPromise: undefined,
@@ -483,6 +758,7 @@ function registerDdTraceHooks (
     return config
   }
 
+  enableInteractiveRunEvents(config)
   return payload.configPromise || config
 }
 
@@ -492,28 +768,60 @@ function registerDdTraceHooks (
  */
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
+    const userBeforeRunHandlers = []
     const userAfterSpecHandlers = []
     const userAfterRunHandlers = []
     const userAfterScreenshotHandlers = []
     const manualPlugin = {
       detected: false,
+      initialConfig: config,
+      beforeRunHandler: undefined,
+      afterSpecHandler: undefined,
+      afterRunHandler: undefined,
       afterScreenshotHandler: undefined,
+      taskHandler: undefined,
+      ownsCurrentPlugin: false,
+      isNoop: false,
     }
+    const recentRegistrations = []
 
     const wrappedOn = (event, handler) => {
-      if (event === 'after:spec') {
+      if (event === 'before:run') {
+        userBeforeRunHandlers.push(handler)
+      } else if (event === 'after:spec') {
         userAfterSpecHandlers.push(handler)
+        if (isDatadogAfterSpecHandler(handler)) manualPlugin.afterSpecHandler = handler
       } else if (event === 'after:run') {
         userAfterRunHandlers.push(handler)
+        if (isDatadogAfterRunHandler(handler)) manualPlugin.afterRunHandler = handler
       } else if (event === 'after:screenshot') {
         userAfterScreenshotHandlers.push(handler)
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterScreenshotHandler = userAfterScreenshotHandlers.at(-1)
+          manualPlugin.ownsCurrentPlugin = isCurrentDatadogTaskRegistration(handler)
+          manualPlugin.isNoop = isDatadogNoopTaskRegistration(handler)
+          const afterRun = recentRegistrations.at(-1)
+          const afterSpec = recentRegistrations.at(-2)
+          const possibleAfterScreenshot = recentRegistrations.at(-3)
+          const hasAfterScreenshot = possibleAfterScreenshot?.event === 'after:screenshot'
+          const beforeRun = hasAfterScreenshot ? recentRegistrations.at(-4) : possibleAfterScreenshot
+          if (!manualPlugin.isNoop &&
+            beforeRun?.event === 'before:run' &&
+            afterSpec?.event === 'after:spec' &&
+            afterRun?.event === 'after:run') {
+            manualPlugin.beforeRunHandler ||= beforeRun.handler
+            manualPlugin.afterSpecHandler ||= afterSpec.handler
+            manualPlugin.afterRunHandler ||= afterRun.handler
+            if (hasAfterScreenshot) manualPlugin.afterScreenshotHandler ||= possibleAfterScreenshot.handler
+          }
+          manualPlugin.taskHandler = handler
+        } else {
+          on(event, handler)
         }
-        on(event, handler)
       }
+      recentRegistrations.push({ event, handler })
+      if (recentRegistrations.length > 4) recentRegistrations.shift()
     }
 
     const maybePromise = originalSetupNodeEvents
@@ -525,6 +833,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
         return registerDdTraceHooks(
           on,
           mergeReturnedConfig(config, result),
+          userBeforeRunHandlers,
           userAfterSpecHandlers,
           userAfterRunHandlers,
           userAfterScreenshotHandlers,
@@ -536,6 +845,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     return registerDdTraceHooks(
       on,
       mergeReturnedConfig(config, maybePromise),
+      userBeforeRunHandlers,
       userAfterSpecHandlers,
       userAfterRunHandlers,
       userAfterScreenshotHandlers,
@@ -568,7 +878,6 @@ function wrapConfig (config) {
  * (`.js`, `.ts`) are loaded as ESM or CJS.
  *
  * @param {string} filePath absolute path to a file under the project
- * @returns {boolean}
  */
 function isUnderEsmPackage (filePath) {
   let dir = path.dirname(filePath)
@@ -587,7 +896,6 @@ function isUnderEsmPackage (filePath) {
 /**
  * @param {string} originalConfigFile absolute path to the original config file
  * @param {string} wrapperDirectory directory for the generated wrapper
- * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   // Match the module mode Cypress would use for the user's original config
@@ -624,22 +932,18 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   //   supported. Guards against ES-module-default shape so TS-authored
   //   configs using `export default` still work.
   const body = isEsm
-    ? [
-        `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-        `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
-        '',
-        'export default cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
-    : [
-        `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
-        `const originalExports = require(${JSON.stringify(originalConfigFile)})`,
-        'const originalConfig = originalExports && originalExports.__esModule',
-        '  ? originalExports.default',
-        '  : originalExports',
-        'module.exports = cypressConfig.wrapConfig(originalConfig)',
-        '',
-      ].join('\n')
+    ? `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}
+import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}
+
+export default cypressConfig.wrapConfig(originalConfig)
+`
+    : `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})
+const originalExports = require(${JSON.stringify(originalConfigFile)})
+const originalConfig = originalExports && originalExports.__esModule
+  ? originalExports.default
+  : originalExports
+module.exports = cypressConfig.wrapConfig(originalConfig)
+`
 
   writeExclusiveFile(wrapperFile, body)
   return wrapperFile
@@ -647,7 +951,6 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
 
 /**
  * @param {string} projectRoot
- * @returns {boolean}
  */
 function isTypeScript6OrNewer (projectRoot) {
   try {
@@ -773,6 +1076,8 @@ function wrapCliConfigFileOptions (options) {
 }
 
 module.exports = {
+  installManualSupportFile,
+  installSupportFile,
   wrapCliConfigFileOptions,
   wrapConfig,
 }

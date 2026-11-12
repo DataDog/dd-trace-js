@@ -82,8 +82,13 @@ const storage = {
       serviceSource: optionServiceSource,
     },
     pg: {
-      opName: () => 'postgresql.query',
+      opName: ({ operation = 'query' }) => `postgresql.${operation}`,
       serviceName: withFunction,
+      serviceSource: optionServiceSource,
+    },
+    postgres: {
+      opName: () => 'postgresql.query',
+      serviceName: configWithFallback,
       serviceSource: optionServiceSource,
     },
     prisma: {

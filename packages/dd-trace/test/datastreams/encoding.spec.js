@@ -37,6 +37,41 @@ describe('encoding', () => {
       assert.strictEqual(bytes2.length, 0)
     })
 
+    it('encoding then decoding should be a no op at the largest encodable magnitude', () => {
+      const n = Math.floor(Number.MAX_SAFE_INTEGER / 2)
+
+      const encoded = encodeVarint(n)
+      assert.deepStrictEqual([...encoded], [254, 255, 255, 255, 255, 255, 255, 15])
+      const [decoded, bytes] = decodeVarint(encoded)
+      assert.strictEqual(decoded, n)
+      assert.strictEqual(bytes.length, 0)
+
+      const encodedNegative = encodeVarint(-n)
+      assert.deepStrictEqual([...encodedNegative], [255, 255, 255, 255, 255, 255, 255, 15])
+      const [decodedNegative, negativeBytes] = decodeVarint(encodedNegative)
+      assert.strictEqual(decodedNegative, -n)
+      assert.strictEqual(negativeBytes.length, 0)
+    })
+
+    it('encoding then decoding should be a no op when a group shifts down to 0x80', () => {
+      // The zig-zag value shifts down to exactly 0x80 for `2 ** exponent` and the
+      // `2 ** (exponent - 7)` values above it. Math.floor(Number.MAX_SAFE_INTEGER / 2)
+      // spans seven 7-bit groups, so there are seven such bands.
+      for (let exponent = 6; exponent <= 48; exponent += 7) {
+        const base = 2 ** exponent
+        const bandTop = base + 2 ** Math.max(exponent - 7, 0) - 1
+
+        for (const n of new Set([base, bandTop, -base, -bandTop])) {
+          const encoded = encodeVarint(n)
+          const [decoded, bytes] = decodeVarint(encoded)
+          assert.strictEqual(decoded, n)
+          assert.strictEqual(bytes.length, 0)
+        }
+      }
+
+      assert.deepStrictEqual([...encodeVarint(2 ** 6)], [128, 1])
+    })
+
     it('encoding a number bigger than Max safe int fails.', () => {
       const n = Number.MAX_SAFE_INTEGER + 10
       const encoded = encodeVarint(n)

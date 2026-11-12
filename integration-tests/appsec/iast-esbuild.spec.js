@@ -7,7 +7,6 @@ const childProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { promisify, inspect } = require('util')
-const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
@@ -108,7 +107,7 @@ describe('esbuild support for IAST', () => {
             DD_IAST_REQUEST_SAMPLING: '100',
           },
         })
-        contextVars.axios = Axios.create({ baseURL: contextVars.proc.url })
+        contextVars.url = contextVars.proc.url
       })
 
       afterEach(async () => {
@@ -118,8 +117,18 @@ describe('esbuild support for IAST', () => {
     }
   }
 
+  /**
+   * @param {string} baseUrl
+   * @param {string} url
+   */
+  async function request (baseUrl, url) {
+    const response = await fetch(new URL(url, baseUrl))
+    assert.strictEqual(response.status, 200)
+    await response.arrayBuffer()
+  }
+
   describe('cjs', () => {
-    const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
+    const context = { proc: null, agent: null, url: '', applicationDir: null, bundledApplicationDir: null }
 
     before(async function () {
       this.timeout(120_000)
@@ -136,7 +145,7 @@ describe('esbuild support for IAST', () => {
         startServer('iast-enabled-with-sm.js', true)
 
         it('should detect vulnerability with correct location', async () => {
-          await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+          await request(context.url, '/iast/cmdi-vulnerable?args=-la')
 
           const expectedPath = path.join('iast', 'index.js')
           const expectedLine = 9
@@ -149,7 +158,7 @@ describe('esbuild support for IAST', () => {
         startServer('iast-enabled-with-no-sm.js', true)
 
         it('should detect vulnerability with first callsite location', async () => {
-          await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+          await request(context.url, '/iast/cmdi-vulnerable?args=-la')
 
           const expectedPath = path.join('build', 'iast-enabled-with-no-sm.js')
 
@@ -162,14 +171,14 @@ describe('esbuild support for IAST', () => {
       startServer('iast-disabled.js', false)
 
       it('should not detect any vulnerability', async () => {
-        await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+        await request(context.url, '/iast/cmdi-vulnerable?args=-la')
         await assertNoVulnerability(context.agent)
       })
     })
   })
 
   describe('esm', () => {
-    const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
+    const context = { proc: null, agent: null, url: '', applicationDir: null, bundledApplicationDir: null }
 
     before(async () => {
       const setup = await setupApplication('iast-esbuild-esm')
@@ -184,7 +193,7 @@ describe('esbuild support for IAST', () => {
         startServer('iast-enabled-with-sm.mjs', true)
 
         it('should detect vulnerability with correct location', async () => {
-          await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+          await request(context.url, '/iast/cmdi-vulnerable?args=-la')
 
           const expectedPath = path.join('iast', 'index.mjs')
           const expectedLine = 7
@@ -197,7 +206,7 @@ describe('esbuild support for IAST', () => {
         startServer('iast-enabled-with-no-sm.mjs', true)
 
         it('should detect vulnerability with first callsite location', async () => {
-          await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+          await request(context.url, '/iast/cmdi-vulnerable?args=-la')
 
           const expectedPath = path.join('build', 'iast-enabled-with-no-sm.mjs')
 
@@ -210,7 +219,7 @@ describe('esbuild support for IAST', () => {
       startServer('iast-disabled.mjs', false)
 
       it('should not detect any vulnerability', async () => {
-        await context.axios.get('/iast/cmdi-vulnerable?args=-la')
+        await request(context.url, '/iast/cmdi-vulnerable?args=-la')
         await assertNoVulnerability(context.agent)
       })
     })

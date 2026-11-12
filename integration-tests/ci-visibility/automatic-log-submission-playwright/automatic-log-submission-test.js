@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('playwright', () => {
   test('should be able to log to the console', async ({ page }) => {
     await test.step('log to the console', async () => {
-      logger.log('info', 'Hello simple log!')
+      logger.info('Hello simple log!')
     })
 
     expect(sum(1, 2)).toEqual(3)

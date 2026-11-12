@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const guard = require('../startup-guard')
 
 const {
   AgentlessCiVisibilityEncoder,
 } = require('../../../packages/dd-trace/src/encode/agentless-ci-visibility')
 const id = require('../../../packages/dd-trace/src/id')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -128,7 +128,7 @@ assert.ok(shape, `unknown VARIANT: ${VARIANT}`)
 const trace = buildTrace(shape.tests, shape.suites, shape.wide)
 const encoder = new AgentlessCiVisibilityEncoder(
   { flush () {} },
-  { runtimeId: 'a1b2c3d4-0000-0000-0000-000000000000', service: 'my-service', env: 'ci' }
+  { tags: { 'runtime-id': 'a1b2c3d4-0000-0000-0000-000000000000', service: 'my-service', env: 'ci' } }
 )
 
 // Preflight: encode once and confirm the encoder buffered bytes and counted the

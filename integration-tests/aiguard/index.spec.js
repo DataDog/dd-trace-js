@@ -15,6 +15,7 @@ const {
   TRACE_SOURCE_PROPAGATION_KEY,
 } = require('../../packages/dd-trace/src/constants')
 const startApiMock = require('./api-mock')
+const startAnthropicMock = require('./anthropic-mock')
 const startOpenAIMock = require('./openai-mock')
 const { executeRequest } = require('./util')
 
@@ -62,20 +63,22 @@ function assertHasTags (metric, expectedTags) {
 }
 
 describe('AIGuard SDK integration tests', () => {
-  let cwd, appFile, agent, proc, api, openaiApi, url
+  let cwd, appFile, agent, proc, api, anthropicApi, openaiApi, url
   let envOverrides = {}
 
-  useSandbox(['express', 'ai@6.0.39', 'openai@6'])
+  useSandbox(['express', 'ai@6.0.39', '@anthropic-ai/sdk', 'openai@6'])
 
   before(async function () {
     cwd = sandboxCwd()
     appFile = path.join(cwd, 'aiguard/server.js')
     api = await startApiMock()
+    anthropicApi = await startAnthropicMock()
     openaiApi = await startOpenAIMock()
   })
 
   after(async () => {
     await api.close()
+    await anthropicApi.close()
     await openaiApi.close()
   })
 
@@ -88,6 +91,7 @@ describe('AIGuard SDK integration tests', () => {
     DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
     DD_AI_GUARD_ENABLED: 'true',
     DD_AI_GUARD_BLOCK: 'true',
+    DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: 'true',
     DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
     DD_API_KEY: 'DD_API_KEY',
     DD_APP_KEY: 'DD_APP_KEY',
@@ -100,6 +104,7 @@ describe('AIGuard SDK integration tests', () => {
       env: {
         ...baseEnv(),
         ...envOverrides,
+        ANTHROPIC_BASE_URL: `http://127.0.0.1:${anthropicApi.address().port}`,
         OPENAI_BASE_URL: `http://127.0.0.1:${openaiApi.address().port}/v1`,
       },
     })
@@ -515,17 +520,128 @@ describe('AIGuard SDK integration tests', () => {
     assert.ok(response.body.message)
   })
 
-  it('skips AI Guard for streaming chat.completions and consumes the stream cleanly', async () => {
+  it('evaluates streaming chat.completions and consumes the returned stream', async () => {
     const response = await executeRequest(`${url}/openai-stream`)
     assert.strictEqual(response.status, 200)
     assert.strictEqual(response.body.streamed, true)
     assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+    assert.strictEqual(response.body.text, 'Hello world')
 
     await agent.assertMessageReceived(({ payload }) => {
       const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
-      assert.strictEqual(guardSpans.length, 0, 'streaming requests must not produce AI Guard spans')
+      assert.strictEqual(guardSpans.length, 2)
+      assertGuardSpansChildOf(payload, 'openai.request')
     })
   })
+
+  it('evaluates streaming responses.create and consumes the returned stream', async () => {
+    const response = await executeRequest(`${url}/openai-responses-stream`)
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(response.body.streamed, true)
+    assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+    assert.strictEqual(response.body.text, 'Hello from mock responses!')
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+      assert.strictEqual(guardSpans.length, 2)
+      assertGuardSpansChildOf(payload, 'openai.request')
+    })
+  })
+
+  for (const [endpoint, output, target] of [
+    ['/openai-stream-after-deny', 'chat completion text', 'prompt'],
+    ['/openai-stream-tool-after-deny', 'chat completion tool call', 'tool'],
+    ['/openai-responses-stream-after-deny', 'Responses API text', 'prompt'],
+  ]) {
+    it(`blocks streamed ${output} at After Model before exposing any chunks`, async () => {
+      const response = await executeRequest(`${url}${endpoint}`)
+      assert.strictEqual(response.status, 403)
+      assert.deepStrictEqual(JSON.parse(response.body), {
+        blocked: true,
+        reason: 'Blocked by policy',
+        chunks: 0,
+      })
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpans.length, 2)
+        assertHasGuardSpan(payload, span =>
+          span.meta['ai_guard.target'] === target &&
+          span.meta['ai_guard.action'] === 'DENY' &&
+          span.meta['ai_guard.blocked'] === 'true'
+        )
+        assertGuardSpansChildOf(payload, 'openai.request')
+        assertLlmSpanErrored(payload, 'openai.request')
+      })
+    })
+  }
+
+  it('evaluates streaming Anthropic messages and consumes the returned stream', async () => {
+    const response = await executeRequest(`${url}/anthropic-stream`)
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(response.body.streamed, true)
+    assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+    assert.strictEqual(response.body.text, 'Hello world')
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+      assert.strictEqual(guardSpans.length, 2)
+      assertGuardSpansChildOf(payload, 'anthropic.request')
+    })
+  })
+
+  for (const endpoint of ['/anthropic-stream-with-response', '/anthropic-message-stream']) {
+    it(`evaluates a streamed Anthropic response consumed through ${endpoint}`, async () => {
+      const response = await executeRequest(`${url}${endpoint}`)
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body))
+      assert.strictEqual(response.body.blocked, false)
+      assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+      assert.strictEqual(response.body.text, 'Hello world')
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpans.length, 2)
+        assertGuardSpansChildOf(payload, 'anthropic.request')
+      })
+    })
+  }
+
+  it('keeps the raw Anthropic response readable through .withResponse()', async () => {
+    const response = await executeRequest(`${url}/anthropic-stream-with-response`)
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body))
+    assert.match(response.body.raw, /event: message_start/)
+    assert.match(response.body.raw, /"text":"Hello"/)
+    assert.match(response.body.raw, /event: message_stop/)
+  })
+
+  for (const [endpoint, output, target] of [
+    ['/anthropic-stream-after-deny', 'text', 'prompt'],
+    ['/anthropic-message-stream-after-deny', 'messages.stream() text', 'prompt'],
+    ['/anthropic-raw-stream-after-deny', 'raw SSE text', 'prompt'],
+    ['/anthropic-stream-tool-after-deny', 'tool call', 'tool'],
+  ]) {
+    it(`blocks streamed Anthropic ${output} at After Model before exposing any chunks`, async () => {
+      const response = await executeRequest(`${url}${endpoint}`)
+      assert.strictEqual(response.status, 403)
+      assert.deepStrictEqual(JSON.parse(response.body), {
+        blocked: true,
+        reason: 'Blocked by policy',
+        chunks: 0,
+      })
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpans.length, 2)
+        assertHasGuardSpan(payload, span =>
+          span.meta['ai_guard.target'] === target &&
+          span.meta['ai_guard.action'] === 'DENY' &&
+          span.meta['ai_guard.blocked'] === 'true'
+        )
+        assertGuardSpansChildOf(payload, 'anthropic.request')
+        assertLlmSpanErrored(payload, 'anthropic.request')
+      })
+    })
+  }
 
   describe('telemetry metrics', () => {
     it('reports requests metric with sdk source on direct SDK call', async () => {

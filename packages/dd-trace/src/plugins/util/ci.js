@@ -18,6 +18,7 @@ const {
   GIT_REPOSITORY_URL,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
@@ -44,7 +45,9 @@ function parseEmailAndName (emailAndName) {
   }
   let name = ''
   let email = ''
-  const matchNameAndEmail = emailAndName.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/)
+  // Untrusted git author metadata (a fork PR controls it). The anchor fixes the start position, the
+  // email classes cannot overlap around `@`, and the slice bounds the optional name part.
+  const matchNameAndEmail = emailAndName.slice(0, 1024).match(/^(?:"?([^"]*)"?\s)?<?([^\s@]+@[^\s>]+)>?/)
   if (matchNameAndEmail) {
     name = matchNameAndEmail[1]
     email = matchNameAndEmail[2]
@@ -75,7 +78,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
 }
 
 function resolveTilde (filePath) {
@@ -113,6 +116,9 @@ const uniq = (items) => [...new Set(items)]
  *
  * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
  * and GHES environments where the runner may be installed under arbitrary directories/users.
+ *
+ * @param {string | undefined} runnerTemp value of the `RUNNER_TEMP` environment variable
+ * @returns {string[]}
  */
 function getGithubDiagnosticDirsFromEnv (runnerTemp) {
   const dirs = []
@@ -181,6 +187,9 @@ function expandGlobPattern (pattern) {
 /**
  * Expands a mixed list of literal directories and glob patterns into concrete
  * directories. Literals pass through unchanged (existence is checked later).
+ *
+ * @param {string[]} candidates
+ * @returns {string[]}
  */
 function expandDiagnosticDirCandidates (candidates) {
   const expanded = []
@@ -215,7 +224,7 @@ const githubWellKnownDiagnosticDirPatternsUnix = [
 ]
 const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
 
-const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+const githubJobIDRegex = /"job":\s*\{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
   const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
@@ -316,10 +325,8 @@ module.exports = {
       }
 
       if (NODE_LABELS) {
-        let nodeLabels
         try {
-          nodeLabels = JSON.stringify(NODE_LABELS.split(' '))
-          tags[CI_NODE_LABELS] = nodeLabels
+          tags[CI_NODE_LABELS] = JSON.stringify(NODE_LABELS.split(' '))
         } catch {
           // ignore errors
         }
@@ -651,7 +658,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/g, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }
@@ -699,6 +706,7 @@ module.exports = {
         BUILDKITE_TAG,
         BUILDKITE_BUILD_ID,
         BUILDKITE_PIPELINE_SLUG,
+        BUILDKITE_PIPELINE_NAME,
         BUILDKITE_BUILD_NUMBER,
         BUILDKITE_BUILD_URL,
         BUILDKITE_JOB_ID,
@@ -722,6 +730,7 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'buildkite',
         [CI_PIPELINE_ID]: BUILDKITE_BUILD_ID,
         [CI_PIPELINE_NAME]: BUILDKITE_PIPELINE_SLUG,
+        [CI_PIPELINE_DISPLAY_NAME]: BUILDKITE_PIPELINE_NAME,
         [CI_PIPELINE_NUMBER]: BUILDKITE_BUILD_NUMBER,
         [CI_PIPELINE_URL]: BUILDKITE_BUILD_URL,
         [CI_JOB_URL]: `${BUILDKITE_BUILD_URL}#${BUILDKITE_JOB_ID}`,

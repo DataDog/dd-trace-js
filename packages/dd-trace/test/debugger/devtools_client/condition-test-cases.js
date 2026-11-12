@@ -804,7 +804,7 @@ function overloadPropertyWithGetter (obj, propName) {
  *
  * @template T extends object
  * @param {T} obj
- * @param {PropertyKey} methodName
+ * @param {string | number | symbol} methodName
  * @returns {T}
  */
 function overloadMethod (obj, methodName) {
@@ -817,43 +817,43 @@ function overloadMethod (obj, methodName) {
  * in the prototype chain to throw, and return a further subclass constructor.
  *
  * @overload
- * @param {StringConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {StringConstructor}
+ * @param {typeof globalThis.String} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof globalThis.String}
  */
 /**
  * @overload
- * @param {ArrayConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {ArrayConstructor}
+ * @param {typeof Array} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof Array}
  */
 /**
  * @overload
- * @param {Int16ArrayConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {Int16ArrayConstructor}
+ * @param {typeof Int16Array} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof Int16Array}
  */
 /**
  * @overload
- * @param {Int32ArrayConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {Int32ArrayConstructor}
+ * @param {typeof Int32Array} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof Int32Array}
  */
 /**
  * @overload
- * @param {SetConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {SetConstructor}
+ * @param {typeof Set} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof Set}
  */
 /**
  * @overload
- * @param {MapConstructor} Builtin
- * @param {PropertyKey} propName
- * @returns {MapConstructor}
+ * @param {typeof Map} Builtin
+ * @param {string | number | symbol} propName
+ * @returns {typeof Map}
  */
 /**
  * @param {new (...args: unknown[]) => object} Builtin
- * @param {PropertyKey} propName
+ * @param {string | number | symbol} propName
  * @returns {new (...args: unknown[]) => object}
  */
 function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {

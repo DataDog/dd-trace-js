@@ -4,13 +4,13 @@
 process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { setTimeout: wait } = require('node:timers/promises')
-const { inspect } = require('node:util')
 
-const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 if (typeof global.gc !== 'function') {
   throw new Error('requires --expose-gc flag')
@@ -42,9 +42,11 @@ describe('Push Subscription Plugin', () => {
   })
 
   // Helper to create a simple HTTP server that responds OK to /push-endpoint
-  function createServer () {
+  /** @param {(req: import('node:http').IncomingMessage) => void} [onRequest] */
+  function createServer (onRequest) {
     return http.createServer((req, res) => {
       if (req.method === 'POST' && req.url.startsWith('/push-endpoint')) {
+        onRequest?.(req)
         req.on('data', () => {})
         req.on('end', () => {
           res.writeHead(200)
@@ -67,7 +69,7 @@ describe('Push Subscription Plugin', () => {
       'x-goog-pubsub-publish-time': new Date().toISOString(),
     }
 
-    return axios.post(`http://localhost:${port}/push-endpoint`, {
+    return httpRequest.post(`http://localhost:${port}/push-endpoint`, {
       message: { data: 'dGVzdA==', messageId: 'test-message-id' },
     }, {
       headers: { ...defaultHeaders, ...headers },
@@ -82,6 +84,140 @@ describe('Push Subscription Plugin', () => {
   }
 
   describe('Push subscription with raw HTTP server', () => {
+    for (const behavior of ['continue', 'restart', 'ignore']) {
+      describe(`with extraction behavior ${behavior}`, () => {
+        let previousBehavior
+
+        before(async () => {
+          previousBehavior = process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+          process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior.toUpperCase()
+          await agent.close()
+          await agent.load(['http'], { client: false })
+        })
+
+        after(async () => {
+          if (previousBehavior === undefined) delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+          else process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = previousBehavior
+          await agent.close()
+          await agent.load(['http'], { client: false })
+        })
+
+        it('preserves the message link when selecting the batch parent', async () => {
+          const tracer = require('../../dd-trace')
+          let carrier
+          appListener = createServer(() => {
+            carrier = {}
+            tracer.inject(tracer.scope().active(), 'text_map', carrier)
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const expected = agent.assertSomeTraces(traces => {
+            const span = findPubSubSpan(traces)
+            assert.strictEqual(span.parent_id.toString(), behavior === 'continue' ? '44' : '0')
+            if (behavior === 'continue') {
+              assert.strictEqual(span.trace_id.toString(), '42')
+              assert.strictEqual(span.meta['_dd.span_links'], undefined)
+            } else {
+              assert.notStrictEqual(span.trace_id.toString(), '42')
+              if (behavior === 'restart') {
+                const links = JSON.parse(span.meta['_dd.span_links'])
+                assert.strictEqual(links.length, 1)
+                assert.strictEqual(links[0].span_id, '000000000000002b')
+                assert.strictEqual(links[0].trace_id, '0000000000000000000000000000002a')
+                assert.strictEqual(links[0].attributes.reason, 'propagation_behavior_extract')
+              } else {
+                assert.strictEqual(span.meta['_dd.span_links'], undefined)
+              }
+            }
+          })
+          await Promise.all([sendPushRequest(appListener.address().port, {
+            'x-datadog-trace-id': '42',
+            'x-datadog-parent-id': '43',
+            'x-datadog-sampling-priority': '2',
+            'ot-baggage-user': 'alice',
+            '_dd.pubsub_request.trace_id': '000000000000002a',
+            '_dd.pubsub_request.span_id': '000000000000002c',
+          }), expected])
+          assert.strictEqual(carrier['ot-baggage-user'], behavior === 'ignore' ? undefined : 'alice')
+        })
+      })
+    }
+
+    for (const [upper, batchUpper] of [
+      [undefined, undefined],
+      ['6af1eb9300000000', '6af1eb9300000000'],
+      ['6af1eb9300000000', '6af1eb9400000000'],
+    ]) {
+      it(`preserves the selected trace metadata for upper IDs ${upper} / ${batchUpper}`, async () => {
+        const tracer = require('../../dd-trace')
+        const tags = '_dd.p.dm=-0,_dd.p.llmobs_parent_id=44,_dd.p.llmobs_sd=0' +
+          (upper ? `,_dd.p.tid=${upper}` : '')
+        let carrier
+        appListener = createServer(() => {
+          carrier = {}
+          tracer.inject(tracer.scope().active(), 'text_map', carrier)
+        })
+        appListener.listen(0, 'localhost')
+        await once(appListener, 'listening')
+        const sameTrace = upper === batchUpper
+        const expected = agent.assertSomeTraces(traces => {
+          const span = findPubSubSpan(traces)
+          assert.strictEqual(span.parent_id.toString(), sameTrace ? '44' : '43')
+          assert.strictEqual(span.trace_id.toString(), '42')
+          if (sameTrace) {
+            assert.strictEqual(span.meta['_dd.span_links'], undefined)
+          } else {
+            const links = JSON.parse(span.meta['_dd.span_links'])
+            assert.strictEqual(links[0].trace_id, batchUpper + '000000000000002a')
+          }
+        })
+        const headers = {
+          'x-datadog-trace-id': '42',
+          'x-datadog-parent-id': '43',
+          'x-datadog-sampling-priority': '2',
+          'x-datadog-tags': tags,
+          'ot-baggage-user': 'alice',
+          traceparent: `00-${upper ?? '0000000000000000'}000000000000002a-000000000000002b-01`,
+          tracestate: 'vendor=value,dd=s:2;t.dm:-0',
+          '_dd.pubsub_request.trace_id': '000000000000002a',
+          '_dd.pubsub_request.span_id': '000000000000002c',
+        }
+        if (batchUpper) headers['_dd.pubsub_request.p.tid'] = batchUpper
+        await Promise.all([sendPushRequest(appListener.address().port, headers), expected])
+
+        assert.strictEqual(carrier['x-datadog-trace-id'], '42')
+        assert.strictEqual(carrier['x-datadog-sampling-priority'], '2')
+        assert.strictEqual(carrier['ot-baggage-user'], 'alice')
+        assert.ok(carrier.tracestate.split(',').includes('vendor=value'))
+        assert.deepStrictEqual(carrier['x-datadog-tags'].split(',').sort(), tags.split(',').sort())
+        assert.strictEqual(carrier.traceparent.split('-')[1], (upper ?? '0000000000000000') + '000000000000002a')
+      })
+    }
+
+    it('preserves terminated-context links when selecting the batch parent', async () => {
+      appListener = createServer()
+      appListener.listen(0, 'localhost')
+      await once(appListener, 'listening')
+      const expected = agent.assertSomeTraces(traces => {
+        const span = findPubSubSpan(traces)
+        assert.strictEqual(span.parent_id.toString(), '44')
+        assert.strictEqual(span.trace_id.toString(), '42')
+        const links = JSON.parse(span.meta['_dd.span_links'])
+        assert.strictEqual(links.length, 1)
+        assert.strictEqual(links[0].span_id, '0000000000000028')
+        assert.strictEqual(links[0].trace_id, '00000000000000000000000000000029')
+        assert.strictEqual(links[0].attributes.reason, 'terminated_context')
+      })
+      await Promise.all([sendPushRequest(appListener.address().port, {
+        'x-datadog-trace-id': '42',
+        'x-datadog-parent-id': '43',
+        'x-datadog-sampling-priority': '2',
+        traceparent: '00-00000000000000000000000000000029-0000000000000028-01',
+        '_dd.pubsub_request.trace_id': '000000000000002a',
+        '_dd.pubsub_request.span_id': '000000000000002c',
+      }), expected])
+    })
+
     it('should create pubsub.push.receive span with delivery duration', (done) => {
       const messageId = 'http-test-789'
       const publishStartTime = Date.now().toString()
@@ -130,12 +266,7 @@ describe('Push Subscription Plugin', () => {
           .assertSomeTraces(traces => {
             const pubsubSpan = findPubSubSpan(traces)
 
-            if (pubsubSpan.meta['_dd.span_links']) {
-              const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              assert.ok(Array.isArray(spanLinks), `Expected array, got ${inspect(spanLinks)}`)
-              const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
-              assert.strictEqual(hasProducerLink, true)
-            }
+            assert.strictEqual(pubsubSpan.meta['_dd.span_links'], undefined)
           })
           .then(done)
           .catch(done)
@@ -149,8 +280,9 @@ describe('Push Subscription Plugin', () => {
     })
 
     it('should add batch metadata to receive span', (done) => {
-      const batchTraceId = 'abc123def456'
-      const batchSpanId = '789012345678'
+      const batchTraceId = 'abc123def4567890'
+      const batchSpanId = '789012345678abcd'
+      const batchTraceIdUpper = 'abcdef1234567890'
 
       appListener = createServer().listen(0, 'localhost', () => {
         const port = appListener.address().port
@@ -167,6 +299,10 @@ describe('Push Subscription Plugin', () => {
               'pubsub.batch.message_count': 3,
               'pubsub.batch.message_index': 0,
             })
+            assert.deepStrictEqual(JSON.parse(pubsubSpan.meta['_dd.span_links']), [{
+              trace_id: batchTraceIdUpper + batchTraceId,
+              span_id: batchSpanId,
+            }])
           })
           .then(done)
           .catch(done)
@@ -176,6 +312,7 @@ describe('Push Subscription Plugin', () => {
           '_dd.batch.index': '0',
           '_dd.pubsub_request.trace_id': batchTraceId,
           '_dd.pubsub_request.span_id': batchSpanId,
+          '_dd.pubsub_request.p.tid': batchTraceIdUpper,
         }).catch(done)
       })
     })
@@ -216,7 +353,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'Mozilla/5.0', // Not Google user agent
@@ -240,7 +377,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',

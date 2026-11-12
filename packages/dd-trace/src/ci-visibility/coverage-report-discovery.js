@@ -5,6 +5,8 @@ const path = require('node:path')
 
 const log = require('../log')
 
+const BIGINT_LSTAT_OPTIONS = { bigint: true, throwIfNoEntry: false }
+
 /**
  * Coverage report file patterns to search for
  * Each entry contains the relative path from root and the format identifier
@@ -38,7 +40,7 @@ const COVERAGE_REPORT_PATTERNS = [
 /**
  * Discovers code coverage report files in the given root directory
  * @param {string} rootDir - The root directory to search for coverage reports
- * @returns {Array<{filePath: string, format: string}>} Array of discovered coverage reports
+ * @returns {Array<{filePath: string, fileDevice: bigint, fileInode: bigint, format: string}>}
  */
 function discoverCoverageReports (rootDir) {
   if (!rootDir) {
@@ -46,27 +48,57 @@ function discoverCoverageReports (rootDir) {
     return []
   }
 
+  let resolvedRoot
+  try {
+    const unresolvedRoot = path.resolve(rootDir)
+    const rootStats = fs.lstatSync(unresolvedRoot, BIGINT_LSTAT_OPTIONS)
+    if (rootStats?.isSymbolicLink() || !rootStats?.isDirectory()) {
+      log.debug('Coverage report root is not a regular directory: %s', unresolvedRoot)
+      return []
+    }
+    resolvedRoot = fs.realpathSync(unresolvedRoot)
+    const resolvedRootStats = fs.lstatSync(resolvedRoot, BIGINT_LSTAT_OPTIONS)
+    if (!resolvedRootStats || resolvedRootStats.dev !== rootStats.dev || resolvedRootStats.ino !== rootStats.ino) {
+      log.debug('Coverage report root changed while resolving it: %s', unresolvedRoot)
+      return []
+    }
+  } catch (error) {
+    log.debug('Error checking coverage report root %s: %s', rootDir, error.message)
+    return []
+  }
+
   const discoveredReports = []
 
   for (const pattern of COVERAGE_REPORT_PATTERNS) {
-    const fullPath = path.join(rootDir, pattern.path)
+    let currentPath = resolvedRoot
 
     try {
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath)
-
-        // Only include regular files, not directories or symlinks
-        if (stats.isFile()) {
-          discoveredReports.push({
-            filePath: fullPath,
-            format: pattern.format,
-          })
-          log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
-        }
+      let stats
+      for (const pathSegment of pattern.path.split('/')) {
+        currentPath = path.join(currentPath, pathSegment)
+        stats = fs.lstatSync(currentPath, BIGINT_LSTAT_OPTIONS)
+        if (!stats || stats.isSymbolicLink()) break
       }
-    } catch (err) {
+
+      // A hard link can name a file outside the root without changing its real path.
+      if (stats?.isFile() && stats.nlink === 1n) {
+        const resolvedPath = fs.realpathSync(currentPath)
+        const pathFromRoot = path.relative(resolvedRoot, resolvedPath)
+        if (pathFromRoot === '..' || pathFromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(pathFromRoot)) {
+          log.debug('Coverage report resolved outside the root directory: %s', currentPath)
+          continue
+        }
+        discoveredReports.push({
+          filePath: resolvedPath,
+          fileDevice: stats.dev,
+          fileInode: stats.ino,
+          format: pattern.format,
+        })
+        log.debug('Found coverage report: %s (format: %s)', resolvedPath, pattern.format)
+      }
+    } catch (error) {
       // Log but don't fail if we can't access a file
-      log.debug('Error checking coverage report path %s: %s', fullPath, err.message)
+      log.debug('Error checking coverage report path %s: %s', currentPath, error.message)
     }
   }
 

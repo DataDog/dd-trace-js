@@ -1,19 +1,26 @@
 'use strict'
 
+const { METHODS } = require('node:http')
 const { URL } = require('url')
-const axios = require('axios')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 function noop () {}
 
 describe('Taint tracking plugin sources express tests', () => {
   withVersions('express', 'express', '>=4.8.0', version => {
     prepareTestServerForIastInExpress('in express', version,
+      (app, listener) => {
+        if (METHODS.includes('QUERY')) {
+          const bodyParser = require('../../../../../../versions/body-parser').get()
+          app.query('/query', bodyParser.json(), listener)
+        }
+      },
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {
           function makePostRequest (done) {
-            axios.post(`http://localhost:${config.port}/`, {
+            httpRequest.post(`http://localhost:${config.port}/`, {
               command: 'echo 1',
             }).catch(done)
           }
@@ -24,9 +31,32 @@ describe('Taint tracking plugin sources express tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
         })
 
+        describe('tainted QUERY body', () => {
+          before(function () {
+            if (!METHODS.includes('QUERY')) {
+              // Older Node.js HTTP parsers do not support QUERY.
+              this.skip()
+            }
+          })
+
+          testThatRequestHasVulnerability({
+            fn: req => {
+              const childProcess = require('node:child_process')
+              childProcess.exec(req.body.command, noop)
+            },
+            vulnerability: 'COMMAND_INJECTION',
+            occurrences: 1,
+            makeRequest: done => {
+              httpRequest({
+                url: `http://localhost:${config.port}/query`, method: 'QUERY', data: { command: 'echo 1' },
+              }).catch(done)
+            },
+          })
+        })
+
         describe('tainted query param', () => {
           function makeRequestWithQueryParam (done) {
-            axios.get(`http://localhost:${config.port}/?command=echo`).catch(done)
+            httpRequest.get(`http://localhost:${config.port}/?command=echo`).catch(done)
           }
 
           testThatRequestHasVulnerability((req) => {
@@ -37,7 +67,7 @@ describe('Taint tracking plugin sources express tests', () => {
 
         describe('tainted header', () => {
           function makeRequestWithHeader (done) {
-            axios.get(`http://localhost:${config.port}/`, {
+            httpRequest.get(`http://localhost:${config.port}/`, {
               headers: {
                 'x-iast-test-command': 'echo 1',
               },
@@ -52,7 +82,7 @@ describe('Taint tracking plugin sources express tests', () => {
 
         describe('url parse taint tracking', () => {
           function makePostRequest (done) {
-            axios.post(`http://localhost:${config.port}/`, {
+            httpRequest.post(`http://localhost:${config.port}/`, {
               url: 'http://www.datadoghq.com/',
             }).catch(done)
           }

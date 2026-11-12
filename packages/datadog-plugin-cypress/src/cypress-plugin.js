@@ -3,11 +3,21 @@
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
 const { basename } = require('node:path')
+const { isDeepStrictEqual } = require('node:util')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
+const {
+  EMPTY_EFD_RETRY_POLICY,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const {
   TEST_STATUS,
   setRumTestTags,
@@ -42,6 +52,8 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_TESTS_SKIPPED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
@@ -56,6 +68,8 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
@@ -72,19 +86,20 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
+  isMarkedAsUnskippable,
   recordAttemptToFixExecution,
+  recordTestManagementExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -92,6 +107,12 @@ const {
   getScreenshotUploadResult,
   setScreenshotUploadTags,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
+const {
+  VIDEO_UPLOAD_RESULT_ERROR,
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  VIDEO_UPLOAD_SCOPE_TEST_SUITE,
+  setVideoUploadTags,
+} = require('../../dd-trace/src/ci-visibility/test-video')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -129,6 +150,8 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const observeRetryConfig = require('./retry-config-observer')
+const observeSetupHandoff = require('./setup-handoff')
 const {
   resolveOriginalSourceFile,
   resolveSourceLineForTest,
@@ -218,11 +241,16 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
 }
 
-function getSessionStatus (summary) {
-  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+function getSessionStatus (summary, testSuiteStatuses) {
+  if (!summary) {
+    if (testSuiteStatuses.has('fail')) return 'fail'
+    if (testSuiteStatuses.has('skip') && !testSuiteStatuses.has('pass')) return 'skip'
+    return 'pass'
+  }
+  if (summary.status === 'failed' || summary.failures > 0 || summary.totalFailed > 0) {
     return 'fail'
   }
-  if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
+  if ((summary.totalSkipped ?? 0) + (summary.totalPending ?? 0) === summary.totalTests) {
     return 'skip'
   }
   return 'pass'
@@ -361,39 +389,16 @@ function getSuiteStatus (suiteStats) {
     return 'fail'
   }
   if (suiteStats.tests !== undefined &&
-    (suiteStats.tests === suiteStats.pending || suiteStats.tests === suiteStats.skipped)) {
+    suiteStats.tests === (suiteStats.pending ?? 0) + (suiteStats.skipped ?? 0)) {
     return 'skip'
   }
   return 'pass'
 }
 
-function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus, preferIndexedMatch = false) {
-  let matchingTestByIndex
-  let matchingTestByStatus
-  let matchingTestIndex = 0
-
-  for (const cypressTest of cypressTests) {
-    if (cypressTest.title.join(' ') !== testName) {
-      continue
-    }
-
-    if (matchingTestIndex === attemptIndex) {
-      matchingTestByIndex = cypressTest
-    }
-    matchingTestIndex++
-
-    if (!matchingTestByStatus && CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
-      matchingTestByStatus = cypressTest
-    }
-  }
-
-  return preferIndexedMatch
-    ? matchingTestByIndex || matchingTestByStatus
-    : matchingTestByStatus || matchingTestByIndex
-}
-
 function isCypressHookFailure (cypressTest) {
-  return CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === 'fail' &&
+  // Duplicate titles can leave the aggregate state passed even when the final attempt has a hook failure.
+  const lastAttempt = cypressTest.attempts?.at(-1)
+  return (cypressTest.state === 'failed' || lastAttempt?.state === 'failed') &&
     /\bhook\b/.test(String(cypressTest.displayError || ''))
 }
 
@@ -404,7 +409,12 @@ const FINAL_STATUS_RETRY_KIND = {
   atf: 'atf',
 }
 
-function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTestRetriesCount }) {
+function getFinalStatusRetryKind ({
+  finishedTest,
+  finishedTestAttempts,
+  flakyTestRetriesCount,
+  isDynamicAtrEnabled,
+}) {
   // Infer retry kind from the executions we actually saw so ATR enabled with
   // a retry count of 0 is still treated as a single final execution.
   if (finishedTest.isAttemptToFix) {
@@ -415,7 +425,8 @@ function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTes
     return FINAL_STATUS_RETRY_KIND.efd
   }
 
-  if (finishedTestAttempts.length > 1 && flakyTestRetriesCount > 0) {
+  if (!finishedTest.noAutoRetry && finishedTestAttempts.length > 1 &&
+    (isDynamicAtrEnabled || flakyTestRetriesCount > 0)) {
     return FINAL_STATUS_RETRY_KIND.atr
   }
 
@@ -425,7 +436,7 @@ function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTes
 function getFinalStatus ({
   status,
   retryKind,
-  hasFailedAllRetries,
+  hasFailedAllAttempts,
   hasPassedAllAtfRetries,
   isQuarantined,
   isDisabled,
@@ -439,7 +450,7 @@ function getFinalStatus ({
     case FINAL_STATUS_RETRY_KIND.atr:
     case FINAL_STATUS_RETRY_KIND.efd:
       // These modes report the aggregate result across attempts.
-      return hasFailedAllRetries ? 'fail' : 'pass'
+      return hasFailedAllAttempts ? 'fail' : 'pass'
     case FINAL_STATUS_RETRY_KIND.atf:
       // Attempt-to-fix only passes if every execution passed.
       return hasPassedAllAtfRetries ? 'pass' : 'fail'
@@ -448,11 +459,70 @@ function getFinalStatus ({
   }
 }
 
+/**
+ * Copies retry configuration without sharing nested experimental options with user code.
+ *
+ * @template T
+ * @param {T} retries
+ * @returns {T}
+ */
+function copyCypressRetries (retries) {
+  // Cypress 6 supports Node.js 12, which does not provide structuredClone.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return retries !== null && typeof retries === 'object' ? JSON.parse(JSON.stringify(retries)) : retries
+}
+
+// Cypress treats omitted/undefined object fields as defaults, while null replaces them.
+function mergeNativeRetries (baseline, supplied) {
+  if (supplied === undefined) return copyCypressRetries(baseline)
+  if (!supplied || typeof supplied !== 'object') return supplied
+  const result = baseline && typeof baseline === 'object' ? copyCypressRetries(baseline) : {}
+  for (const key of Object.keys(supplied)) result[key] = mergeNativeRetries(result[key], supplied[key])
+  return result
+}
+
+function updateNativeRetries (native, baseline, supplied, path) {
+  if (!path.length) return mergeNativeRetries(baseline, supplied)
+  if (typeof native === 'number') native = { runMode: native, openMode: native }
+  if (typeof baseline === 'number') baseline = { runMode: baseline, openMode: baseline }
+  const [key, ...rest] = path
+  const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
+  result[key] = updateNativeRetries(result[key], baseline && baseline[key], supplied && supplied[key], rest)
+  return result
+}
+
+function reconcileNativeRetries (native, baseline, configured, actual) {
+  if (isDeepStrictEqual(configured, actual)) return native
+  if (!actual || typeof actual !== 'object' || !configured || typeof configured !== 'object') {
+    return mergeNativeRetries(baseline, actual)
+  }
+  if (typeof native === 'number') native = { runMode: native, openMode: native }
+  if (typeof baseline === 'number') baseline = { runMode: baseline, openMode: baseline }
+  const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
+  for (const key of Object.keys(actual)) {
+    if (!isDeepStrictEqual(configured[key], actual[key])) {
+      result[key] = reconcileNativeRetries(result[key], baseline && baseline[key], configured[key], actual[key])
+    }
+  }
+  for (const key of Object.keys(configured)) {
+    // Cypress 6's plugin process uses Node 12, which predates Object.hasOwn.
+    // eslint-disable-next-line prefer-object-has-own
+    if (!Object.prototype.hasOwnProperty.call(actual, key)) {
+      result[key] = copyCypressRetries(baseline && baseline[key])
+    }
+  }
+  return result
+}
+
 class CypressPlugin {
+  #pendingTestSuiteSpans = new Map()
+
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
+  hasTestsReported = false
+  testSuiteStatuses = new Set()
   testStatuses = {}
   hasLibraryConfiguration = false
   isItrEnabled = false
@@ -462,22 +532,25 @@ class CypressPlugin {
   isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
+  isDynamicAtrEnabled = false
+  dynamicAtrBuckets = undefined
+  dynamicAtrRetryCountByTest = new Map()
   isEarlyFlakeDetectionEnabled = false
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
-  earlyFlakeDetectionNumRetries = 0
-  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   efdRetryCountByTest = {}
   efdSlowAbortedTests = {}
   earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
   unskippableSuites = []
+  testAnnotationsBySuite = new Map()
   knownTests = []
   isTestManagementTestsEnabled = false
   testManagementAttemptToFixRetries = 0
@@ -487,7 +560,10 @@ class CypressPlugin {
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
+  uploadedVideoPaths = new Set()
+  pendingVideoUploads = []
   screenshotUploadPromisesByTraceId = new Map()
+  screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
@@ -537,11 +613,14 @@ class CypressPlugin {
    * Resets state that is scoped to a single Cypress run so the singleton plugin
    * can be reused safely across multiple programmatic cypress.run() calls.
    *
-   * @returns {void}
    */
   resetRunState () {
+    this.#pendingTestSuiteSpans.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
+    this.resolvedCypressRetries = undefined
+    this.hasTestsReported = false
+    this.testSuiteStatuses = new Set()
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
     this.isItrEnabled = false
@@ -551,18 +630,20 @@ class CypressPlugin {
     this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
+    this.isDynamicAtrEnabled = false
+    this.dynamicAtrBuckets = undefined
+    this.dynamicAtrRetryCountByTest = new Map()
     this.isEarlyFlakeDetectionEnabled = false
     this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
-    this.earlyFlakeDetectionNumRetries = 0
-    this.earlyFlakeDetectionSlowTestRetries = {}
+    this.earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
     this.efdRetryCountByTest = {}
     this.efdSlowAbortedTests = {}
     this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -572,12 +653,16 @@ class CypressPlugin {
     this.isTestManagementTestsEnabled = false
     this.testManagementAttemptToFixRetries = 0
     this.testManagementTests = undefined
+    this.testAnnotationsBySuite = new Map()
     this.isImpactedTestsEnabled = false
     this.modifiedFiles = []
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.uploadedVideoPaths = new Set()
+    this.pendingVideoUploads = []
     this.screenshotUploadPromisesByTraceId = new Map()
+    this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
@@ -615,7 +700,6 @@ class CypressPlugin {
    *
    * @param {string} traceId - Test trace id used for the upload
    * @param {Promise<string|undefined>} uploadPromise - Promise resolving to the upload outcome
-   * @returns {void}
    */
   addScreenshotUploadPromise (traceId, uploadPromise) {
     const uploadPromises = this.screenshotUploadPromisesByTraceId.get(traceId)
@@ -641,11 +725,22 @@ class CypressPlugin {
   }
 
   /**
+   * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
+   *
+   * @param {Error} error - Error that triggered finalization
+   */
+  abortPendingScreenshotUploads (error) {
+    for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
+    this.screenshotUploadAbortControllers.clear()
+    this.screenshotUploadPromisesByTraceId.clear()
+    this.pendingScreenshotUploads = []
+  }
+
+  /**
    * Returns the current time in the same coordinate system used by span
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
    *
-   * @returns {number}
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
@@ -654,40 +749,26 @@ class CypressPlugin {
   /**
    * Returns the directory used to normalize coverage file names.
    *
-   * @returns {string}
    */
   getCoverageRootDir () {
     return this.repositoryRoot || this.rootDir || process.cwd()
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
-   * @returns {boolean}
    */
   shouldBackfillSkippedCoverage () {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
    * Adds a test's Istanbul coverage to the aggregated session coverage map.
    *
    * @param {object} coverage
-   * @returns {void}
    */
   addTestSessionCoverage (coverage) {
     mergeCoverage(coverage, this.testSessionCoverageMap)
@@ -696,7 +777,6 @@ class CypressPlugin {
   /**
    * Applies backend skipped-test coverage to the aggregated session coverage map.
    *
-   * @returns {boolean}
    */
   applySkippedCoverageToTestSessionCoverage () {
     if (!this.shouldBackfillSkippedCoverage()) {
@@ -739,7 +819,6 @@ class CypressPlugin {
   /**
    * Uploads executable-line coverage for the test session when backend configuration enables it.
    *
-   * @returns {void}
    */
   reportTestSessionCoverage () {
     const exporter = this.tracer._tracer._exporter
@@ -768,7 +847,6 @@ class CypressPlugin {
    * @param {object} cypressConfig - Cypress resolved config
    * @param {object} tracer - dd-trace proxy tracer
    * @param {object} testOptimizationConfig - Test Optimization config
-   * @returns {void}
    */
   warnIfMisconfiguredTestFailureScreenshots (cypressConfig, tracer, testOptimizationConfig) {
     if (!testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) {
@@ -793,10 +871,56 @@ class CypressPlugin {
     }
   }
 
+  /**
+   * Warns when video upload is enabled but Cypress cannot produce or send videos.
+   *
+   * @param {object} cypressConfig - Cypress resolved config
+   * @param {object} tracer - dd-trace proxy tracer
+   * @param {object} testOptimizationConfig - Test Optimization config
+   */
+  warnIfMisconfiguredTestFailureVideos (cypressConfig, tracer, testOptimizationConfig) {
+    if (!testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED) return
+
+    if (cypressConfig.video === false) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress video capture is disabled.',
+        'Datadog cannot upload failure videos unless Cypress is configured to record videos.'
+      )
+      return
+    }
+
+    if (!tracer?._tracer?._exporter?.canUploadTestVideos?.()) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress failure video upload is not supported',
+        'by the active Test Optimization transport.'
+      )
+    }
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    this.retryConfigObserver?.stop()
+    this.retryConfigObserver = undefined
+    this.stopSetupHandoff?.()
+    this.stopSetupHandoff = undefined
+    const isReusedConfig = this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries
+    const retryDescriptor = Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
+    if (retryDescriptor && !retryDescriptor.writable && !retryDescriptor.set) {
+      // Setup may make the retry root read-only before initial or repeated use.
+      // Work on a private copy without changing the external retry descriptor.
+      cypressConfig = { ...cypressConfig }
+    }
+    if (isReusedConfig) {
+      cypressConfig.retries = copyCypressRetries(this.originalCypressRetries)
+    } else {
+      this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)
+      this.hasOriginalCypressRetries = true
+    }
+    this.nativeCypressRetriesBaseline = copyCypressRetries(cypressConfig.retries)
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -807,7 +931,14 @@ class CypressPlugin {
 
     const testOptimizationConfig = getConfig().testOptimization
     this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    if (getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true) {
+      cypressConfig.screenshotOnRunFailure = true
+    }
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      cypressConfig.video = true
+    }
     this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
+    this.warnIfMisconfiguredTestFailureVideos(cypressConfig, tracer, testOptimizationConfig)
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -818,8 +949,47 @@ class CypressPlugin {
       tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
 
     this._pendingRequestErrorTags = []
+    const handoff = { seen: false, hasReply: false, retries: undefined }
+    const stopSetupHandoff = observeSetupHandoff((returnedConfig, event) => {
+      handoff.seen = true
+      if (event === 'setupTestingType:reply') {
+        handoff.hasReply = true
+        const retryProperty = returnedConfig && Object.getOwnPropertyDescriptor(returnedConfig, 'retries')
+        handoff.retries = mergeNativeRetries(
+          this.nativeCypressRetriesBaseline, retryProperty?.enumerable ? returnedConfig.retries : undefined
+        )
+      }
+    })
+    this.stopSetupHandoff = stopSetupHandoff
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
+        stopSetupHandoff()
+        if (this.stopSetupHandoff === stopSetupHandoff) this.stopSetupHandoff = undefined
+        if (handoff.hasReply) {
+          // Keep the serialized retry snapshot independent of later child-local writes.
+          const properties = Object.getOwnPropertyDescriptors(this.cypressConfig)
+          for (const key of Reflect.ownKeys(properties)) {
+            const property = properties[key]
+            property.configurable = true
+            if ('value' in property) property.writable = true
+          }
+          properties.retries = {
+            value: copyCypressRetries(handoff.retries), enumerable: true, configurable: true, writable: true,
+          }
+          this.cypressConfig = Object.defineProperties({}, properties)
+        }
+        // Manual setup can make retries read-only while settings are pending.
+        // Keep later SDK writes private without changing the user's retry descriptor.
+        const pendingRetryDescriptor = Object.getOwnPropertyDescriptor(this.cypressConfig, 'retries')
+        if (pendingRetryDescriptor && !pendingRetryDescriptor.writable && !pendingRetryDescriptor.set) {
+          this.cypressConfig = { ...this.cypressConfig }
+        }
+        // Setup can change native retries while backend settings are resolving.
+        // Capture them before the first SDK retry write, including on settings errors.
+        this.cypressConfig.retries = mergeNativeRetries(
+          this.nativeCypressRetriesBaseline, this.cypressConfig.retries
+        )
+        this.originalCypressRetries = copyCypressRetries(this.cypressConfig.retries)
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
@@ -835,11 +1005,12 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
-              earlyFlakeDetectionNumRetries,
-              earlyFlakeDetectionSlowTestRetries,
+              earlyFlakeDetectionRetryPolicy,
               earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
+              isDynamicAtrEnabled,
+              dynamicAtrBuckets,
               isKnownTestsEnabled,
               isTestManagementEnabled,
               testManagementAttemptToFixRetries,
@@ -851,26 +1022,73 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-          this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
+          this.earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
           this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
             this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            this.isDynamicAtrEnabled = isDynamicAtrEnabled ?? false
+            this.dynamicAtrBuckets = dynamicAtrBuckets
             if (typeof this.cypressConfig.retries === 'number') {
               this.cypressConfig.retries = {
                 openMode: this.cypressConfig.retries,
                 runMode: this.cypressConfig.retries,
               }
             }
-            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+            // Dynamic ATR starts at the maximum budget, then narrows each test
+            // after its initial duration is known.
+            const retryCount = this.isDynamicAtrEnabled
+              ? Math.max(
+                1,
+                this.dynamicAtrBuckets
+                  ? Math.max(...this.dynamicAtrBuckets)
+                  : this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+              )
+              : this.flakyTestRetriesCount
+            if (this.cypressConfig.retries.experimentalStrategy) {
+              if (this.cypressConfig.isTextTerminal !== false) {
+                if (this.cypressConfig.retries.runMode === true) {
+                  // Keep an active native strategy and its budget floor.
+                  this.cypressConfig.retries.experimentalOptions = {
+                    ...this.cypressConfig.retries.experimentalOptions,
+                    maxRetries: Math.max(this.cypressConfig.retries.experimentalOptions?.maxRetries ?? 0, retryCount),
+                  }
+                } else if (retryCount > 0) {
+                  // An inactive experimental strategy must not change ordinary ATR policy.
+                  const { openMode, experimentalOptions } = this.cypressConfig.retries
+                  this.cypressConfig.retries = {
+                    // Explicit nulls prevent Cypress's config merge from retaining inactive options.
+                    experimentalStrategy: null,
+                    experimentalOptions: null,
+                    openMode: openMode === true ? experimentalOptions?.maxRetries ?? 0 : 0,
+                    runMode: retryCount,
+                  }
+                }
+              }
+            } else {
+              this.cypressConfig.retries.runMode = retryCount
+            }
           } else {
             this.flakyTestRetriesCount = 0
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
+        }
+        this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
+        if (!handoff.seen) {
+          this.retryConfigObserver = observeRetryConfig(this.cypressConfig, (retries, path, provenance) => {
+            this.originalCypressRetries = copyCypressRetries(provenance.retries)
+          }, {
+            nativeRetries: copyCypressRetries(this.originalCypressRetries),
+            reconcileNative: (native, observed, actual) => reconcileNativeRetries(
+              native, this.nativeCypressRetriesBaseline, observed, actual
+            ),
+            updateNative: (native, retries, path) => updateNativeRetries(
+              native, this.nativeCypressRetriesBaseline, retries, path
+            ),
+          })
         }
         return this.cypressConfig
       })
@@ -901,46 +1119,17 @@ class CypressPlugin {
   }
 
   /**
-   * Returns how many EFD retries must be scheduled before the first duration is known.
-   *
-   * @returns {number}
-   */
-  getConfiguredEfdRetryCount () {
-    const { earlyFlakeDetectionSlowTestRetries } = this
-    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-      return this.earlyFlakeDetectionNumRetries
-    }
-    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  }
-
-  /**
-   * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
-   *
-   * @param {string} testSuite
-   * @param {string} testName
-   * @returns {number}
-   */
-  getEfdRetryCountForTest (testSuite, testName) {
-    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
-      return this.getConfiguredEfdRetryCount()
-    }
-    return testSuiteRetries[testName]
-  }
-
-  /**
    * Stores the selected EFD retry count for a test after its first execution duration is known.
    *
    * @param {string} testSuite
    * @param {string} testName
    * @param {number | undefined} duration
-   * @returns {number}
    */
   setEfdRetryCountForTest (testSuite, testName, duration) {
     if (!this.efdRetryCountByTest[testSuite]) {
       this.efdRetryCountByTest[testSuite] = {}
     }
-    const retryCount = getEfdRetryCount(duration ?? 0, this.earlyFlakeDetectionSlowTestRetries)
+    const retryCount = getEfdRetryCountForDuration(duration ?? 0, this.earlyFlakeDetectionRetryPolicy)
     this.efdRetryCountByTest[testSuite][testName] = retryCount
     if (retryCount === 0) {
       if (!this.efdSlowAbortedTests[testSuite]) {
@@ -952,16 +1141,49 @@ class CypressPlugin {
   }
 
   /**
+   * Stores the dynamic ATR retry count for a test after its first execution duration is known.
+   *
+   * @param {string} testSuite
+   * @param {string} testId
+   * @param {number | undefined} duration
+   * @param {number} [nativeRetryFloor]
+   */
+  setDynamicAtrRetryCountForTest (testSuite, testId, duration, nativeRetryFloor = 0) {
+    if (!this.dynamicAtrRetryCountByTest) {
+      this.dynamicAtrRetryCountByTest = new Map()
+    }
+    let retryCountByTestId = this.dynamicAtrRetryCountByTest.get(testSuite)
+    if (!retryCountByTestId) {
+      retryCountByTestId = new Map()
+      this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestId)
+    }
+    const retryCount = Math.max(nativeRetryFloor, getDynamicAtrRetryCount(
+      duration ?? 0,
+      this.earlyFlakeDetectionRetryPolicy,
+      this.dynamicAtrBuckets
+    ))
+    retryCountByTestId.set(testId, retryCount)
+    return retryCount
+  }
+
+  /**
    * Returns whether an EFD retry clone is beyond the selected retry count and should be discarded.
    *
    * @param {string} testSuite
    * @param {string} testName
    * @param {number} efdRetryIndex
-   * @returns {boolean}
    */
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    return testSuiteRetries?.[testName] !== undefined && efdRetryIndex > testSuiteRetries[testName]
+    return shouldSkipEfdRetry(efdRetryIndex, testSuiteRetries?.[testName])
+  }
+
+  /**
+   * @param {string} testSuite
+   * @param {string} testId
+   */
+  getDynamicAtrRetryCountForTest (testSuite, testId) {
+    return this.dynamicAtrRetryCountByTest.get(testSuite)?.get(testId)
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -969,6 +1191,11 @@ class CypressPlugin {
       ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
       ...this.getSessionRequestErrorTags(),
       ...this.getSessionItrSkippingEnabledTags(),
+    }
+
+    if (this.isItrEnabled) {
+      testSuiteSpanMetadata[TEST_ITR_SKIPPING_COUNT] = 0
+      testSuiteSpanMetadata[TEST_ITR_TESTS_SKIPPED] = 'false'
     }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
@@ -984,7 +1211,7 @@ class CypressPlugin {
       }
     }
 
-    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+    const testSuiteSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
@@ -993,9 +1220,14 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    this.#pendingTestSuiteSpans.set(testSuite, testSuiteSpan)
+    return testSuiteSpan
   }
 
-  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
+  getTestSpan ({
+    testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined,
+    isAttemptToFix, annotations, startTime,
+  }) {
     const testSuiteTags = {
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
     }
@@ -1040,6 +1272,10 @@ class CypressPlugin {
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
     }
 
+    if (annotations && annotations.mustFail) testSpanMetadata[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+    if (annotations && annotations.noAutoRetry) testSpanMetadata[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
+    if (isAttemptToFix) testSpanMetadata[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+
     if (isDisabled) {
       testSpanMetadata[TEST_MANAGEMENT_IS_DISABLED] = 'true'
     }
@@ -1052,6 +1288,7 @@ class CypressPlugin {
 
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
+      startTime,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         [ORIGIN_KEY]: CI_APP_ORIGIN,
@@ -1090,10 +1327,31 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    // We need to make sure that the plugin is initialized before running the tests
-    // This is for the case where the user has not returned the promise from the init function
-    await this.libraryConfigurationPromise
+    this.retryConfigObserver?.stop()
+    // Manual setup can change the developer budget after awaiting init. Capture it
+    // before interactive reinitialization can restore the previous native value.
+    const finalRetries = copyCypressRetries(details.config?.retries ?? this.cypressConfig?.retries)
+    if (!this._isInit && !isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = reconcileNativeRetries(
+        this.originalCypressRetries, this.nativeCypressRetriesBaseline, this.configuredCypressRetries, finalRetries
+      )
+    }
+    if (this._isInit) {
+      // The user may not have returned the promise from the init function.
+      await this.libraryConfigurationPromise
+    } else {
+      // Cypress open reuses the same plugin process for every interactive run.
+      await this.init(this.tracer, this.cypressConfig)
+    }
+    this.retryConfigObserver?.stop()
 
+    if (!isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = reconcileNativeRetries(
+        this.originalCypressRetries, this.nativeCypressRetriesBaseline, this.configuredCypressRetries, finalRetries
+      )
+    }
+
+    this.resolvedCypressRetries = finalRetries
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
@@ -1158,7 +1416,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -1279,18 +1537,72 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun (suiteStats, error) {
+    const pendingFinalizations = []
+    // Late manual initialization cannot intercept a later replacement of after:spec.
+    // Run results let us finalize the suites whose browser hooks already created spans.
+    if (this._isInit && suiteStats?.runs) {
+      for (const result of suiteStats.runs) {
+        const testSuiteSpan = this.#pendingTestSuiteSpans.get(result.spec?.relative)
+        if (!testSuiteSpan) continue
+        this.testSuiteSpan = testSuiteSpan
+        const endedAt = Date.parse(result.stats?.endedAt)
+        const finalization = this.afterSpec(result.spec, result, undefined,
+          Number.isFinite(endedAt) ? endedAt : undefined)
+        if (finalization) pendingFinalizations.push(finalization)
+      }
+    }
+    const hasPendingVideoSpans = this.pendingVideoUploads.length > 0
+    const videoUploadsPromise = this.uploadPendingTestSuiteVideos()
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
+      if (videoUploadsPromise) {
+        return Promise.all([videoUploadsPromise, this.#flushExporter(false)])
+          .then(() => this.#flushExporter(false))
+      }
       return
     }
+    // Recovered screenshot-only tests must finish before the run closes any remaining trace spans.
+    const finalizeRun = () => this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
+    const finalizationPromise = pendingFinalizations.length > 0
+      ? Promise.all(pendingFinalizations).then(finalizeRun)
+      : finalizeRun()
+    if (videoUploadsPromise) {
+      return Promise.all([videoUploadsPromise, finalizationPromise])
+        .then(() => this.#flushExporter(false))
+    }
+    return finalizationPromise
+  }
+
+  /**
+   * Finalizes Cypress run state without starting queued video uploads.
+   *
+   * @param {object|undefined} suiteStats - Cypress run statistics
+   * @param {Error|undefined} error - Run finalization error
+   * @param {boolean} [hasPendingVideoSpans] - Whether video-owned spans will finish during finalization
+   * @returns {Promise<null>}
+   */
+  #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats, this.testSuiteStatuses)
+      const hasNoTests = suiteStats?.totalTests === 0 ||
+        (suiteStats?.totalTests === undefined && !this.hasTestsReported)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      if (testStatus !== 'fail' && (hasNoTests || testStatus === 'skip')) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          hasNoTests ? 'zero_tests' : 'all_tests_skipped'
+        )
+      }
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -1327,13 +1639,28 @@ class CypressPlugin {
         autoInjected: !!getConfig().testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
-      finishAllTraceSpans(this.testSessionSpan)
+      // Cypress finishes suite videos in after:run, so their spans must remain open until the upload result is known.
+      if (!hasPendingVideoSpans) {
+        finishAllTraceSpans(this.testSessionSpan)
+      }
     }
 
+    return this.#flushExporter(true)
+  }
+
+  /**
+   * Flushes Test Optimization data after Cypress finalization work.
+   *
+   * @param {boolean} closeRun - Whether to close the Cypress run and telemetry lifecycle
+   * @returns {Promise<null>}
+   */
+  #flushExporter (closeRun) {
     return new Promise(resolve => {
       const finishAfterRun = () => {
-        this._isInit = false
-        appClosingTelemetry()
+        if (closeRun) {
+          this._isInit = false
+          appClosingTelemetry()
+        }
         resolve(null)
       }
 
@@ -1360,7 +1687,6 @@ class CypressPlugin {
    * Uploads failure screenshots as soon as Cypress creates them.
    *
    * @param {object} details - Cypress screenshot details
-   * @returns {void}
    */
   afterScreenshot (details) {
     const lastFailedTestSpan = this.lastFinishedTest?.testStatus === 'fail'
@@ -1368,11 +1694,7 @@ class CypressPlugin {
       : undefined
     const testSpan = this.activeTestSpan || lastFailedTestSpan
 
-    if (!testSpan) {
-      return
-    }
-
-    if (!isFailureScreenshotForUpload(details)) {
+    if (!testSpan || !isFailureScreenshotForUpload(details)) {
       return
     }
 
@@ -1385,13 +1707,14 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results) {
-    const { tests, stats, screenshots } = results || {}
+  afterSpec (spec, results, error, finishTime) {
+    const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
+    if (cypressTests.length > 0 || stats?.tests > 0) this.hasTestsReported = true
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
-    const testSpanFinishPromises = []
+    const testSpanFinishes = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1405,13 +1728,21 @@ class CypressPlugin {
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
-    for (const { title } of cypressTests) {
-      const cypressTestName = title.join(' ')
-      const isTestFinished = finishedTests.some(({ testName }) => cypressTestName === testName)
+    const annotationOffsets = new Map()
+    const matchedCypressTests = new Set()
+    for (const cypressTest of cypressTests) {
+      const cypressTestName = cypressTest.title.join(' ')
+      const declarationIndex = annotationOffsets.get(cypressTestName) || 0
+      const annotations = this.testAnnotationsBySuite.get(spec.relative)?.get(cypressTestName)?.[declarationIndex]
+      annotationOffsets.set(cypressTestName, declarationIndex + 1)
+      const isTestFinished = annotations?.testId
+        ? finishedTests.some(({ testId }) => testId === annotations.testId)
+        : finishedTests.some(({ testName }) => cypressTestName === testName)
 
       if (isTestFinished) {
         continue
       }
+      matchedCypressTests.add(cypressTest)
 
       const isSkippedByItr = this.testsToSkip.some(test =>
         cypressTestName === test.name && spec.relative === test.suite
@@ -1420,7 +1751,10 @@ class CypressPlugin {
         ? getTestSuitePath(spec.absolute, this.repositoryRoot)
         : spec.relative
 
-      const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+      // Recovered tests that never ran have no execution time; keep them at the recorded suite end.
+      const skippedTestSpan = this.getTestSpan({
+        testName: cypressTestName, testSuite: spec.relative, testSourceFile, annotations, startTime: finishTime,
+      })
       skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
@@ -1431,15 +1765,36 @@ class CypressPlugin {
         skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
       }
 
-      const { isDisabled, isQuarantined } = this.getTestProperties(spec.relative, cypressTestName)
+      const { isAttemptToFix, isDisabled, isQuarantined } =
+        this.getTestProperties(spec.relative, cypressTestName)
 
       if (isDisabled) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-      } else if (isQuarantined) {
+      }
+      if (isQuarantined) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
-      skippedTestSpan.finish()
+      if (isAttemptToFix) skippedTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+      recordTestManagementExecution({
+        testSuite: spec.relative,
+        testName: cypressTestName,
+        status: 'skip',
+        isAttemptToFix: isAttemptToFix && !annotations?.noAutoRetry,
+        isDisabled: isDisabled && !annotations?.mustFail,
+        isQuarantined: isQuarantined && !annotations?.mustFail,
+      })
+      if (isAttemptToFix && !annotations?.noAutoRetry) {
+        recordAttemptToFixExecution(this.attemptToFixExecutions, {
+          testSuite: spec.relative,
+          testName: cypressTestName,
+          status: 'skip',
+          isDisabled: isDisabled && !annotations?.mustFail,
+          isQuarantined: isQuarantined && !annotations?.mustFail,
+        })
+      }
+
+      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: finishTime ?? this._now() })
     }
 
     // Make sure that reported test statuses are the same as Cypress reports.
@@ -1447,38 +1802,48 @@ class CypressPlugin {
     // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
     let latestError
 
-    const finishedTestsByTestName = finishedTests.reduce((acc, finishedTest) => {
-      if (!acc[finishedTest.testName]) {
-        acc[finishedTest.testName] = []
+    // Cypress preserves IDs across retry clones, so duplicate titles remain independent.
+    const finishedTestsByTest = new Map()
+    for (const finishedTest of finishedTests) {
+      const testIdentifier = finishedTest.testId ?? finishedTest.testName
+      let finishedTestAttempts = finishedTestsByTest.get(testIdentifier)
+      if (!finishedTestAttempts) {
+        finishedTestAttempts = []
+        finishedTestsByTest.set(testIdentifier, finishedTestAttempts)
       }
-      acc[finishedTest.testName].push(finishedTest)
-      return acc
-    }, {})
+      finishedTestAttempts.push(finishedTest)
+    }
 
-    for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
+    for (const finishedTestAttempts of finishedTestsByTest.values()) {
+      const { testName } = finishedTestAttempts[0]
+      // Cypress reports one result per original runnable, including Datadog-managed clones.
+      // Public results omit runnable IDs but retain declaration order.
+      const cypressTest = cypressTests.find(test =>
+        test.title.join(' ') === testName && !matchedCypressTests.has(test)
+      )
+      matchedCypressTests.add(cypressTest)
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
-        const cypressTest = isDatadogManagedAttempt
-          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
-            cypressTests.find(test => test.title.join(' ') === testName)
-          : cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
           continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        const shouldUseCapturedStatus = isDatadogManagedAttempt && !(isLastAttempt && isCypressHookFailure(cypressTest))
-        let cypressTestStatus = shouldUseCapturedStatus
-          ? finishedTest.testStatus
-          : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        if (isDatadogManagedAttempt) {
+          cypressTestStatus = isLastAttempt && isCypressHookFailure(cypressTest) ? 'fail' : finishedTest.testStatus
+        }
         if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
           cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
+            (this.isDynamicAtrEnabled || this.flakyTestRetriesCount > 0) &&
+            (!finishedTest.hasNativeRetries || this.isDynamicAtrEnabled) &&
+            !finishedTest.noAutoRetry &&
             !finishedTest.isAttemptToFix &&
             !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
@@ -1514,7 +1879,8 @@ class CypressPlugin {
 
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
+        const isQuarantinedTest = !finishedTest.mustFail &&
+          finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1522,6 +1888,15 @@ class CypressPlugin {
             finishedTest.testSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
           }
         }
+        const testManagementTags = finishedTest.testSpan.context().getTags()
+        recordTestManagementExecution({
+          testSuite: spec.relative,
+          testName,
+          status: testManagementTags[TEST_STATUS] || cypressTestStatus,
+          isAttemptToFix: finishedTest.isAttemptToFix,
+          isDisabled: !finishedTest.mustFail && testManagementTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isQuarantined: !finishedTest.mustFail && testManagementTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+        })
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
@@ -1546,21 +1921,45 @@ class CypressPlugin {
             finishedTest,
             finishedTestAttempts,
             flakyTestRetriesCount: this.flakyTestRetriesCount,
+            isDynamicAtrEnabled: this.isDynamicAtrEnabled,
           })
 
-          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          let hasFailedAllAttempts = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          if (retryKind === FINAL_STATUS_RETRY_KIND.atr) {
+            // Late hooks can change every attempt after dd:afterEach has captured its status.
+            hasFailedAllAttempts = finishedTestAttempts.every(attempt =>
+              attempt.testSpan.context().getTag(TEST_STATUS) === 'fail'
+            )
+            const atrRetryCount = this.isDynamicAtrEnabled
+              ? this.getDynamicAtrRetryCountForTest(spec.relative, finishedTest.testId)
+              : this.flakyTestRetriesCount
+            // An aborted run can fail without using the entire selected retry budget.
+            const hasFailedAllRetries = hasFailedAllAttempts && finishedTestAttempts.length > atrRetryCount
+            finishedTest.testSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, hasFailedAllRetries ? 'true' : undefined)
+          }
           const hasPassedAllAtfRetries =
             testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
           const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
           const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
+          // Explicit experimental strategies can fail after a passing attempt. Their native
+          // aggregate outcome remains authoritative when ATR supplies the retry budget.
+          const hasNativeExperimentalRetries = typeof finishedTest.hasNativeExperimentalRetries === 'boolean'
+            ? finishedTest.hasNativeExperimentalRetries
+            : Boolean(this.resolvedCypressRetries?.experimentalStrategy)
+          const finalRetryKind = hasNativeExperimentalRetries && !isDatadogManagedAttempt
+            ? FINAL_STATUS_RETRY_KIND.none
+            : retryKind
           const finalStatus = getFinalStatus({
-            status: cypressTestStatus,
-            retryKind,
-            hasFailedAllRetries,
+            // Native retries use Cypress's aggregate outcome; managed attempts retain their own policy.
+            status: finalRetryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
+              ? CYPRESS_STATUS_TO_TEST_STATUS[isCypressHookFailure(cypressTest) ? 'failed' : cypressTest.state]
+              : cypressTestStatus,
+            retryKind: finalRetryKind,
+            hasFailedAllAttempts,
             hasPassedAllAtfRetries,
-            isQuarantined,
-            isDisabled,
+            isQuarantined: isQuarantined && !finishedTest.mustFail,
+            isDisabled: isDisabled && !finishedTest.mustFail,
           })
 
           if (finalStatus) {
@@ -1571,28 +1970,52 @@ class CypressPlugin {
         const screenshotUploadResultPromise = failedTestTraceId
           ? this.getScreenshotUploadResultPromise(failedTestTraceId)
           : undefined
-        if (screenshotUploadResultPromise) {
-          testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
-            setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
-            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
-            finishedTest.testSpan.finish(finishedTest.finishTime)
-          }))
-        } else {
-          finishedTest.testSpan.finish(finishedTest.finishTime)
-        }
+        testSpanFinishes.push({
+          testSpan: finishedTest.testSpan,
+          finishTime: finishedTest.finishTime,
+          screenshotUploadResultPromise: error ? undefined : screenshotUploadResultPromise,
+          failedTestTraceId,
+        })
       }
     }
 
-    const finishSuite = () => {
-      if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
-        this.testSuiteSpan.setTag(TEST_STATUS, status)
+    const testSuiteFinishTime = finishTime ?? this._now()
+    const suiteError = error || resultError || latestError
+    const suiteStatus = suiteError ||
+      cypressTests.some(test => CYPRESS_STATUS_TO_TEST_STATUS[test.state] === 'fail')
+      ? 'fail'
+      : getSuiteStatus(stats)
+    this.testSuiteStatuses.add(suiteStatus)
+    const testSuiteSpan = this.testSuiteSpan
+    const uploadOptions = {
+      filePath: video,
+      testSessionId: typeof this.testSessionSpan?.context === 'function'
+        ? this.testSessionSpan.context().toTraceId()
+        : undefined,
+      testSuiteId: typeof testSuiteSpan?.context === 'function'
+        ? testSuiteSpan.context().toSpanId()
+        : undefined,
+    }
+    const shouldUploadVideo = suiteStatus === 'fail' && this.#canUploadTestSuiteVideo(uploadOptions)
+    if (testSuiteSpan) {
+      testSuiteSpan.setTag(TEST_STATUS, suiteStatus)
+      if (suiteError) testSuiteSpan.setTag('error', suiteError)
+      this.testSuiteSpan = null
+      this.#pendingTestSuiteSpans.delete(spec.relative)
+    }
 
-        if (latestError) {
-          this.testSuiteSpan.setTag('error', latestError)
-        }
-        this.testSuiteSpan.finish()
-        this.testSuiteSpan = null
+    let testSpansPromise
+    if (shouldUploadVideo) {
+      this.pendingVideoUploads.push({
+        ...uploadOptions,
+        testSpanFinishes,
+        testSuiteSpan,
+        testSuiteFinishTime,
+      })
+    } else {
+      testSpansPromise = this.finishTestSpans(testSpanFinishes)
+      if (testSuiteSpan) {
+        testSuiteSpan.finish(testSuiteFinishTime)
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     }
@@ -1605,18 +2028,57 @@ class CypressPlugin {
       }
     }
 
-    finishSuite()
-
-    const screenshotUploadsPromise = waitForScreenshotUploads()
-    if (testSpanFinishPromises.length > 0) {
-      const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
-      if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+    if (error) {
+      this.abortPendingScreenshotUploads(error)
+      const videoSpansPromise = this.#finishPendingTestSuiteVideos(VIDEO_UPLOAD_RESULT_ERROR)
+      const finalizationPromise = this.#finalizeRun(undefined, error)
+      if (videoSpansPromise) {
+        return Promise.all([videoSpansPromise, finalizationPromise]).then(() => null)
       }
-      return testSpansPromise
+      return finalizationPromise
     }
 
-    return screenshotUploadsPromise
+    const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
+    if (testSpansPromise) {
+      if (screenshotUploadsPromise) {
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      } else {
+        afterSpecPromise = testSpansPromise
+      }
+    }
+
+    return afterSpecPromise
+  }
+
+  /**
+   * Applies media outcome tags and finishes test spans from one Cypress suite.
+   *
+   * @param {Array<object>} testSpanFinishes - Test spans and deferred screenshot outcomes
+   * @param {string|undefined} videoUploadResult - Test suite video upload outcome
+   * @returns {Promise<null>|undefined}
+   */
+  finishTestSpans (testSpanFinishes, videoUploadResult) {
+    const finishPromises = []
+    for (const {
+      testSpan,
+      finishTime,
+      screenshotUploadResultPromise,
+      failedTestTraceId,
+    } of testSpanFinishes) {
+      const finishTestSpan = (screenshotUploadResult) => {
+        setScreenshotUploadTags(testSpan, screenshotUploadResult)
+        setVideoUploadTags(testSpan, videoUploadResult, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+        if (failedTestTraceId) this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+        testSpan.finish(finishTime)
+      }
+      if (screenshotUploadResultPromise) {
+        finishPromises.push(screenshotUploadResultPromise.then(finishTestSpan))
+      } else {
+        finishTestSpan()
+      }
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
   /**
@@ -1636,6 +2098,7 @@ class CypressPlugin {
     }
 
     const uploadPromises = []
+    const abortController = new AbortController()
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
@@ -1654,6 +2117,7 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
+          signal: abortController.signal,
         }, (err) => {
           resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
@@ -1661,20 +2125,162 @@ class CypressPlugin {
     }
 
     if (uploadPromises.length > 0) {
-      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.screenshotUploadAbortControllers.add(abortController)
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult).finally(() => {
+        this.screenshotUploadAbortControllers.delete(abortController)
+      })
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }
   }
 
+  /**
+   * Returns whether a Cypress test suite video can be uploaded.
+   *
+   * @param {object} options - Upload options
+   * @param {string|undefined} options.filePath - Cypress video path
+   * @param {string|undefined} options.testSessionId - Test session id
+   * @param {string|undefined} options.testSuiteId - Test suite id
+   */
+  #canUploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
+    const exporter = this.tracer?._tracer?._exporter
+    return Boolean(filePath && testSessionId && testSuiteId && !this.uploadedVideoPaths.has(filePath) &&
+      exporter?.canUploadTestVideos?.() && exporter.uploadTestSuiteVideo)
+  }
+
+  /**
+   * Uploads the Cypress spec video for a failed test suite.
+   *
+   * @param {object} options - Upload options
+   * @param {string|undefined} options.filePath - Cypress video path
+   * @param {string|undefined} options.testSessionId - Test session id
+   * @param {string|undefined} options.testSuiteId - Test suite id
+   * @returns {Promise<string>|undefined} Promise resolving to the upload outcome
+   */
+  uploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
+    const exporter = this.tracer?._tracer?._exporter
+    if (!this.#canUploadTestSuiteVideo({ filePath, testSessionId, testSuiteId })) return
+
+    this.uploadedVideoPaths.add(filePath)
+
+    return new Promise(resolve => {
+      exporter.uploadTestSuiteVideo({
+        filePath,
+        testSessionId,
+        testSuiteId,
+        idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
+        capturedAtMs: Date.now(),
+      }, (error) => {
+        resolve(error ? VIDEO_UPLOAD_RESULT_ERROR : VIDEO_UPLOAD_RESULT_UPLOADED)
+      })
+    })
+  }
+
+  /**
+   * Tags and finishes every event that references one Cypress test suite video.
+   *
+   * @param {object} pendingVideoUpload - Pending video upload and owning spans
+   * @param {Array<object>} pendingVideoUpload.testSpanFinishes - Deferred test span finishes
+   * @param {object|undefined} pendingVideoUpload.testSuiteSpan - Owning test suite span
+   * @param {number} pendingVideoUpload.testSuiteFinishTime - Suite completion time captured by after:spec
+   * @param {string|undefined} uploadResult - Video upload outcome
+   * @returns {Promise<null>|undefined}
+   */
+  #finishPendingTestSuiteVideo ({ testSpanFinishes, testSuiteSpan, testSuiteFinishTime }, uploadResult) {
+    const testSpansPromise = this.finishTestSpans(testSpanFinishes, uploadResult)
+    if (testSuiteSpan) {
+      setVideoUploadTags(testSuiteSpan, uploadResult, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+      testSuiteSpan.finish(testSuiteFinishTime)
+      this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+    }
+    return testSpansPromise
+  }
+
+  /**
+   * Finishes queued video-owned spans when Cypress will not reach after:run.
+   *
+   * @param {string} uploadResult - Video upload outcome applied to every queued span
+   * @returns {Promise<null>|undefined}
+   */
+  #finishPendingTestSuiteVideos (uploadResult) {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    const finishPromises = []
+    for (const pendingVideoUpload of pendingVideoUploads) {
+      const finishPromise = this.#finishPendingTestSuiteVideo(pendingVideoUpload, uploadResult)
+      if (finishPromise) finishPromises.push(finishPromise)
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
+  }
+
+  /**
+   * Starts queued Cypress video uploads after Cypress has compressed the source files.
+   *
+   * @returns {Promise<null>|undefined}
+   */
+  uploadPendingTestSuiteVideos () {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    const finishPromises = []
+    for (const pendingVideoUpload of pendingVideoUploads) {
+      const { filePath, testSessionId, testSuiteId } = pendingVideoUpload
+      const uploadPromise = this.uploadTestSuiteVideo({ filePath, testSessionId, testSuiteId })
+      if (uploadPromise) {
+        finishPromises.push(uploadPromise.then(uploadResult =>
+          this.#finishPendingTestSuiteVideo(pendingVideoUpload, uploadResult)))
+      } else {
+        const finishPromise = this.#finishPendingTestSuiteVideo(pendingVideoUpload)
+        if (finishPromise) finishPromises.push(finishPromise)
+      }
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
+  }
+
+  /**
+   * @param {string} testSuite Suite path shared with Cypress results.
+   * @param {object[]} testAnnotations Declaration metadata from the browser.
+   */
+  recordTestDeclarations (testSuite, testAnnotations) {
+    const declarationsByName = new Map()
+    for (const annotation of testAnnotations) {
+      if (!declarationsByName.has(annotation.testName)) declarationsByName.set(annotation.testName, [])
+      declarationsByName.get(annotation.testName).push(annotation)
+    }
+    this.testAnnotationsBySuite.set(testSuite, declarationsByName)
+  }
+
   getTasks () {
     return {
-      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
+      'dd:testDeclarations': ({ testSuite, testAnnotations }) => {
+        this.recordTestDeclarations(testSuite, testAnnotations)
+        return null
+      },
+      'dd:testSuiteStart': ({
+        testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal, testAnnotations = [],
+      }) => {
+        this.recordTestDeclarations(testSuite, testAnnotations)
+        // Cypress 6 omits the execution mode from the Node plugin configuration.
+        const isTextTerminal = this.cypressConfig.isTextTerminal ?? browserIsTextTerminal
+        if (!isTextTerminal) {
+          this.isFlakyTestRetriesEnabled = false
+          this.isDynamicAtrEnabled = false
+          this.flakyTestRetriesCount = 0
+        }
+        let frameworkRetries = this.originalCypressRetries
+        if (typeof frameworkRetries !== 'number') {
+          const configured = this.originalCypressRetries?.[isTextTerminal ? 'runMode' : 'openMode']
+          frameworkRetries = configured === true
+            ? this.originalCypressRetries.experimentalOptions?.maxRetries ?? 0
+            : configured || 0
+        }
         const suitePayload = {
-          isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionEnabled:
+            this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
+          frameworkRetries,
+          configuredRetries: this.configuredCypressRetries,
+          originalRetries: this.originalCypressRetries,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
-          earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
+          earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
@@ -1683,15 +2289,19 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          isDynamicAtrEnabled: this.isDynamicAtrEnabled,
+          isTextTerminal,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
           rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
 
-        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan = this.#pendingTestSuiteSpans.get(testSuite) ||
+          this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {
-        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        this.hasTestsReported = true
+        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex, annotations } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }
         }
@@ -1707,17 +2317,27 @@ class CypressPlugin {
           if (!this.skippedTestIds.has(skippedTestId)) {
             this.skippedTestIds.add(skippedTestId)
             this.skippedTests.push(test)
+            const testSuiteSpan = this.#pendingTestSuiteSpans.get(testSuite)
+            if (this.isItrEnabled && testSuiteSpan) {
+              try {
+                const count = testSuiteSpan.context().getTag(TEST_ITR_SKIPPING_COUNT) || 0
+                testSuiteSpan.setTag(TEST_ITR_SKIPPING_COUNT, count + 1)
+                testSuiteSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+              } catch (error) {
+                log.error('Could not report Test Impact Analysis skips for suite %s: %s', testSuite, error)
+              }
+            }
           }
           this.isTestsSkipped = true
           return { shouldSkip: true }
         }
 
-        if (isAttemptToFix) {
+        if (isAttemptToFix && !annotations?.noAutoRetry) {
           logAttemptToFixTestExecution(testSuite, testName, this.loggedAttemptToFixTests)
         }
 
         // For disabled tests (not attemptToFix), skip them
-        if (!isAttemptToFix && isDisabled) {
+        if ((!isAttemptToFix || annotations?.noAutoRetry) && isDisabled && !annotations?.mustFail) {
           return { shouldSkip: true }
         }
         // Quarantined tests (not attemptToFix) run normally but their failures are caught
@@ -1731,6 +2351,8 @@ class CypressPlugin {
             isForcedToRun,
             isDisabled,
             isQuarantined,
+            isAttemptToFix,
+            annotations,
           })
         }
 
@@ -1749,12 +2371,17 @@ class CypressPlugin {
           testSourceStack,
           testSuite,
           testSuiteAbsolutePath,
+          testId,
           testName,
           testItTitle,
           isNew,
           isEfdRetry,
           isAttemptToFix,
+          annotations,
           isModified,
+          hasNativeRetries,
+          hasNativeExperimentalRetries,
+          nativeRetryFloor,
           duration,
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
@@ -1784,7 +2411,10 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const isEfdManagedTest = (isNew || isModified) && this.isEarlyFlakeDetectionEnabled && !isAttemptToFix
+        const isEfdManagedTest = !annotations?.noAutoRetry && (isNew || isModified) &&
+          this.isEarlyFlakeDetectionEnabled &&
+          hasEfdRetries(this.earlyFlakeDetectionRetryPolicy) &&
+          !isAttemptToFix
         let testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
         let didAbortSlowEfdRetries = false
         if (isEfdManagedTest && !isEfdRetry && this.efdRetryCountByTest[testSuite]?.[testName] === undefined) {
@@ -1794,12 +2424,24 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'slow')
           }
         }
+        // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+        if (
+          !annotations?.noAutoRetry &&
+          this.isDynamicAtrEnabled &&
+          this.isFlakyTestRetriesEnabled &&
+          !isAttemptToFix &&
+          !isEfdRetry &&
+          !isEfdManagedTest &&
+          this.getDynamicAtrRetryCountForTest(testSuite, testId) === undefined
+        ) {
+          this.setDynamicAtrRetryCountForTest(testSuite, testId, duration, nativeRetryFloor)
+        }
         if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
           testStatus = 'pass'
         }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
-        const testIdentifier = `${testSuite}\0${testName}`
+        const testIdentifier = `${testSuite}\0${testId ?? testName}`
         let testStatuses = this.testStatuses[testIdentifier]
         if (testStatuses) {
           testStatuses.push(testStatus)
@@ -1858,7 +2500,7 @@ class CypressPlugin {
         }
         // Check if all EFD retries failed
         if (isEfdManagedTest) {
-          const efdRetryCount = this.getEfdRetryCountForTest(testSuite, testName)
+          const efdRetryCount = this.efdRetryCountByTest[testSuite]?.[testName]
           const isLastEfdAttempt = testStatuses.length === efdRetryCount + 1
           if (efdRetryCount > 0 && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
             this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -1885,13 +2527,15 @@ class CypressPlugin {
             testSuite,
             testName,
             status: testStatus,
-            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+            isDisabled: !annotations?.mustFail && activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+            isQuarantined: !annotations?.mustFail && activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
-        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
-          this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
+        const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testId)
+        const atrRetryCount = this.isDynamicAtrEnabled ? dynamicAtrRetryCount : this.flakyTestRetriesCount
+        if (!annotations?.noAutoRetry && this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+          atrRetryCount > 0 && testStatuses.length === atrRetryCount + 1 &&
           testStatuses.every(status => status === 'fail')) {
           this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
@@ -1931,6 +2575,7 @@ class CypressPlugin {
         }
 
         const finishedTest = {
+          testId,
           testName,
           testStatus,
           finishTime: this._now(),
@@ -1938,6 +2583,10 @@ class CypressPlugin {
           isEfdRetry,
           isEfdManagedTest,
           isAttemptToFix,
+          hasNativeRetries,
+          hasNativeExperimentalRetries,
+          mustFail: annotations?.mustFail,
+          noAutoRetry: annotations?.noAutoRetry,
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)
@@ -1957,7 +2606,7 @@ class CypressPlugin {
         })
         this.activeTestSpan = null
 
-        return null
+        return dynamicAtrRetryCount === undefined ? null : { dynamicAtrRetryCount }
       },
       'dd:addTags': (tags) => {
         if (this.activeTestSpan) {

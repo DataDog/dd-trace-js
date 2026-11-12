@@ -2,9 +2,12 @@
 
 ## Overview
 
-Every LLM provider uses a different message format. Before implementing message extraction, you **must** read the provider's actual source code and existing plugin implementation to understand its specific format.
+Every LLM provider uses a different message format. Before implementing message extraction, you **must** read the
+provider's actual source code and existing plugin implementation to understand its specific format.
 
-All plugins must normalize messages to the standard LLMObs format: `[{ content: string, role: string }]`
+`llm` operations pass message objects to `tagLLMIO`. The tagger defaults a missing role to `''` and supports
+content, tool-call, tool-result and audio fields; a tool-only message need not carry content.
+Embedding, retrieval, workflow, agent, task, step, and tool operations use documents or text values instead.
 
 Common roles: `'user'`, `'assistant'`, `'system'`, `'tool'`
 
@@ -23,25 +26,46 @@ Common variations include:
 - **Simple array** — messages are already `[{role, content}]` (e.g. OpenAI)
 - **Nested content blocks** — content is an array of typed objects (e.g. Anthropic `[{type: 'text', text: '...'}]`)
 - **Parts format** — messages use a `parts` array inside a `contents` array (e.g. Google GenAI)
-- **Role normalization** — provider uses different role names that must be mapped (e.g. Google's `'model'` → `'assistant'`)
+- **Role normalization** — provider uses different role names that must be mapped (e.g. Google's `'model'` →
+  `'assistant'`)
 - **Streaming** — content arrives as deltas that must be accumulated across chunks
 
 ## How to Research a New Provider
 
-1. Read the existing tracing plugin for the package (`packages/datadog-plugin-<name>/src/index.js`) to understand what arguments and results look like
+1. Read the package's tracing plugin (`packages/datadog-plugin-<name>/src/index.js`) for argument and result shapes
 2. Look at the provider's SDK source or API docs to understand response shapes
 3. Check an existing LLMObs plugin for a similar provider as a reference
 
 ## Reference Implementations
 
 The best examples of message extraction for the providers we support:
-- Anthropic: [`packages/datadog-plugin-anthropic/src/llmobs.js`](../../../../../packages/datadog-plugin-anthropic/src/llmobs.js)
-- Google GenAI: [`packages/datadog-plugin-google-genai/src/llmobs.js`](../../../../../packages/datadog-plugin-google-genai/src/llmobs.js)
+- Anthropic: `packages/dd-trace/src/llmobs/plugins/anthropic/util.js`
+- Google GenAI: `packages/dd-trace/src/llmobs/plugins/genai/util.js`
 
 ## Key Implementation Notes
 
-- Always handle null/undefined with fallback defaults (`|| ''` and `|| []`)
+- Preserve valid falsy values. Use nullish defaults such as `?? ''` or `?? []` when only `null` / `undefined` mean
+  absent, and follow the provider's semantics when an empty value also means absent
 - Normalize `'model'` role to `'assistant'` for consistency (preserve `'system'`, `'tool'`, `'function'`)
-- For array content parts (Anthropic, Google), join text parts with `''`
+- For array content parts, the separator is the provider's, not a default: `genai/util.js` joins text parts with
+  `'\n'`, `anthropic/util.js` with `','`
 - For streaming, accumulate delta content across chunks before tagging
-- Always return `[{ content: '', role: '' }]` on error (never omit output messages)
+- Error output follows the integration contract: OpenAI and GenAI emit an empty message, while Anthropic omits
+  output when there is no result
+
+### OpenAI Realtime token usage
+
+Realtime uses singular `input_token_details` and `output_token_details`, unlike
+Chat/Responses usage fields. Preserve audio counts as `input_audio_tokens` and
+`output_audio_tokens`, cached input as `cache_read_input_tokens`, and
+`input_token_details.cached_tokens_details.audio_tokens` as `cache_audio_read_tokens`.
+All are subsets of the inclusive totals. Keep explicit zero values; omit absent or
+invalid counts so the backend can distinguish unknown cache splits from zero audio.
+
+Keep reported text and image counts as `input_text_tokens`, `output_text_tokens`,
+and `input_image_tokens`. Map cached text/image intersections from
+`input_token_details.cached_tokens_details` to `cache_text_read_tokens` and
+`cache_image_read_tokens`. All modality counts include their cached subset. Never
+infer text from total minus audio, or cached text from cached total minus cached
+audio: images and incomplete provider details make those subtractions ambiguous.
+Optional counts must be nonnegative safe integers; preserve reported zero values.

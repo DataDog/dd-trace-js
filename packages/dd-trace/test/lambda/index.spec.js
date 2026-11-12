@@ -61,7 +61,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      const result = await datadog(app.handler)(_event, _context)
+      const wrappedHandler = datadog(app.handler)
+      const result = await wrappedHandler(_event, _context)
       assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
       await agent.assertSomeTraces(traces => {
@@ -83,7 +84,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
       let result
-      datadog(app.callbackHandler)(_event, _context, (_error, response) => {
+      const wrappedHandler = datadog(app.callbackHandler)
+      wrappedHandler(_event, _context, (_error, response) => {
         result = response
       })
 
@@ -108,7 +110,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      await assert.rejects(datadog(app.errorHandler)(_event, _context), { name: 'CustomError' })
+      const wrappedHandler = datadog(app.errorHandler)
+      await assert.rejects(wrappedHandler(_event, _context), { name: 'CustomError' })
 
       await agent.assertSomeTraces(traces => {
         assert.strictEqual(traces[0].length, 1)
@@ -129,7 +132,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      const result = await datadog(app.swappedArgsHandler)(_event, {}, _context)
+      const wrappedHandler = datadog(app.swappedArgsHandler)
+      const result = await wrappedHandler(_event, {}, _context)
       assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
       await agent.assertSomeTraces(traces => {
@@ -175,7 +179,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      const result = await datadog(app.authorizerHandler)(_event)
+      const wrappedHandler = datadog(app.authorizerHandler)
+      const result = await wrappedHandler(_event)
       assert.strictEqual(result.principalId, 'user123')
       assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
 
@@ -200,7 +205,8 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      const result = await datadog(app.authorizerHandlerSync)(_event)
+      const wrappedHandler = datadog(app.authorizerHandlerSync)
+      const result = await wrappedHandler(_event)
       assert.strictEqual(result.principalId, 'user123')
       assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
 
@@ -225,8 +231,9 @@ describe('lambda', () => {
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
+      const wrappedHandler = datadog(app.authorizerErrorHandler)
       await assert.rejects(
-        datadog(app.authorizerErrorHandler)(_event),
+        wrappedHandler(_event),
         { name: 'AuthorizationError', message: 'Unauthorized' }
       )
 
@@ -257,7 +264,8 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
-      const result = datadog(app.finishSpansEarlyTimeoutHandler)(_event, _context)
+      const wrappedHandler = datadog(app.finishSpansEarlyTimeoutHandler)
+      const result = wrappedHandler(_event, _context)
 
       const checkTraces = agent.assertSomeTraces(traces => {
         for (const trace of traces[0]) {
@@ -293,7 +301,8 @@ describe('lambda', () => {
         const app = require(_handlerPath)
         datadog = require('./fixtures/datadog-lambda')
 
-        const result = datadog(app.timeoutHandler)(_event, _context)
+        const wrappedHandler = datadog(app.timeoutHandler)
+        const result = wrappedHandler(_event, _context)
 
         const checkTraces = agent.assertSomeTraces(traces => {
           const trace = traces[0][0]
