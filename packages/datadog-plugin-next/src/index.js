@@ -159,10 +159,6 @@ class NextPlugin extends ServerPlugin {
     const error = ctx.error ?? span.context().getTag('error')
     const requestError = req.error || nextRequest?.error
 
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && nextRequest) {
-      addOtelRequestTags(span, this.config, nextRequest)
-    }
-
     if (requestError) {
       // prioritize user-set errors from API routes
       span.setTag('error', requestError)
@@ -301,32 +297,14 @@ function setInstrumentationHttpResourceIfOwned (span, resource) {
   }
 }
 /**
- * @param {import('node:http').IncomingMessage | Request} req
- * @returns {req is Request}
- */
-function isWebRequest (req) {
-  return 'get' in req.headers && typeof req.headers.get === 'function'
-}
-
-/**
  * @param {import('../../dd-trace/src/opentracing/span')} span
  * @param {Record<string, unknown>} config
- * @param {import('node:http').IncomingMessage | Request} req
+ * @param {import('node:http').IncomingMessage} req
  */
 function addOtelRequestTags (span, config, req) {
-  let url
-  let userAgent
-  let peerAddress
-  if (isWebRequest(req)) {
-    url = req.url
-    userAgent = req.headers.get('user-agent') ?? undefined
-  } else {
-    url = extractURL(req)
-    userAgent = req.headers['user-agent']
-    peerAddress = req.socket?.remoteAddress
-  }
-
-  span.setTag('http.url', obfuscateQs(config, url))
+  const userAgent = req.headers['user-agent']
+  const peerAddress = req.socket?.remoteAddress
+  span.setTag('http.url', obfuscateQs(config, extractURL(req)))
   if (userAgent !== undefined) span.setTag('http.useragent', userAgent)
   if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
 }

@@ -2292,7 +2292,7 @@ describe('compiled Next runtimes', () => {
       })
     }
 
-    it('captures Web NextRequest attributes through the App Route lifecycle', async () => {
+    it('preserves Node request attributes through the App Route lifecycle', async () => {
       class AppRouteRouteModule {
         definition = { pathname: '/api/web-request' }
 
@@ -2310,7 +2310,7 @@ describe('compiled Next runtimes', () => {
       }
       applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
 
-      const request = new Request('https://example.com/api/web-request?token=secret', {
+      const request = new Request('http://n/api/web-request?token=secret', {
         headers: { 'user-agent': 'test-agent/1.0' },
         method: 'PROPFIND',
       })
@@ -2333,7 +2333,12 @@ describe('compiled Next runtimes', () => {
           },
         })
       })
-      const nodeRequest = { headers: {}, method: 'PROPFIND', url: '/api/web-request?token=secret' }
+      const nodeRequest = {
+        headers: { host: 'example.com', 'user-agent': 'test-agent/1.0' },
+        method: 'PROPFIND',
+        url: '/api/web-request?token=secret',
+        socket: { encrypted: true },
+      }
       const nodeResponse = new http.ServerResponse(nodeRequest)
       const routeModule = new AppRouteRouteModule()
 
