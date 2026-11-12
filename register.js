@@ -26,7 +26,8 @@ if (shouldRegisterSyncLoaderHooks()) {
   }
 }
 
-if (!isSyncLoaderRegistered) {
+// `module.register` is gone in Node.js 27+ (nodejs/node#67090); skip instead of crashing the preload.
+if (!isSyncLoaderRegistered && register) {
   const { getLoaderRegisterOptions } = require('./packages/dd-trace/src/esm-module-load')
   register('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
 }
