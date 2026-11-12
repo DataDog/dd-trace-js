@@ -136,6 +136,20 @@ describe('register.js', () => {
     )
   })
 
+  it('skips the async loader if module.register has been removed', () => {
+    const requireEsmError = new Error('require(esm) is disabled')
+    requireEsmError.code = 'ERR_REQUIRE_ESM'
+
+    loadRegister({
+      register: undefined,
+      registerSyncLoaderHooks: sinon.stub().throws(new Error('should not be called')),
+      supportsSyncHooks: sinon.stub().throws(requireEsmError),
+      version: { NODE_MAJOR: 27, NODE_MINOR: 0, NODE_PATCH: 0 },
+    })
+
+    sinon.assert.notCalled(emitWarning)
+  })
+
   it('warns and falls back if sync hook support detection fails', () => {
     const register = sinon.stub()
     const error = new Error('support detection failure')
