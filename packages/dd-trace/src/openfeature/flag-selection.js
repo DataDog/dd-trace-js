@@ -39,7 +39,7 @@ function canonicalize (option) {
     flaggingCore ??= require('../../../../vendor/dist/@datadog/flagging-core')
     return flaggingCore.canonicalizeFlagSelection(option)
   } catch {
-    // A throwing getter, proxy or iterator in the option, or a missing vendored bundle: nothing can be sent.
+    // Canonicalization failed or the vendored bundle could not load: nothing can be sent.
     return { error: 'malformed_selection' }
   }
 }

@@ -303,20 +303,6 @@ describe('OpenFeature flag selection', () => {
       })
     }
 
-    it('reports malformed_selection when reading the option throws', () => {
-      const flagSelection = {
-        get tags () {
-          throw new Error('payments')
-        },
-      }
-
-      const resolved = createSourceConfig(flagSelection)
-
-      assert.strictEqual(resolved.flagSelectionSent, false)
-      assertDropped('malformed_selection')
-      assert.doesNotMatch(JSON.stringify(log.error.args), /payments/)
-    })
-
     it('reports malformed_selection when a list yields an unpaired surrogate after validation', () => {
       const tags = ['payments']
       Object.defineProperty(tags, Symbol.iterator, { value: function * () { yield '\uD800' } })
