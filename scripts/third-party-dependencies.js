@@ -67,7 +67,11 @@ function listBunLockDependencies (lockPath) {
     visited.add(packagePath)
 
     const dependency = splitBunPackageSpec(entry[0])
-    const childContext = { packagePath, parent: context }
+    let parent = context
+    while (parent && !packagePath.startsWith(`${parent.packagePath}/`)) {
+      parent = parent.parent
+    }
+    const childContext = { packagePath, parent }
     if (dependency.version.startsWith('workspace:')) {
       const workspace = lock.workspaces[dependency.version.slice('workspace:'.length)]
       if (!isObject(workspace)) throw new Error(`Missing ${lockPath} workspace for ${packagePath}`)

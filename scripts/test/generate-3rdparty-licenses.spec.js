@@ -117,6 +117,34 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     ])
   })
 
+  for (const prefix of ['', 'outer/']) {
+    it(`attributes both versions when a dependency is hoisted to ${prefix || 'the root'}`, async () => {
+      const packages = {
+        [`${prefix}parent`]: ['parent@1.0.0', '', { dependencies: { child: '1.0.0', shared: 'npm:foo@1.0.0' } }],
+        [`${prefix}parent/child`]: ['child@1.0.0', '', { dependencies: { '@scope/hoisted': '1.0.0' } }],
+        [`${prefix}parent/shared`]: ['foo@1.0.0', '', {}],
+        [`${prefix}@scope/hoisted`]: ['@scope/hoisted@1.0.0', '', { dependencies: { shared: 'npm:foo@2.0.0' } }],
+        [`${prefix}shared`]: ['foo@2.0.0', '', {}],
+      }
+      if (prefix) packages.outer = ['outer@1.0.0', '', { dependencies: { parent: '1.0.0' } }]
+      fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), JSON.stringify({
+        lockfileVersion: 3,
+        workspaces: { '': { dependencies: { [prefix ? 'outer' : 'parent']: '1.0.0' } } },
+        packages,
+      }))
+
+      await runGenerator({
+        DD_TEST_LICENSE_METADATA: JSON.stringify({
+          '1.0.0': { license: 'MIT' },
+          '2.0.0': { license: 'Apache-2.0' },
+        }),
+      })
+
+      const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
+      assert.match(generated, /"foo",[^\r\n]*"\['MIT', 'Apache-2.0'\]"/)
+    })
+  }
+
   it('appends copied-source attributions after the installed dependencies', async () => {
     fs.writeFileSync(
       path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),
