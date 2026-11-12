@@ -130,6 +130,83 @@ describe('plugin fixture discovery', () => {
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })
   })
+
+  it('installs native Express boundaries for an isolated PostgreSQL integration', () => {
+    withInstallerFixture({ PLUGINS: 'pg' }, fixtureRoot => {
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions/package.json'), 'utf8')).workspaces
+      assert.ok(packages.includes('express@4.3.0'))
+      assert.ok(packages.includes('express@5.0.0'))
+    })
+  })
+
+  it('injects LangGraph peers into its scoped workspace', () => {
+    withInstallerFixture({ PLUGINS: 'langgraph', PACKAGE_VERSION_RANGE: '1.1.2' }, fixtureRoot => {
+      const manifest = JSON.parse(readFileSync(
+        join(fixtureRoot, 'versions/@langchain/langgraph@1.1.2/package.json'), 'utf8'
+      ))
+      assert.deepEqual(manifest.dependencies, {
+        '@langchain/langgraph': '1.1.2',
+        '@langchain/core': '^1.0.1',
+        zod: '^3.25.32',
+        'zod-to-json-schema': '^3.22.4',
+      })
+    }, {
+      '@langchain/langgraph': {
+        name: '@langchain/langgraph',
+        version: '1.1.2',
+        peerDependencies: {
+          '@langchain/core': '^1.0.1',
+          zod: '^3.25.32 || ^4.2.0',
+          'zod-to-json-schema': '^3.x',
+        },
+        devDependencies: { 'zod-to-json-schema': '^3.22.4' },
+      },
+    })
+  })
+
+  it('preserves the Mongo sanitizer Express cap while sharing native declarations', () => {
+    withInstallerFixture({ PLUGINS: 'express-mongo-sanitize' }, fixtureRoot => {
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions/package.json'), 'utf8')).workspaces
+      assert.ok(packages.includes('express@4.3.0'))
+      assert.equal(packages.some(name => /^express@5(?:\.|$)/.test(name)), false)
+    })
+  })
+
+  it('preserves the Apollo server Fastify floor while sharing native declarations', () => {
+    withInstallerFixture({ PLUGINS: 'apollo-server-core' }, fixtureRoot => {
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions/package.json'), 'utf8')).workspaces
+      assert.equal(packages.some(name => /^fastify@[12](?:\.|$)/.test(name)), false)
+      assert.ok(packages.includes('fastify@3.0.0'))
+    })
+  })
+
+  it('prefers published peer ranges and resolves workspace-only development dependencies', () => {
+    withInstallerFixture({ PLUGINS: 'langchain' }, fixtureRoot => {
+      const manifest = JSON.parse(readFileSync(
+        join(fixtureRoot, 'versions/@langchain/google-genai@0.1.0/package.json'), 'utf8'
+      ))
+      assert.equal(manifest.dependencies['@langchain/core'], '>=0.2.21 <0.4.0')
+      const cohere = JSON.parse(readFileSync(
+        join(fixtureRoot, 'versions/@langchain/cohere@0.1.0/package.json'), 'utf8'
+      ))
+      const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
+      assert.equal(cohere.dependencies['@langchain/core'], latests['@langchain/core'])
+    }, {
+      langchain: { name: 'langchain', version: '1.0.0' },
+      '@langchain/anthropic': { name: '@langchain/anthropic', version: '1.0.0' },
+      '@langchain/cohere': {
+        name: '@langchain/cohere',
+        version: '0.1.0',
+        devDependencies: { '@langchain/core': 'workspace:*' },
+      },
+      '@langchain/google-genai': {
+        name: '@langchain/google-genai',
+        version: '0.1.0',
+        devDependencies: { '@langchain/core': 'workspace:*' },
+        peerDependencies: { '@langchain/core': '>=0.2.21 <0.4.0' },
+      },
+    })
+  })
 })
 
 /**
@@ -137,8 +214,9 @@ describe('plugin fixture discovery', () => {
  *
  * @param {Record<string, string>} env
  * @param {(fixtureRoot: string) => void} assertions
+ * @param {Record<string, object>} manifests
  */
-function withInstallerFixture (env, assertions) {
+function withInstallerFixture (env, assertions, manifests = {}) {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'dd-trace-plugin-installer-'))
   try {
     const scripts = join(fixtureRoot, 'scripts')
@@ -149,15 +227,17 @@ function withInstallerFixture (env, assertions) {
     copyFileSync(join(root, 'scripts', 'install_plugin_modules.js'), join(scripts, 'install_plugin_modules.js'))
 
     const preload = join(fixtureRoot, 'preload.cjs')
-    writeFileSync(preload, String.raw`
+    writeFileSync(preload, `
 const fs = require('node:fs')
 const path = require('node:path')
 const execPath = require.resolve(process.env.DD_INSTALLER_EXEC_PATH)
 require.cache[execPath] = {
   exports (command, options) {
-    const packagePath = path.join(options.cwd, 'node_modules/bullmq')
-    fs.mkdirSync(packagePath, { recursive: true })
-    fs.writeFileSync(path.join(packagePath, 'package.json'), '{"name":"bullmq","version":"5.66.0"}\n')
+    for (const [name, manifest] of Object.entries(JSON.parse(process.env.DD_INSTALLER_MANIFESTS))) {
+      const packagePath = path.join(options.cwd, 'node_modules', name)
+      fs.mkdirSync(packagePath, { recursive: true })
+      fs.writeFileSync(path.join(packagePath, 'package.json'), JSON.stringify(manifest))
+    }
   },
 }
 `)
@@ -166,6 +246,7 @@ require.cache[execPath] = {
       env: {
         ...process.env,
         DD_INSTALLER_EXEC_PATH: join(root, 'scripts/helpers/exec.js'),
+        DD_INSTALLER_MANIFESTS: JSON.stringify({ bullmq: { name: 'bullmq', version: '5.66.0' }, ...manifests }),
         ...env,
       },
       stdio: 'pipe',

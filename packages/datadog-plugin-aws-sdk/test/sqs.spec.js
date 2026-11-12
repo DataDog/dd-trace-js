@@ -27,7 +27,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName, resolvedVersion) => {
+    withAwsSdkVersions('@aws-sdk/client-sqs', (version, moduleName, resolvedVersion) => {
       let AWS
       let sqs
       let queueName
@@ -35,9 +35,9 @@ describe('Plugin', () => {
       let QueueUrl
       let tracer
 
-      const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
       // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
-      const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
+      const promisesSupported = moduleName !== 'aws-sdk' || semver.gte(resolvedVersion, '2.3.0')
 
       beforeEach(() => {
         const id = randomUUID()

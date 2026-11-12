@@ -553,7 +553,7 @@ function resolveDependencyVersions (
   if (supportedRange === undefined) return { supportedRange, tested: [] }
   const testedVersions = new Set()
 
-  const dependencyDeclarations = testDeclarations.filter(declaration => declaration.dep)
+  const dependencyDeclarations = testDeclarations.filter(declaration => declaration.dep && declaration.versions?.length)
   const testedDeclarations = dependencyDeclarations.length
     ? dependencyDeclarations
     : [...declarations, ...testDeclarations]

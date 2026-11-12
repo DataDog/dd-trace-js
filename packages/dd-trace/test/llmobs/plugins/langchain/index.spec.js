@@ -80,10 +80,105 @@ describe('integrations', () => {
   // emits the single `llm` span. This avoids two llm spans (and double-counted
   // tokens/cost) for one underlying call, while keeping the provider's
   // cache-aware token accounting.
+  describe('@langchain/cohere', () => {
+    const { getEvents } = useLlmObs({ plugin: 'langchain' })
+
+    withVersions('langchain', '@langchain/cohere', (version) => {
+      beforeEach(() => {
+        langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
+      })
+
+      it('submits an llm span for a cohere call', async function () {
+        if (version === '0.1.0') this.skip() // cannot patch client to mock response on lower versions
+
+        const cohere = new langchainCohere.Cohere({
+          model: 'command',
+          client: {
+            generate () {
+              return {
+                generations: [
+                  {
+                    text: 'hello world!',
+                  },
+                ],
+                meta: {
+                  billed_units: {
+                    input_tokens: 8,
+                    output_tokens: 12,
+                  },
+                },
+              }
+            },
+          },
+        })
+
+        await cohere.invoke('Hello!')
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          modelName: 'command',
+          modelProvider: 'cohere',
+          name: 'langchain.llms.cohere.Cohere',
+          inputMessages: [{ content: 'Hello!', role: '' }],
+          outputMessages: [{ content: 'hello world!', role: '' }],
+          metadata: MOCK_NOT_NULLISH,
+          // @langchain/cohere does not provide token usage in the response
+          metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+          tags: { ml_app: 'test', integration: 'langchain' },
+        })
+      })
+    })
+  })
+
+  describe('langchain', () => {
+    const { getEvents } = useLlmObs({ plugin: 'langchain' })
+
+    withVersions('langchain', 'langchain', (version) => {
+      beforeEach(() => {
+        langchainOpenai = require(`../../../../../../versions/langchain@${version}`).get('@langchain/openai')
+      })
+
+      it('submits an llm span for an openai llm call', async () => {
+        const llm = new langchainOpenai.OpenAI({
+          model: 'gpt-3.5-turbo-instruct',
+          configuration: {
+            fetch: async () => new Response(JSON.stringify({
+              id: 'cmpl-test',
+              object: 'text_completion',
+              created: 1,
+              model: 'gpt-3.5-turbo-instruct',
+              choices: [{ text: '\n\n4', index: 0, logprobs: null, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 },
+            }), { headers: { 'content-type': 'application/json' } }),
+          },
+        })
+
+        await llm.invoke('What is 2 + 2?')
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          modelName: 'gpt-3.5-turbo-instruct',
+          modelProvider: 'openai',
+          name: 'langchain.llms.openai.OpenAI',
+          inputMessages: [{ content: 'What is 2 + 2?', role: '' }],
+          outputMessages: [{ content: '\n\n4', role: '' }],
+          metadata: MOCK_NOT_NULLISH,
+          metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
+          tags: { ml_app: 'test', integration: 'langchain' },
+        })
+      })
+    })
+  })
+
   describe('langchain with a provider integration also enabled', () => {
     const { getEvents } = useLlmObs({ plugin: ['langchain', 'anthropic'] })
 
-    withVersions('langchain', ['@langchain/core'], (version) => {
+    withVersions('langchain', '@langchain/anthropic', (version) => {
       beforeEach(() => {
         langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
         langchainAnthropicVersion = require(`../../../../../../versions/@langchain/anthropic@${version}`).version()
@@ -183,7 +278,6 @@ describe('integrations', () => {
           langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
             .get('@langchain/openai')
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
-          langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 
           langchainAnthropicVersion = require(`../../../../../../versions/@langchain/anthropic@${version}`).version()
 
@@ -213,27 +307,6 @@ describe('integrations', () => {
         })
 
         describe('llm', () => {
-          it('submits an llm span for an openai llm call', async () => {
-            const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
-
-            await llm.invoke('What is 2 + 2?')
-
-            const { apmSpans, llmobsSpans } = await getEvents()
-
-            assertLlmObsSpanEvent(llmobsSpans[0], {
-              span: apmSpans[0],
-              spanKind: 'llm',
-              modelName: 'gpt-3.5-turbo-instruct',
-              modelProvider: 'openai',
-              name: 'langchain.llms.openai.OpenAI',
-              inputMessages: [{ content: 'What is 2 + 2?', role: '' }],
-              outputMessages: [{ content: '\n\n4', role: '' }],
-              metadata: MOCK_NOT_NULLISH,
-              metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
-              tags: { ml_app: 'test', integration: 'langchain' },
-            })
-          })
-
           it('does not tag output if there is an error', async () => {
             const llm = new langchainOpenai.OpenAI({ model: 'text-embedding-3-small', maxRetries: 0 })
 
@@ -257,48 +330,6 @@ describe('integrations', () => {
                 message: MOCK_STRING,
                 stack: MOCK_NOT_NULLISH,
               },
-            })
-          })
-
-          it('submits an llm span for a cohere call', async function () {
-            if (version === '0.1.0') this.skip() // cannot patch client to mock response on lower versions
-
-            const cohere = new langchainCohere.Cohere({
-              model: 'command',
-              client: {
-                generate () {
-                  return {
-                    generations: [
-                      {
-                        text: 'hello world!',
-                      },
-                    ],
-                    meta: {
-                      billed_units: {
-                        input_tokens: 8,
-                        output_tokens: 12,
-                      },
-                    },
-                  }
-                },
-              },
-            })
-
-            await cohere.invoke('Hello!')
-
-            const { apmSpans, llmobsSpans } = await getEvents()
-            assertLlmObsSpanEvent(llmobsSpans[0], {
-              span: apmSpans[0],
-              spanKind: 'llm',
-              modelName: 'command',
-              modelProvider: 'cohere',
-              name: 'langchain.llms.cohere.Cohere',
-              inputMessages: [{ content: 'Hello!', role: '' }],
-              outputMessages: [{ content: 'hello world!', role: '' }],
-              metadata: MOCK_NOT_NULLISH,
-              // @langchain/cohere does not provide token usage in the response
-              metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })

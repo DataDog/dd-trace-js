@@ -173,7 +173,7 @@ describe('generate supported integrations', () => {
     ])
   })
 
-  it('reports the Pino Pretty version loaded by the Pino tests', async () => {
+  it('reports native Pino Pretty boundaries when its external only injects dependencies', async () => {
     const { rows } = await generateSupportedIntegrations({
       nodeVersions: ['26.2.0'],
       plugins: new Map([['pino-pretty', 'pino']]),
@@ -182,7 +182,9 @@ describe('generate supported integrations', () => {
       ],
     })
 
-    assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', ['13.2.0'])])
+    assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', [
+      ...Array.from({ length: 12 }, (_, index) => `${index + 1}.0.0`), latestVersions['pino-pretty'],
+    ])])
   })
 
   for (const nodeRange of ['>=18', '>=22']) {
