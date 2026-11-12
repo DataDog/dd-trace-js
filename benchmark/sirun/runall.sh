@@ -213,7 +213,9 @@ function run_variant {
     # Append-only writes to a single tempfile from parallel subshells are
     # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
     echo "${D}/${V}" >> "$SKIPPED_FILE"
-  elif [[ ${STATUS} -eq 124 ]]; then
+  elif [[ ${STATUS} -eq 124 \
+      || ( ${STATUS} -eq 137 && ${ELAPSED_MS} -ge $((VARIANT_HARD_TIMEOUT_SECONDS * 1000)) ) ]]; then
+    # 137: node ignored SIGTERM and timeout's --kill-after sent SIGKILL.
     echo "${D}/${V} FAILED: did not finish within the " \
       "${VARIANT_HARD_TIMEOUT_SECONDS}-second safety limit on core ${CPU_AFFINITY}" >&2
     print_cpu_contention "${CPU_AFFINITY}" "${DIAG_CPUS}" "${TICKS_BEFORE}"
