@@ -120,6 +120,7 @@ describe('Feature Flags SDK diagnostics', () => {
     assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/flagevaluation')
     assert.strictEqual(options.headers['Content-Type'], 'application/json')
     assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+    assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
   })
 
   it('reports preloaded rules as ready, without a cached-fallback claim', async () => {
