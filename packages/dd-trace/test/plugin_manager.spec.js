@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { setImmediate } = require('node:timers/promises')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, after, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -26,8 +26,10 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let Fs
   let Nine
   let Graphql
+  let AwsLambda
   let pm
   let registeredDefaults
   let subscriptionCalls
@@ -94,6 +96,10 @@ describe('Plugin Manager', () => {
         static optIn = true
         static id = 'eight'
       },
+      fs: class Fs extends FakePlugin {
+        static id = 'fs'
+        static optIn = true
+      },
       nine: class Nine extends FakePlugin {
         static id = 'nine'
       },
@@ -146,6 +152,9 @@ describe('Plugin Manager', () => {
       graphql: class Graphql extends FakePlugin {
         static id = 'graphql'
       },
+      'aws-lambda': class AwsLambda extends FakePlugin {
+        static id = 'aws-lambda'
+      },
     }
 
     Two = plugins.two
@@ -154,6 +163,8 @@ describe('Plugin Manager', () => {
     Four.prototype.configure = sinon.spy()
     Graphql = plugins.graphql
     Graphql.prototype.configure = sinon.spy()
+    AwsLambda = plugins['aws-lambda']
+    AwsLambda.prototype.configure = sinon.spy()
 
     // disabled plugins
     Five = plugins.five
@@ -163,10 +174,15 @@ describe('Plugin Manager', () => {
 
     Eight = plugins.eight
     Eight.prototype.configure = sinon.spy()
+    Fs = plugins.fs
+    Fs.prototype.configure = sinon.spy()
+
     Nine = plugins.nine
     Nine.prototype.configure = sinon.spy()
 
-    process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME === undefined) {
+      process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
+    }
 
     // Mirrors getValueFromEnvSources: an explicit env value wins, otherwise the registered
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
@@ -180,13 +196,14 @@ describe('Plugin Manager', () => {
       },
     })
     const loadPluginManager = proxyquire.noPreserveCache()
+    const initializeLambda = loadPluginManager('../src/lambda', {
+      '../../../datadog-instrumentations/src/helpers/hook': () => {},
+    })
     PluginManager = loadPluginManager('../src/plugin_manager', {
       './plugins': pluginModules,
+      './lambda': initializeLambda,
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {
-        getEnvironmentVariable (name) {
-          return process.env[name]
-        },
         getValueFromEnvSources (name, skipDefault) {
           if (name === 'DD_TRACE_NINE_ENABLED') {
             throw new Error(`${name} is not registered`)
@@ -206,7 +223,9 @@ describe('Plugin Manager', () => {
 
   afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
+    delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
     delete process.env.DD_TRACE_EIGHT_ENABLED
+    delete process.env.DD_TRACE_FS_ENABLED
     pm.destroy()
   })
 
@@ -388,6 +407,223 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
+    describe('in an AWS Lambda environment', () => {
+      before(() => {
+        process.env.AWS_LAMBDA_FUNCTION_NAME = 'test-function'
+      })
+
+      after(() => {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      })
+
+      it('registers the aws-lambda plugin through Lambda initialization', () => {
+        pm.configure(makeTracerConfig())
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure, { enabled: true })
+      })
+
+      it('configures the plugin once per configuration with the latest settings', () => {
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'first' } }))
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'second' } }))
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledTwice(AwsLambda.prototype.configure)
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure.firstCall, { service: 'first' })
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure.secondCall, { service: 'second' })
+      })
+
+      it('forwards the centralized Lambda namespace and shared tracer settings', () => {
+        pm.configure(makeTracerConfig({
+          DD_API_KEY: 'api-key',
+          DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25,
+          DD_TRACE_AWS_ADD_SPAN_POINTERS: true,
+          dsmEnabled: true,
+          lambda: {
+            DD_API_KEY_SECRET_ARN: 'secret-arn',
+            DD_CAPTURE_LAMBDA_PAYLOAD: true,
+            DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 4,
+            DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk',
+            DD_COLD_START_TRACING: false,
+            DD_DECODE_AUTHORIZER_CONTEXT: false,
+            DD_ENCODE_AUTHORIZER_CONTEXT: false,
+            DD_ENHANCED_METRICS: false,
+            DD_FLUSH_TO_LOG: true,
+            DD_KMS_API_KEY: 'kms-ciphertext',
+            DD_LAMBDA_FIPS_MODE: true,
+            DD_MERGE_XRAY_TRACES: true,
+            DD_MIN_COLD_START_DURATION: 7,
+            DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: false,
+            DD_TRACE_MANAGED_SERVICES: false,
+          },
+          logInjection: false,
+          site: 'datadoghq.eu',
+        }))
+
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure, {
+          addSpanPointers: true,
+          apiKey: 'api-key',
+          apiKeyKms: 'kms-ciphertext',
+          apiKeySecretArn: 'secret-arn',
+          apmFlushDeadlineMs: 25,
+          captureLambdaPayload: true,
+          captureLambdaPayloadMaxDepth: 4,
+          coldStartTraceSkipLib: 'aws-sdk',
+          coldStartTracing: false,
+          createInferredSpan: false,
+          dataStreamsEnabled: true,
+          decodeAuthorizerContext: false,
+          encodeAuthorizerContext: false,
+          enhancedMetrics: false,
+          fipsMode: true,
+          logForwarding: true,
+          logInjection: false,
+          mergeXrayTraces: true,
+          minColdStartTraceDurationMs: 7,
+          serviceRepresentationEnabled: false,
+          site: 'datadoghq.eu',
+        })
+      })
+
+      describe('filesystem tracing', () => {
+        for (const registerFs of [false, true]) {
+          const timing = registerFs ? 'before' : 'after'
+
+          it(`keeps fs opt-in when registered ${timing} configuration`, () => {
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            loadChannel.publish({ name: 'fs' })
+
+            sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: false })
+          })
+
+          it(`honors DD_TRACE_FS_ENABLED=true when registered ${timing} configuration`, () => {
+            process.env.DD_TRACE_FS_ENABLED = 'true'
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            loadChannel.publish({ name: 'fs' })
+
+            sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: true })
+          })
+
+          it(`honors programmatic fs enablement when registered ${timing} configuration`, () => {
+            if (registerFs) loadChannel.publish({ name: 'fs' })
+            pm.configure(makeTracerConfig())
+            pm.configurePlugin('fs', { enabled: true })
+            loadChannel.publish({ name: 'fs' })
+
+            sinon.assert.calledWithMatch(Fs.prototype.configure, { enabled: true })
+          })
+        }
+
+        for (const enable of ['environment', 'programmatic']) {
+          describe(`with fs explicitly disabled and a ${enable} opt-in`, () => {
+            before(() => {
+              process.env.DD_TRACE_DISABLED_PLUGINS = 'fs'
+            })
+
+            after(() => {
+              delete process.env.DD_TRACE_DISABLED_PLUGINS
+            })
+
+            it('honors the explicit disabled-plugin list', () => {
+              if (enable === 'environment') process.env.DD_TRACE_FS_ENABLED = 'true'
+              pm.configure(makeTracerConfig())
+              if (enable === 'programmatic') pm.configurePlugin('fs', { enabled: true })
+              loadChannel.publish({ name: 'fs' })
+
+              assert.deepStrictEqual(instantiated, ['aws-lambda'])
+              sinon.assert.notCalled(Fs.prototype.configure)
+            })
+          })
+        }
+      })
+
+      // Both spellings name one integration. Accepting only one and silently ignoring the other
+      // leaves a customer who asked for it to be off with tracing still on.
+      for (const value of [
+        'http, lambda', 'lambda', 'aws-lambda', 'http,aws-lambda', ' lambda ', 'fs,\tlambda', ', aws-lambda,,',
+      ]) {
+        it(`disables the plugin for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+          process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+          pm.configure(makeTracerConfig())
+
+          assert.deepStrictEqual(instantiated, [])
+          sinon.assert.notCalled(AwsLambda.prototype.configure)
+          delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+        })
+      }
+
+      for (const value of ['', 'http,express', 'aws-sdk', 'lambda-something', 'not-lambda', 'aws-lambda-extra']) {
+        it(`leaves the plugin enabled for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+          process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+          pm.configure(makeTracerConfig())
+
+          assert.deepStrictEqual(instantiated, ['aws-lambda'])
+          delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+        })
+      }
+
+      // DD_TRACE_DISABLED_PLUGINS is captured when plugin_manager is required, so the value has
+      // to exist before the outer `beforeEach` loads it — setting it inside the test is too late.
+      // A nested `before` runs ahead of an outer `beforeEach`, which is the same ordering this
+      // suite already relies on for AWS_LAMBDA_FUNCTION_NAME above.
+      for (const value of ['aws-lambda', 'lambda', 'http, lambda', ' aws-lambda ']) {
+        describe(`with DD_TRACE_DISABLED_PLUGINS=${JSON.stringify(value)}`, () => {
+          before(() => {
+            process.env.DD_TRACE_DISABLED_PLUGINS = value
+          })
+
+          after(() => {
+            delete process.env.DD_TRACE_DISABLED_PLUGINS
+          })
+
+          it('disables the plugin under either spelling', () => {
+            pm.configure(makeTracerConfig())
+
+            assert.deepStrictEqual(instantiated, [])
+            sinon.assert.notCalled(AwsLambda.prototype.configure)
+          })
+        })
+      }
+
+      for (const value of ['', 'five,six']) {
+        for (const registerFs of [false, true]) {
+          describe(`with DD_TRACE_DISABLED_PLUGINS=${JSON.stringify(value)} and fs registered ${registerFs}`, () => {
+            before(() => {
+              process.env.DD_TRACE_DISABLED_PLUGINS = value
+            })
+
+            after(() => {
+              delete process.env.DD_TRACE_DISABLED_PLUGINS
+            })
+
+            it('keeps fs opt-in when the explicit list does not disable it', () => {
+              if (registerFs) loadChannel.publish({ name: 'fs' })
+              pm.configure(makeTracerConfig())
+              loadChannel.publish({ name: 'fs' })
+
+              sinon.assert.alwaysCalledWithMatch(Fs.prototype.configure, { enabled: false })
+            })
+          })
+        }
+      }
+    })
+
+    it('activates Lambda when its environment appears after the manager was imported and configured', () => {
+      pm.configure(makeTracerConfig())
+      assert.deepStrictEqual(instantiated, [])
+
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'late-lambda'
+      try {
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'late-service' } }))
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledOnceWithMatch(AwsLambda.prototype.configure, { enabled: true, service: 'late-service' })
+      } finally {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      }
+    })
+
     describe('without the load event', () => {
       it('should not instantiate plugins', () => {
         pm.configure(makeTracerConfig())

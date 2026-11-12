@@ -2,6 +2,7 @@
 
 const { existsSync, mkdirSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
+const { setImmediate } = require('node:timers')
 
 const OWNERSHIP_FILE = '.dd-c8-coverage'
 
@@ -45,6 +46,7 @@ function warmSourceMaps () {
     pendingUrls.add(url)
     if (!warmingScheduled) {
       warmingScheduled = true
+      // Keep coverage work on the real scheduler captured before tests install fake timers.
       setImmediate(warmPendingSourceMaps)
     }
   }
