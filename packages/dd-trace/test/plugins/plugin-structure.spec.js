@@ -49,6 +49,7 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'async-mutex',
   'azure-cosmos',
   'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
@@ -61,6 +62,7 @@ const missingInstrumentationHooks = [
 ]
 
 const hooklessOrchestrionPlugins = new Set([
+  'async-mutex',
   'azure-cosmos',
   'bullmq',
   'langchain',

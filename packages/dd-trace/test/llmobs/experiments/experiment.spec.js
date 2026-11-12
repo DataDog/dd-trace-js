@@ -91,7 +91,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         return fn({ name: 'span' })
       },
       exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
-      annotate: (_span, options) => callsToLlmobs.push(['annotate', options]),
+      _annotateExperimentSpan: (_span, options) => callsToLlmobs.push(['annotate', options]),
       flush: () => callsToLlmobs.push(['flush']),
     }
 
@@ -109,6 +109,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
     assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
+    assert.equal(callsToLlmobs[1][1].expectedOutput, 'apple')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
