@@ -160,6 +160,10 @@ never weaken or delete assertions to make them pass.
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
+- **One PR, one purpose**: every change in a PR must serve its title. Defer drive-by typo fixes,
+  refactors, dependency bumps, and unrelated fixes to a follow-up PR, even when obviously correct.
+- Exceptions: a prerequisite refactor lands as its own PR first, and mechanical fallout or sibling
+  instances of the same bug move with the change.
 
 ## Specialized Workflows
 
