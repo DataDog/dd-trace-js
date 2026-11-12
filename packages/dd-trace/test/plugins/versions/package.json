@@ -243,7 +243,7 @@
     "router": "2.2.0",
     "selenium-webdriver": "4.52.0",
     "sequelize": "6.37.8",
-    "sharedb": "7.0.0",
+    "sharedb": "7.0.1",
     "sinon": "22.1.0",
     "sqlite3": "6.0.1",
     "stripe": "23.0.0",
