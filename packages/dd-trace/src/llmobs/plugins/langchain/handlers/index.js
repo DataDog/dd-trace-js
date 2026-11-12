@@ -12,6 +12,16 @@ class LangChainLLMObsHandler {
 
   setMetaTags () {}
 
+  /**
+   * Token usage for a chat or LLM result. Subclasses widen this where the provider reports usage
+   * somewhere other than `llmOutput`.
+   *
+   * @param {object} results
+   */
+  getTokenUsage (results) {
+    return this.checkTokenUsageChatOrLLMResult(results)
+  }
+
   checkTokenUsageChatOrLLMResult (results) {
     const llmOutput = results.llmOutput
     const tokens = {

@@ -27,8 +27,9 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (command.includes('--format=sha --reverse v5.x master') || command === `git rev-parse ${FULL_SHA}`) {
+        return FULL_SHA
+      }
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return 'chore(deps-dev): bump multer (#10253)'
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
@@ -134,8 +135,9 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (command.includes('--format=sha --reverse v5.x master') || command === `git rev-parse ${FULL_SHA}`) {
+        return FULL_SHA
+      }
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return masterSubject
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
@@ -193,8 +195,9 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (command.includes('--format=sha --reverse v5.x master') || command === `git rev-parse ${FULL_SHA}`) {
+        return FULL_SHA
+      }
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return 'fix(core): incoming change (#123)'
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
@@ -327,4 +330,88 @@ describe('release proposal', () => {
     assert.strictEqual(createReleaseChangelog.firstCall.args[0], hydrateReleaseEntries.firstCall.returnValue)
     assert.strictEqual(createReleaseChangelog.firstCall.args[1], hydrateReleaseEntries.secondCall.returnValue)
   })
+
+  it('labels new release proposal pull requests', () => {
+    const { fail, run } = loadProposalForPullRequest()
+
+    assert.strictEqual(fail.called, false, fail.firstCall?.args[0]?.stack)
+    const command = run.args.find(([command]) => command.startsWith('gh pr create'))[0]
+
+    assert.match(command, / --label release-proposal$/)
+  })
+
+  it('labels existing release proposal pull requests', () => {
+    const { fail, run } = loadProposalForPullRequest(true)
+
+    assert.strictEqual(fail.called, false, fail.firstCall?.args[0]?.stack)
+    const command = run.args.find(([command]) => command.startsWith('gh pr edit'))[0]
+
+    assert.match(command, / --add-label release-proposal$/)
+  })
 })
+
+function loadProposalForPullRequest (pullRequestExists = false) {
+  const createReleaseChangelog = sinon.stub().returns({
+    isMinor: true,
+    markdown: '',
+    warnings: [],
+  })
+  const fail = sinon.stub()
+  const run = sinon.stub().callsFake(command => {
+    if (pullRequestExists && command.startsWith('gh pr create')) {
+      throw new Error('pull request already exists')
+    }
+  })
+
+  const exitListeners = new Set(process.listeners('exit'))
+  const loadProposal = proxyquire.noCallThru().noPreserveCache()
+
+  loadProposal('./proposal', {
+    fs: {
+      appendFileSync: sinon.stub(),
+      mkdirSync: sinon.stub(),
+      writeFileSync: sinon.stub(),
+    },
+    '../../version': { DD_MAJOR: 5, DD_MINOR: 126, DD_PATCH: 0, VERSION: '5.126.0' },
+    './changelog': { createReleaseChangelog },
+    './helpers/requirements': { checkAll: sinon.stub() },
+    './helpers/terminal': {
+      capture: capturePullRequestFlow,
+      checkpoint: sinon.stub(),
+      fail,
+      fatal: sinon.stub(),
+      flags: { y: true },
+      log: sinon.stub(),
+      params: ['5'],
+      pass: sinon.stub(),
+      run,
+      start: sinon.stub(),
+    },
+    './metadata': { hydrateReleaseEntries: sinon.stub().returnsArg(0) },
+  })
+
+  for (const listener of process.listeners('exit')) {
+    if (!exitListeners.has(listener)) process.removeListener('exit', listener)
+  }
+
+  return { fail, run }
+}
+
+/**
+ * @param {string} command
+ */
+function capturePullRequestFlow (command) {
+  if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
+  if (command.includes('--format=sha --reverse v5.x ') || command === `git rev-parse ${FULL_SHA}`) {
+    return FULL_SHA
+  }
+  if (command === `git show -s --format=%s ${FULL_SHA}`) return 'fix(core): apply change (#123)'
+  if (command === 'git log -1 --pretty=%B') return 'v5.126.0'
+  if (command.startsWith('git log --format="%H%x09%s"')) return ''
+  if (command.includes(`v5.127.0-proposal ${FULL_SHA}`)) return 'fix(core): apply change'
+  if (command === 'gh pr view --json number,url') {
+    return JSON.stringify({ number: 123, url: 'https://github.com/DataDog/dd-trace-js/pull/123' })
+  }
+  if (command.startsWith('gh pr view ')) throw new Error('pull request not found')
+  throw new Error(`Unexpected command: ${command}`)
+}

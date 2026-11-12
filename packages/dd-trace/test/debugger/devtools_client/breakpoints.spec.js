@@ -61,6 +61,7 @@ describe('breakpoints', function () {
    *     location: { file: string; lines: string[] };
    *     templateRequiresEvaluation: boolean;
    *     template: string;
+   *     templateRedactionErrors?: { expr: string; message: string }[];
    *     nsBetweenSampling: bigint;
    *     compiledCaptureExpressions?:
    *       import('../../../src/debugger/devtools_client/snapshot').CompiledCaptureExpression[];
@@ -123,7 +124,19 @@ describe('breakpoints', function () {
       '@noCallThru': true,
     }
 
+    const load = proxyquire.noCallThru()
+    const redaction = load('../../../src/debugger/devtools_client/snapshot/redaction', {
+      '../config': {
+        dynamicInstrumentation: {
+          DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
+        },
+      },
+    })
+    const condition = load('../../../src/debugger/devtools_client/condition', { './snapshot/redaction': redaction })
+
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
+      './condition': condition,
       './session': sessionMock,
       './source-maps': sourceMapsMock,
       './state': stateMock,
@@ -492,6 +505,37 @@ describe('breakpoints', function () {
         })
     })
 
+    it('should report why enabling the debugger failed for every probe', async function () {
+      const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+      sessionMock.post.withArgs('Debugger.enable').rejects(enableError)
+      // No script is loaded until the debugger has been enabled
+      stateMock.findScriptFromPartialPath.returns(undefined)
+
+      await assert.rejects(addProbe(), enableError)
+      await assert.rejects(addProbe({ id: 'probe-2' }), enableError)
+
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledTwice(sessionMock.post)
+      sinon.assert.notCalled(stateMock.findScriptFromPartialPath)
+    })
+
+    it('should add the next probe once enabling the debugger succeeds', async function () {
+      const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+      sessionMock.post.withArgs('Debugger.enable')
+        .onFirstCall().rejects(enableError)
+        .onSecondCall().resolves({})
+
+      await assert.rejects(addProbe(), enableError)
+      await addProbe({ id: 'probe-2' })
+
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledThrice(sessionMock.post)
+      assert.ok(stateMock.breakpointToProbes.get(breakpointId)?.has('probe-2'))
+    })
+
     it('should handle condition compilation errors', async function () {
       const config = {
         when: {
@@ -651,6 +695,35 @@ describe('breakpoints', function () {
         ])
       })
 
+      it('should not compile capture expressions reading redacted identifiers', async function () {
+        await addProbe({
+          captureSnapshot: false,
+          captureExpressions: [
+            { name: 'a', expr: { dsl: 'a', json: { ref: 'a' } } },
+            { name: 'pw', expr: { dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } } },
+          ],
+        })
+
+        const probe = getInstalledProbe()
+
+        assert.deepStrictEqual(probe.compiledCaptureExpressions, [
+          {
+            name: 'a',
+            expression: 'a',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'pw',
+            redactionError: {
+              expr: 'pw',
+              message: "Could not evaluate the expression because 'password' was redacted",
+            },
+          },
+        ])
+        // The probe still produces snapshots, so it keeps the snapshot sampling rate
+        assert.strictEqual(probe.nsBetweenSampling, 1_000_000_000n)
+      })
+
       it('should handle capture expression compilation errors', async function () {
         await assert.rejects(
           addProbe({
@@ -710,6 +783,35 @@ describe('breakpoints', function () {
         const probe = getInstalledProbe()
 
         assert.strictEqual(probe.compiledCaptureExpressions, undefined)
+      })
+    })
+
+    describe('templates', function () {
+      it('should record the evaluation errors of template segments reading redacted identifiers', async function () {
+        await addProbe({
+          segments: [
+            { str: 'user: ' },
+            { dsl: 'user.name', json: { getmember: [{ ref: 'user' }, 'name'] } },
+            { str: ', secret: ' },
+            { dsl: 'secret', json: { ref: 'secret' } },
+          ],
+        })
+
+        const probe = getInstalledProbe()
+
+        assert.strictEqual(probe.templateRequiresEvaluation, true)
+        assert.match(probe.template, /,", secret: ","\{redacted\}"\]$/)
+        assert.deepStrictEqual(probe.templateRedactionErrors, [
+          { expr: 'secret', message: "Could not evaluate the expression because 'secret' was redacted" },
+        ])
+      })
+
+      it('should not record evaluation errors if no template segment reads a redacted identifier', async function () {
+        await addProbe({
+          segments: [{ str: 'user: ' }, { dsl: 'user.name', json: { getmember: [{ ref: 'user' }, 'name'] } }],
+        })
+
+        assert.strictEqual(getInstalledProbe().templateRedactionErrors, undefined)
       })
     })
   })

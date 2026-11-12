@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/decisions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 7.30.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.30.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.23.2",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "521"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"input\":\"I was charged twice for my subscription this month.\",\"questions\":[{\"type\":\"choice\",\"name\":\"department\",\"instructions\":\"Which team should handle this request?\",\"choices\":[{\"value\":\"billing\"},{\"value\":\"technical\"},{\"value\":\"sales\"}]},{\"type\":\"score\",\"name\":\"severity\",\"instructions\":\"How severe is the issue?\",\"levels\":[{\"label\":\"Minor\"},{\"label\":\"Workaround available\"},{\"label\":\"Blocking\"}]},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"instructions\":\"Is the customer asking for a refund?\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 17:25:23 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "180000000",
+      "x-ratelimit-remaining-requests": "29990",
+      "x-ratelimit-remaining-tokens": "179982660",
+      "x-ratelimit-reset-requests": "20ms",
+      "x-ratelimit-reset-tokens": "5ms",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-request-id,retry-after,server-timing-total, CF-Ray",
+      "server-timing-total": "45.244",
+      "openai-processing-ms": "45",
+      "x-request-id": "req_e93134547b2b4259ab2f0b1c76466a12",
+      "x-openai-proxy-wasm": "v0.1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=VjA9mo.BGXVBmnvfNNYN5BW.qFOs9hLz3ITT2iEmV9c-1791566722.973575-1.0.1.1-yftthslMuH0gUUs29UOtvFzlUZPeHKMuH5o4piBS8JxYZMpFdQGi8yR3g.tEhyqm0FSXCrszHJ4hQlMSC9KxhdLoSBXxJOJryFrJlue03OYbVfuWVpEstS98rtymfbFJ; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Fri, 09 Oct 2026 17:55:23 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a47f15929e749a43-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"answers\":[{\"type\":\"choice\",\"name\":\"department\",\"choice\":\"billing\",\"probabilities\":[{\"value\":\"billing\",\"probability\":1.0},{\"value\":\"technical\",\"probability\":0.0},{\"value\":\"sales\",\"probability\":0.0}],\"confidence\":1.0},{\"type\":\"score\",\"name\":\"severity\",\"score\":0.7,\"probabilities\":[{\"value\":0,\"label\":\"Minor\",\"probability\":0.42},{\"value\":1,\"label\":\"Workaround available\",\"probability\":0.46},{\"value\":2,\"label\":\"Blocking\",\"probability\":0.12}],\"confidence\":0.19},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"probability\":0.29}],\"usage\":{\"input_tokens\":383,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":383}}"
+  }
+}

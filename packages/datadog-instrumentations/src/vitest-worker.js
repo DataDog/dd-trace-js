@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
+const { deserialize } = require('node:v8')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
 const { channel } = require('dc-polyfill')
@@ -45,8 +46,29 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
+const emptyAnnotations = { mustFail: false, noAutoRetry: false }
+
+/** @param {object} task */
+function getAnnotations (task) {
+  return task.meta?.__ddTestOptAnnotations || emptyAnnotations
+}
+
+/** @param {object} task */
+function getReportedProperties (task) {
+  const properties = taskToTestProperties.get(task) || getVitestTestProperties(
+    getProvidedContext(), task.file.filepath, getTestName(task)
+  )
+  return {
+    isAttemptToFix: properties.isAttemptToFix,
+    isDisabled: properties.isDisabled,
+    isQuarantined: properties.isQuarantined,
+    annotations: getAnnotations(task),
+  }
+}
+
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
+const wrappedTestRunners = new WeakSet()
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -352,8 +374,7 @@ function hasConcurrentTask (tasks) {
   if (!tasks) return false
 
   for (const task of tasks) {
-    if (task.concurrent === true) return true
-    if (hasConcurrentTask(task.tasks)) return true
+    if (task.concurrent === true || hasConcurrentTask(task.tasks)) return true
   }
 
   return false
@@ -381,10 +402,11 @@ function hasConcurrentTests (file) {
  */
 function hasRunnableNewTest (file, providedContext) {
   for (const task of getTypeTasks(file.tasks)) {
-    if (task.mode === 'skip' || task.mode === 'todo') continue
+    if (task.mode === 'skip' || task.mode === 'todo' || getAnnotations(task).noAutoRetry) continue
 
     const testProperties = getVitestTestProperties(providedContext, file.filepath, getTestName(task))
-    if (testProperties.isNew && !testProperties.isAttemptToFix && !testProperties.isDisabled) {
+    if (testProperties.isNew && !testProperties.isAttemptToFix &&
+      (!testProperties.isDisabled || getAnnotations(task).mustFail)) {
       return true
     }
   }
@@ -412,6 +434,14 @@ function finishEfdSuiteAdmissionRequest (requestId, allowed) {
  * @param {unknown} message
  */
 function handleEfdSuiteAdmissionResponse (message) {
+  // Older Vitest 4 forks serialize parent messages explicitly; newer forks and threads send plain values.
+  if (Buffer.isBuffer(message) || (message?.type === 'Buffer' && Array.isArray(message.data))) {
+    try {
+      message = deserialize(Buffer.from(message))
+    } catch {
+      return
+    }
+  }
   if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
 
   const { allowed, requestId } = message[1] || {}
@@ -520,6 +550,11 @@ function wrapSuiteHookFn (hookType, fn, fallbackTask) {
 }
 
 function wrapVitestTestRunner (VitestTestRunner) {
+  // ESM hooks can expose the same runner through multiple module identities.
+  // Wrapping its lifecycle methods twice would report each retry twice.
+  if (wrappedTestRunners.has(VitestTestRunner)) return
+  wrappedTestRunners.add(VitestTestRunner)
+
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
@@ -536,6 +571,11 @@ function wrapVitestTestRunner (VitestTestRunner) {
     } = providedContext
     const testProperties = getVitestTestProperties(providedContext, task.file.filepath, testName)
     taskToTestProperties.set(task, testProperties)
+    const annotations = getAnnotations(task)
+    if (annotations.noAutoRetry && !annotations.hasFrameworkRetry &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task)) {
+      task.retry = 0
+    }
 
     if (isTestManagementTestsEnabled) {
       const {
@@ -543,7 +583,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         isDisabled,
         isQuarantined,
       } = testProperties
-      if (isAttemptToFix) {
+      if (isAttemptToFix && !annotations.noAutoRetry) {
         if (task.repeats !== testManagementAttemptToFixRetries) {
           attemptToFixRetryTasks.add(task)
         }
@@ -552,10 +592,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         attemptToFixTasks.add(task)
         attemptToFixTaskToStatuses.set(task, [])
       }
-      if (isQuarantined) {
+      if (isQuarantined && !annotations.mustFail) {
         quarantinedTasks.add(task)
       }
-      if (isDisabled) {
+      if (isDisabled && !annotations.mustFail) {
         disabledTasks.add(task)
         if (!attemptToFixTasks.has(task)) {
           // we only actually skip if the test is not being attempted to be fixed
@@ -575,7 +615,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const isEfdCandidate = isEarlyFlakeDetectionEnabled &&
+    const isEfdCandidate = !annotations.noAutoRetry && isEarlyFlakeDetectionEnabled &&
       !attemptToFixTasks.has(task) &&
       !disabledTasks.has(task) &&
       (modifiedTasks.has(task) || newTasks.has(task))
@@ -591,6 +631,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     if (
+      !annotations.noAutoRetry &&
       providedContext.isDynamicAtrEnabled &&
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !attemptToFixTasks.has(task) &&
@@ -622,6 +663,13 @@ function wrapVitestTestRunner (VitestTestRunner) {
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
     const { isTestManagementTestsEnabled } = getProvidedContext()
+
+    // Vitest 5 aggregates failed repetitions into the final state. Preserve the last attempt's actual result.
+    if ((attemptToFixTasks.has(task) || efdRetryTasks.has(task)) &&
+        task.result.state === 'fail' && taskToCtx.get(task)?.status === 'pass' &&
+        (task.result.errors?.length ?? 0) === (taskToReportedErrorCount.get(task) ?? 0)) {
+      task.result.state = 'pass'
+    }
 
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
@@ -745,7 +793,12 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const lastExecutionStatus = task.result.state
+    let lastExecutionStatus = task.result.state
+    if (lastExecutionStatus === 'run' && numRepetition > 0) {
+      // Vitest 5 resets the state before each repetition but retains errors from earlier attempts.
+      const reportedErrorCount = taskToReportedErrorCount.get(task) ?? 0
+      lastExecutionStatus = (task.result.errors?.length ?? 0) > reportedErrorCount ? 'fail' : 'pass'
+    }
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
@@ -792,7 +845,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const isRetryReasonAtr = numAttempt > 0 &&
+    const isRetryReasonAtr = !getAnnotations(task).noAutoRetry && numAttempt > 0 &&
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !attemptToFixRetryTasks.has(task) &&
       !efdRetryTasks.has(task)
@@ -806,9 +859,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isNew,
       hasDynamicName: dynamicNameTasks.has(task),
       mightHitProbe: isDiEnabled && isFailedTestReplayAllowed && numAttempt > 0,
-      isAttemptToFix: attemptToFixTasks.has(task),
-      isDisabled: disabledTasks.has(task),
-      isQuarantined: quarantinedTasks.has(task),
+      ...getReportedProperties(task),
       isRetryReasonAtr,
       isModified: modifiedTasks.has(task),
     }
@@ -1097,18 +1148,20 @@ function getStartTestsWrapper (frameworkVersion) {
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
-            isAttemptToFix: attemptToFixTasks.has(task),
-            isDisabled: disabledTasks.has(task),
-            isQuarantined: quarantinedTasks.has(task),
+            ...getReportedProperties(task),
           })
-        } else if (state === 'pass' && !isSwitchedStatus) {
+        } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
+          // Attempt-to-fix can pass its last attempt while an earlier failure still fails the suite.
+          if (switchedStatus === 'pass' && errors?.length) {
+            testSuiteError = testError
+          }
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
             const promises = {}
             testPassCh.publish({
               task,
-              finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
+              finalStatus: isSkippedByTestManagement ? 'skip' : state,
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               promises,
               ...testCtx.currentStore,
@@ -1144,7 +1197,8 @@ function getStartTestsWrapper (frameworkVersion) {
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
+          const isAtrRetry = !getAnnotations(task).noAutoRetry &&
+            isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
             !efdRetryTasks.has(task)
           if (isAtrRetry) {
             // Dynamic ATR: use the per-test duration-based count instead of the flat limit.
@@ -1200,9 +1254,7 @@ function getStartTestsWrapper (frameworkVersion) {
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
-          isAttemptToFix: attemptToFixTasks.has(task),
-          isDisabled: disabledTasks.has(task),
-          isQuarantined: quarantinedTasks.has(task),
+          ...getReportedProperties(task),
         })
       }
     }

@@ -1,11 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
-const { fork } = require('child_process')
-const { join } = require('path')
-const axios = require('axios')
+const { fork } = require('node:child_process')
+const { join } = require('node:path')
+
+const semver = require('semver')
+
+const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
+const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
+
+const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', latestVersions['@opentelemetry/api']]
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -58,13 +65,116 @@ async function getWithRetry (url, timeoutMs) {
   let lastErr
   while (Date.now() < deadline) {
     try {
-      return await axios.get(url)
+      return await httpRequest.get(url)
     } catch (err) {
       lastErr = err
       await new Promise(resolve => setTimeout(resolve, 100))
     }
   }
   throw lastErr
+}
+
+describe('OpenTelemetry API version compatibility', function () {
+  this.timeout(20_000)
+
+  for (const apiVersion of OTEL_API_VERSIONS) {
+    describe(apiVersion, () => {
+      let agent
+      let proc
+      let cwd
+      const timeout = 5000
+
+      useSandbox(
+        [`@opentelemetry/api@${apiVersion}`],
+        false,
+        ['./integration-tests/opentelemetry/basic.js']
+      )
+
+      before(async () => {
+        cwd = sandboxCwd()
+        agent = await new FakeAgent().start()
+      })
+
+      after(async () => {
+        await stopProc(proc)
+        await agent?.stop()
+      })
+
+      it('preserves user API span and propagation behavior', async () => {
+        const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
+        assert.strictEqual(installedApiVersion, apiVersion)
+
+        proc = fork(join(cwd, 'basic.js'), {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+          },
+        })
+
+        await check(agent, proc, timeout, ({ payload }) => {
+          const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+          assert.ok(trace)
+          assert.strictEqual(trace[0].meta['test.attribute'], 'value')
+          assert.strictEqual(trace[0].duration, 50_000_000)
+        })
+      })
+    })
+  }
+})
+
+for (const [sdkVersion, apiVersion] of [
+  ['0.222.0', '1.9.1'],
+  [latestVersions['@opentelemetry/sdk-node'], latestVersions['@opentelemetry/api']],
+]) {
+  describe(`OpenTelemetry SDK provider (${sdkVersion})`, function () {
+    this.timeout(20_000)
+
+    let agent
+    let proc
+    let cwd
+
+    useSandbox([`@opentelemetry/sdk-node@${sdkVersion}`, `@opentelemetry/api@${apiVersion}`])
+
+    before(async function () {
+      cwd = sandboxCwd()
+      const { engines } = require(join(cwd, 'node_modules/@opentelemetry/sdk-node/package.json'))
+      if (!semver.satisfies(process.versions.node, engines.node)) {
+        // SDK releases can require a newer runtime than the tracer.
+        this.skip()
+      }
+      agent = await new FakeAgent().start()
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+    })
+
+    after(async () => {
+      await agent?.stop()
+    })
+
+    for (const format of ['commonjs', 'esm']) {
+      it(`delivers spans to the tracer and user processor with ${format}`, async () => {
+        const fixture = format === 'esm'
+          ? 'opentelemetry/fixtures/sdk-node-span-processor.mjs'
+          : 'opentelemetry/sdk-node-span-processor.js'
+        proc = fork(join(cwd, fixture), {
+          cwd,
+          execArgv: format === 'esm' ? ['--loader=dd-trace/loader-hook.mjs'] : [],
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+            DD_TRACE_OTEL_ENABLED: '1',
+            DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+          },
+        })
+
+        await check(agent, proc, 5000, ({ payload }) => {
+          const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+          assert.ok(trace)
+        })
+      })
+    }
+  })
 }
 
 describe('opentelemetry', function () {
@@ -87,8 +197,13 @@ describe('opentelemetry', function () {
 
   useSandbox(dependencies)
 
-  before(async () => {
+  before(async function () {
     cwd = sandboxCwd()
+    const { engines } = require(join(cwd, 'node_modules/@opentelemetry/sdk-node/package.json'))
+    if (!semver.satisfies(process.versions.node, engines.node)) {
+      // SDK releases can require a newer runtime than the tracer.
+      this.skip()
+    }
     agent = await new FakeAgent().start()
   })
 
@@ -373,52 +488,68 @@ describe('opentelemetry', function () {
 
   it('should work with otel express & http auto instrumentation', async () => {
     const SERVER_PORT = 6666
-    proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent?.port,
-        DD_TRACE_OTEL_ENABLED: '1',
-        SERVER_PORT,
-        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
-        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
-      },
-    })
-    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
+    const signal = AbortSignal.timeout(10_000)
+    const messages = []
+    const onTraces = messages.push.bind(messages)
+    agent.on('otlp-traces', onTraces)
+    try {
+      proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent?.port,
+          DD_TRACE_OTEL_ENABLED: '1',
+          SERVER_PORT,
+          DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
+        },
+      })
+      const [[code]] = await Promise.all([
+        once(proc, 'exit', { signal }),
+        getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000),
+      ])
+      assert.strictEqual(code, 0)
+    } finally {
+      agent.removeListener('otlp-traces', onTraces)
+    }
+    assert.strictEqual(messages.length, 2)
+    for (const { headers } of messages) {
+      assert.strictEqual(headers['content-type'], 'application/json')
+    }
+    const trace = messages.flatMap(({ payload }) => payload.resourceSpans
+      .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
+    assert.strictEqual(trace.length, 9)
 
-    await check(agent, proc, 10_000, ({ payload }) => {
-      assert.strictEqual(payload.length, 2)
-      // combine the traces
-      const trace = payload.flat()
-      assert.strictEqual(trace.length, 9)
+    // Should have expected span resource names and ordering
+    assert.ok(eachEqual(trace, [
+      'GET /second-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /second-endpoint',
+      'GET /first-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /first-endpoint',
+      'GET',
+    ],
+    (span) => span.name))
 
-      // Should have expected span resource names and ordering
-      assert.ok(eachEqual(trace, [
-        'GET /second-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /second-endpoint',
-        'GET /first-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /first-endpoint',
-        'GET',
-      ],
-      (span) => span.resource))
+    assert.ok(allEqual(trace, span => span.traceId))
 
-      assert.ok(allEqual(trace, (span) => {
-        span.trace_id.toString()
-      }))
-
-      const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
-      isChildOf(query1, get1)
-      isChildOf(init1, get1)
-      isChildOf(handler1, get1)
-      isChildOf(get2, get1)
-      isChildOf(get3, get2)
-      isChildOf(query2, get3)
-      isChildOf(init2, get3)
-      isChildOf(handler2, get3)
-    })
+    const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
+    for (const [child, parent] of [
+      [query1, get1],
+      [init1, get1],
+      [handler1, get1],
+      [get2, get1],
+      [get3, get2],
+      [query2, get3],
+      [init2, get3],
+      [handler2, get3],
+    ]) {
+      assert.notStrictEqual(child.spanId, parent.spanId)
+      assert.strictEqual(child.parentSpanId, parent.spanId)
+    }
   })
 
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
@@ -433,30 +564,7 @@ describe('opentelemetry', function () {
       assert.ok(trace)
     })
   })
-
-  it('should deliver spans to a user span processor configured on @opentelemetry/sdk-node', async () => {
-    // Regression guard: sdk-node 0.220+ passes span processors through the
-    // provider constructor. The fixture exits non-zero if its own processor
-    // never saw the span, so the tracer producing the DD span while dropping
-    // the user's processor fails here rather than passing silently.
-    proc = fork(join(cwd, 'opentelemetry/sdk-node-span-processor.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent?.port,
-      },
-    })
-    await check(agent, proc, timeout, ({ payload }) => {
-      const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
-      assert.ok(trace)
-    })
-  })
 })
-
-function isChildOf (childSpan, parentSpan) {
-  assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
-  assert.notStrictEqual(childSpan.span_id.toString(), parentSpan.span_id.toString())
-  assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
-}
 
 function sortMetricTags (metrics) {
   return metrics

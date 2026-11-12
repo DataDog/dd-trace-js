@@ -62,6 +62,7 @@ describe('TracerProxy', () => {
   let initializeServerlessTelemetry
   let supportsServerlessTelemetryRetention
   let flushServerlessTelemetry
+  let otelThreadCtx
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -81,6 +82,7 @@ describe('TracerProxy', () => {
     }
 
     tracer = {
+      getStartupConfig: sinon.stub(),
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
@@ -163,6 +165,8 @@ describe('TracerProxy', () => {
     NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
+      DD_API_KEY: 'api-key',
+      DD_APP_KEY: 'app-key',
       DD_TRACE_ENABLED: true,
       testOptimization: {},
       featureFlags: {
@@ -266,6 +270,10 @@ describe('TracerProxy', () => {
       cleanup: sinon.spy(),
     }
 
+    otelThreadCtx = {
+      start: sinon.stub().returns(true),
+    }
+
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
@@ -296,6 +304,11 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './startup-log': {
+        setStartupLogConfig: sinon.spy(),
+        setStartupLogPluginManager: sinon.spy(),
+        startupLog: sinon.spy(),
+      },
       './debugger': dynamicInstrumentation,
       './log': log,
       './profiler': profiler,
@@ -312,6 +325,7 @@ describe('TracerProxy', () => {
       './flare': flare,
       './openfeature': openfeature,
       './openfeature/flagging_provider': OpenFeatureProvider,
+      './otel-thread-ctx': otelThreadCtx,
       './serverless': {
         IS_SERVERLESS: false,
         initializeServerlessTelemetry,
@@ -355,6 +369,53 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(DatadogTracer, config)
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
         sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('initializes AI Guard with all required configuration', () => {
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(AIGuardSdk, tracer, config)
+        sinon.assert.calledOnceWithExactly(aiguard.enable, tracer, config)
+        sinon.assert.notCalled(log.error)
+      })
+
+      for (const missing of [
+        ['DD_API_KEY'],
+        ['DD_APP_KEY'],
+        ['DD_API_KEY', 'DD_APP_KEY'],
+      ]) {
+        it(`does not initialize AI Guard without ${missing.join(' or ')}`, () => {
+          for (const name of missing) {
+            config[name] = undefined
+          }
+          config.apmTracingEnabled = true
+
+          proxy.init()
+
+          sinon.assert.calledOnceWithExactly(DatadogTracer, config, undefined)
+          sinon.assert.notCalled(AIGuardSdk)
+          sinon.assert.notCalled(aiguard.enable)
+          sinon.assert.calledOnceWithExactly(
+            log.error,
+            'AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY'
+          )
+
+          const messages = [{ role: 'user', content: 'What day is today?' }]
+          proxy.aiguard.evaluate(messages)
+          sinon.assert.calledOnceWithExactly(noopAiguardSdk.evaluate, messages)
+        })
+      }
+
+      it('does not validate required AI Guard configuration while AI Guard is disabled', () => {
+        config.DD_API_KEY = undefined
+        config.DD_APP_KEY = undefined
+        config.aiguard.DD_AI_GUARD_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(AIGuardSdk)
+        sinon.assert.notCalled(aiguard.enable)
+        sinon.assert.notCalled(log.error)
       })
 
       it('only loads Test Optimization startup modules through ci/init', () => {
@@ -489,6 +550,48 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(RemoteConfig)
       })
 
+      it('preserves the no-op entrypoint for tracing opt-outs even when OTel signals are requested', () => {
+        const repoRoot = path.resolve(__dirname, '../../..')
+        const inactiveModules = ['remote_config', 'opentelemetry/logs', 'opentelemetry/metrics', 'debugger']
+          .map(name => require.resolve(`../src/${name}`))
+        const script = `
+          const lines = []
+          console.warn = line => lines.push(line)
+          const tracer = require(${JSON.stringify(repoRoot)}).init({ startupLogs: true })
+          const carrier = {}
+          tracer.inject(tracer.startSpan('disabled'), 'text_map', carrier)
+          process.stdout.write(JSON.stringify({
+            loaded: ${JSON.stringify(inactiveModules)}.map(file => require.cache[file] !== undefined),
+            lines,
+            carrier,
+          }), () => process.exit(0))
+        `
+        const inherited = Object.fromEntries(Object.entries(process.env)
+          .filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+        for (const signal of ['LOGS', 'METRICS']) {
+          for (const optOut of ['DD_TRACE_ENABLED', 'OTEL_TRACES_EXPORTER']) {
+            for (const remoteConfig of [undefined, 'true']) {
+              const result = spawnSync(process.execPath, ['--eval', script], {
+                encoding: 'utf8',
+                timeout: 10000,
+                env: {
+                  ...inherited,
+                  [`DD_${signal}_OTEL_ENABLED`]: 'true',
+                  [optOut]: optOut === 'DD_TRACE_ENABLED' ? 'false' : 'none',
+                  DD_REMOTE_CONFIGURATION_ENABLED: remoteConfig,
+                },
+              })
+              assert.strictEqual(result.status, 0, result.stderr)
+              assert.deepStrictEqual(JSON.parse(result.stdout), {
+                loaded: inactiveModules.map(() => false),
+                lines: [],
+                carrier: {},
+              })
+            }
+          }
+        }
+      })
+
       it('should not initialize when disabled', () => {
         config.DD_TRACE_ENABLED = false
 
@@ -514,6 +617,19 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
+      })
+
+      it('logs missing AI Guard configuration once across remote config updates', () => {
+        config.DD_API_KEY = undefined
+        config.apmTracingEnabled = true
+
+        proxy.init()
+
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('aiguard-update-1', {}))
+        handleApmTracing(createApmTracingTransaction('aiguard-update-2', {}, 'modify'))
+
+        sinon.assert.calledOnce(log.error)
       })
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
@@ -744,6 +860,8 @@ describe('TracerProxy', () => {
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -776,6 +894,8 @@ describe('TracerProxy', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -915,6 +1035,22 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
       })
 
+      it('should start the thread context writer when enabled', () => {
+        config.DD_TRACE_OTEL_CTX_ENABLED = true
+
+        proxy.init()
+
+        sinon.assert.calledOnce(otelThreadCtx.start)
+      })
+
+      it('should not start the thread context writer when disabled', () => {
+        config.DD_TRACE_OTEL_CTX_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(otelThreadCtx.start)
+      })
+
       it('should enable iast when configured', () => {
         config.iast = { DD_IAST_ENABLED: true }
 
@@ -960,11 +1096,29 @@ describe('TracerProxy', () => {
         )
       })
 
-      it('should start telemetry', () => {
+      it('should start telemetry without product metadata for ordinary tracing', () => {
         proxy.init()
 
-        sinon.assert.called(telemetry.start)
+        sinon.assert.calledOnceWithExactly(telemetry.start, config, pluginManager, undefined)
       })
+
+      for (const enabled of [true, false]) {
+        it(`provides Test Optimization log metadata only with telemetry enabled (${enabled})`, () => {
+          config.isCiVisibility = true
+          config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: enabled }
+
+          proxy.init()
+
+          const options = telemetry.start.firstCall.args[2]
+          if (enabled) {
+            assert.deepStrictEqual(options, {
+              tags: 'test_optimization_enabled:true',
+            })
+          } else {
+            assert.strictEqual(options, undefined)
+          }
+        })
+      }
 
       it('should configure standalone', () => {
         const standalone = {
@@ -975,6 +1129,8 @@ describe('TracerProxy', () => {
         const DatadogProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -1366,9 +1522,13 @@ describe('TracerProxy', () => {
     let storeConfig
     let uuidStub
     let buildProxy
+    let id
+    let randomFillSync
 
     beforeEach(() => {
       uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
+      randomFillSync = sinon.stub().callsFake(data => data.fill(randomFillSync.callCount))
+      id = proxyquire('../src/id', { crypto: { randomFillSync } })
 
       channelMock = {
         subscribe: sinon.stub(),
@@ -1398,11 +1558,13 @@ describe('TracerProxy', () => {
         './tracer': DatadogTracer,
         './noop/proxy': NoopProxy,
         './config': Config,
+        './id': id,
         './plugin_manager': PluginManager,
         './runtime_metrics': runtimeMetrics,
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
           IS_SERVERLESS: true,
@@ -1473,9 +1635,27 @@ describe('TracerProxy', () => {
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
     })
 
+    for (const state of ['enabled', 'disabled', 'failed']) {
+      it(`should reseed IDs before publishing identity updates when tracing is ${state}`, () => {
+        const before = id().toString()
+        if (state === 'disabled') config.DD_TRACE_ENABLED = false
+        if (state === 'failed') DatadogTracer.throws(new Error('tracer initialization failed'))
+        microProxy.init()
+
+        channelMock.publish.callsFake(() => {
+          assert.notStrictEqual(id().toString(), before)
+        })
+        const subscriber = channelMock.subscribe.firstCall.args[0]
+        subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+        sinon.assert.calledTwice(channelMock.publish)
+        sinon.assert.calledTwice(randomFillSync)
+      })
+    }
+
     it('should update identity, store metadata, and then refresh consumers', () => {
-      // Core identity producers (id/config/remote_config) self-subscribe to identity:update and
-      // must finish reseeding before identity:refresh notifies downstream cache-holders
+      // Core identity producers (id/config/remote_config) must finish reseeding before
+      // identity:refresh notifies downstream cache-holders
       // (dogstatsd, otel metrics, debugger); otherwise those subsystems would refresh from the
       // pre-reseed identity.
       storeConfig.returns(undefined)
@@ -1548,6 +1728,7 @@ describe('TracerProxy', () => {
     })
 
     it('should not drain the UUID pool when the request is not the run hook', () => {
+      id()
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
@@ -1555,6 +1736,8 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/other' } })
 
       sinon.assert.notCalled(uuidStub)
+      id()
+      sinon.assert.calledOnce(randomFillSync)
     })
 
     it('should unsubscribe HTTP channel after first fire', () => {
@@ -1620,6 +1803,7 @@ describe('TracerProxy', () => {
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
           IS_SERVERLESS: true,

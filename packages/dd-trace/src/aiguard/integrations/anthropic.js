@@ -2,10 +2,15 @@
 
 const { channel } = require('dc-polyfill')
 
-const { getMessagesInputMessages, getMessagesOutputMessages } = require('../messages/anthropic')
+const {
+  getMessagesInputMessages,
+  getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
+} = require('../messages/anthropic')
 const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
+const { interceptStream } = require('./stream')
 
 const messagesPrepareChannel = channel('dd-trace:anthropic:messages:prepare')
 const messagesInterceptChannel = channel('dd-trace:anthropic:messages:intercept')
@@ -13,18 +18,21 @@ const messagesInterceptChannel = channel('dd-trace:anthropic:messages:intercept'
 let isEnabled = false
 let aiguard
 let opts
+let analyzeStreamResponses
 
 /**
  * Subscribes AI Guard to the Anthropic interception channels.
  *
  * @param {object} aiguardInstance
  * @param {boolean} block
+ * @param {boolean} analyzeStreams
  */
-function enable (aiguardInstance, block) {
+function enable (aiguardInstance, block, analyzeStreams) {
   if (isEnabled) return
 
   aiguard = aiguardInstance
   opts = { block, source: SOURCE_AUTO, integration: 'anthropic' }
+  analyzeStreamResponses = analyzeStreams
 
   messagesPrepareChannel.subscribe(onMessagesPrepare)
   messagesInterceptChannel.subscribe(onMessagesIntercept)
@@ -40,6 +48,7 @@ function disable () {
 
   aiguard = undefined
   opts = undefined
+  analyzeStreamResponses = undefined
   isEnabled = false
 }
 
@@ -76,19 +85,35 @@ function onMessagesIntercept (ctx) {
     return inputEvaluation
   }
 
+  const isStream = ctx.arguments[0].stream
+  if (isStream && !analyzeStreamResponses) return
+
   // One model call has one output however many readers observe it: `parse`, `json()`, `text()`
   // and every `clone()` of the raw response share this callback.
   let outputEvaluation
   ctx.onResult = body => {
     if (!isEnabled) return body
 
+    if (isStream) {
+      outputEvaluation ??= interceptStream(body, chunks => {
+        if (!isEnabled) return
+        const outputMessages = decode(
+          () => getStreamedMessagesOutputMessages(chunks),
+          null,
+          'AIGuard: unable to decode the streamed Anthropic response: %s'
+        )
+        if (!outputMessages?.length) return
+        return evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
+      })
+      return outputEvaluation
+    }
+
     const outputMessages = decode(
       () => getMessagesOutputMessages(body),
       null,
       'AIGuard: unable to decode Anthropic response body: %s'
     )
-    if (outputMessages === null) return body
-    if (!outputMessages.length) return body
+    if (!outputMessages?.length) return body
 
     outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
     return outputEvaluation.then(() => body)

@@ -1,0 +1,13 @@
+_v: 1
+name: openai
+display_name: OpenAI
+description: Instruments OpenAI SDK requests for completions and responses, embeddings, image generation and editing,
+  audio transcription and translation, moderation, file and model management, fine-tuning, and Realtime conversations,
+  with LLM Observability and optional AI Guard input/output evaluation.
+packages:
+- name: openai
+category:
+- gen_ai
+systems:
+- openai
+creation_date: '2023-06-23'

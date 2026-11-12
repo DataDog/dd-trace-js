@@ -20,6 +20,7 @@ const EVP_ORIGIN_HEADERS = {
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
  * @property {object} [headers] - Additional HTTP headers
+ * @property {(error: Error, statusCode?: number) => string} [formatError] - Optional delivery error redaction
  */
 
 /**
@@ -80,10 +81,14 @@ function shouldSwitchFutureRoute (statusCode) {
  */
 class BaseFFEWriter {
   #destroyer
+  #formatError
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
-  constructor ({ interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers }) {
+  constructor ({
+    interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers, formatError,
+  }) {
+    this.#formatError = formatError
     this._interval = interval ?? 1000
     this._timeout = timeout ?? 5000
 
@@ -138,7 +143,14 @@ class BaseFFEWriter {
         continue
       }
 
-      const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      let eventSizeBytes
+      try {
+        eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      } catch {
+        log.warn('%s could not serialize an event, dropping event', this.constructor.name)
+        this._droppedEvents++
+        continue
+      }
 
       // Check individual event size limit if configured
       if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
@@ -170,7 +182,14 @@ class BaseFFEWriter {
     this._buffer = []
     this._bufferSize = 0
 
-    const payload = this._encode(this.makePayload(events))
+    let payload
+    try {
+      payload = this._encode(this.makePayload(events))
+    } catch {
+      log.warn('%s could not encode %d events, dropping batch', this.constructor.name, events.length)
+      this._droppedEvents += events.length
+      return
+    }
 
     // Keep byte counting behind the debug callback because payloads can be several megabytes.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -193,14 +212,19 @@ class BaseFFEWriter {
    */
   destroy () {
     if (this.#destroyer) {
-      log.debug('Stopping %s', this.constructor.name)
+      log.debug('%s stopping with %d buffered events; final flush requested without awaiting delivery',
+        this.constructor.name, this._buffer.length)
       clearInterval(this._periodic)
       this.flush()
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
       this.#destroyer = undefined
 
       if (this._droppedEvents > 0) {
-        log.warn('%s dropped %d events due to buffer overflow', this.constructor.name, this._droppedEvents)
+        log.warn(
+          '%s dropped %d events (buffer capacity, size limits, serialization or delivery failures)',
+          this.constructor.name,
+          this._droppedEvents
+        )
       }
     }
   }
@@ -219,10 +243,11 @@ class BaseFFEWriter {
    * @protected
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
+   * @param {(delivered: boolean) => void} [onComplete] - Final outcome after any safe fallback attempt
    */
-  _sendPayload (payload, eventCount) {
+  _sendPayload (payload, eventCount, onComplete) {
     const route = this.#createActiveRoute()
-    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute, onComplete)
   }
 
   /**
@@ -301,76 +326,105 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
+   * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
-  #sendRequest (payload, eventCount, route, fallbackRoute) {
+  #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
     request(payload, route.requestOptions, (error, response, statusCode) => {
+      const errorMessage = error && (this.#formatError
+        ? this.#formatError(error, statusCode)
+        : error.message)
       if (fallbackRoute && isSafeToReplay(error, statusCode)) {
         log.debug(
-          '%s switching from %s%s to direct intake after definitive rejection',
+          '%s switching from %s to direct intake after definitive rejection',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#sendRequest(payload, eventCount, fallbackRoute, undefined, onComplete)
         return
       }
 
       if (fallbackRoute && isTransportFailure(error, statusCode)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after an ambiguous failure without replay',
+          '%s switching future batches from %s to direct intake after an ambiguous failure without replay',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
         return
       }
 
       if (fallbackRoute && shouldSwitchFutureRoute(statusCode)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after status %d without replay',
+          '%s switching future batches from %s to direct intake after status %d without replay',
           this.constructor.name,
-          route.url.href,
-          route.endpoint,
+          route.url.origin,
           statusCode
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
-        log.warn('Events request returned status %d', statusCode)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
         return
       }
 
       if (
         !fallbackRoute &&
+        this._requestOptions === route.requestOptions &&
         route.onUnavailable &&
         (isSafeToReplay(error, statusCode) ||
           isTransportFailure(error, statusCode) ||
           shouldSwitchFutureRoute(statusCode))
       ) {
         route.onUnavailable()
-        if (error) {
-          log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
-        } else {
-          log.warn('Events request returned status %d', statusCode)
-        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
         return
       }
 
-      if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
-      } else if (statusCode >= 200 && statusCode < 300) {
-        log.debug('Successfully sent %d events', eventCount)
+      const delivered = !error && statusCode >= 200 && statusCode < 300
+      if (delivered) {
+        log.debug('%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+          this.constructor.name, eventCount, route.url.origin,
+          // An Agent URL path prefix precedes the EVP path, so the route type cannot be read from its start.
+          route.endpoint.includes('/evp_proxy/') ? 'Agent/local EVP handoff' : 'HTTP receiver', statusCode)
       } else {
-        log.warn('Events request returned status %d', statusCode)
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
       }
+      onComplete?.(delivered)
     })
+  }
+
+  /**
+   * Batches are not retried after a failed final attempt, so the failure log states the loss.
+   *
+   * @param {ActiveWriterRoute} route - Route that failed
+   * @param {number} eventCount - Event count in the dropped batch
+   * @param {Error | null} error - Request error
+   * @param {string | null | undefined} errorMessage - Redacted request error
+   * @param {number | undefined} statusCode - HTTP response status
+   */
+  #logDropped (route, eventCount, error, errorMessage, statusCode) {
+    if (error) {
+      log.error('%s failed to send %d events to %s (status=%s, cause=%s); events dropped',
+        this.constructor.name, eventCount, route.url.origin, statusCode ?? 'none', errorMessage)
+    } else {
+      log.warn('%s events request to %s returned status %d; %d events were dropped',
+        this.constructor.name, route.url.origin, statusCode, eventCount)
+    }
   }
 }
 

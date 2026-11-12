@@ -4,10 +4,10 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 describe('RASP - lfi - integration - sync', () => {
-  let axios, cwd, appFile, agent, proc
+  let httpRequest, cwd, appFile, agent, proc
 
   useSandbox(
     ['express', 'fs'],
@@ -30,7 +30,7 @@ describe('RASP - lfi - integration - sync', () => {
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'lfi_rasp_rules.json'),
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
+    httpRequest = HttpRequest.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -40,7 +40,7 @@ describe('RASP - lfi - integration - sync', () => {
 
   it('should block a sync endpoint getting the error from apm:express:middleware:error', async () => {
     try {
-      await axios.get('/lfi/sync?file=/etc/passwd')
+      await httpRequest.get('/lfi/sync?file=/etc/passwd')
     } catch (e) {
       if (!e.response) {
         throw e

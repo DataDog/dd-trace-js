@@ -9,10 +9,10 @@
  * atomics, and the main thread periodically drains the counters into instrumentation telemetry metrics.
  *
  * The metric names, tags and reason codes are defined by the "Debugger Observability for GA" specification and are
- * shared with the other tracers. All metrics are counts in the `live_debugger` telemetry namespace.
+ * shared with the other tracers. All metrics are counts in the `debugger` telemetry namespace.
  */
 
-const TELEMETRY_NAMESPACE = 'live_debugger'
+const TELEMETRY_NAMESPACE = 'debugger'
 
 const EVENT_TYPE = Object.freeze({
   SNAPSHOT: 0,
@@ -32,8 +32,6 @@ const SKIPPED_REASON_NAMES = ['rateLimitGlobal', 'rateLimitProbe', 'evaluationTi
 /** Complete events dropped before transport (`events.dropped`) */
 const DROPPED_REASON = Object.freeze({
   QUEUE_FULL: 0,
-  // The spec allows either trimming oversized payloads or dropping them whole. This tracer trims, and reports
-  // `capture.incomplete{payloadTooLarge}` instead, so this reason exists for spec parity but is never emitted.
   PAYLOAD_TOO_LARGE: 1,
 })
 const DROPPED_REASON_NAMES = ['queueFull', 'payloadTooLarge']

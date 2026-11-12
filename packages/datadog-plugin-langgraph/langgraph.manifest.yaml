@@ -1,0 +1,11 @@
+_v: 1
+name: langgraph
+display_name: LangGraph
+description: Instruments LangGraph graph invocation and streaming execution, capturing workflow inputs, outputs, and
+  errors for LLM Observability.
+packages:
+- name: '@langchain/langgraph'
+category:
+- gen_ai
+systems: []
+creation_date: '2026-03-16'

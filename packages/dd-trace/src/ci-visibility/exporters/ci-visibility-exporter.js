@@ -27,6 +27,7 @@ const {
 } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const telemetry = require('../../telemetry')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -114,10 +115,14 @@ function isValidRetryCount (value) {
  * @param {unknown} retryPolicy - Candidate retry policy.
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
-  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
-  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
-  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
-    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
+  if (
+    retryPolicy === null ||
+    typeof retryPolicy !== 'object' ||
+    Array.isArray(retryPolicy) ||
+    !isValidRetryCount(retryPolicy.schedulingRetryCount) ||
+    !Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length
+  ) {
     return false
   }
 
@@ -152,9 +157,11 @@ function isValidCachedSettings (settings) {
   }
   if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
   if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
-  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
-  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
-    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+  if (
+    !isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy) ||
+    !isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100
+  ) {
     return false
   }
   return settings.testManagementAttemptToFixRetries === undefined ||
@@ -205,7 +212,7 @@ class CiVisibilityExporter extends BufferingExporter {
   #deferredTestSuiteSpans = new Map()
   #gitUploadTimeoutId
 
-  constructor (config, options = {}) {
+  constructor (config) {
     super(config)
     this._timer = undefined
     this._coverageTimer = undefined
@@ -216,8 +223,7 @@ class CiVisibilityExporter extends BufferingExporter {
     this._dynamicAtrEnabled = isDynamicAtrEnabled(dynamicAtrEnabled)
     this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets(dynamicAtrBuckets) ?? undefined : undefined
     this._hasRecordedDynamicAtrTelemetry = false
-    this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
-    this._isTestOptimizationCacheOnly = options.cacheOnly === true
+    this._testOptimizationHttpCache = new TestOptimizationHttpCache()
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
     if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
       log.warn(
@@ -258,7 +264,8 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
+    // Final upload errors are recorded after telemetry's initial app-closing drain.
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => telemetry.flush()))
   }
 
   shouldRequestSkippableSuites () {
@@ -319,10 +326,6 @@ class CiVisibilityExporter extends BufferingExporter {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
       return callback(null, skippableSuites, correlationId, coverage)
     }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('skippable tests'), [])
-    }
-
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
         return callback(gitUploadError, [])
@@ -339,9 +342,6 @@ class CiVisibilityExporter extends BufferingExporter {
     if (cachedKnownTests !== CACHE_MISS) {
       return callback(null, cachedKnownTests)
     }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('known tests'))
-    }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
@@ -352,9 +352,6 @@ class CiVisibilityExporter extends BufferingExporter {
     const cachedTestManagementTests = this._testOptimizationHttpCache.readTestManagementTests()
     if (cachedTestManagementTests !== CACHE_MISS) {
       return callback(null, cachedTestManagementTests)
-    }
-    if (this._isTestOptimizationCacheOnly) {
-      return callback(this._getCacheOnlyError('test management tests'))
     }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
@@ -377,10 +374,6 @@ class CiVisibilityExporter extends BufferingExporter {
       if (cachedLibraryConfig !== CACHE_MISS) {
         log.debug('Test Optimization HTTP cache settings found, skipping settings request')
         return this._applyCachedSettings(cachedLibraryConfig, configuration, repositoryUrl, false, callback)
-      }
-
-      if (this._isTestOptimizationCacheOnly) {
-        return callback(this._getCacheOnlyError('settings'), {})
       }
 
       // The settings request has a two-phase shape: when the backend returns
@@ -515,17 +508,6 @@ class CiVisibilityExporter extends BufferingExporter {
     })
   }
 
-  /**
-   * Returns the deterministic cache error for offline exporters.
-   *
-   * @param {string} input required cache input
-   * @returns {Error} cache error
-   */
-  _getCacheOnlyError (input) {
-    return this._testOptimizationHttpCache.getLastError?.() ||
-      new Error(`Offline Test Optimization validation requires a valid ${input} cache fixture.`)
-  }
-
   // Takes into account potential kill switches
   filterConfiguration (remoteConfiguration = EMPTY_SETTINGS) {
     const { testOptimization } = this._config
@@ -618,7 +600,7 @@ class CiVisibilityExporter extends BufferingExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error('Error uploading git metadata: %s', err.message)
+            log.error('Error uploading git metadata', err)
           } else {
             log.debug('Successfully uploaded git metadata')
           }

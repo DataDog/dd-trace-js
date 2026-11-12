@@ -83,7 +83,7 @@ describe('OTLP Log Export', () => {
             attributes: [
               { key: 'service.name', value: { stringValue: 'otlp-logs-test-service' } },
               { key: 'service.version', value: { stringValue: '1.0.0' } },
-              { key: 'deployment.environment', value: { stringValue: 'test' } },
+              { key: 'deployment.environment.name', value: { stringValue: 'test' } },
             ],
           },
           scopeLogs: [{

@@ -9,8 +9,9 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
-const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
+const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
+const { AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
+const TraceState = require('../src/opentracing/propagation/tracestate')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -25,6 +26,7 @@ describe('SpanProcessor', () => {
   let config
   let SpanSampler
   let SpanStatsProcessor
+  let updateOtelTraceState
   let sample
 
   before(() => {
@@ -67,8 +69,12 @@ describe('SpanProcessor', () => {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
       appsec: {},
+      tracing: {},
     }
-    spanFormat = sinon.stub().returns({ formatted: true })
+    spanFormat = sinon.stub().callsFake(() => ({ formatted: true, meta: {} }))
+    updateOtelTraceState = sinon.stub().callsFake((context, traceState) => {
+      traceState.set('ot', 'rv:ef284ace7a91e1;th:e6666666666668')
+    })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -80,12 +86,14 @@ describe('SpanProcessor', () => {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
       './span_stats': { SpanStatsProcessor },
+      './otel-sampling': { updateOtelTraceState },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
 
   it('should configure span stats when enabled outside standalone AppSec', () => {
-    const otlpStatsExporter = {}
+    const resourceAttributes = { 'service.name': 'stats-service' }
+    const otlpStatsExporter = { protocol: 'http/protobuf', getStartupResourceAttributes: () => resourceAttributes }
     const stats = {}
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
     config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = false
@@ -95,6 +103,7 @@ describe('SpanProcessor', () => {
 
     sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
     assert.strictEqual(processor._stats, stats)
+    assert.deepEqual(processor.getSpanMetricsStartupConfig(), { protocol: 'http/protobuf', resourceAttributes })
   })
 
   it('should not configure span stats in standalone AppSec', () => {
@@ -106,6 +115,19 @@ describe('SpanProcessor', () => {
     sinon.assert.notCalled(SpanStatsProcessor)
     assert.strictEqual(processor._stats, undefined)
   })
+
+  for (const [statsEnabled, standalone] of [[false, false], [true, true]]) {
+    it(`omits span-metrics startup configuration when stats=${statsEnabled} and standalone=${standalone}`, () => {
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = statsEnabled
+      config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = standalone
+
+      const processor = new SpanProcessor(exporter, prioritySampler, config, { protocol: 'http/json' })
+
+      assert.strictEqual(processor._stats, undefined)
+      sinon.assert.notCalled(SpanStatsProcessor)
+      assert.strictEqual(processor.getSpanMetricsStartupConfig(), undefined)
+    })
+  }
 
   it('should generate sampling priority', () => {
     processor.process(finishedSpan)
@@ -189,9 +211,9 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(exporter.export, [
-      { formatted: true },
-      { formatted: true },
-      { formatted: true },
+      { formatted: true, meta: { [SDK_OTLP_EXPORT_KEY]: 'false' } },
+      { formatted: true, meta: {} },
+      { formatted: true, meta: {} },
     ])
 
     assert.ok('started' in trace)
@@ -247,13 +269,14 @@ describe('SpanProcessor', () => {
 
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(exporter.export, [{ formatted: true }])
+    sinon.assert.calledWith(exporter.export, [{ formatted: true, meta: { [SDK_OTLP_EXPORT_KEY]: 'false' } }])
   })
 
   it('should configure span sampler correctly', () => {
     const config = {
       stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
       appsec: {},
+      tracing: {},
       sampler: {
         sampleRate: 0,
         spanSamplingRules: [
@@ -280,6 +303,7 @@ describe('SpanProcessor', () => {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
       appsec: {},
+      tracing: {},
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -342,12 +366,119 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
+  it('should add the native export marker to the first span of each chunk', () => {
+    config.flushMinSpans = 2
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan]
+    processor.process(finishedSpan)
+
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    const [firstChunk] = exporter.export.firstCall.args
+    const [secondChunk] = exporter.export.secondCall.args
+    assert.strictEqual(firstChunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
+    assert.ok(!Object.hasOwn(firstChunk[1].meta, SDK_OTLP_EXPORT_KEY))
+    assert.strictEqual(secondChunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
+  })
+
+  it('should not let a span tag override the native export marker', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const formattedSpan = { meta: { [SDK_OTLP_EXPORT_KEY]: 'true' } }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    assert.strictEqual(formattedSpan.meta[SDK_OTLP_EXPORT_KEY], 'false')
+  })
+
+  it('should not add the native export marker when traces are exported over OTLP', () => {
+    config.flushMinSpans = 1
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    const [chunk] = exporter.export.firstCall.args
+    assert.ok(!Object.hasOwn(chunk[0].meta, SDK_OTLP_EXPORT_KEY))
+  })
+
+  it('should add the native export marker when a native transport overrides OTLP', () => {
+    config.flushMinSpans = 1
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    const [chunk] = exporter.export.firstCall.args
+    assert.strictEqual(chunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
+  })
+
+  it('should add live tracestate to spans exported through OTLP', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    const formattedSpan = { meta: {}, metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const context = finishedSpan.context()
+    context._tracestate = TraceState.fromString('dd=s:1,congo=value')
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(formattedSpan.trace_state, 'ot=rv:ef284ace7a91e1;th:e6666666666668,dd=s:1,congo=value')
+    assert.strictEqual(context._tracestate.toString(), 'dd=s:1,congo=value')
+    sinon.assert.calledOnceWithExactly(updateOtelTraceState, context, sinon.match.instanceOf(TraceState))
+    sinon.assert.calledWith(exporter.export, [formattedSpan])
+  })
+
+  it('should not build tracestate for the Datadog exporter', () => {
+    const formattedSpan = { meta: {}, metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
+    sinon.assert.notCalled(updateOtelTraceState)
+  })
+
+  for (const priority of [AUTO_REJECT, USER_REJECT]) {
+    it(`should retain stats without building OTLP tracestate for priority ${priority}`, () => {
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+      const stats = { onSpanFinished: sinon.stub() }
+      SpanStatsProcessor.returns(stats)
+      const formattedSpan = { meta: {}, metrics: {} }
+      spanFormat.returns(formattedSpan)
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      finishedSpan.context()._sampling.priority = priority
+      const processor = new SpanProcessor(exporter, prioritySampler, config)
+
+      processor.process(finishedSpan)
+
+      assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
+      sinon.assert.notCalled(updateOtelTraceState)
+      sinon.assert.calledOnceWithExactly(stats.onSpanFinished, formattedSpan)
+      sinon.assert.calledOnceWithExactly(exporter.export, [formattedSpan])
+    })
+  }
+
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
     config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const firstFormatted = { metrics: {} }
-    const secondFormatted = { metrics: {} }
+    const firstFormatted = { meta: {}, metrics: {} }
+    const secondFormatted = { meta: {}, metrics: {} }
     spanFormat.onFirstCall().returns(firstFormatted)
     spanFormat.onSecondCall().returns(secondFormatted)
     trace.started = [activeSpan, finishedSpan, finishedSpan]
@@ -366,8 +497,8 @@ describe('SpanProcessor', () => {
     // later in its own chunk. Both chunks must carry _dd.apm.enabled:0.
     config.apmTracingEnabled = false
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const parentFormatted = { metrics: {} }
-    const childFormatted = { metrics: {} }
+    const parentFormatted = { meta: {}, metrics: {} }
+    const childFormatted = { meta: {}, metrics: {} }
     spanFormat.onFirstCall().returns(parentFormatted)
     spanFormat.onSecondCall().returns(childFormatted)
 
@@ -393,7 +524,7 @@ describe('SpanProcessor', () => {
   it('should not add APM disabled marker when APM tracing is enabled', () => {
     config.apmTracingEnabled = true
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const formattedSpan = { metrics: {} }
+    const formattedSpan = { meta: {}, metrics: {} }
     spanFormat.returns(formattedSpan)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
@@ -423,6 +554,7 @@ describe('SpanProcessor', () => {
         flushMinSpans: 3,
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
+        tracing: {},
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
       }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
@@ -437,20 +569,25 @@ describe('SpanProcessor', () => {
       assert.ok(!('http.method' in exported.meta))
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
-      spanFormat.returns(formattedHttpSpan())
+    it('records span stats from the OTel span shape used for export', () => {
+      const formattedSpan = formattedHttpSpan()
+      formattedSpan.resource = 'PROPFIND /u'
+      formattedSpan.meta['http.method'] = 'PROPFIND'
+      spanFormat.returns(formattedSpan)
       const otelConfig = {
         flushMinSpans: 3,
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
+        tracing: {},
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
       }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       const statsView = {}
       processor._stats = {
         onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
+          statsView.resource = span.resource
+          statsView.method = span.meta['http.request.method']
+          statsView.statusCode = span.metrics['http.response.status_code']
           statsView.endpoint = span.meta['http.endpoint']
         }),
       }
@@ -459,7 +596,7 @@ describe('SpanProcessor', () => {
 
       processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+      assert.deepStrictEqual(statsView, { resource: 'HTTP /u', method: '_OTHER', statusCode: 200, endpoint: '/u' })
     })
   })
 })

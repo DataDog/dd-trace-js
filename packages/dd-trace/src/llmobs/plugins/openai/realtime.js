@@ -120,26 +120,53 @@ function buildMessage (role, side, maxAudioBytes) {
 }
 
 /**
- * @param {{ input_tokens?: number, output_tokens?: number, total_tokens?: number } | undefined} usage
+ * @param {{
+ *   input_tokens?: number, output_tokens?: number, total_tokens?: number,
+ *   input_token_details?: {
+ *     audio_tokens?: number, text_tokens?: number, image_tokens?: number, cached_tokens?: number,
+ *     cached_tokens_details?: { audio_tokens?: number, text_tokens?: number, image_tokens?: number }
+ *   },
+ *   output_token_details?: { audio_tokens?: number, text_tokens?: number }
+ * } | undefined} usage
  * @returns {Record<string, number> | undefined}
  */
 function usageMetrics (usage) {
   if (!usage) return
 
-  const { input_tokens: inputTokens, output_tokens: outputTokens } = usage
-  let { total_tokens: totalTokens } = usage
-
+  // Named modality and cache counts are subsets of the inclusive totals.
+  // Missing details stay absent; never infer text or a cache intersection.
+  const inputDetails = usage.input_token_details
+  const counts = {
+    input_tokens: usage.input_tokens,
+    output_tokens: usage.output_tokens,
+    total_tokens: usage.total_tokens,
+    cache_read_input_tokens: inputDetails?.cached_tokens,
+    input_audio_tokens: inputDetails?.audio_tokens,
+    input_text_tokens: inputDetails?.text_tokens,
+    input_image_tokens: inputDetails?.image_tokens,
+    output_audio_tokens: usage.output_token_details?.audio_tokens,
+    output_text_tokens: usage.output_token_details?.text_tokens,
+    cache_audio_read_tokens: inputDetails?.cached_tokens_details?.audio_tokens,
+    cache_text_read_tokens: inputDetails?.cached_tokens_details?.text_tokens,
+    cache_image_read_tokens: inputDetails?.cached_tokens_details?.image_tokens,
+  }
   /** @type {Record<string, number>} */
   const metrics = {}
-  if (inputTokens != null) metrics.input_tokens = inputTokens
-  if (outputTokens != null) metrics.output_tokens = outputTokens
-  // Mirror the chat and responses fallback.
-  if (totalTokens == null && inputTokens != null && outputTokens != null) {
-    totalTokens = inputTokens + outputTokens
+  let hasMetrics = false
+  for (const [key, value] of Object.entries(counts)) {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+      metrics[key] = value
+      hasMetrics = true
+    }
   }
-  if (totalTokens != null) metrics.total_tokens = totalTokens
 
-  return metrics.total_tokens === undefined && metrics.input_tokens === undefined ? undefined : metrics
+  // Preserve the existing total fallback only when no total was supplied. Both
+  // components and their sum must be valid; an invalid reported total stays absent.
+  if (usage.total_tokens == null && metrics.input_tokens !== undefined && metrics.output_tokens !== undefined) {
+    const total = metrics.input_tokens + metrics.output_tokens
+    if (Number.isSafeInteger(total)) metrics.total_tokens = total
+  }
+  return hasMetrics ? metrics : undefined
 }
 
 /**
@@ -154,6 +181,11 @@ function usageMetrics (usage) {
 class RealtimeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai'
   static system = 'openai'
+
+  // The instrumentation retains a turn's audio only while these plugins are subscribed, and only
+  // the LLM Observability payload reads those bytes. Staying subscribed for the `gen_ai.*` tags
+  // alone would buffer megabytes per turn for no consumer, so realtime opts out.
+  static emitsGenAiApmTags = false
 
   /**
    * The instrumentation replays the turn with `traceSync`, which never publishes `asyncEnd`, so tag

@@ -509,6 +509,18 @@ describe('Tracer', () => {
       assert.ok(new WrappedCallback() instanceof Callback)
     })
 
+    it('should wrap a bound generator function', () => {
+      const it = {}
+      const callback = function * (value) {
+        assert.strictEqual(this, it)
+        yield value
+      }.bind(it)
+
+      const fn = tracer.wrap('name', {}, callback)
+
+      assert.deepStrictEqual([...fn('value')], ['value'])
+    })
+
     it('should reject a frozen class constructor', () => {
       const Callback = Object.freeze(class Callback {})
 

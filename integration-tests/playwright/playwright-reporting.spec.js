@@ -1,11 +1,15 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { inspect } = require('node:util')
+
+const { Channel, tracingChannel } = require('dc-polyfill')
+const proxyquire = require('proxyquire').noPreserveCache()
 const satisfies = require('semifies')
+const sinon = require('sinon')
 
 const {
   sandboxCwd,
@@ -54,10 +58,11 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
-const { PLAYWRIGHT_VERSION } = process.env
+const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 
-const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, latest: latestPlaywrightVersion, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
+const latestResolvedVersion = latest === 'latest' ? latestPlaywrightVersion : latest
 const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
 const SCREENSHOT_CAPTURE_DISABLED_WARNING =
@@ -70,6 +75,12 @@ const VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.'
 const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
 const UNBOUND_RUNNER_EXPORT_VERSION = '1.59.0'
+const nodeShardIndex = ['oldest', 'latest'].indexOf(TEST_OPTIMIZATION_NODE_SHARD)
+const nodeShard = nodeShardIndex === -1 ? undefined : { index: nodeShardIndex, count: 2 }
+
+function createPlaywrightIt () {
+  return createParallelIt(global.it, { withReceiver: true, shard: nodeShard })
+}
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -80,12 +91,98 @@ function assertRequestErrorTag (events, tag) {
   }
 }
 
+describe('Playwright failure media configuration', () => {
+  afterEach(() => sinon.restore())
+
+  const cases = []
+  for (const screenshot of [undefined, false, true]) {
+    for (const video of [undefined, false, true]) {
+      cases.push({ screenshot, video, pluginEnabled: true })
+    }
+  }
+  cases.push({ screenshot: true, video: true, pluginEnabled: false })
+
+  for (const { screenshot, video, pluginEnabled } of cases) {
+    const flags = `screenshots=${screenshot}, videos=${video}, plugin=${pluginEnabled}`
+    it(`only enables capture for explicit flags (${flags})`, () => {
+      const env = { ...process.env }
+      delete env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      if (screenshot !== undefined) env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = String(screenshot)
+      if (video !== undefined) env.DD_TEST_FAILURE_VIDEOS_ENABLED = String(video)
+      sinon.stub(process, 'env').value(env)
+
+      // Isolate the instrumentation's subscriptions without registering hooks in the test runner.
+      const channels = new Map()
+      const tracingChannels = new Map()
+      proxyquire('../../packages/datadog-instrumentations/src/playwright', {
+        './helpers/instrument': {
+          '@noCallThru': true,
+          addHook () {},
+          /** @param {string} name */
+          channel (name) {
+            if (!channels.has(name)) channels.set(name, new Channel(name))
+            return channels.get(name)
+          },
+          /** @param {string} name */
+          tracingChannel (name) {
+            if (!tracingChannels.has(name)) {
+              const events = {}
+              for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error']) {
+                events[event] = new Channel(`${name}:${event}`)
+              }
+              tracingChannels.set(name, tracingChannel(events))
+            }
+            return tracingChannels.get(name)
+          },
+        },
+      })
+      if (pluginEnabled) channels.get('ci:playwright:library-configuration').subscribe(() => {})
+
+      const screenshotEnabled = screenshot === true && pluginEnabled
+      const videoEnabled = video === true && pluginEnabled
+      const projects = [
+        [{}, {
+          ...(screenshotEnabled && { screenshot: 'only-on-failure' }),
+          ...(videoEnabled && { video: 'retain-on-failure' }),
+        }],
+        [{ screenshot: 'off', video: 'off' }, {
+          screenshot: screenshotEnabled ? 'only-on-failure' : 'off',
+          video: videoEnabled ? 'retain-on-failure' : 'off',
+        }],
+        [{
+          screenshot: { mode: 'off', fullPage: true },
+          video: { mode: 'on-first-retry', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: screenshotEnabled ? 'only-on-failure' : 'off', fullPage: true },
+          video: {
+            mode: videoEnabled ? 'retain-on-failure' : 'on-first-retry', size: { width: 320, height: 240 },
+          },
+        }],
+        [{ screenshot: 'on', video: 'on' }, { screenshot: 'on', video: 'on' }],
+        [{
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }],
+      ]
+      for (const [use, expected] of projects) {
+        const project = { use }
+        tracingChannels.get('orchestrion:playwright:FullProjectInternal').end.publish({ self: { project } })
+        assert.deepStrictEqual(project.use, expected)
+      }
+    })
+  }
+})
+
 const unboundRunnerExportContext = !PLAYWRIGHT_VERSION || PLAYWRIGHT_VERSION === 'latest'
   ? context
   : context.skip
 
 unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound runner export`, function () {
-  const it = createParallelIt(global.it, { withReceiver: true })
+  const it = createPlaywrightIt()
   let cwd
 
   this.timeout(80000)
@@ -125,7 +222,7 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
   // Playwright versions below the release line's minimum are not instrumented.
   const listingContext = version === latest || satisfies(version, `>=${oldest}`) ? describe : describe.skip
   listingContext(`playwright@${version} test listing`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
 
     this.timeout(60000)
     useSandbox([`@playwright/test@${version}`])
@@ -202,7 +299,7 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
 const retryHistoryContext = PLAYWRIGHT_VERSION === 'oldest' ? describe.skip : describe
 
 retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
-  const it = createParallelIt(global.it, { withReceiver: true })
+  const it = createPlaywrightIt()
   this.timeout(60000)
   useSandbox([`@playwright/test@${latest}`])
 
@@ -271,8 +368,18 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
       const result = await execute('--last-failed --list', false)
       assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
       const specs = result.report.suites[0].specs
-      assert.deepStrictEqual(new Set(specs.map(({ id }) => id)), new Set(history.failedTests))
       const selectedTests = specs.flatMap(({ tests }) => tests)
+      const listedSpecIds = new Set(specs.map(({ id }) => id))
+      const failedTestIds = new Set(history.failedTests)
+
+      if (satisfies(latestResolvedVersion, '>=1.65.0') && nativeRepeats > 1) {
+        for (const specId of listedSpecIds) {
+          assert.ok(failedTestIds.has(specId), `${specId} should be one of the failed test ids`)
+        }
+        assert.strictEqual(selectedTests.length, failedTestIds.size)
+      } else {
+        assert.deepStrictEqual(listedSpecIds, failedTestIds)
+      }
       assert.deepStrictEqual(
         selectedTests.map(({ results }) => results),
         Array.from({ length: nativeRepeats }, () => [])
@@ -286,7 +393,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   describe(`playwright@${version} global errors`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     this.timeout(60000)
     useSandbox([`@playwright/test@${version}`])
 
@@ -347,7 +454,7 @@ versions.forEach((version) => {
   const contextOldVersions = version !== 'latest' && satisfies(version, '<1.38.0') ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     const deferredFailureScreenshotTest = satisfies(version, '>=1.60.0') || version === 'latest'
       ? it
       : global.it.skip
@@ -880,11 +987,26 @@ versions.forEach((version) => {
       const programmaticRerunsContext = satisfies(version, '>=1.60.0') || version === 'latest' ? context : context.skip
 
       programmaticRerunsContext('programmatic reruns', () => {
+        // Parallel scenarios share the sandbox. Isolate output dirs so Playwright cleanup
+        // cannot delete another run's worker artifacts or .last-run.json.
+        let programmaticRerunId = 0
+
         context('automatic test retries', () => {
           it('resets dynamic ATR statuses between runs', async (receiver, run) => {
             receiver.setSettings({ flaky_test_retries_enabled: true })
-            const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-              ({ url }) => url === '/api/v2/citestcycle',
+            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
+                TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                TEST_SHOULD_FAIL: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+              },
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc, ({ url }) => url === '/api/v2/citestcycle',
               payloads => {
                 const tests = payloads.flatMap(({ payload }) => payload.events)
                   .filter(event => event.type === 'test').map(event => event.content)
@@ -893,25 +1015,26 @@ versions.forEach((version) => {
                 const finalTests = tests.filter(test => test.meta[TEST_FINAL_STATUS] !== undefined)
                 assert.strictEqual(finalTests.length, 2)
                 assert.ok(finalTests.every(test => test.meta[TEST_FINAL_STATUS] === 'fail'))
-              }, 30000)
-            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-tests-disabled',
-                TEST_SHOULD_FAIL: 'true',
-                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
-                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
-              },
-            })
+              }, { hardTimeout: 70_000 })
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.strictEqual(exitCode, 0)
           })
 
           it('finalizes serial ATR separately on repeated runs', async (receiver, run) => {
             receiver.setSettings({ flaky_test_retries_enabled: true })
-            const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-              ({ url }) => url === '/api/v2/citestcycle',
+            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
+                TEST_DIR: './ci-visibility/playwright-dynamic-atr-serial',
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+                PLAYWRIGHT_SERIAL_SCENARIO: 'later-recovers',
+              },
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc, ({ url }) => url === '/api/v2/citestcycle',
               payloads => {
                 const tests = payloads.flatMap(({ payload }) => payload.events)
                   .filter(event => event.type === 'test').map(event => event.content)
@@ -923,17 +1046,7 @@ versions.forEach((version) => {
                   assert.strictEqual(finalExecutions.length, 2)
                   assert.ok(finalExecutions.every(test => test.meta[TEST_FINAL_STATUS] === 'pass'))
                 }
-              }, 30000)
-            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-dynamic-atr-serial',
-                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
-                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
-                PLAYWRIGHT_SERIAL_SCENARIO: 'later-recovers',
-              },
-            })
+              }, { hardTimeout: 70_000 })
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.strictEqual(exitCode, 0)
           })
@@ -941,8 +1054,19 @@ versions.forEach((version) => {
           it('clears dynamic ATR after a settings request fails between runs', async (receiver, run) => {
             receiver.setSettings({ flaky_test_retries_enabled: true })
             receiver.setSettingsResponseStatusCodes([200, 404])
-            const eventsPromise = receiver.gatherPayloadsMaxTimeout(
-              ({ url }) => url === '/api/v2/citestcycle',
+            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
+                TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                TEST_SHOULD_FAIL: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+              },
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc, ({ url }) => url === '/api/v2/citestcycle',
               payloads => {
                 const tests = payloads.flatMap(({ payload }) => payload.events)
                   .filter(event => event.type === 'test').map(event => event.content)
@@ -950,17 +1074,7 @@ versions.forEach((version) => {
                 const secondRun = tests.filter(test => test.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true')
                 assert.strictEqual(secondRun.length, 1)
                 assert.strictEqual(secondRun[0].meta[TEST_FINAL_STATUS], 'fail')
-              }, 30000)
-            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-tests-disabled',
-                TEST_SHOULD_FAIL: 'true',
-                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
-                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
-              },
-            })
+              }, { hardTimeout: 70_000 })
             const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
             assert.strictEqual(exitCode, 0)
           })
@@ -974,6 +1088,7 @@ versions.forEach((version) => {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
+                  PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                   NODE_OPTIONS: '',
                   TEST_DIR: './ci-visibility/playwright-tests-disabled',
                   TEST_SHOULD_FAIL: 'true',
@@ -1028,6 +1143,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 NODE_OPTIONS: '',
                 TEST_DIR: './ci-visibility/playwright-tests-disabled',
                 TEST_SHOULD_FAIL: 'false',
@@ -1055,6 +1171,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 NODE_OPTIONS: '',
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
@@ -1414,7 +1531,7 @@ versions.forEach((version) => {
         receiver,
         run,
         screenshotMode = 'only-on-failure',
-        isScreenshotUploadEnabled = true,
+        isScreenshotUploadEnabled,
         testOptimizationConfig = getCiVisAgentlessConfig(receiver.port),
         additionalEnvironment = {}
       ) {
@@ -1429,7 +1546,7 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-screenshots-${++screenshotRunId}`,
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled?.toString(),
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
               ...additionalEnvironment,
@@ -1442,8 +1559,14 @@ versions.forEach((version) => {
       }
 
       for (const screenshotMode of screenshotModes) {
-        it(`uploads only automatic failure screenshots with screenshot: '${screenshotMode}'`, async (receiver, run) => {
-          const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run, screenshotMode)
+        it(`uploads failure screenshots by default with screenshot: '${screenshotMode}'`, async (receiver, run) => {
+          const { proc, getTestOutput } = runWithFailureScreenshots(
+            receiver, run, screenshotMode, undefined, getCiVisAgentlessConfig(receiver.port), {
+              // Also verify that disabling videos does not suppress default screenshot uploads.
+              PLAYWRIGHT_FAILURE_VIDEO_MODE: screenshotMode === 'on' ? 'retain-on-failure' : 'off',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+            }
+          )
           const payloadsPromise = receiver
             .gatherPayloadsUntilChildExit(
               proc,
@@ -1460,6 +1583,8 @@ versions.forEach((version) => {
                 assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
                 assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
                 assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
                 assert.strictEqual(
                   mediaPayloads.length,
                   1,
@@ -1500,7 +1625,7 @@ versions.forEach((version) => {
         })
       }
 
-      it('uploads a failed Playwright test video to the test-run media endpoint', async (receiver, run) => {
+      it('uploads a failed Playwright test video by default to the test-run media endpoint', async (receiver, run) => {
         let testOutput = ''
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1510,10 +1635,12 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-videos-${++screenshotRunId}`,
               PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
-              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
             },
           }
         )
@@ -1533,6 +1660,9 @@ versions.forEach((version) => {
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_SCOPE], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'image/png').length, 0)
 
             const videoPayloads = payloads.filter(({ media }) => media?.contentType === 'video/webm')
             assert.strictEqual(videoPayloads.length, 1, `one test video should upload\n${testOutput}`)
@@ -1553,6 +1683,44 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
         assert.strictEqual(exitCode, 1)
+      })
+
+      it('does not upload captured failure media when explicitly disabled', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          false,
+          getCiVisAgentlessConfig(receiver.port),
+          {
+            PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+            PLAYWRIGHT_LOG_MEDIA_CONFIG: 'true',
+          }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .find(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+            assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+          },
+          { hardTimeout: 60000 }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+        const expectedConfig = { screenshot: 'only-on-failure', video: 'retain-on-failure' }
+        assert.ok(getTestOutput().includes(`FAILURE_MEDIA_CONFIG=${JSON.stringify(expectedConfig)}`), getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), getTestOutput())
       })
 
       it('tags a failed Playwright test when its video upload fails', async (receiver, run) => {
@@ -1612,7 +1780,8 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'on-first-retry',
-              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
             },
@@ -1626,6 +1795,7 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 1)
         const warningCount = testOutput.split(VIDEO_CAPTURE_DISABLED_WARNING).length - 1
         assert.strictEqual(warningCount, 1, testOutput)
+        assert.ok(!testOutput.includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), testOutput)
       })
 
       it('does not upload a user attachment named like a recorder video when video capture is off',
@@ -1641,7 +1811,9 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-screenshot',
                 PLAYWRIGHT_OUTPUT_DIR: `./test-results-manual-video-${++screenshotRunId}`,
                 PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
-                DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+                DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
+                DD_TRACE_DEBUG: 'true',
+                DD_TRACE_LOG_LEVEL: 'warn',
               },
             }
           )
@@ -1666,6 +1838,7 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
           assert.strictEqual(exitCode, 1)
+          assert.strictEqual(testOutput.split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1, 1, testOutput)
         })
 
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
@@ -1704,41 +1877,96 @@ versions.forEach((version) => {
         }
       )
 
-      for (const isScreenshotUploadEnabled of [true, false]) {
-        const testName = isScreenshotUploadEnabled
-          ? 'warns when screenshot upload is enabled but screenshot capture is off'
-          : 'does not warn when screenshot upload is disabled'
+      it('enables both captures when explicitly true', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'off',
+          true,
+          getCiVisAgentlessConfig(receiver.port),
+          { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', PLAYWRIGHT_LOG_MEDIA_CONFIG: 'true' }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.includes('/media') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const failedTests = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedTests.length, 1, getTestOutput())
+            const { meta } = failedTests[0].content
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'image/png').length, 1)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'video/webm').length, 1)
+          },
+          { hardTimeout: 60000 }
+        )
 
-        it(testName, async (receiver, run) => {
-          const { proc, getTestOutput } = runWithFailureScreenshots(
-            receiver,
-            run,
-            'off',
-            isScreenshotUploadEnabled
-          )
-          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
-            proc,
-            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
-              const failedTest = payloads
-                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.type === 'test')
-                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+        const expectedConfig = { screenshot: 'only-on-failure', video: 'retain-on-failure' }
+        assert.ok(getTestOutput().includes(`FAILURE_MEDIA_CONFIG=${JSON.stringify(expectedConfig)}`), getTestOutput())
+      })
 
-              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
-              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
-              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
-              assert.strictEqual(mediaPayloads.length, 0)
+      // The flag matrix is covered above without child processes; verify the real config hook in two runs.
+      for (const pluginEnabled of [true, false]) {
+        const name = `resolves capture configuration (plugin=${pluginEnabled})`
+        it(name, async (receiver, run) => {
+          let output = ''
+          const payloads = []
+          receiver.on('message', payload => { payloads.push(payload) })
+          const proc = run('./node_modules/.bin/playwright test -c playwright-failure-media.config.js --list', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TRACE_PLAYWRIGHT_ENABLED: pluginEnabled.toString(),
             },
-            { hardTimeout: 60000 }
-          )
-
-          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
-          assert.strictEqual(exitCode, 1)
-          const warningCount = getTestOutput().split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1
-          assert.strictEqual(warningCount, isScreenshotUploadEnabled ? 1 : 0, getTestOutput())
+          })
+          proc.stdout?.on('data', chunk => { output += chunk.toString() })
+          proc.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [exitCode] = await once(proc, 'close')
+          assert.strictEqual(exitCode, 0, output)
+          const configLine = output.split('\n').find(line => line.startsWith('FAILURE_MEDIA_CONFIG='))
+          assert.ok(configLine, output)
+          const projects = JSON.parse(configLine.slice('FAILURE_MEDIA_CONFIG='.length))
+          const capturesScreenshot = pluginEnabled
+          const capturesVideo = pluginEnabled
+          assert.deepStrictEqual(projects, [
+            {
+              name: 'unset',
+              ...(capturesScreenshot && { screenshot: 'only-on-failure' }),
+              ...(capturesVideo && { video: 'retain-on-failure' }),
+            },
+            {
+              name: 'off',
+              screenshot: capturesScreenshot ? 'only-on-failure' : 'off',
+              video: capturesVideo ? 'retain-on-failure' : 'off',
+            },
+            {
+              name: 'options',
+              screenshot: { mode: capturesScreenshot ? 'only-on-failure' : 'off', fullPage: true },
+              video: {
+                mode: capturesVideo ? 'retain-on-failure' : 'on-first-retry', size: { width: 320, height: 240 },
+              },
+            },
+            { name: 'on', screenshot: 'on', video: 'on' },
+            {
+              name: 'enabled-options',
+              screenshot: { mode: 'on', fullPage: true },
+              video: { mode: 'on', size: { width: 320, height: 240 } },
+            },
+          ])
+          assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+          if (!pluginEnabled) {
+            assert.strictEqual(payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle')).length, 0)
+          }
         })
       }
 
@@ -1837,8 +2065,20 @@ versions.forEach((version) => {
 
     it('works when tests are compiled to a different location', async (receiver, run) => {
       let testOutput = ''
+      const proc = run(
+        'node ./node_modules/typescript/bin/tsc' +
+          '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PW_RUNNER_DEBUG: '1',
+          },
+        }
+      )
       const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testEvents = events.filter(event => event.type === 'test')
           const expectedResources = [
@@ -1883,19 +2123,7 @@ versions.forEach((version) => {
           assert.match(testOutput, /1 passed/)
           assert.match(testOutput, /1 skipped/)
           assert.doesNotMatch(testOutput, /TypeError/)
-        }, 25000)
-      const proc = run(
-        'node ./node_modules/typescript/bin/tsc' +
-          '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            PW_BASE_URL: `http://localhost:${webAppPort}`,
-            PW_RUNNER_DEBUG: '1',
-          },
-        }
-      )
+        }, { hardTimeout: 70_000 })
       proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
       proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
       await Promise.all([receiverPromise, once(proc, 'exit')])
@@ -1903,8 +2131,21 @@ versions.forEach((version) => {
 
     for (const hookFailure of ['times out', 'throws']) {
       it(`works when before all ${hookFailure} and step durations are negative`, async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-error',
+              TEST_TIMEOUT: '3000',
+              PLAYWRIGHT_BEFORE_ALL_ERROR: hookFailure === 'throws' ? 'throw' : '',
+            },
+          }
+        )
         const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
             const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
@@ -1919,35 +2160,12 @@ versions.forEach((version) => {
             })
             assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
             assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
-          })
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-error',
-              TEST_TIMEOUT: '3000',
-              PLAYWRIGHT_BEFORE_ALL_ERROR: hookFailure === 'throws' ? 'throw' : '',
-            },
-          }
-        )
+          }, { hardTimeout: 70_000 })
         await Promise.all([receiverPromise, once(proc, 'exit')])
       })
     }
 
     it('reports multiple test suite errors', async (receiver, run) => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
-
-          assert.match(
-            testSuiteEvent.meta[ERROR_MESSAGE],
-            /2 errors in this test suite:\n(?:Error: )?first failure\n------\n'second failure'/
-          )
-        })
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js',
         {
@@ -1958,20 +2176,21 @@ versions.forEach((version) => {
           },
         }
       )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+
+          assert.match(
+            testSuiteEvent.meta[ERROR_MESSAGE],
+            /2 errors in this test suite:\n(?:Error: )?first failure\n------\n'second failure'/
+          )
+        }, { hardTimeout: 70_000 })
 
       await Promise.all([receiverPromise, once(proc, 'exit')])
     })
 
     it('does not crash when maxFailures=1 and there is an error', async (receiver, run) => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testEvents = events.filter(event => event.type === 'test')
-          assertObjectContains(testEvents.map(test => test.content.resource), [
-            'failing-test-and-another-test.js.should work with failing tests',
-            'failing-test-and-another-test.js.does not crash afterwards',
-          ])
-        })
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js',
         {
@@ -1984,22 +2203,21 @@ versions.forEach((version) => {
           },
         }
       )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+          assertObjectContains(testEvents.map(test => test.content.resource), [
+            'failing-test-and-another-test.js.should work with failing tests',
+            'failing-test-and-another-test.js.does not crash afterwards',
+          ])
+        }, { hardTimeout: 70_000 })
       await Promise.all([receiverPromise, once(proc, 'exit')])
     })
 
     it(
       'correctly calculates test code owners when working directory is not repository root',
       async (receiver, run) => {
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const test = events.find(event => event.type === 'test').content
-            const testSuite = events.find(event => event.type === 'test_suite_end').content
-            // The test is in a subproject
-            assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
-            assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-            assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-          })
         const proc = run(
           '../../node_modules/.bin/playwright test',
           {
@@ -2012,19 +2230,21 @@ versions.forEach((version) => {
             },
           }
         )
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
+            const testSuite = events.find(event => event.type === 'test_suite_end').content
+            // The test is in a subproject
+            assert.notStrictEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.strictEqual(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+            assert.strictEqual(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          }, { hardTimeout: 70_000 })
         await Promise.all([eventsPromise, once(proc, 'exit')])
       }
     )
 
     it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async (receiver, run) => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          tests.forEach(test => {
-            assert.strictEqual(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
-          })
-        })
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js',
         {
@@ -2036,13 +2256,33 @@ versions.forEach((version) => {
           },
         }
       )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.strictEqual(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        }, { hardTimeout: 70_000 })
       await Promise.all([receiverPromise, once(proc, 'exit')])
     })
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
+            },
+          }
+        )
         const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
@@ -2068,31 +2308,13 @@ versions.forEach((version) => {
               assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
               assert.strictEqual(metadata.test_levels[TEST_COMMAND], 'playwright test -c playwright.config.js')
             })
-          })
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
-              DD_TEST_SESSION_NAME: 'my-test-session-name',
-            },
-          }
-        )
+          }, { hardTimeout: 70_000 })
         await Promise.all([eventsPromise, once(proc, 'exit')])
       })
     })
 
     context('run session status', () => {
       it('session status is not changed if it fails before running any test', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
-          })
         receiver.setSettings({ test_management: { enabled: true } })
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
@@ -2105,6 +2327,12 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+          }, { hardTimeout: 70_000 })
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -2157,8 +2385,21 @@ versions.forEach((version) => {
          * This only happened with tests that included skipped tests.
          */
         it('should report the correct test suite duration when there are skipped tests', async (receiver, run) => {
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-test-duration',
+                FULLY_PARALLEL: String(parallelism),
+                PLAYWRIGHT_WORKERS: '2',
+              },
+            }
+          )
           const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSuites = events
@@ -2186,20 +2427,7 @@ versions.forEach((version) => {
                 `- Long suite: ${Number(longSuite.duration) / 1e6}ms \n` +
                 `- Short suite: ${Number(shortSuite.duration) / 1e6}ms`
               )
-            })
-          const proc = run(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-test-duration',
-                FULLY_PARALLEL: String(parallelism),
-                PLAYWRIGHT_WORKERS: '2',
-              },
-            }
-          )
+            }, { hardTimeout: 70_000 })
           await Promise.all([receiverPromise, once(proc, 'exit')])
         })
       })

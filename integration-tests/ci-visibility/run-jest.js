@@ -52,6 +52,7 @@ const options = {
   testPathIgnorePatterns: ['/node_modules/'],
   modulePathIgnorePatterns: ['<rootDir>/\\.bun/'],
   cache: false,
+  watchman: false,
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !!process.env.ENABLE_CODE_COVERAGE,
   runInBand: true,
@@ -106,6 +107,10 @@ if (process.env.COVERAGE_REPORTERS) {
 
 if (process.env.DO_NOT_INJECT_GLOBALS) {
   options.injectGlobals = false
+}
+
+if (process.env.JEST_MODULE_FILE_EXTENSIONS) {
+  options.moduleFileExtensions = process.env.JEST_MODULE_FILE_EXTENSIONS.split(',')
 }
 
 if (process.env.WAIT_FOR_UNHANDLED_REJECTIONS) {

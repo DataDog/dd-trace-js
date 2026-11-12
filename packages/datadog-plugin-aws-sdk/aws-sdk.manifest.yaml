@@ -1,0 +1,44 @@
+_v: 1
+name: aws-sdk
+display_name: AWS SDK
+description: "Instruments AWS SDK service requests, including database and object-storage operations, CloudWatch Logs\
+  \ API requests, message production and consumption with trace context propagation, Lambda invocations and Step\
+  \ Functions execution starts with context injection, and Bedrock Runtime model calls with LLM Observability."
+packages:
+- name: '@aws-sdk/client-bedrock-runtime'
+- name: '@aws-sdk/client-cloudwatch-logs'
+- name: '@aws-sdk/client-dynamodb'
+- name: '@aws-sdk/client-eventbridge'
+- name: '@aws-sdk/client-kinesis'
+- name: '@aws-sdk/client-lambda'
+- name: '@aws-sdk/client-redshift'
+- name: '@aws-sdk/client-s3'
+- name: '@aws-sdk/client-sfn'
+- name: '@aws-sdk/client-sns'
+- name: '@aws-sdk/client-sqs'
+- name: '@aws-sdk/smithy-client'
+- name: '@smithy/core'
+- name: '@smithy/smithy-client'
+- name: aws-sdk
+category:
+- cloud_provider.client
+- db.client
+- faas
+- gen_ai
+- messaging.consumer
+- messaging.producer
+- object_store.client
+- workflow.durable_execution
+systems:
+- aws
+- aws.bedrock
+- aws.dynamodb
+- aws.eventbridge
+- aws.kinesis
+- aws.lambda
+- aws.redshift
+- aws.s3
+- aws.sns
+- aws.sqs
+- aws.step_functions
+creation_date: '2020-02-28'

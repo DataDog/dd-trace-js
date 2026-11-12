@@ -29,6 +29,8 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
@@ -118,6 +120,7 @@ class VitestPlugin extends CiPlugin {
         isAttemptToFix,
         isQuarantined,
         isDisabled,
+        annotations,
         mightHitProbe,
         isRetryReasonEfd,
         isRetryReasonAttemptToFix,
@@ -162,6 +165,8 @@ class VitestPlugin extends CiPlugin {
       if (hasDynamicName) {
         extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
       }
+      if (annotations?.mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+      if (annotations?.noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
       }
@@ -344,6 +349,7 @@ class VitestPlugin extends CiPlugin {
       isAttemptToFix,
       isDisabled,
       isQuarantined,
+      annotations,
       isRumActive,
       isTestFrameworkWorker,
       requestErrorTags,
@@ -354,6 +360,8 @@ class VitestPlugin extends CiPlugin {
       browserProjectName,
       testExecutionId,
       testStartLine,
+      startTime,
+      duration,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const extraTags = {
@@ -363,6 +371,8 @@ class VitestPlugin extends CiPlugin {
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
       }
+      if (annotations?.mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+      if (annotations?.noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
       if (isAttemptToFix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
       if (isDisabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
       if (isQuarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
@@ -380,10 +390,11 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         testSuiteSpan || this.testSuiteSpan,
         extraTags,
-        testExecutionId
+        testExecutionId,
+        startTime
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
-      testSpan.finish()
+      testSpan.finish(Number.isFinite(duration) && duration >= 0 ? testSpan._startTime + duration : undefined)
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {

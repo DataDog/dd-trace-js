@@ -13,11 +13,14 @@ describe('http-otel-semantics', () => {
       )
     })
 
-    it('omits the port when it is the scheme default', () => {
-      assert.deepStrictEqual(
-        decomposeServerUrl('https://example.com/p', 'https://example.com/p'),
-        { scheme: 'https', address: 'example.com', port: undefined, path: '/p', query: undefined }
-      )
+    it('populates implicit scheme-default ports', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com/p', '').port, 80)
+      assert.strictEqual(decomposeServerUrl('https://example.com/p', '').port, 443)
+    })
+
+    it('populates explicit scheme-default ports', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com:80/p', '').port, 80)
+      assert.strictEqual(decomposeServerUrl('https://example.com:443/p', '').port, 443)
     })
 
     it('keeps an explicit non-default port and omits an absent query', () => {
@@ -32,16 +35,21 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(parts.query, '<redacted>')
     })
 
-    it('strips brackets from an IPv6 server.address', () => {
-      const parts = decomposeServerUrl('http://[::1]:8080/p', 'http://[::1]:8080/p')
+    it('strips brackets from an IPv6 server.address and populates its default port', () => {
+      const parts = decomposeServerUrl('http://[::1]/p', 'http://[::1]/p')
       assert.strictEqual(parts.address, '::1')
-      assert.strictEqual(parts.port, 8080)
+      assert.strictEqual(parts.port, 80)
     })
 
-    it('omits server.address when the Host header is absent', () => {
+    it('omits port 0', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com:0/p', '').port, undefined)
+    })
+
+    it('omits server.address and server.port when the Host header is absent', () => {
       // extractURL builds `http://undefined/...` when req.headers.host is missing.
       const parts = decomposeServerUrl('http://undefined/p', 'http://undefined/p')
       assert.strictEqual(parts.address, undefined)
+      assert.strictEqual(parts.port, undefined)
       assert.strictEqual(parts.path, '/p')
     })
 
@@ -110,7 +118,7 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(metrics['http.response.status_code'], 500)
       assert.strictEqual(meta['error.type'], '500')
       assert.ok(!('http.url' in meta))
-      assert.ok(!('http.endpoint' in meta))
+      assert.strictEqual(meta['http.endpoint'], '/u')
       assert.ok(!('http.useragent' in meta))
       assert.ok(!('http.client_ip' in meta))
     })
@@ -176,7 +184,7 @@ describe('http-otel-semantics', () => {
       )
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://user@h/p' }).meta['url.full'],
-        'http://REDACTED@h/p'
+        'http://REDACTED:REDACTED@h/p'
       )
       // userinfo extends to the last '@' in the authority — redact all of it.
       assert.strictEqual(
@@ -192,6 +200,8 @@ describe('http-otel-semantics', () => {
     it('falls back to the scheme default port for a client without an explicit port', () => {
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).metrics['server.port'], 443)
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).metrics['server.port'], 80)
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'wss://h/p' }).metrics['server.port'], 443)
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'ws://h/p' }).metrics['server.port'], 80)
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://h:8080/p' }, { 'network.destination.port': 8080 })
           .metrics['server.port'],
@@ -239,27 +249,18 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(span.resource, 'GET /users/{id}')
     })
 
-    it('marks a server 5xx as an error with error.type, but never a server 4xx', () => {
-      const e503 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-      assert.strictEqual(e503.meta['error.type'], '503')
-      assert.strictEqual(e503.error, 1)
+    for (const kind of ['client', 'server']) {
+      for (const status of ['200', '404', '503', '600']) {
+        for (const error of [0, 1]) {
+          it(`preserves error=${error} for a ${kind} response with status ${status}`, () => {
+            const span = run({ 'span.kind': kind, 'http.method': 'GET', 'http.status_code': status }, {}, error)
 
-      const e404 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-      assert.ok(!('error.type' in e404.meta))
-    })
-
-    it('sets error.type for client 4xx and 5xx', () => {
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '404'
-      )
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '503'
-      )
-    })
+            assert.strictEqual(span.error, error)
+            assert.strictEqual(span.meta['error.type'], error ? status : undefined)
+          })
+        }
+      }
+    }
 
     it('skips the status-code metric and error.type when the status is non-numeric', () => {
       const { meta, metrics } = run({
@@ -267,7 +268,7 @@ describe('http-otel-semantics', () => {
         'http.method': 'GET',
         'http.status_code': 'bogus',
         'http.url': 'http://h/p',
-      })
+      }, {}, 1)
 
       assert.ok(!('http.response.status_code' in metrics))
       assert.ok(!('error.type' in meta))

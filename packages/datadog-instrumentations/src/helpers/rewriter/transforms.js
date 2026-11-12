@@ -140,8 +140,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     const generatedCallback = createAwaitedContextCallback(
       state,
       insertionTarget,
-      callbackAncestry,
-      'awaitContextCallback'
+      callbackAncestry
     )
     if (!generatedCallback) return
 
@@ -158,8 +157,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   const generatedCallback = createAwaitedContextCallback(
     state,
     node.consequent,
-    ancestry,
-    'awaitContextCallback'
+    ancestry
   )
   if (!generatedCallback) return
 
@@ -181,18 +179,17 @@ function awaitContextCallback (state, node, _parent, ancestry) {
  * @param {Parameters<typeof awaitContextCallback>[0]} state
  * @param {import('estree').BlockStatement} insertionTarget
  * @param {import('estree').Node[]} ancestry
- * @param {string} transformName
  * @returns {{
  *   callbackStatements: import('estree').Statement[],
  *   callbackVariable: string
  * }|undefined}
  */
-function createAwaitedContextCallback (state, insertionTarget, ancestry, transformName) {
+function createAwaitedContextCallback (state, insertionTarget, ancestry) {
   const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
 
-  assert(identifierPattern.test(callbackName), `${transformName}: callbackName must be an identifier`)
+  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
   assert(Array.isArray(callbackArgumentNames) && callbackArgumentNames.every(name => identifierPattern.test(name)),
-    `${transformName}: callbackArgumentNames must be identifiers`)
+    'awaitContextCallback: callbackArgumentNames must be identifiers')
 
   let enclosingFunction
   let hasTraceWrapper = false
@@ -215,8 +212,8 @@ function createAwaitedContextCallback (state, insertionTarget, ancestry, transfo
     hasTraceWrapper ||= hasContextBinding && hasTracedBinding
   }
 
-  assert(enclosingFunction?.async, `${transformName}: expected an enclosing async function`)
-  assert(hasTraceWrapper, `${transformName}: expected an enclosing trace wrapper`)
+  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
+  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
 
   const callbackVariable = `__apm$${callbackName}`
   if (query(insertionTarget, `[id.name="${callbackVariable}"]`).length > 0) return
@@ -246,8 +243,10 @@ function createAwaitedContextCallback (state, insertionTarget, ancestry, transfo
 /**
  * @param {object} _state
  * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
  */
-function configureGraphqlJitCompileObject (_state, node) {
+function configureGraphqlJitCompileObject (_state, node, _parent, ancestry) {
   const resolverConditions = query(node, 'IfStatement[test.name="resolver"]')
   const compileTypeCalls = query(node, 'CallExpression[callee.name="compileType"]')
 
@@ -287,7 +286,7 @@ function configureGraphqlJitCompileObject (_state, node) {
         DD_FIELD_NODES,
         originPaths,
         ddTraceArguments,
-        objectStringify(ddTraceArguments.values),
+        DD_STRINGIFY,
         DD_COMPILED
       )
       : undefined
@@ -295,6 +294,26 @@ function configureGraphqlJitCompileObject (_state, node) {
   replaceIdentifier(inlineField, 'DD_PATH', clone(compileTypeCall.arguments[6]))
   replaceIdentifier(inlineField, 'DD_FIELD_NODES', clone(compileTypeCall.arguments[3]))
   replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
+
+  const program = ancestry.find(ancestor => ancestor.type === 'Program')
+  let stringify = parse('objectStringify').body[0].expression
+  if (query(program, 'FunctionDeclaration[id.name="objectStringify"]').length === 0) {
+    const values = queryOne(
+      program,
+      'FunctionDeclaration[id.name="compileArguments"][params.1.name="args"]' +
+      ':has(VariableDeclarator[id.name="bind"]) VariableDeclarator[id.name="valuesExpression"]'
+    )
+    assert(values?.init, 'configureGraphqlJitCompileObject: argument serializer not found')
+    stringify = parse(`
+      (values, hoist) => {
+        const args = { values, types: ddTraceArguments.types }
+        const bind = value => '__context.literals.' + hoist(value)
+        return DD_VALUES
+      }
+    `).body[0].expression
+    replaceIdentifier(stringify, 'DD_VALUES', values.init)
+  }
+  replaceIdentifier(inlineField, 'DD_STRINGIFY', stringify)
 
   assert(
     insertBeforeStatement(node.body, resolverCondition, [...defaultSetup, inlineField]),

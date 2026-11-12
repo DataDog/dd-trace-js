@@ -3,6 +3,61 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
+declare const baseEvaluatorBrand: unique symbol
+declare const baseSummaryEvaluatorBrand: unique symbol
+
+declare const EvaluatorContext: {
+  new (options: {
+    inputData: tracer.llmobs.JSONType
+    outputData: tracer.llmobs.JSONType
+    expectedOutput?: tracer.llmobs.JSONType
+    metadata?: Record<string, tracer.llmobs.JSONType>
+    spanId?: string
+    traceId?: string
+  }): tracer.llmobs.EvaluatorContext
+}
+
+declare const SummaryEvaluatorContext: {
+  new (options: {
+    inputs: tracer.llmobs.JSONType[]
+    outputs: tracer.llmobs.JSONType[]
+    expectedOutputs: tracer.llmobs.JSONType[]
+    evaluationResults: Record<string, tracer.llmobs.JSONType[]>
+    metadata?: Array<Record<string, tracer.llmobs.JSONType>>
+  }): tracer.llmobs.SummaryEvaluatorContext
+}
+
+declare const EvaluatorResult: {
+  new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
+}
+
+declare const MultiEvaluatorResult: {
+  new (values: Record<string, tracer.llmobs.JSONType | tracer.llmobs.EvaluatorResult>, prefix?: boolean): tracer.llmobs.MultiEvaluatorResult
+}
+
+declare const BaseEvaluator: {
+  new (name?: string): tracer.llmobs.BaseEvaluator
+}
+
+declare const BaseSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseSummaryEvaluator
+}
+
+declare const RemoteEvaluatorError: {
+  new (message: string, options?: {
+    status?: string
+    backendError?: Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluatorError
+}
+
+declare const RemoteEvaluator: {
+  new (options: {
+    evalName: string
+    transformFn?: (context: tracer.llmobs.EvaluatorContext) => Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluator
+}
+
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -158,11 +213,14 @@ interface Tracer extends opentracing.Tracer {
   /**
    * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Agentless delivery is enabled by default and starts when the provider is first accessed.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed. The default agentless
+   * endpoint requires DD_API_KEY. Without it, provider initialization fails at once. A custom agentless base URL
+   * and Remote Config delivery do not need the key.
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
-   * @beta This feature is in preview and not ready for production use
+   * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+   * @env DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED
    */
   openfeature: tracer.OpenFeatureProvider;
 
@@ -219,7 +277,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * Removes all baggage items from the current context and returns the new context.
    *
-   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#clear-baggage-in-the-context
    */
   removeAllBaggageItems (): Record<string, string>;
 }
@@ -235,6 +293,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "claude-agent-sdk": tracer.plugins.claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
+  "async-mutex": tracer.plugins.async_mutex;
   "avsc": tracer.plugins.avsc;
   "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -256,6 +315,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -303,6 +363,7 @@ interface Plugins {
   "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "react-router": tracer.plugins.react_router;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -311,6 +372,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
+  "typesafe": tracer.plugins.typesafe;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
   "web": tracer.plugins.web;
@@ -798,6 +860,22 @@ declare namespace tracer {
     site?: string;
 
     /**
+     * Feature Flags configuration.
+     */
+    featureFlags?: {
+      /**
+       * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
+       * Enabling this option does not change exposure events or flag evaluation results.
+       * Captured when the provider is constructed.
+       * The attribute remains available to targeting rules and exposure reporting.
+       * Explicit configuration takes precedence over the environment variable, including false.
+       * @default false
+       * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
+       */
+      enableEvaluationTelemetryOptOutParameter?: boolean
+    }
+
+    /**
      * Experimental features can be enabled individually using key / value pairs.
      * @default {}
      */
@@ -904,8 +982,6 @@ declare namespace tracer {
 
       /**
        * Configuration for Feature Flagging & Experimentation.
-       *
-       * @beta This feature is in preview and not ready for production use
        */
       flaggingProvider?: {
         /**
@@ -920,7 +996,8 @@ declare namespace tracer {
         enabled?: boolean
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
-         * If configuration is not received within this time, initialization fails.
+         * If configuration is not received within this time, initialization fails. It fails at once when the agentless
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
@@ -1358,6 +1435,16 @@ declare namespace tracer {
       captureTimeoutMs?: number
 
       /**
+       * Time budget in milliseconds for evaluating a probe's condition, log message template and capture expressions.
+       * An evaluation that exceeds the budget is reported as an evaluation error and the probe is not evaluated again
+       * for a while.
+       * @default 50
+       * @env DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      evaluationTimeoutMs?: number
+
+      /**
        * Interval in seconds between uploads of probe data.
        * @default 1
        * @env DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
@@ -1774,8 +1861,6 @@ declare namespace tracer {
    *
    * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
-   *
-   * @beta This feature is in preview and not ready for production use
    */
   export interface OpenFeatureProvider {
     /**
@@ -2052,11 +2137,21 @@ declare namespace tracer {
        * @param opts - Optional configuration object:
        *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
        *              and the AI Guard service has blocking mode enabled (default: false).
+       *   - `tags`: Custom tags to set on the AI Guard span. Keys are set verbatim. Keys equal to
+       *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
+       *             empty key, a key longer than 200 characters, a string value longer than 25000
+       *             characters, or a value that is not a string, finite number or boolean are dropped.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
-      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+      evaluate (
+        messages: Message[],
+        opts?: {
+          block?: boolean,
+          tags?: { [key: string]: string | number | boolean },
+        }
+      ): Promise<Evaluation>;
     }
   }
 
@@ -2137,8 +2232,9 @@ declare namespace tracer {
       /**
        * Whether to capture LLM Observability spans for this integration. When set to `false`,
        * the integration keeps emitting APM spans and propagating trace context, but no LLM
-       * Observability spans are produced. Useful when another integration already captures the
-       * same operation and the payloads would otherwise be stored twice.
+       * Observability spans and no basic `gen_ai.*` APM tags are produced. Useful when another
+       * integration already captures the same operation and the payloads would otherwise be
+       * stored twice.
        * @default true
        */
       llmobs?: boolean;
@@ -2466,6 +2562,12 @@ declare namespace tracer {
     }
 
     /**
+     * This plugin automatically instruments the
+     * [async-mutex](https://github.com/DirtyHairy/async-mutex) module.
+     */
+    interface async_mutex extends Instrumentation {}
+
+    /**
      * This plugin automatically patches the [avsc](https://github.com/mtth/avsc) module
      * to collect avro message schemas when Datastreams Monitoring is enabled.
      */
@@ -2555,14 +2657,14 @@ declare namespace tracer {
     /**
      * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface browser_bunyan extends Integration {}
 
     /**
      * This plugin automatically instruments the
-     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     * [bullmq](https://www.npmjs.com/package/bullmq) message queue library.
      */
     interface bullmq extends Instrumentation {
       /**
@@ -2583,7 +2685,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface bunyan extends Integration {}
@@ -2671,6 +2773,12 @@ declare namespace tracer {
        */
       net?: boolean;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -3078,7 +3186,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [langgraph](https://github.com/npmjs/package/langgraph) library.
+     * [langgraph](https://www.npmjs.com/package/@langchain/langgraph) library.
      */
     interface langgraph extends Instrumentation, LLMObsIntegration {}
 
@@ -3114,7 +3222,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     * [modelcontextprotocol-sdk](https://www.npmjs.com/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation, LLMObsIntegration {}
 
@@ -3293,7 +3401,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [pino](http://getpino.io)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface pino extends Integration {}
@@ -3323,12 +3431,12 @@ declare namespace tracer {
      */
     interface prisma extends PrismaClient, PrismaEngine {
       /**
-       * Configuration for prisma client.
+       * Configuration for prisma client. Set to `false` to skip `prisma.client` spans.
        */
       client?: PrismaClient | boolean,
 
       /**
-       * Configuration for Prisma engine.
+       * Configuration for Prisma engine. Set to `false` to skip `prisma.engine` spans.
        */
       engine?: PrismaEngine | boolean
     }
@@ -3338,6 +3446,17 @@ declare namespace tracer {
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
     interface protobufjs extends Integration {}
+
+    /**
+     * This plugin automatically instruments
+     * [React Router](https://reactrouter.com/) Framework Mode via the
+     * ServerInstrumentation API (`createRequestHandler`), tagging Express/http
+     * spans with parameterized routes and creating loader/action child spans.
+     *
+     * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     * Configure request span options on `http` or the host framework integration.
+     */
+    interface react_router extends Pick<Instrumentation, 'enabled' | 'measured'> {}
 
     /**
      * This plugin automatically instruments the
@@ -3462,6 +3581,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@typesafe-ai/sdk](https://www.npmjs.com/package/@typesafe-ai/sdk) module.
+     */
+    interface typesafe extends Instrumentation, LLMObsIntegration {}
+
+    /**
+     * This plugin automatically instruments the
      * [undici](https://github.com/nodejs/undici) module.
      */
     interface undici extends HttpClient {}
@@ -3480,7 +3605,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface winston extends Integration {}
@@ -3781,7 +3906,7 @@ declare namespace tracer {
        * key/value pair separated by an equals sign `=`. Spaces and horizontal tabs
        * surrounding `list-members` are ignored. There can be a maximum of 32
        * `list-members` in a `list`.
-       * More Info: https://www.w3.org/TR/trace-context/#tracestate-field
+       * More Info: https://www.w3.org/TR/trace-context/#tracestate-header
        *
        * Examples:
        *     Single tracing system (generic format):
@@ -3996,7 +4121,8 @@ declare namespace tracer {
 
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
-       * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * Note that with the exception of tags and agent, this method will override any existing values for the provided fields.
+       * Agent fields update earlier agent annotations one top-level field at a time.
        *
        * For example:
        * ```javascript
@@ -4012,7 +4138,7 @@ declare namespace tracer {
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, metrics, and agent to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -4083,13 +4209,13 @@ declare namespace tracer {
       /** Create a text or chat prompt and its first version. */
       createPrompt (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptOptions
       ): Promise<PromptResponse>
       /** Add a text or chat version to an existing prompt. */
       createPromptVersion (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptVersionOptions
       ): Promise<PromptVersionResponse>
       /** Update prompt metadata. */
@@ -4113,10 +4239,45 @@ declare namespace tracer {
       content: string
     }
 
+    /** Provider fields on expanded messages; authored templates remain text-only. */
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      // The inherited content type stays string for compatibility; tool-only payloads can omit it or contain null.
+      tool_calls?: PromptToolCall[] | null,
+      tool_results?: PromptToolResult[] | null,
+      tool_call_id?: string | null
+    }
+
+    interface PromptToolCall {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      arguments?: unknown,
+      function?: {
+        name: string,
+        arguments: string
+      } | null
+    }
+
+    interface PromptToolResult {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      result?: unknown
+    }
+
+    interface PromptMessagePlaceholder {
+      type: 'placeholder',
+      name: string
+    }
+
+    type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
+
     type PromptFallbackValue =
       | string
-      | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string, config?: Record<string, JSONType> }
+      | PromptTemplateItem[]
+      | { template: string | PromptTemplateItem[], version?: string, config?: Record<string, JSONType> }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -4156,6 +4317,7 @@ declare namespace tracer {
       envIds?: string[]
     }
 
+    // Preserve released output types; placeholder entries and null/omitted tool content are not fully described here.
     interface ManagedPrompt {
       readonly id: string,
       readonly version: string,
@@ -4164,7 +4326,7 @@ declare namespace tracer {
       readonly config: Readonly<Record<string, ReadonlyJSONType>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 
@@ -4212,6 +4374,74 @@ declare namespace tracer {
 
     type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
+    /** Context passed to a record-level class evaluator. */
+    interface EvaluatorContext {
+      inputData: JSONType
+      outputData: JSONType
+      expectedOutput?: JSONType
+      metadata: Record<string, JSONType>
+      spanId?: string
+      traceId?: string
+    }
+
+    /** Context passed to a summary class evaluator. */
+    interface SummaryEvaluatorContext {
+      inputs: JSONType[]
+      outputs: JSONType[]
+      expectedOutputs: JSONType[]
+      evaluationResults: Record<string, JSONType[]>
+      metadata: Array<Record<string, JSONType>>
+    }
+
+    interface EvaluatorResultOptions {
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A metric value with optional evaluation details. */
+    interface EvaluatorResult {
+      value: JSONType
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A result that emits several named metrics from one evaluator invocation. */
+    interface MultiEvaluatorResult {
+      values: Record<string, JSONType | EvaluatorResult>
+      prefix: boolean
+    }
+
+    /** Error returned by a managed evaluator configured in Datadog. */
+    interface RemoteEvaluatorError extends Error {
+      status: string
+      backendError: Record<string, JSONType>
+    }
+
+    /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
+    interface RemoteEvaluator extends BaseEvaluator {}
+    interface ExperimentSummaryEvaluation extends EvaluatorResultOptions {
+      value: any
+      error: string | null
+    }
+
+    /** Base class for reusable synchronous or asynchronous record-level evaluators. */
+    interface BaseEvaluator {
+      readonly [baseEvaluatorBrand]: never
+      name: string
+      evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
+    /** Base class for reusable synchronous or asynchronous summary evaluators. */
+    interface BaseSummaryEvaluator {
+      readonly [baseSummaryEvaluatorBrand]: never
+      name: string
+      evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
     /**
      * A task run over each dataset record during an experiment.
      */
@@ -4221,26 +4451,25 @@ declare namespace tracer {
       metadata?: Record<string, JSONType>
     ) => JSONType | Promise<JSONType>
 
-    /**
-     * Scores a single task output. The return type selects the metric:
-     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
-     */
-    type ExperimentEvaluator = (
+    /** Scores a single task output. */
+    type ExperimentEvaluatorFunction = (
       input: JSONType,
       output: JSONType,
       expectedOutput: JSONType
-    ) => JSONType | Promise<JSONType>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
 
-    /**
-     * Scores all rows in an experiment run and emits a summary metric.
-     */
-    type ExperimentSummaryEvaluator = (
-      inputs: any[],
-      outputs: any[],
-      expectedOutputs: any[],
-      evaluatorResults: Record<string, any[]>,
-      metadata?: Array<Record<string, any>>
-    ) => any | Promise<any>
+    type ExperimentEvaluator = ExperimentEvaluatorFunction | BaseEvaluator
+
+    /** Scores all rows in an experiment run and emits a summary metric. */
+    type ExperimentSummaryEvaluatorFunction = (
+      inputs: JSONType[],
+      outputs: JSONType[],
+      expectedOutputs: JSONType[],
+      evaluatorResults: Record<string, JSONType[]>,
+      metadata?: Array<Record<string, JSONType>>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+
+    type ExperimentSummaryEvaluator = ExperimentSummaryEvaluatorFunction | BaseSummaryEvaluator
 
     interface DatasetRecord {
       id: string | null
@@ -4271,9 +4500,9 @@ declare namespace tracer {
       task: ExperimentTask
       /** Override the configured project for this experiment. */
       projectName?: string
-      /** Evaluators keyed by metric label, or named functions. */
+      /** Evaluators keyed by metric label, or named functions or class instances. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
-      /** Summary evaluators keyed by metric label, or named functions. */
+      /** Summary evaluators keyed by metric label, or named functions or class instances. */
       summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
       config?: Record<string, JSONType>
@@ -4329,7 +4558,7 @@ declare namespace tracer {
       /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
       hasError: boolean
       rows: ExperimentResultRow[]
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
     }
 
     interface ExperimentResult {
@@ -4337,7 +4566,7 @@ declare namespace tracer {
       /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
       /** Summary evaluator results from the first run, kept as a compatibility alias. */
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
       /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
@@ -4472,6 +4701,14 @@ declare namespace tracer {
     }
 
     interface Experiments {
+      BaseEvaluator: typeof BaseEvaluator
+      BaseSummaryEvaluator: typeof BaseSummaryEvaluator
+      EvaluatorContext: typeof EvaluatorContext
+      SummaryEvaluatorContext: typeof SummaryEvaluatorContext
+      EvaluatorResult: typeof EvaluatorResult
+      MultiEvaluatorResult: typeof MultiEvaluatorResult
+      RemoteEvaluator: typeof RemoteEvaluator
+      RemoteEvaluatorError: typeof RemoteEvaluatorError
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset
@@ -4492,12 +4729,18 @@ declare namespace tracer {
       /**
        * The input content associated with the span.
        */
-      input: { content: string, role?: string }[]
+      input: { content: JSONType, role?: string }[]
 
       /**
        * The output content associated with the span.
        */
-      output: { content: string, role?: string }[]
+      output: { content: JSONType, role?: string }[]
+
+      /**
+       * The expected output associated with an experiment span.
+       * Delete this property or set it to `undefined` to omit the expected output.
+       */
+      expectedOutput?: JSONType
 
       /**
        * Get a tag from the span.
@@ -4828,6 +5071,84 @@ declare namespace tracer {
     }
 
 
+    interface AgentToolParameter {
+      type?: string,
+      required?: boolean
+    }
+
+    /**
+     * A plain JSON Schema object with `type: 'object'`, which is how it is told apart from a parameter map.
+     * Schema-library objects (for example Zod schemas) must be converted first, for example with
+     * `z.toJSONSchema()`, or they are dropped.
+     */
+    interface AgentToolJsonSchema {
+      type: 'object',
+      properties: { [param: string]: { type?: string, [key: string]: unknown } },
+      required?: string[]
+    }
+
+    interface AgentTool {
+      name: string,
+      description?: string,
+      /**
+       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object, which is flattened to the
+       * same shape.
+       */
+      parameters?: { [param: string]: AgentToolParameter } | AgentToolJsonSchema
+    }
+
+    /**
+     * Inference parameters reported in an agent manifest. Keys are accepted in snake_case or camelCase and
+     * reported in snake_case. Other keys are dropped, since provider-specific settings can carry secrets.
+     */
+    interface AgentModelSettings {
+      frequency_penalty?: number,
+      frequencyPenalty?: number,
+      logit_bias?: { [token: string]: number },
+      logitBias?: { [token: string]: number },
+      logprobs?: boolean,
+      max_tokens?: number,
+      maxTokens?: number,
+      parallel_tool_calls?: boolean,
+      parallelToolCalls?: boolean,
+      presence_penalty?: number,
+      presencePenalty?: number,
+      seed?: number,
+      stop_sequences?: string[],
+      stopSequences?: string[],
+      temperature?: number,
+      timeout?: number,
+      tool_choice?: string,
+      toolChoice?: string,
+      top_k?: number,
+      topK?: number,
+      top_logprobs?: number,
+      topLogprobs?: number,
+      top_p?: number,
+      topP?: number
+    }
+
+    /**
+     * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag on the agent
+     * span and its child spans within the same process. The other fields are reported as the agent's manifest.
+     * Only applies to `agent` spans. Unreportable values are dropped with a warning, and unset values
+     * (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in place.
+     */
+    interface Agent {
+      /** The version of the agent. Must not contain a comma. */
+      version?: string,
+      /** The agent's name. Defaults to the agent span's name. */
+      name?: string,
+      /** The system instructions the agent runs with. */
+      instructions?: string,
+      /** The model the agent is configured to call. */
+      model?: string,
+      /** Inference parameters. Replaces the settings an earlier annotation declared as a whole. */
+      modelSettings?: AgentModelSettings,
+      /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
+      tools?: AgentTool[]
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4879,7 +5200,12 @@ declare namespace tracer {
        * A list of ToolDefinition object that represents the tools available to the LLM for this span
        * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
        * */
-      toolDefinitions?: ToolDefinition[]
+      toolDefinitions?: ToolDefinition[],
+
+      /**
+       * Declares the agent this span represents. Only used on `agent` spans.
+       */
+      agent?: Agent
     }
 
     interface AnnotationContextOptions {
@@ -4904,6 +5230,13 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * Declares the agent running in this context, read when the context is entered. The version and manifest
+       * are reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * span to declare its own agent.
+       */
+      agent?: Agent,
     }
 
     interface RoutingContextOptions {
@@ -4961,6 +5294,13 @@ declare namespace tracer {
        * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
        */
       modelProvider?: string,
+
+      /**
+       * The version of the agent, set as an `agent_version` tag on the agent span and its child spans within the
+       * same process. Must not contain a comma. Only used on `agent` spans, and wins over a version declared by an
+       * enclosing `annotationContext`.
+       */
+      version?: string,
     }
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {

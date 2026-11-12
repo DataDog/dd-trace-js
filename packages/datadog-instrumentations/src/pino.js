@@ -10,10 +10,9 @@ const logSubmissionCh = channel('ci:log-submission:log')
 
 /**
  * @param {string} symbol
- * @param {(original: Function) => Function} wrapper
  * @param {Function} pino
  */
-function wrapPino (symbol, wrapper, pino) {
+function wrapPino (symbol, pino) {
   /**
    * @param {unknown[]} args
    * @returns {unknown}
@@ -25,7 +24,7 @@ function wrapPino (symbol, wrapper, pino) {
       configurable: true,
       enumerable: true,
       writable: true,
-      value: wrapper(instance[symbol]),
+      value: wrapAsJson(instance[symbol]),
     })
 
     return instance
@@ -83,19 +82,19 @@ function wrapPrettyFactory (prettyFactory) {
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino))
 })
 
 addHook({ name: 'pino', versions: ['>=5 <6.8.0'], patchDefault: true }, (pino) => {
   const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino.default || pino))
+  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino.default || pino))
 })
 
 addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {
   const asJsonSym = pino.symbols.asJsonSym
 
-  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, pino))
   wrapped.pino = wrapped
   wrapped.default = wrapped
 

@@ -5,6 +5,8 @@ const realSetTimeout = setTimeout
 const realClearTimeout = clearTimeout
 
 const { performance } = require('node:perf_hooks')
+
+const { getTestAnnotations } = require('../../dd-trace/src/ci-visibility/test-annotations')
 const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
@@ -75,6 +77,7 @@ const artifactsRecorderScreenshotPathCh =
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomaticVideo')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
+const fullProjectInternalCh = tracingChannel('orchestrion:playwright:FullProjectInternal')
 
 const testToCtx = new WeakMap()
 const originalTestIdsByRetry = new WeakMap()
@@ -91,6 +94,8 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 const isFailureVideoUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') === true
+const shouldEnableFailureScreenshots = getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true
+const shouldEnableFailureVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 
 let applyRepeatEachIndex = null
 let reporterError
@@ -185,7 +190,7 @@ function isAutomaticFailureVideoAttachment (attachment) {
 }
 
 function isValidKnownTests (receivedKnownTests) {
-  return !!receivedKnownTests.playwright
+  return !!receivedKnownTests?.playwright
 }
 
 function getTestFullyQualifiedName (test) {
@@ -276,10 +281,12 @@ function shouldRunEarlyFlakeDetection () {
 }
 
 function isTestEfdManaged (test) {
-  return !!test._ddIsEfdManagedTest || (
-    (test._ddIsNew || test._ddIsModified) &&
-    !test._ddIsAttemptToFix &&
-    shouldRunEarlyFlakeDetection()
+  return !test._ddIsAutomaticRetryExcluded && !getTestAnnotations(test.fn).noAutoRetry && (
+    !!test._ddIsEfdManagedTest || (
+      (test._ddIsNew || test._ddIsModified) &&
+      !test._ddIsAttemptToFix &&
+      shouldRunEarlyFlakeDetection()
+    )
   )
 }
 
@@ -437,13 +444,31 @@ function shouldSkipEfdRetryTest (test) {
   return shouldSkipEfdRetry(test._ddEfdRetryIndex, retryCount)
 }
 
+/** @param {object} test */
+function getExclusionTags (test) {
+  const { mustFail, noAutoRetry } = getTestAnnotations(test.fn)
+  const properties = test._ddAssignedProperties
+  const tags = {}
+  if (mustFail) tags['test.test_management.prevent_failure_suppression'] = 'true'
+  if (noAutoRetry) tags['test.test_management.no_auto_retry'] = 'true'
+  if (properties?.attempt_to_fix) tags['test.test_management.is_attempt_to_fix'] = 'true'
+  if (properties?.disabled) tags['test.test_management.is_test_disabled'] = 'true'
+  if (properties?.quarantined) tags['test.test_management.is_quarantined'] = 'true'
+  return tags
+}
+
 function getTestProperties (test) {
   const testName = getTestFullname(test)
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
 
   const { attempt_to_fix: attemptToFix, disabled, quarantined } =
     testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
-  return { attemptToFix, disabled, quarantined }
+  const { mustFail, noAutoRetry } = getTestAnnotations(test.fn)
+  return {
+    attemptToFix: attemptToFix && !noAutoRetry && !test._ddIsAutomaticRetryExcluded,
+    disabled: disabled && !mustFail,
+    quarantined: quarantined && !mustFail,
+  }
 }
 
 function isNewTest (test) {
@@ -477,6 +502,7 @@ function deepCloneSuite (suite, filterTest, tags = [], configureCopiedTest) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
+        copiedTest._ddAssignedProperties = entry._ddAssignedProperties
         originalTestIdsByRetry.set(copiedTest, originalTestIdsByRetry.get(entry) ?? entry.id)
         if (configureCopiedTest) {
           configureCopiedTest(copiedTest, entry)
@@ -796,6 +822,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   if (shouldCreateTestSpan) {
     const testName = getTestFullname(test)
     const testCtx = {
+      extraTags: getExclusionTags(test),
       testName,
       testSuiteAbsolutePath,
       testSourceFileAbsolutePath,
@@ -847,6 +874,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
     const browserName = getBrowserNameFromProjects(projects, test)
     recordSkippedTestOptimizationExecution(test, testSuiteAbsolutePath)
     testSkipCh.publish({
+      extraTags: getExclusionTags(test),
       testName: getTestFullname(test),
       testSuiteAbsolutePath,
       testSourceFileAbsolutePath: test.location.file,
@@ -882,7 +910,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
  * @param {object[]} projects
  */
 function hasAutomaticRetries (test, projects) {
-  if (!automaticRetryProjects.has(getTestProject(projects, test))) return false
+  if (test._ddIsAutomaticRetryExcluded || !automaticRetryProjects.has(getTestProject(projects, test))) return false
   for (let suite = test.parent; suite; suite = suite.parent) {
     if (suite._retries !== undefined) return false
   }
@@ -981,7 +1009,7 @@ function testEndHandler ({
   const testProperties = getTestProperties(test)
   if (
     isDynamicAtrEnabled &&
-    isFlakyTestRetriesEnabled &&
+    isFlakyTestRetriesEnabled && !getTestAnnotations(test.fn).noAutoRetry &&
     !testProperties.attemptToFix &&
     !test._ddIsEfdRetry &&
     !isEfdManagedTest &&
@@ -1054,9 +1082,13 @@ function testEndHandler ({
   const atrRetryCount = isDynamicAtrEnabled
     ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey) ?? test.retries
     : flakyTestRetriesCount
-  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+  if (!test._ddIsAutomaticRetryExcluded && !getTestAnnotations(test.fn).noAutoRetry &&
+    isFlakyTestRetriesEnabled &&
+    !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
+    // Serial suites can add skipped results before a test's first execution.
+    results.some((result, index) => index < results.length - 1 && result.status !== 'skipped') &&
     !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
@@ -1071,7 +1103,8 @@ function testEndHandler ({
       ? test.id ?? test._id
       : undefined
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isFlakyTestRetriesEnabled && !test._ddIsAutomaticRetryExcluded &&
+      !getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1096,7 +1129,7 @@ function testEndHandler ({
         steps: testResult?.steps || [],
         isRetry: testResult?.retry > 0,
         error,
-        extraTags: annotationTags,
+        extraTags: { ...annotationTags, ...getExclusionTags(test) },
         isNew: test._ddIsNew,
         hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
         isAttemptToFix: test._ddIsAttemptToFix,
@@ -1334,7 +1367,8 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       worker[kDdPlaywrightFailureVideos].push(videos)
     }
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isFlakyTestRetriesEnabled && !test._ddIsAutomaticRetryExcluded &&
+      !getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1360,6 +1394,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       (!isFinalExecution || (isSerialTest(test) && test.results.length <= test.retries))
 
     const ddProperties = {
+      _ddAssignedProperties: test._ddAssignedProperties,
       _ddRetryTestId: retryTestId,
       _ddDeferFinalStatus: deferFinalStatus,
       _ddIsDisabled: test._ddIsDisabled,
@@ -1480,6 +1515,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const playwrightConfig = config?.config || runnerConfig.config || runnerConfig
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
+    sessionProjects = projects
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
     const isFailureVideoEnabled = isFailureVideoCaptureEnabled(projects)
     const isFailureVideoUploadSupported = satisfies(playwrightVersion, MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE)
@@ -1549,11 +1585,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           isKnownTestsEnabled = false
         } else {
           knownTests = receivedKnownTests
-        }
-        if (!isValidKnownTests(receivedKnownTests)) {
-          isEarlyFlakeDetectionFaulty = true
-          isEarlyFlakeDetectionEnabled = false
-          isKnownTestsEnabled = false
+          if (!isValidKnownTests(receivedKnownTests)) {
+            isEarlyFlakeDetectionFaulty = true
+            isEarlyFlakeDetectionEnabled = false
+            isKnownTestsEnabled = false
+          }
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
@@ -1882,6 +1918,27 @@ dispatcherRunCh.subscribe({
   },
 })
 
+fullProjectInternalCh.subscribe({
+  end ({ self, error }) {
+    if (error || !libraryConfigurationCh.hasSubscribers) return
+
+    // Workers reload the config, so apply capture settings as each project is resolved in either process.
+    const { project } = self
+    if (shouldEnableFailureScreenshots && !isFailureScreenshotCaptureEnabled([project])) {
+      const screenshot = project.use.screenshot
+      project.use.screenshot = typeof screenshot === 'object' && screenshot !== null
+        ? { ...screenshot, mode: 'only-on-failure' }
+        : 'only-on-failure'
+    }
+    if (shouldEnableFailureVideos && !isFailureVideoCaptureEnabled([project])) {
+      const video = project.use.video
+      project.use.video = typeof video === 'object' && video !== null
+        ? { ...video, mode: 'retain-on-failure' }
+        : 'retain-on-failure'
+    }
+  },
+})
+
 dispatcherCreateWorkerCh.subscribe({
   end (ctx) {
     onDispatcherCreateWorker(ctx.self, ctx.result)
@@ -2170,10 +2227,6 @@ function applyRetriesToTests (
 }
 
 function processRootSuite (createRootSuiteReturnValue) {
-  if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
-    return createRootSuiteReturnValue
-  }
-
   if (!createRootSuiteReturnValue) {
     return createRootSuiteReturnValue
   }
@@ -2185,6 +2238,28 @@ function processRootSuite (createRootSuiteReturnValue) {
   }
 
   const allTests = rootSuite.allTests()
+  const excludedSerialSuites = new Set()
+  for (const test of allTests) {
+    if (!getTestAnnotations(test.fn).noAutoRetry) continue
+    for (let suite = test.parent; suite; suite = suite.parent) {
+      if (suite._parallelMode === 'serial') excludedSerialSuites.add(suite)
+    }
+  }
+  for (const test of allTests) {
+    test._ddAssignedProperties = isTestManagementTestsEnabled
+      ? testManagementTests?.playwright?.suites
+        ?.[getTestSuitePath(test._requireFile, rootDir)]?.tests?.[getTestFullname(test)]?.properties
+      : undefined
+    test._ddIsAutomaticRetryExcluded = false
+    const hasInjectedRetries = isFlakyTestRetriesEnabled && hasAutomaticRetries(test, sessionProjects)
+    let excludeRetries = getTestAnnotations(test.fn).noAutoRetry
+    // Serial retries need every prerequisite, so exclude the group from both ATR and EFD.
+    for (let suite = test.parent; !excludeRetries && suite; suite = suite.parent) {
+      excludeRetries = excludedSerialSuites.has(suite)
+    }
+    test._ddIsAutomaticRetryExcluded = excludeRetries
+    if (hasInjectedRetries && excludeRetries) test.retries = 0
+  }
 
   if (isTestManagementTestsEnabled) {
     const fileSuitesWithManagedTestsToProjects = new Map()
@@ -2243,7 +2318,8 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped' &&
+      if (!impactedTest._ddIsAutomaticRetryExcluded &&
+        shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped' &&
         !impactedTest._ddIsAttemptToFix) {
         // Prevent ATR or `--retries` from retrying tests that EFD manages.
         impactedTest.retries = 0
@@ -2257,7 +2333,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     // If something changes in the file, all tests in the file are impacted, except attempt-to-fix tests managed above.
     applyRetriesToTests(
       fileSuitesWithImpactedTestsToProjects,
-      (test) => !test._ddIsAttemptToFix,
+      (test) => !test._ddIsAttemptToFix && !test._ddIsAutomaticRetryExcluded,
       [
         '_ddIsModified',
         '_ddIsEfdRetry',
@@ -2290,7 +2366,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' &&
+        if (!newTest._ddIsAutomaticRetryExcluded &&
+          shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' &&
           !newTest._ddIsModified && !newTest._ddIsAttemptToFix) {
           // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
@@ -2304,7 +2381,7 @@ function processRootSuite (createRootSuiteReturnValue) {
 
       applyRetriesToTests(
         fileSuitesWithNewTestsToProjects,
-        (test) => !test._ddIsAttemptToFix && isNewTest(test),
+        (test) => !test._ddIsAttemptToFix && !test._ddIsAutomaticRetryExcluded && isNewTest(test),
         [
           '_ddIsNew',
           '_ddIsEfdRetry',
@@ -2589,6 +2666,7 @@ function instrumentWorkerMainMethods (workerMain) {
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
     const testCtx = {
+      extraTags: getExclusionTags(test),
       testName,
       testSuiteAbsolutePath,
       testSourceFileAbsolutePath,
@@ -2631,11 +2709,14 @@ function instrumentWorkerMainMethods (workerMain) {
       }
 
       // In cases where there is no afterEach hook with _ddHook, we need to add one
+      // Playwright 1.64 builds the hook step stack from hook.location, so an undefined
+      // location ends up as [undefined] and breaks trace writing
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
           fn: cleanupRumPages,
           title: 'afterEach hook',
+          location: test.location,
           _ddHook: true,
         })
       }
@@ -2701,7 +2782,7 @@ function instrumentWorkerMainMethods (workerMain) {
       deferFinalStatus: test._ddDeferFinalStatus,
       steps: steps.filter(step => step.testId === testId),
       error,
-      extraTags: annotationTags,
+      extraTags: { ...annotationTags, ...getExclusionTags(test) },
       isNew: test._ddIsNew,
       hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
       isRetry: retry > 0,
@@ -2738,6 +2819,8 @@ function instrumentWorkerMainMethods (workerMain) {
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
       delete stepInfoByStepId[payload.stepId]
+      if (!stepInfo) return dispatchEvent.apply(this, arguments)
+
       steps.push({
         testId: stepInfo.testId,
         startTime: new Date(stepInfo.startTime),
@@ -2792,6 +2875,7 @@ function generateSummaryWrapper (generateSummary) {
 
         recordSkippedTestOptimizationExecution(test, testSuiteAbsolutePath)
         testSkipCh.publish({
+          extraTags: getExclusionTags(test),
           testName: getTestFullname(test),
           testSuiteAbsolutePath,
           testSourceFileAbsolutePath,

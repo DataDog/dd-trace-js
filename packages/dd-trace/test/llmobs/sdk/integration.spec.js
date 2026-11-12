@@ -11,6 +11,40 @@ function getTag (llmobsSpan, tagName) {
   return tag?.split(':')[1]
 }
 
+describe('sampling propagated trace IDs', () => {
+  const { getEvents } = useLlmObs({
+    tracerConfigOptions: {
+      llmobs: { mlApp: 'test', agentlessEnabled: false, sampleRate: 0.1 },
+      tracePropagationStyle: { extract: ['tracecontext', 'b3multi', 'b3 single header'] },
+    },
+  })
+
+  for (const style of ['tracecontext', 'b3multi', 'b3 single header']) {
+    it(`samples the lower 64 bits of ${style} traces`, async () => {
+      const tracer = global._ddtrace
+      for (const upper of ['0000000000000000', '6af1eb9300000000', 'ffffffffffffffff']) {
+        for (const [lower, decision] of [['0000000000000001', '1'], ['0000000000000002', '0']]) {
+          const traceId = upper + lower
+          const carrier = style === 'tracecontext'
+            ? { traceparent: `00-${traceId}-0000000000000001-01` }
+            : style === 'b3multi'
+              ? { 'x-b3-traceid': traceId, 'x-b3-spanid': '0000000000000001', 'x-b3-sampled': '1' }
+              : { b3: `${traceId}-0000000000000001-1` }
+          const parent = tracer.extract('text_map', carrier)
+          assert.ok(parent, `${style} ${traceId}`)
+          tracer.trace('message', { childOf: parent }, () => {
+            tracer.llmobs.trace({ kind: 'llm', name: 'sampled-call' }, span => {
+              assert.strictEqual(span.context().toTraceId(true), traceId)
+            })
+          })
+          const { llmobsSpans } = await getEvents()
+          assert.deepStrictEqual(llmobsSpans.map(span => span._dd.sampling_decision), [decision])
+        }
+      }
+    })
+  }
+})
+
 describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
@@ -64,6 +98,25 @@ describe('end to end sdk integration tests', () => {
       // The workflow sits under the agent, so it is attributed to it.
       agentAttribution: { pagent_name: 'agent', pagent_span_id: llmobsSpans[0].span_id },
     })
+  })
+
+  it('preserves structured experiment input and output', async () => {
+    const input = { prompt: 'smoke test' }
+    const output = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
+
+    llmobs.trace({ kind: 'experiment', name: 'json-stringify-repro' }, () => {
+      llmobs.annotate({ inputData: input, outputData: output, tags: { experiment_id: 'exp-1' } })
+    })
+
+    const { llmobsSpans } = await getEvents()
+    assert.equal(llmobsSpans.length, 1)
+    assert.deepStrictEqual(llmobsSpans[0].meta.input, input)
+    assert.deepStrictEqual(llmobsSpans[0].meta.output, output)
+    assert.equal(llmobsSpans[0]._dd.scope, 'experiments')
   })
 
   it('uses wrap correctly', async () => {
@@ -171,8 +224,8 @@ describe('end to end sdk integration tests', () => {
   })
 
   describe('otel correlation bridge tags', () => {
-    it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
-      llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+    it('writes llmobs_trace_id, llmobs_parent_id, and llmobs meta_struct to apm spans', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {
         llmobs.trace({ kind: 'task', name: 'inner' }, () => {})
       })
 
@@ -181,12 +234,14 @@ describe('end to end sdk integration tests', () => {
 
       // The first span in the chunk carries _trace.tags, including the bridge tags.
       const firstSpan = apmSpans[0]
-      assert.equal(firstSpan.meta.llmobs_trace_id, llmobsSpans[0].trace_id)
-      assert.equal(firstSpan.meta.llmobs_parent_id, llmobsSpans[0].span_id)
+      const workflowSpan = llmobsSpans.find(span => span.name === 'wf')
+      assert.equal(firstSpan.meta.llmobs_trace_id, workflowSpan.trace_id)
+      assert.equal(firstSpan.meta.llmobs_parent_id, workflowSpan.span_id)
 
-      // Every SDK-tagged apm span carries the submitted marker.
+      // The sampled Agent path rides the APM trace via meta_struct.
       for (const apmSpan of apmSpans) {
-        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], '1')
+        assert.ok(apmSpan.meta_struct._llmobs)
+        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], undefined)
       }
     })
 
@@ -202,7 +257,8 @@ describe('end to end sdk integration tests', () => {
       assert.ok(plainApmSpan)
       assert.ok(sdkSpan)
       assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
-      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], undefined)
+      assert.ok(sdkSpan.meta_struct._llmobs)
 
       // bridge tags still flow to the local trace's chunk meta
       const firstSpan = apmSpans[0]
@@ -404,13 +460,19 @@ describe('end to end sdk integration tests', () => {
 
     describe('with a processor that returns a valid LLMObservabilitySpan', () => {
       function processor (span) {
+        const removeInput = span.getTag('remove_input')
         const redactInput = span.getTag('redact_input')
-        if (redactInput) {
+        if (removeInput) {
+          span.input = []
+        } else if (redactInput) {
           span.input = span.input.map(message => ({ ...message, content: 'REDACTED' }))
         }
 
+        const removeOutput = span.getTag('remove_output')
         const redactOutput = span.getTag('redact_output')
-        if (redactOutput) {
+        if (removeOutput) {
+          span.output = []
+        } else if (redactOutput) {
           span.output = span.output.map(message => ({ ...message, content: 'REDACTED' }))
         }
 
@@ -434,6 +496,36 @@ describe('end to end sdk integration tests', () => {
 
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
         assert.equal(llmobsSpans[1].meta.output.messages[0].content, 'REDACTED')
+      })
+
+      it('redacts structured experiment input and output', async () => {
+        llmobs.trace({ kind: 'experiment', name: 'experiment' }, () => {
+          llmobs.annotate({
+            tags: { redact_input: true, redact_output: true },
+            inputData: { prompt: 'sensitive input' },
+            outputData: { result: ['sensitive output'] },
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.input, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.output, 'REDACTED')
+      })
+
+      it('preserves the experiment span when the processor removes input and output', async () => {
+        llmobs.trace({ kind: 'experiment', name: 'experiment' }, () => {
+          llmobs.annotate({
+            tags: { remove_input: true, remove_output: true },
+            inputData: { prompt: 'sensitive input' },
+            outputData: { result: ['sensitive output'] },
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.deepStrictEqual(llmobsSpans[0].meta.input, {})
+        assert.deepStrictEqual(llmobsSpans[0].meta.output, {})
       })
 
       it('redacts embedding input document content while preserving other document fields', async () => {

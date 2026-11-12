@@ -71,11 +71,13 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, 'llm')
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext._tags['span.type'], undefined)
       })
 
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
+        assert.strictEqual(spanContext._tags['span.type'], 'llm')
         assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -86,12 +88,14 @@ describe('tagger', () => {
       })
 
       it('uses options passed in to set tags', () => {
+        const experimentTags = { experiment_id: 'exp-1', run_id: 'run-1', run_iteration: 1 }
         tagger.registerLLMObsSpan(span, {
           kind: 'llm',
           modelName: 'my-model',
           modelProvider: 'my-provider',
           sessionId: 'my-session',
           mlApp: 'my-app',
+          _experimentTags: experimentTags,
         })
 
         assertObjectContains(Tagger.tagMap.get(span), {
@@ -103,6 +107,8 @@ describe('tagger', () => {
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.sample_rate': '1',
           '_ml_obs.sampling_decision': '1',
+          '_ml_obs.experiment_tags': experimentTags,
+          '_ml_obs.tags': experimentTags,
         })
       })
 
@@ -171,6 +177,9 @@ describe('tagger', () => {
           '_ml_obs.sample_rate': '1',
           '_ml_obs.sampling_decision': '1',
         })
+        // Without an experiment parent there is nothing to inherit.
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.experiment_tags'], undefined)
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.tags'], undefined)
       })
 
       it('uses the parent span if provided to populate fields', () => {
@@ -182,9 +191,11 @@ describe('tagger', () => {
           },
         }
 
+        const experimentTags = { experiment_id: 'exp-1', run_id: 'run-1', run_iteration: 2 }
         Tagger.tagMap.set(parentSpan, {
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
+          '_ml_obs.experiment_tags': experimentTags,
         })
 
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
@@ -196,6 +207,8 @@ describe('tagger', () => {
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.llmobs_parent_id': '5678',
+          '_ml_obs.experiment_tags': experimentTags,
+          '_ml_obs.tags': experimentTags,
         })
       })
 
@@ -334,7 +347,10 @@ describe('tagger', () => {
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
 
           config.llmobs.DD_LLMOBS_SAMPLE_RATE = 0
-          const nextSpan = { context () { return spanContext } }
+          const nextSpan = {
+            context () { return spanContext },
+            setTag (key, value) { spanContext._tags[key] = value },
+          }
           tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(nextSpan)
@@ -409,7 +425,10 @@ describe('tagger', () => {
             toTraceId () { return 'ffffffffffffffffffffffffffffffff' },
             toSpanId () { return '9999999999999999' },
           }
-          const secondSpan = { context () { return secondSpanContext } }
+          const secondSpan = {
+            context () { return secondSpanContext },
+            setTag (key, value) { secondSpanContext._tags[key] = value },
+          }
 
           tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
 
@@ -568,6 +587,14 @@ describe('tagger', () => {
         })
         assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.metrics': { input_tokens: 1, output_tokens: 2, total_tokens: 3, foo: 10 },
+        })
+      })
+
+      it('keeps a custom metric named after an Object.prototype member', () => {
+        tagger._register(span)
+        tagger.tagMetrics(span, { constructor: 1, toString: 2 })
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.metrics': { constructor: 1, toString: 2 },
         })
       })
 
@@ -1330,6 +1357,40 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagExperimentIO', () => {
+      it('preserves structured experiment io', () => {
+        const inputData = { prompt: 'smoke test' }
+        const outputData = {
+          status: 'ok',
+          count: 3,
+          nested: { a: 1, b: [1, 2, 3] },
+        }
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, inputData, outputData)
+
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
+        })
+      })
+
+      it('preserves falsey JSON values', () => {
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, false, null)
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input'], false)
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.output'], null)
+      })
+
+      it('throws when a value is not JSON serializable', () => {
+        tagger._register(span)
+
+        assert.throws(() => tagger.tagExperimentIO(span, undefined, unserializableObject()))
+      })
+    })
+
     describe('changeKind', () => {
       it('changes the span kind', () => {
         tagger._register(span)
@@ -1453,6 +1514,41 @@ describe('tagger', () => {
         })
       })
 
+      it('preserves message placeholders in a managed prompt annotation', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          id: 'chat-prompt',
+          version: '1',
+        })
+
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          chat_template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          _dd_context_variable_keys: ['context'],
+          _dd_query_variable_keys: ['question'],
+          version: '1',
+          id: 'chat-prompt',
+        })
+      })
+
+      it('rejects a malformed placeholder even when it has message fields', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: [{ type: 'placeholder', role: 'user', content: 'Hi' }],
+        }), /Prompt chat template/)
+        assert.equal(Tagger.tagMap.get(span)[INPUT_PROMPT], undefined)
+      })
+
       it('throws for a non-string and non-array prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         assert.throws(() => tagger.tagPrompt(span, {
@@ -1467,7 +1563,7 @@ describe('tagger', () => {
             { role: 'system', message: 'Please use the following information: \n\n{{context}}' },
             { role: 'user', content: 'Tell me a bit about {{subject}}.' },
           ],
-        }), { message: 'Prompt chat template must be an array of objects with role and content properties.' })
+        }), { message: 'Prompt chat template must contain messages or message placeholders.' })
       })
 
       it('defaults the prompt id', () => {

@@ -578,6 +578,30 @@ describe('shimmer', () => {
       assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
+    it('should wrap a bound generator function', () => {
+      const count = function * () { yield this.value }.bind({ value: 1 })
+
+      const wrapped = shimmer.wrapFunction(count, count => function () { return count() })
+
+      assert.deepStrictEqual([...wrapped()], [1])
+    })
+
+    it('should wrap a bound async generator function', async () => {
+      const count = async function * () { yield this.value }.bind({ value: 1 })
+
+      const wrapped = shimmer.wrapFunction(count, count => function () { return count() })
+
+      assert.deepStrictEqual(await wrapped().next(), { value: 1, done: false })
+    })
+
+    it('should wrap a function that only inherits a prototype property', () => {
+      const count = Object.setPrototypeOf(() => 1, function () {})
+
+      const wrapped = shimmer.wrapFunction(count, count => () => count())
+
+      assert.strictEqual(wrapped(), 1)
+    })
+
     it('should detect class constructors without materializing the source', () => {
       const spy = sinon.spy(Function.prototype, 'toString')
       try {

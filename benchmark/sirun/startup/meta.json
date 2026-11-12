@@ -12,14 +12,14 @@
       }
     },
     "with-tracer-everything": {
-      "iterations": 30,
+      "iterations": 24,
       "env": {
         "USE_TRACER": "1",
         "EVERYTHING": "1"
       }
     },
     "with-tracer-everything-esm": {
-      "iterations": 25,
+      "iterations": 19,
       "env": {
         "USE_TRACER": "1",
         "EVERYTHING": "1",

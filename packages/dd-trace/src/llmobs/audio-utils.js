@@ -106,8 +106,9 @@ function fitsInlineAudioBudget (byteLength, maxBytes = LLMOBS_AUDIO_INLINE_MAX_B
  * @returns {AudioPart | undefined}
  */
 function formatAudioPartWithGuard (audioBytes, mimeType, maxBytes = LLMOBS_AUDIO_INLINE_MAX_BYTES) {
-  if (!audioBytes?.length || !isRenderableAudioMime(mimeType)) return
-  if (!fitsInlineAudioBudget(audioBytes.length, maxBytes)) return
+  if (!audioBytes?.length || !isRenderableAudioMime(mimeType) || !fitsInlineAudioBudget(audioBytes.length, maxBytes)) {
+    return
+  }
 
   return formatAudioPart(audioBytes, mimeType)
 }

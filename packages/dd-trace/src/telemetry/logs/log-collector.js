@@ -23,6 +23,7 @@ function createHash (logEntry) {
   let result = logEntry.level ? hashCode(logEntry.level) : 0
   result = (((prime * result) | 0) + (logEntry.message ? hashCode(logEntry.message) : 0)) | 0
   result = (((prime * result) | 0) + (logEntry.stack_trace ? hashCode(logEntry.stack_trace) : 0)) | 0
+  result = (((prime * result) | 0) + (logEntry.tags ? hashCode(logEntry.tags) : 0)) | 0
   return result
 }
 
@@ -48,7 +49,7 @@ function sanitize (logEntry) {
 
   for (let i = Math.max(firstIndex, 0); i < lines.length; i++) {
     const line = lines[i]
-    if (line.includes(ddBasePath)) {
+    if (ddBasePath !== undefined && line.includes(ddBasePath)) {
       stackLines.push(line.replace(ddBasePath, ''))
     } else {
       const match = NODE_FRAME_LINE_REGEX.exec(line)

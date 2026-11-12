@@ -10,9 +10,14 @@ const INSTRUMENT_HELPER_PATH = path.join(
 const REWRITER_INSTRUMENTATIONS_PATH = path.join(
   INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentations'
 )
+const REWRITER_REGISTRY_PATH = path.join(
+  INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentation-registry'
+)
+const subscriberOnlyFiles = new Set()
 
-function loadInstFile (file, instrumentations) {
+function loadInstFile (file, instrumentations, cacheSubscribers = false) {
   const instPath = path.join(INSTRUMENTATIONS_PATH, file)
+  if (cacheSubscribers && subscriberOnlyFiles.has(instPath) && require.cache[instPath]) return
 
   // Patch `addHook` for the duration of this load and filter to the SUT's own
   // call sites; addHook calls from transitively-loaded siblings (e.g.
@@ -27,14 +32,18 @@ function loadInstFile (file, instrumentations) {
     }
   }
 
-  // Snapshot `require.cache` and drop everything this load adds, so production's
-  // `helpers/register.js` re-evaluation finds an empty cache and re-runs the
-  // integration's top-level `addHook` calls.
+  // Hook files must be re-evaluated by register.js, but subscriber-only entries
+  // must stay cached so discovery does not duplicate their runtime subscribers.
   const cacheBefore = new Set(Object.keys(require.cache))
+  const hookCount = instrumentations.length
 
   try {
     delete require.cache[instPath]
     require(instPath)
+    if (cacheSubscribers && instrumentations.length === hookCount) {
+      subscriberOnlyFiles.add(instPath)
+      cacheBefore.add(instPath)
+    }
   } finally {
     realInstrument.addHook = originalAddHook
     for (const id of Object.keys(require.cache)) {
@@ -55,17 +64,28 @@ function loadOneInst (name) {
     for (const file of splitFiles) loadInstFile(file, instrumentations)
   } else if (fs.existsSync(path.join(INSTRUMENTATIONS_PATH, mainFile))) {
     loadInstFile(mainFile, instrumentations)
-  } else if (fs.existsSync(path.join(INSTRUMENTATIONS_PATH, singleFile))) {
-    loadInstFile(singleFile, instrumentations)
   } else {
+    const hasSingleFile = fs.existsSync(path.join(INSTRUMENTATIONS_PATH, singleFile))
     const rewriterFile = path.join(REWRITER_INSTRUMENTATIONS_PATH, name)
-    if (!fs.existsSync(`${rewriterFile}.js`)) {
-      loadInstFile(singleFile, instrumentations)
+    const hasRewriterFile = fs.existsSync(`${rewriterFile}.js`)
+    if (hasSingleFile) {
+      loadInstFile(singleFile, instrumentations, hasRewriterFile)
+      if (instrumentations.length) return instrumentations
+    }
+
+    if (!hasRewriterFile) {
+      if (!hasSingleFile) loadInstFile(singleFile, instrumentations)
       return instrumentations
     }
 
     const definitions = require(rewriterFile)
-    const names = new Set(definitions.map(definition => definition.module.name))
+    const moduleNames = definitions.map(definition => definition.module.name)
+    // An entry that narrows activation is entered through those packages only; the rest of its rewrite
+    // targets are internal files of the same project and are never installed as fixtures on their own.
+    // Entries that opt out of activation keep reporting every rewrite target.
+    const { isRewriteActivationEnabled } = require(REWRITER_REGISTRY_PATH)
+    const activated = moduleNames.filter(isRewriteActivationEnabled)
+    const names = new Set(activated.length > 0 ? activated : moduleNames)
     instrumentations.push(...require(INSTRUMENT_HELPER_PATH).getHooks([...names]).values())
   }
 

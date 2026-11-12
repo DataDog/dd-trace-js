@@ -3,6 +3,7 @@
 // W3C Trace Context §3.3.1.2: max 32 list-members.
 // https://www.w3.org/TR/trace-context/#tracestate-header-field-values
 const MAX_LIST_MEMBERS = 32
+const MAX_VALUE_LENGTH = 256
 const WHITESPACE = /[ \t]/
 
 /**
@@ -12,37 +13,104 @@ const WHITESPACE = /[ \t]/
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
  * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
+ * @param {number} [maxEntries] Maximum number of entries to parse.
+ * @param {number} [maxValueLength] Maximum length of an entry value.
+ * @param {boolean} [prioritizeDd] Keep dd first even when it follows the member limit.
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
-function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
-  const segments = value.split(fieldSeparator, MAX_LIST_MEMBERS)
-
-  // TODO: We should extract dd no matter at what position and move it to the front of the list.
-  // Extract up 31 additional entries.
+function parseEntries (
+  value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries = Infinity, maxValueLength = Infinity, prioritizeDd
+) {
+  /** @type {[string, string][]} */
   const entries = []
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index]
-    const splitIndex = segment.indexOf(pairSeparator)
-    if (splitIndex === -1) continue
-    const key = segment.slice(0, splitIndex).trim()
-    if (!key || WHITESPACE.test(key)) continue
-    // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
-    // Leading 0x20 is part of value; trailing whitespace is OWS.
-    const entryValue = segment.slice(splitIndex + 1).trimEnd()
-    if (!entryValue || rejectValueTabs && entryValue.includes('\t')) continue
-    entries.push([key, entryValue])
+  /** @type {[string, string] | undefined} */
+  let ddEntry
+  let start = 0
+  let memberCount = 0
+  let splitIndex = -1
+
+  while (start <= value.length && memberCount < maxEntries) {
+    const separatorIndex = value.indexOf(fieldSeparator, start)
+    const end = separatorIndex === -1 ? value.length : separatorIndex
+    // Reuse the next separator (or end) so malformed members do not rescan the suffix.
+    if (splitIndex < start && start < end) {
+      splitIndex = value.indexOf(pairSeparator, start)
+      if (splitIndex === -1) splitIndex = value.length
+    }
+    const key = splitIndex > start && splitIndex < end ? value.slice(start, splitIndex).trim() : undefined
+    if (key && !WHITESPACE.test(key)) {
+      // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
+      // Leading 0x20 is part of value; trailing whitespace is OWS.
+      const entryValue = value.slice(splitIndex + 1, end).trimEnd()
+      if (entryValue &&
+        entryValue.length <= maxValueLength &&
+        (!rejectValueTabs || !entryValue.includes('\t'))) {
+        if (prioritizeDd && key === 'dd') {
+          ddEntry ??= [key, entryValue]
+        } else {
+          entries.push([key, entryValue])
+        }
+      }
+    }
+
+    memberCount++
+    if (separatorIndex === -1) {
+      start = value.length + 1
+      break
+    }
+    start = separatorIndex + fieldSeparator.length
   }
+
+  if (prioritizeDd && ddEntry === undefined && start < value.length) {
+    let position = value.indexOf('dd', start)
+    while (position !== -1) {
+      const segmentStart = value.lastIndexOf(',', position) + 1
+      const separatorIndex = value.indexOf(',', position)
+      const end = separatorIndex === -1 ? value.length : separatorIndex
+      const segment = value.slice(segmentStart, end)
+      const splitIndex = segment.indexOf('=')
+
+      if (splitIndex > 0 && segment.slice(0, splitIndex).trim() === 'dd') {
+        const entryValue = segment.slice(splitIndex + 1).trimEnd()
+        if (entryValue && entryValue.length <= maxValueLength && !entryValue.includes('\t')) {
+          ddEntry = ['dd', entryValue]
+          break
+        }
+      }
+
+      if (separatorIndex === -1) break
+      position = value.indexOf('dd', separatorIndex + 1)
+    }
+  }
+
+  if (ddEntry && entries.length === maxEntries) entries.pop()
   // Reverse so the Map's insertion order is reverse of wire order. `toString`
   // prepends as it iterates, which yields the original wire order back.
   entries.reverse()
+  if (ddEntry) entries.push(ddEntry)
   return entries
 }
 
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
+/**
+ * @template T
+ * @param {new (entries?: [string, string][]) => T} Type
+ * @param {string | undefined} value
+ * @param {string} fieldSeparator
+ * @param {string} pairSeparator
+ * @param {boolean} rejectValueTabs
+ * @param {number} [maxEntries]
+ * @param {number} [maxValueLength]
+ * @param {boolean} [prioritizeDd]
+ */
+function fromString (
+  Type, value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength, prioritizeDd
+) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
+  return new Type(parseEntries(
+    value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength, prioritizeDd
+  ))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -76,8 +144,9 @@ class TraceStateData {
   }
 
   delete (key) {
+    if (!this.#map.delete(key)) return false
     this.changed = true
-    return this.#map.delete(key)
+    return true
   }
 
   clear () {
@@ -97,6 +166,24 @@ class TraceStateData {
     return this.#map.size
   }
 
+  /**
+   * @template Context
+   * @param {number} valueLength
+   * @param {(key: string, context: Context) => boolean} isOptional
+   * @param {Context} context
+   */
+  trimOptionalFields (valueLength, isOptional, context) {
+    const fields = [...this.#map]
+    for (let index = fields.length - 1; index >= 0 && valueLength > MAX_VALUE_LENGTH; index--) {
+      const [key, value] = fields[index]
+      if (!isOptional(key, context)) continue
+
+      valueLength -= key.length + String(value).length + (this.#map.size > 1 ? 2 : 1)
+      this.delete(key)
+    }
+  }
+
+  /** @param {string | undefined} value */
   static fromString (value) {
     return fromString(TraceStateData, value, ';', ':', false)
   }
@@ -115,11 +202,22 @@ class TraceState {
 
   constructor (entries) {
     this.#map = entries ? new Map(entries) : new Map()
+    while (this.#map.size > MAX_LIST_MEMBERS) {
+      this.#map.delete(this.#map.keys().next().value)
+    }
   }
 
   // Delete entries on update to ensure they're moved to the end of the list
+  /**
+   * @param {string} key
+   * @param {string} value
+   */
   set (key, value) {
-    if (this.#map.has(key)) this.#map.delete(key)
+    if (value.length > MAX_VALUE_LENGTH) return this
+    const updated = this.#map.delete(key)
+    if (!updated && this.#map.size === MAX_LIST_MEMBERS) {
+      this.#map.delete(this.#map.keys().next().value)
+    }
     this.#map.set(key, value)
     return this
   }
@@ -140,25 +238,45 @@ class TraceState {
     return this.#map.size
   }
 
-  forVendor (vendor, handle) {
+  /** @returns {TraceState} A shallow copy with independent member storage. */
+  clone () {
+    return new TraceState(this.#map)
+  }
+
+  /**
+   * @template Context
+   * @param {string} vendor
+   * @param {(state: TraceStateData) => unknown} handle
+   * @param {(key: string, context: Context) => boolean} [isOptional]
+   * @param {Context} [context]
+   * @returns {unknown}
+   */
+  forVendor (vendor, handle, isOptional, context) {
     const data = this.#map.get(vendor)
     const state = TraceStateData.fromString(data)
     const result = handle(state)
 
-    if (state.changed) {
-      const value = state.toString()
-      if (value) {
-        this.set(vendor, value)
-      } else {
-        this.delete(vendor)
-      }
+    if (!state.changed) return result
+
+    let value = state.toString()
+    if (value.length > MAX_VALUE_LENGTH && isOptional) {
+      state.trimOptionalFields(value.length, isOptional, context)
+      value = state.toString()
     }
+    if (value.length > MAX_VALUE_LENGTH) {
+      if (isOptional) this.delete(vendor)
+      return result
+    }
+    if (value === data) return result
+    if (value) this.set(vendor, value)
+    else this.delete(vendor)
 
     return result
   }
 
+  /** @param {string | undefined} value */
   static fromString (value) {
-    return fromString(TraceState, value, ',', '=', true)
+    return fromString(TraceState, value, ',', '=', true, MAX_LIST_MEMBERS, MAX_VALUE_LENGTH, true)
   }
 
   toString () {

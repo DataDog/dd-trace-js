@@ -14,6 +14,7 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const { httpAgent } = require('../../src/exporters/common/agents')
+const { usesOtlpTraceExporter } = require('../../src/exporter')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -57,10 +58,13 @@ let loaded = false
 const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
+  'AWS_LAMBDA_INITIALIZATION_TYPE',
   'FUNCTION_NAME',
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
   'FUNCTIONS_WORKER_RUNTIME',
+  // azure container app detection (azure-functions plugin aas/aca prefix)
+  'CONTAINER_APP_NAME',
   'GCP_PROJECT',
   'K_SERVICE',
   'VERCEL',
@@ -81,6 +85,11 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_OWNER_NAME',
   'WEBSITE_OS',
   'WEBSITE_RESOURCE_GROUP',
+  // LLM judge provider defaults
+  'AWS_DEFAULT_REGION',
+  'AWS_REGION',
+  'GCLOUD_PROJECT',
+  'GOOGLE_CLOUD_REGION',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
   'JEST_JASMINE',
@@ -308,13 +317,79 @@ function unformatSpanEvents (span) {
 }
 
 /**
+ * @typedef {object} OtlpAttribute
+ * @property {string} key
+ * @property {{ stringValue?: string, intValue?: number|string, doubleValue?: number, boolValue?: boolean }} value
+ * @typedef {object} OtlpSpan
+ * @property {string} traceId
+ * @property {string} spanId
+ * @property {string} [parentSpanId]
+ * @property {string} name
+ * @property {number} kind
+ * @property {number|string} startTimeUnixNano
+ * @property {number|string} endTimeUnixNano
+ * @property {OtlpAttribute[]} attributes
+ * @property {{ code: number }} status
+ * @typedef {object} OtlpTraceRequest
+ * @property {{ resource: { attributes: OtlpAttribute[] }, scopeSpans: { spans: OtlpSpan[] }[] }[]} resourceSpans
+ */
+
+/** @param {OtlpTraceRequest} payload */
+function decodeOtlpTraces (payload) {
+  const traces = new Map()
+  const kinds = ['', 'internal', 'server', 'client', 'producer', 'consumer']
+
+  for (const { resource, scopeSpans } of payload.resourceSpans) {
+    for (const { spans } of scopeSpans) {
+      for (const span of spans) {
+        const meta = {}
+        const metrics = {}
+        for (const { key, value } of [...resource.attributes, ...span.attributes]) {
+          if (value.stringValue !== undefined) {
+            meta[key] = value.stringValue
+          } else if (value.boolValue !== undefined) {
+            meta[key] = String(value.boolValue)
+          } else if (value.intValue !== undefined || value.doubleValue !== undefined) {
+            metrics[key] = Number(value.intValue ?? value.doubleValue)
+          }
+        }
+        if (kinds[span.kind]) meta['span.kind'] = kinds[span.kind]
+        const decoded = {
+          trace_id: BigInt(`0x${span.traceId.slice(-16)}`),
+          span_id: BigInt(`0x${span.spanId}`),
+          parent_id: span.parentSpanId ? BigInt(`0x${span.parentSpanId}`) : 0n,
+          name: meta['operation.name'] ?? span.name,
+          resource: span.name,
+          service: meta['service.name'],
+          type: meta['span.type'],
+          error: span.status.code === 2 ? 1 : 0,
+          meta,
+          metrics,
+          start: Number(span.startTimeUnixNano),
+          duration: Number(span.endTimeUnixNano) - Number(span.startTimeUnixNano),
+        }
+        let trace = traces.get(span.traceId)
+        if (!trace) {
+          trace = []
+          traces.set(span.traceId, trace)
+        }
+        trace.push(decoded)
+      }
+    }
+  }
+
+  return [...traces.values()]
+}
+
+/**
  * @param {express.Request} req
  * @param {express.Response} res
  */
 function handleTraceRequest (req, res) {
-  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  const otlp = req.is('application/json')
+  const trace = otlp ? decodeOtlpTraces(JSON.parse(req.body)) : req.body
+  res.status(200).send(otlp ? {} : { rate_by_service: { 'service:,env:': 1 } })
   for (const { handler, spanResourceMatch } of traceHandlers) {
-    const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
@@ -679,11 +754,17 @@ module.exports = {
       })
     })
 
-    agent.put('/v0.5/traces', (req, res) => {
+    // v0.5 is not implemented here: answer 404 so a writer probing it falls back
+    // to v0.4, as it would against an Agent that does not advertise the endpoint.
+    agent.all('/v0.5/traces', (req, res) => {
       res.status(404).end()
     })
 
+    // Both methods the Agent accepts for trace intake: the legacy writer sends
+    // PUT, and a writer built on libdatadog sends POST.
     agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v0.4/traces', handleTraceRequest)
+    agent.post('/v1/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
@@ -730,7 +811,9 @@ module.exports = {
           ...tracerConfig,
         })
 
-        tracer.setUrl(`http://127.0.0.1:${port}`)
+        const createConfig = require('../../src/config')
+        const path = usesOtlpTraceExporter(createConfig()) ? '/v1/traces' : ''
+        tracer.setUrl(`http://127.0.0.1:${port}${path}`)
 
         for (const [name, pluginConfig] of loadedPlugins) {
           tracer.use(name, pluginConfig)

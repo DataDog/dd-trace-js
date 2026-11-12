@@ -16,7 +16,7 @@ let isEnabled = false
 function enable (aiguard, block, analyzeStreamResponses) {
   if (isEnabled) return
 
-  anthropic.enable(aiguard, block)
+  anthropic.enable(aiguard, block, analyzeStreamResponses)
   openai.enable(aiguard, block, analyzeStreamResponses)
   vercelAi.enable(aiguard, block, analyzeStreamResponses)
 

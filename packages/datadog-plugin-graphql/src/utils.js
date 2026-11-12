@@ -53,7 +53,7 @@ function getRequestCache (owner, configuredLimit) {
 
 /**
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  */
 function operationCacheKey (operationName, calculateSignature) {
   return `${calculateSignature === false ? 0 : 1}\n${operationName ?? ''}`
@@ -62,7 +62,7 @@ function operationCacheKey (operationName, calculateSignature) {
 /**
  * @param {unknown} source
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {RequestCache | undefined} requestCache
  * @returns {RequestOperation | undefined}
  */
@@ -156,7 +156,7 @@ function refineRequestSpanMetadata (requestSpan, signature, type, name) {
  * @param {import('graphql').DocumentNode | undefined} document
  * @param {unknown} requestSource
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {boolean} validated
  * @param {RequestCache | undefined} requestCache
  */
@@ -193,7 +193,7 @@ function refineRequestSpan (
  * @param {RequestCache} requestCache
  * @param {string | object} source
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @param {RequestOperation} operation
  * @param {import('graphql').DocumentNode} document
  */
@@ -229,7 +229,7 @@ function cacheRequestOperation (
 /**
  * @param {import('graphql').DocumentNode} document
  * @param {string | null | undefined} operationName
- * @param {boolean} calculateSignature
+ * @param {boolean | undefined} calculateSignature
  * @returns {RequestOperation | undefined}
  */
 function getRequestOperation (document, operationName, calculateSignature) {

@@ -5,10 +5,10 @@ const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
-const { getEnvironmentVariable } = require('./config/helper')
+const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager, startupLog } = require('./startup-log')
+const { setStartupLogConfig, setStartupLogPluginManager, startupLog } = require('./startup-log')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -22,7 +22,6 @@ const {
 } = require('./serverless')
 const { flushServerlessTelemetry, registerTelemetryFlusher } = require('./flush')
 const processTags = require('./process-tags')
-const { isTrue } = require('./util')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -31,20 +30,6 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
-const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
-const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
-const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
-const ORDINARY_TRACING_DISABLED_MESSAGE =
-  'Ordinary dd-trace application tracing initialization is disabled during offline Test Optimization validation. ' +
-  'The CI test process must initialize through dd-trace/ci/init.'
-const OFFLINE_VALIDATION_EXPORTERS = new Set([
-  'ci_validation',
-  'cucumber_worker',
-  'jest_worker',
-  'mocha_worker',
-  'playwright_worker',
-  'vitest_worker',
-])
 const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
@@ -116,6 +101,7 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  #aiguardConfigurationErrorLogged = false
   #openfeatureState = OPENFEATURE_STATE_NOOP
 
   /** @type {boolean} */
@@ -164,11 +150,6 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
-    if (isOfflineTestOptimizationValidation() && !isOfflineValidationExporter(options)) {
-      process.stderr.write(`${ORDINARY_TRACING_DISABLED_MESSAGE}\n`)
-      return this
-    }
-
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
@@ -195,9 +176,12 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
-      telemetry.start(config, this._pluginManager)
+      const telemetryLogOptions = config.isCiVisibility && config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+        ? require('./ci-visibility/telemetry-logs')
+        : undefined
+      telemetry.start(config, this._pluginManager, telemetryLogOptions)
 
-      if (config.dogstatsd && !config.DD_AGENTLESS_ENABLED && !isOfflineTestOptimizationValidation()) {
+      if (config.dogstatsd && !config.DD_AGENTLESS_ENABLED) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
@@ -234,8 +218,7 @@ class Tracer extends NoopProxy {
         })
 
         rc.setProductHandler('AGENT_TASK', (action, conf) => {
-          if (action === 'unapply' || !conf) return
-          if (conf.task_type !== 'tracer_flare' || !conf.args) return
+          if (action === 'unapply' || !conf || conf.task_type !== 'tracer_flare' || !conf.args) return
 
           this._flare.enable(config)
           this._flare.module.send(conf.args)
@@ -261,7 +244,7 @@ class Tracer extends NoopProxy {
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
-      // reader can consume.
+      // reader can consume. On by default when appsec is enabled.
       if (config.DD_TRACE_OTEL_CTX_ENABLED) {
         try {
           require('./otel-thread-ctx').start()
@@ -273,14 +256,16 @@ class Tracer extends NoopProxy {
       // OTel logs/metrics pipelines must be initialized BEFORE runtimeMetrics.start so that
       // when the OTLP runtime metrics module calls metrics.getMeterProvider(), it gets the
       // real provider, otherwise instruments register on the noop provider and never export.
+      let logs
+      let metrics
       if (config.DD_LOGS_OTEL_ENABLED) {
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        initializeOpenTelemetryLogs(config)
+        logs = initializeOpenTelemetryLogs(config)
       }
 
       if (config.DD_METRICS_OTEL_ENABLED) {
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        initializeOpenTelemetryMetrics(config)
+        metrics = initializeOpenTelemetryMetrics(config)
       }
 
       if (config.runtimeMetrics.enabled) {
@@ -290,7 +275,10 @@ class Tracer extends NoopProxy {
         registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
-      this.#updateTracing(config)
+      const tracing = this.#updateTracing(config)
+      setStartupLogConfig(config, { ...tracing, logs, metrics })
+      setStartupLogPluginManager(this._pluginManager)
+      startupLog()
 
       if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
@@ -353,6 +341,7 @@ class Tracer extends NoopProxy {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
         drainUuidPool()
+        reseed()
         channel('datadog:identity:update').publish(config)
         if (this._tracingInitialized) {
           const storeTracerMetadata = require('./tracer_metadata')
@@ -404,9 +393,19 @@ class Tracer extends NoopProxy {
 
   /**
    * @param {import('./config/config-base')} config - Tracer configuration
+   * @returns {import('./opentelemetry/startup-config').Pipelines | undefined}
    */
   #updateTracing (config) {
+    /** @type {import('./opentelemetry/startup-config').Pipelines | undefined} */
+    let startupPipelines
     if (config.DD_TRACE_ENABLED !== false) {
+      const aiguardEnabled = config.aiguard.DD_AI_GUARD_ENABLED === true &&
+        config.DD_API_KEY !== undefined &&
+        config.DD_APP_KEY !== undefined
+      if (config.aiguard.DD_AI_GUARD_ENABLED && !aiguardEnabled && !this.#aiguardConfigurationErrorLogged) {
+        log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
+        this.#aiguardConfigurationErrorLogged = true
+      }
       if (config.appsec.DD_APPSEC_ENABLED) {
         this._modules.appsec.enable(config)
       }
@@ -418,17 +417,18 @@ class Tracer extends NoopProxy {
           ? require('./standalone').configure(config)
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
+        startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
           () => this.openfeature)
 
-        if (config.aiguard.DD_AI_GUARD_ENABLED) {
+        if (aiguardEnabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
-      if (config.aiguard.DD_AI_GUARD_ENABLED) {
+      if (aiguardEnabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
       if (config.iast.DD_IAST_ENABLED) {
@@ -448,11 +448,10 @@ class Tracer extends NoopProxy {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
       dynamicInstrumentation?.configure(config)
-      setStartupLogPluginManager(this._pluginManager)
-      startupLog()
     }
 
     initializeServerlessTelemetry(this._serverlessTelemetry)
+    return startupPipelines
   }
 
   /**
@@ -525,25 +524,6 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
-}
-
-/**
- * Checks the private filesystem-only Test Optimization validation mode.
- *
- */
-function isOfflineTestOptimizationValidation () {
-  return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
-    Boolean(getEnvironmentVariable(VALIDATION_MANIFEST_ENV)) &&
-    Boolean(getEnvironmentVariable(VALIDATION_OUTPUT_ENV))
-}
-
-/**
- * Checks whether initialization selected a filesystem-only Test Optimization exporter.
- *
- * @param {import('../../../index').TracerOptions} [options] tracer initialization options
- */
-function isOfflineValidationExporter (options) {
-  return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
 }
 
 /**

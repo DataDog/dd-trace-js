@@ -1,0 +1,11 @@
+_v: 1
+name: cassandra-driver
+display_name: Cassandra Driver
+description: Instruments Cassandra queries and batch operations through the cassandra-driver client.
+packages:
+- name: cassandra-driver
+category:
+- db.client
+systems:
+- cassandra
+creation_date: '2019-03-06'

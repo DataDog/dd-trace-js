@@ -1,19 +1,21 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
 const path = require('node:path')
 const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
-const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
-const axios = require('axios')
+const { mkdirSync, writeFileSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
+const { rm } = require('node:fs/promises')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
@@ -23,7 +25,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
-const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
 
 /**
  * @param {'app-page'|'app-route'|'pages-api'} runtime
@@ -71,6 +73,130 @@ function getDisabledRuntimeHooks () {
   return runtime => hooks.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
 }
 
+/**
+ * @param {string} version
+ * @param {number} port
+ * @param {number} width
+ * @param {'MISS'|'HIT'|undefined} cacheStatus
+ * @param {object} [options]
+ * @param {string} [options.parentRoute]
+ * @param {boolean} [options.withHttp]
+ * @param {boolean} [options.withQuery]
+ * @param {'GET'|'HEAD'} [options.method]
+ * @param {string} [options.pathname]
+ * @param {boolean} [options.standalone]
+ * @param {string} [options.source]
+ * @param {boolean} [options.sourceError]
+ * @param {number} [options.statusCode]
+ */
+async function assertImageRequest (
+  version,
+  port,
+  width,
+  cacheStatus,
+  {
+    parentRoute = '/_next/image',
+    withHttp = true,
+    withQuery = true,
+    method = 'GET',
+    pathname = '/_next/image',
+    standalone = false,
+    source = '/test.png',
+    sourceError = false,
+    statusCode = cacheStatus ? 200 : 400,
+  } = {}
+) {
+  let imageSpan
+  const tracingPromise = agent.assertSomeTraces(traces => {
+    const spans = traces[0]
+    const nextSpans = spans.filter(span => span.name === 'next.request')
+    assert.strictEqual(nextSpans.length, 1)
+    assert.strictEqual(nextSpans[0].resource, `${method} /_next/image`)
+    assert.strictEqual(nextSpans[0].meta['next.page'], '/_next/image')
+
+    const httpSpan = spans.find(span => span.name === 'web.request')
+    if (withHttp) {
+      assert.strictEqual(httpSpan.resource, `${method} ${parentRoute}`)
+      assert.strictEqual(httpSpan.meta['http.route'], parentRoute)
+    } else {
+      assert.strictEqual(httpSpan, undefined)
+    }
+    imageSpan = nextSpans[0]
+  }, { timeoutMs: 4000 })
+  const cacheWatchers = []
+  const cacheFiles = new Set()
+  let cacheWritten
+  if (cacheStatus === 'MISS') {
+    const distDir = standalone ? '.next/standalone/.next' : '.next'
+    const cacheDir = path.join(__dirname, distDir, 'cache/images')
+    mkdirSync(cacheDir, { recursive: true })
+    const directories = new Set(readdirSync(cacheDir))
+    cacheWritten = new Promise((resolve, reject) => {
+      const rootWatcher = watch(cacheDir, (_event, directory) => {
+        if (!directory || directories.has(directory)) return
+        const imageDir = path.join(cacheDir, directory)
+        if (!statSync(imageDir, { throwIfNoEntry: false })?.isDirectory()) return
+        directories.add(directory)
+        const checkCacheFile = () => {
+          for (const filename of readdirSync(imageDir)) {
+            if (!filename.endsWith('.png')) continue
+            const filePath = path.join(imageDir, filename)
+            const file = statSync(filePath, { throwIfNoEntry: false })
+            if (file?.size > 0) {
+              resolve()
+            } else if (!cacheFiles.has(filePath)) {
+              cacheFiles.add(filePath)
+              // File creation can arrive before the asynchronous cache write completes.
+              watchFile(filePath, { interval: 10 }, current => {
+                if (current.size > 0) resolve()
+              })
+            }
+          }
+        }
+        const imageWatcher = watch(imageDir, checkCacheFile)
+        imageWatcher.once('error', reject)
+        cacheWatchers.push(imageWatcher)
+        checkCacheFile()
+      })
+      rootWatcher.once('error', reject)
+      cacheWatchers.push(rootWatcher)
+    })
+  }
+  const headers = parentRoute === '/_next/image' ? {} : { 'x-test-upstream-route': parentRoute }
+  const query = withQuery ? `?url=${encodeURIComponent(source)}&w=${width}&q=75` : ''
+  const request = (async () => {
+    const response = await httpRequest.request(`http://127.0.0.1:${port}${pathname}${query}`, {
+      headers,
+      method,
+      validateStatus: () => true,
+      responseType: 'arraybuffer',
+    })
+    if (sourceError) {
+      assert.ok(response.status >= 400)
+    } else {
+      assert.strictEqual(response.status, statusCode)
+    }
+    if (cacheStatus) {
+      assert.strictEqual(response.headers['x-nextjs-cache'], satisfies(version, '<12') ? undefined : cacheStatus)
+      assert.strictEqual(response.headers['content-type'], 'image/png')
+      if (method === 'GET') {
+        assert.ok(response.data.byteLength > 0)
+      } else {
+        assert.strictEqual(response.data.byteLength, 0)
+      }
+    }
+    return response
+  })()
+  try {
+    const [response] = await Promise.all([request, tracingPromise, cacheWritten])
+    assert.strictEqual(imageSpan.meta['http.status_code'], String(response.status))
+    if (response.status >= 500) assert.strictEqual(imageSpan.error, 1)
+  } finally {
+    for (const watcher of cacheWatchers) watcher.close()
+    for (const filePath of cacheFiles) unwatchFile(filePath)
+  }
+}
+
 describe('Plugin', function () {
   let server
   let port
@@ -85,7 +211,8 @@ describe('Plugin', function () {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       before(done => {
-        downstreamServer = http.createServer((_req, res) => {
+        downstreamServer = http.createServer((req, res) => {
+          if (req.url === '/image-error') return res.destroy()
           res.writeHead(204)
           res.end()
         }).listen(0, '127.0.0.1', () => {
@@ -112,8 +239,7 @@ describe('Plugin', function () {
           return agent.load('next')
         })
 
-        before(function (done) {
-          this.timeout(300 * 1000)
+        const launchServer = () => new Promise((resolve, reject) => {
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -142,7 +268,7 @@ describe('Plugin', function () {
             },
           })
 
-          server.once('error', done)
+          server.once('error', reject)
 
           function waitUntilServerStarted (chunk) {
             const chunkStr = chunk.toString()
@@ -152,7 +278,7 @@ describe('Plugin', function () {
             if (match) {
               port = Number(match[1])
               server.stdout.off('data', waitUntilServerStarted)
-              done()
+              resolve()
             }
           }
           server.stdout.on('data', waitUntilServerStarted)
@@ -161,14 +287,22 @@ describe('Plugin', function () {
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
 
+        before(async function () {
+          this.timeout(300 * 1000)
+          await launchServer()
+        })
+
         after(async function () {
           this.timeout(30 * 1000)
 
-          server.kill()
-
-          await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
+          await stopProc(server)
           await agent.close()
         })
+
+        return async () => {
+          await stopProc(server)
+          await launchServer()
+        }
       }
 
       before(async function () {
@@ -231,12 +365,12 @@ describe('Plugin', function () {
           // copy public and static files to the `standalone` folder
           const publicOrigin = path.join(__dirname, 'public')
           const publicDestination = path.join(__dirname, '.next/standalone/public')
-          execSync(`mkdir ${publicDestination}`)
-          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+          mkdirSync(publicDestination, { recursive: true })
+          execSync(`cp ${publicOrigin}/test.txt ${publicOrigin}/test.png ${publicDestination}/`)
         }
       })
 
-      after(function () {
+      after(async function () {
         this.timeout(5000)
         const files = [
           'package.json',
@@ -244,13 +378,12 @@ describe('Plugin', function () {
           '.next',
           'yarn.lock',
         ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
+        await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
 
       withNamingSchema(
         (done) => {
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             // skip catch due to socket hang up when server is killed, unsure if this catch is needed
             // .catch(done)
@@ -266,7 +399,7 @@ describe('Plugin', function () {
       )
 
       describe('without configuration', () => {
-        startServer({ withConfig: false, standalone: false })
+        const restartServer = startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -291,7 +424,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
@@ -312,14 +445,14 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}${url}`)
                 .catch(done)
             })
           })
 
           it('should propagate context', done => {
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .then(res => {
                 assert.strictEqual(res.data.name, 'next.request')
@@ -348,13 +481,13 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/missing`)
               .catch(() => {})
           })
 
-          it('should handle invalid catch all parameters', done => {
-            agent
+          it('should handle invalid catch all parameters', async () => {
+            const tracingPromise = agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
 
@@ -366,18 +499,20 @@ describe('Plugin', function () {
                   meta: {
                     'span.kind': 'server',
                     'http.method': 'GET',
-                    // Next.js 16 surfaces a malformed request URL as a 500 instead of a 400.
-                    'http.status_code': satisfies(pkg.version, '>=16') ? '500' : '400',
                     component: 'next',
                   },
                 })
-              })
-              .then(done)
-              .catch(done)
 
-            axios
-              .get(`http://127.0.0.1:${port}/api/invalid/%ff`)
-              .catch(() => {})
+                return spans[1]
+              })
+
+            const [span, response] = await Promise.all([
+              tracingPromise,
+              httpRequest.get(`http://127.0.0.1:${port}/api/invalid/%ff`, { validateStatus: null }),
+            ])
+
+            assert.ok(response.status >= 400 && response.status < 600)
+            assert.strictEqual(span.meta['http.status_code'], String(response.status))
           })
 
           it('should pass resource path to parent span', done => {
@@ -394,7 +529,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
@@ -413,7 +548,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`, {
                 headers: { 'x-test-upstream-route': '/upstream/[id]' },
               })
@@ -448,7 +583,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world?createChildSpan=true`)
               .catch(done)
           })
@@ -477,7 +612,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/hello/downstream`),
+                httpRequest.get(`http://127.0.0.1:${port}/api/hello/downstream`),
                 tracingPromise,
               ])
             })
@@ -506,7 +641,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
@@ -534,7 +669,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://127.0.0.1:${port}${url}`)
+              httpRequest.get(`http://127.0.0.1:${port}${url}`)
             })
           })
 
@@ -558,7 +693,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/missing`)
               .catch(() => {})
           })
@@ -574,7 +709,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
@@ -598,7 +733,70 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+            httpRequest.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+          })
+        })
+
+        describe('for the image optimizer', () => {
+          it('names image optimizer cache misses and hits', async () => {
+            await assertImageRequest(pkg.version, port, 64, 'MISS')
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 64, 'HIT')
+          })
+
+          it('names image optimizer HEAD cache hits', async () => {
+            await assertImageRequest(pkg.version, port, 384, 'MISS')
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 384, 'HIT', { method: 'HEAD' })
+          })
+
+          it('names rewritten image optimizer requests', async () => {
+            await assertImageRequest(pkg.version, port, 640, 'MISS', { pathname: '/image-optimizer' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 640, 'HIT', { pathname: '/image-optimizer' })
+          })
+
+          it('preserves the optimizer route when an API route serves the image', async () => {
+            await assertImageRequest(pkg.version, port, 32, 'MISS', { source: '/api/image' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 32, 'HIT', { source: '/api/image' })
+          })
+
+          it('preserves the optimizer route when its image source fails', async () => {
+            await assertImageRequest(pkg.version, port, 32, undefined, {
+              source: '/api/image?error=true', sourceError: true,
+            })
+          })
+
+          it('records the final status when an external image request rejects', async () => {
+            await assertImageRequest(pkg.version, port, 32, undefined, {
+              source: `http://127.0.0.1:${downstreamPort}/image-error`, statusCode: 500,
+            })
+          })
+
+          it('finishes rejected image requests after the response is destroyed', async () => {
+            const tracingPromise = agent.assertSomeTraces(traces => {
+              const nextSpans = traces[0].filter(span => span.name === 'next.request')
+              assert.strictEqual(nextSpans.length, 1)
+              assert.strictEqual(nextSpans[0].resource, 'GET /_next/image')
+              assert.strictEqual(nextSpans[0].error, 1)
+            }, { timeoutMs: 4000 })
+            const source = encodeURIComponent(`http://127.0.0.1:${downstreamPort}/image-error`)
+            const request = httpRequest.get(`http://127.0.0.1:${port}/_next/image?url=${source}&w=32&q=75`, {
+              headers: { 'x-test-close-response': 'true' },
+            })
+            await Promise.all([assert.rejects(request, { code: 'ECONNRESET' }), tracingPromise])
+          })
+
+          it('preserves an upstream parent route for image optimizer requests', async () => {
+            await assertImageRequest(pkg.version, port, 256, 'MISS', { parentRoute: '/upstream/[id]' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 256, 'HIT', { parentRoute: '/upstream/[id]' })
+          })
+
+          it('names image optimizer validation failures', async () => {
+            await assertImageRequest(pkg.version, port, 0, undefined)
+            await assertImageRequest(pkg.version, port, 0, undefined, { withQuery: false })
           })
         })
 
@@ -622,7 +820,7 @@ describe('Plugin', function () {
                 })
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
 
           it('should do automatic instrumentation for static chunks', () => {
@@ -644,7 +842,7 @@ describe('Plugin', function () {
                 })
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), tracingPromise])
           })
 
           it('should pass resource path to parent span', () => {
@@ -656,7 +854,7 @@ describe('Plugin', function () {
                 assert.strictEqual(spans[0].resource, 'GET /public/*')
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
 
           it('should not replace an upstream parent route for static files', () => {
@@ -672,7 +870,7 @@ describe('Plugin', function () {
               })
 
             return Promise.all([
-              axios.get(`http://127.0.0.1:${port}/test.txt`, {
+              httpRequest.get(`http://127.0.0.1:${port}/test.txt`, {
                 headers: { 'x-test-upstream-route': '/upstream/[id]' },
               }),
               tracingPromise,
@@ -707,7 +905,7 @@ describe('Plugin', function () {
               })
 
             return Promise.all([
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}/api/error/boom`)
                 .catch(error => assert.strictEqual(error.response?.status, 500)),
               tracingPromise,
@@ -732,7 +930,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/hello`)
               .catch(done)
           })
@@ -748,7 +946,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios.get(`http://127.0.0.1:${port}/appDir/hello`)
+            httpRequest.get(`http://127.0.0.1:${port}/appDir/hello`)
           })
 
           if (satisfies(pkg.version, '>=15.4.1')) {
@@ -772,7 +970,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
+                httpRequest.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
                 tracePromise,
               ])
             })
@@ -794,7 +992,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
+                httpRequest.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
                 tracePromise,
               ])
             })
@@ -814,7 +1012,7 @@ describe('Plugin', function () {
               })
 
               const [response] = await Promise.all([
-                axios.get(`http://127.0.0.1:${port}/cached`),
+                httpRequest.get(`http://127.0.0.1:${port}/cached`),
                 tracePromise,
               ])
               assert.strictEqual(response.headers['x-nextjs-cache'], 'HIT')
@@ -841,7 +1039,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}/appDir/page-error`)
                 .catch(error => {
                   if (error.response?.status !== 500) done(error)
@@ -869,7 +1067,7 @@ describe('Plugin', function () {
                 },
               })
             }),
-            axios.get(`http://127.0.0.1:${port}/api/hello/world`),
+            httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`),
           ])
         })
       })
@@ -904,7 +1102,7 @@ describe('Plugin', function () {
             .then(done)
             .catch(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
@@ -929,7 +1127,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/error`)
               .catch(err => {
                 if (err.response.status !== 500) done(err)
@@ -957,7 +1155,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/throw`)
               .catch(err => {
                 if (err.response.status !== 500) done(err)
@@ -972,7 +1170,13 @@ describe('Plugin', function () {
       // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
         describe('with standalone', () => {
-          startServer({ withConfig: false, standalone: true })
+          const restartServer = startServer({ withConfig: false, standalone: true })
+
+          it('names image optimizer cache misses and hits in standalone mode', async () => {
+            await assertImageRequest(pkg.version, port, 96, 'MISS', { standalone: true })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 96, 'HIT', { standalone: true })
+          })
 
           // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`
           const standaloneTests = [
@@ -1001,7 +1205,7 @@ describe('Plugin', function () {
                   })
                 })
 
-              return Promise.all([axios.get(`http://127.0.0.1:${port}${resource}`), promise])
+              return Promise.all([httpRequest.get(`http://127.0.0.1:${port}${resource}`), promise])
             }).timeout(5000)
             // increase timeout for longer test in CI
             // locally, do not see any slowdowns
@@ -1024,14 +1228,26 @@ describe('Plugin', function () {
         for (const path of ['http://[:::1]', '//[::1']) {
           it(`keeps serving requests after a request with path "${path}"`, async () => {
             await sendPath(path).catch(() => {})
-            const response = await axios.get(`http://127.0.0.1:${port}/api/hello/world`)
+            const response = await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`)
             assert.strictEqual(response.status, 200)
           })
         }
       })
 
       describe('without HTTP instrumentation', () => {
-        startServer({ withConfig: false, standalone: false, withHttp: false })
+        const restartServer = startServer({ withConfig: false, standalone: false, withHttp: false })
+
+        it('names image optimizer cache misses and hits without HTTP instrumentation', async () => {
+          await assertImageRequest(pkg.version, port, 128, 'MISS', { withHttp: false })
+          await restartServer()
+          await assertImageRequest(pkg.version, port, 128, 'HIT', { withHttp: false })
+        })
+
+        it('records rejected image requests without HTTP instrumentation', async () => {
+          await assertImageRequest(pkg.version, port, 32, undefined, {
+            source: `http://127.0.0.1:${downstreamPort}/image-error`, statusCode: 500, withHttp: false,
+          })
+        })
 
         it('should continue incoming distributed context', done => {
           agent
@@ -1046,7 +1262,7 @@ describe('Plugin', function () {
             .then(done)
             .catch(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`, {
               headers: {
                 'x-datadog-trace-id': '1234',

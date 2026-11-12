@@ -1,16 +1,20 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const { once } = require('node:events')
 const http = require('node:http')
+const { join } = require('node:path')
+
+const { satisfies } = require('semver')
 
 const {
+  createParallelIt,
   getCiVisAgentlessConfig,
   sandboxCwd,
   useSandbox,
+  withReceiver,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
@@ -38,11 +42,22 @@ const {
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
+const {
+  getWebdriverioVersions,
+  oldest: OLDEST_WEBDRIVERIO_VERSION,
+  resolveWebdriverioVersion,
+} = require('./versions')
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
-const versions = requestedVersion
-  ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
-  : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const versions = getWebdriverioVersions(requestedVersion)
+const mochaArgs = [...process.argv, ...(process.env.MOCHA_OPTIONS?.split(/\s+/) || [])]
+const hasMochaFilter = mochaArgs.some(arg =>
+  ['--grep', '--fgrep', '-g', '-f'].includes(arg) || /^(?:--f?grep=|-[gf].+)/.test(arg)
+)
+
+const PNG_SCREENSHOT = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=',
+  'base64'
+)
 
 const disabledSettings = {
   code_coverage: false,
@@ -62,6 +77,8 @@ const disabledSettings = {
   coverage_report_upload_enabled: false,
 }
 
+const scenarioContext = new AsyncLocalStorage()
+
 const advancedRequestPaths = [
   '/api/v2/ci/libraries/tests',
   '/api/v2/ci/tests/skippable',
@@ -77,7 +94,8 @@ function startWebDriverServer () {
   let sessionCount = 0
   let screenshotCount = 0
   const server = http.createServer((request, response) => {
-    request.resume()
+    let body = ''
+    request.on('data', chunk => { body += chunk })
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
       let value = null
@@ -90,13 +108,15 @@ function startWebDriverServer () {
             browserName: 'chrome',
             browserVersion: 'test',
             platformName: process.platform,
+            unhandledPromptBehavior: JSON.parse(body).capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
       } else if (request.method === 'GET' && /^\/session\/[^/]+\/screenshot$/.test(request.url)) {
         screenshotCount++
-        value = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+        value = PNG_SCREENSHOT.toString('base64')
       }
 
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -136,6 +156,41 @@ function stopServer (server) {
     return Promise.resolve()
   }
   return new Promise(resolve => server.close(resolve))
+}
+
+/**
+ * Runs WebdriverIO scenarios with isolated intake and WebDriver servers.
+ *
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {number} concurrency
+ * @returns {import('mocha').TestFunction}
+ */
+function createScenarioIt (mochaIt, concurrency) {
+  const register = concurrency === 1
+    ? (name, fn) => mochaIt(name, withReceiver(fn))
+    : createParallelIt(mochaIt, { concurrency, withReceiver: true })
+
+  const scenarioIt = (name, fn) => register(name, async (receiver, run) => {
+    receiver.setSettings(disabledSettings)
+    const webDriver = await startWebDriverServer()
+
+    try {
+      await scenarioContext.run({ receiver, run, webDriver }, fn)
+    } finally {
+      try {
+        await run.stop()
+      } finally {
+        await stopServer(webDriver.server)
+      }
+    }
+  })
+  scenarioIt.skip = mochaIt.skip.bind(mochaIt)
+
+  return scenarioIt
+}
+
+function getScenarioReceiver () {
+  return scenarioContext.getStore().receiver
 }
 
 /**
@@ -188,7 +243,7 @@ function assertFailureScreenshotUploaded (failedTest, media) {
   assert.strictEqual(media.length, 1)
   assert.strictEqual(media[0].media.traceId, failedTest.trace_id.toString())
   assert.strictEqual(media[0].media.contentType, 'image/png')
-  assert.deepStrictEqual([...media[0].media.content], [137, 80, 78, 71, 13, 10, 26, 10])
+  assert.deepStrictEqual(media[0].media.content, PNG_SCREENSHOT)
 }
 
 /**
@@ -267,37 +322,22 @@ for (const version of versions) {
   describe(`webdriverio@${version}`, function () {
     this.timeout(60_000)
 
-    let childProcess
     let cwd
-    let receiver
-    let testOutput = ''
-    let webDriver
+    const concurrency = version === OLDEST_WEBDRIVERIO_VERSION && !hasMochaFilter ? 2 : 1
+    const resolvedWebdriverioVersion = resolveWebdriverioVersion(version)
+    const jasmineAfterAllFailureExitCode = satisfies(resolvedWebdriverioVersion, '>=10.2.0') ? 1 : 0
+    const it = createScenarioIt(global.it, concurrency)
 
     useSandbox([
       `@wdio/cli@${version}`,
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
+      '@sinonjs/fake-timers@15.4.0',
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
 
-    before(async function () {
+    before(function () {
       cwd = sandboxCwd()
-      webDriver = await startWebDriverServer()
-    })
-
-    after(async function () {
-      await stopServer(webDriver?.server)
-    })
-
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-      receiver.setSettings(disabledSettings)
-    })
-
-    afterEach(async function () {
-      childProcess?.kill()
-      testOutput = ''
-      await receiver.stop()
     })
 
     /**
@@ -314,16 +354,19 @@ for (const version of versions) {
      * @returns {Promise<void>}
      */
     async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
+      const { receiver, run, webDriver } = scenarioContext.getStore()
       const { env, expectedScreenshots, framework = 'mocha' } = options
+      let testOutput = ''
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialScreenshotCount = webDriver.getScreenshotCount()
-      childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
+      const childProcess = run('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
           WEBDRIVERIO_FRAMEWORK: framework,
+          WEBDRIVERIO_RETRY_MARKER: join(cwd, `.webdriverio-spec-file-retry-${webDriver.port}`),
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
           ...env,
@@ -447,7 +490,7 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine statuses and a failure screenshot without global injection', async () => {
+    it('reports Jasmine statuses and a failure screenshot by default without global injection', async () => {
       await runScenario('jasmineStatuses', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)
@@ -463,7 +506,7 @@ for (const version of versions) {
         assert.match(failedTest.meta['error.message'], /expected WebdriverIO/)
         assertFailureScreenshotUploaded(failedTest, media)
       }, 1, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
         framework: 'jasmine',
       })
@@ -549,7 +592,7 @@ for (const version of versions) {
         assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
         assert.strictEqual(tests.length, 1)
         assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
-      }, 0, { framework: 'jasmine' })
+      }, jasmineAfterAllFailureExitCode, { framework: 'jasmine' })
     })
 
     it('reports a Jasmine global afterAll failure on its suite', async () => {
@@ -567,11 +610,11 @@ for (const version of versions) {
         assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
         assert.strictEqual(tests.length, 2)
         assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
-      }, 0, { framework: 'jasmine' })
+      }, jasmineAfterAllFailureExitCode, { framework: 'jasmine' })
     })
 
     it('starts Jasmine parent spans before tests when settings are delayed', async () => {
-      receiver.setSettingsResponseDelay(1_000)
+      getScenarioReceiver().setSettingsResponseDelay(1_000)
 
       await runScenario('jasmineDelayedSettings', 1, ({ session, module, suites, tests }) => {
         assert.strictEqual(suites.length, 1)
@@ -703,7 +746,7 @@ for (const version of versions) {
       }, 1)
     })
 
-    it('reports native Mocha retries and captures only the failed attempt', async () => {
+    it('reports native Mocha retries and captures only the failed attempt by default', async () => {
       await runScenario('retries', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
         assert.strictEqual(suites.length, 1)
@@ -713,10 +756,26 @@ for (const version of versions) {
         assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
         assertFailureScreenshotUploaded(tests.find(test => test.meta[TEST_STATUS] === 'fail'), media)
       }, 0, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
       })
     })
+
+    for (const framework of ['mocha', 'jasmine']) {
+      it(`does not capture or upload ${framework} failure screenshots when explicitly disabled`, async () => {
+        await runScenario(framework === 'mocha' ? 'retries' : 'jasmineStatuses', 1, ({ media, tests }) => {
+          const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+          assert.ok(failedTest)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(media.length, 0)
+        }, framework === 'mocha' ? 0 : 1, {
+          env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' },
+          expectedScreenshots: 0,
+          framework,
+        })
+      })
+    }
 
     it('supports the Mocha TDD interface', async () => {
       await runScenario('tdd', 1, ({ suites, tests }) => {

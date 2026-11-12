@@ -5,6 +5,7 @@ const fs = require('fs')
 const { URL } = require('url')
 const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
+const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
@@ -250,8 +251,11 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end',
 ]
+const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
+const TEST_PARALLELIZATION_PLAN_TAG_PREFIX = 'test.parallelization.plan.'
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
+  TEST_PARALLELIZATION_ENABLED,
   CI_JOB_ID,
   CI_JOB_NAME,
   CI_JOB_URL,
@@ -306,6 +310,8 @@ const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
 // Test Management tags
 const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION = 'test.test_management.prevent_failure_suppression'
+const TEST_MANAGEMENT_NO_AUTO_RETRY = 'test.test_management.no_auto_retry'
 const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
@@ -587,6 +593,8 @@ module.exports = {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -795,6 +803,8 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       commitMessage,
       ciWorkspacePath,
       headCommitSha,
+      pullRequestBaseBranchSha: userProvidedGitMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA] ||
+        ciMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA],
     })
   }
 
@@ -809,10 +819,47 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
+  if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
+    metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
+    Object.assign(metadata, getTestParallelizationPlanMetadata())
+  }
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
   return removeInvalidMetadata(metadata)
+}
+
+/** @returns {Record<string, string>} */
+function getTestParallelizationPlanMetadata () {
+  try {
+    let metadataFile = getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE')
+    if (!metadataFile) {
+      // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      const env = process.env
+      const manifestFile = env.TEST_OPTIMIZATION_MANIFEST_FILE || env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile
+        ? path.dirname(resolveRunfilePath(manifestFile, env))
+        : path.join(process.cwd(), '.testoptimization')
+      metadataFile = path.join(planDirectory, 'plan-metadata.json')
+    }
+    const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
+        Object.values(tags).some(value => typeof value !== 'string')) {
+      return {}
+    }
+    const metadata = {}
+    for (const [tag, value] of Object.entries(tags)) {
+      if (tag.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) &&
+          tag.length > TEST_PARALLELIZATION_PLAN_TAG_PREFIX.length && value) {
+        metadata[tag] = value
+      }
+    }
+    return metadata
+  } catch (err) {
+    log.debug('Failed to read DDTest plan metadata: %s', err.message)
+    return {}
+  }
 }
 
 function getTestParametersString (parametersByTestName, testName) {
@@ -842,6 +889,11 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
     const key = TEST_LEVELS_METADATA_TAGS[i]
     const value = testEnvironmentMetadata[key]
     if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(testEnvironmentMetadata)) {
+    if (key.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) && value !== undefined) {
       testLevelsMetadataTags[key] = value
     }
   }
@@ -1556,8 +1608,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || fileCoverage.data.s[statementId] > 0) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -2025,6 +2076,10 @@ function getModifiedFilesFromDiff (diff) {
     if (lineMatch && currentFile) {
       const start = Number(lineMatch.groups.start)
       const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
+      if (count === 0) {
+        // Keep the surviving line before a deletion so line-based consumers can match its scope.
+        result[currentFile].push(start)
+      }
       for (let j = 0; j < count; j++) {
         result[currentFile].push(start + j)
       }
@@ -2252,8 +2307,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+  if (!execution?.testName || getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const identity = getTestOptimizationIdentity(testSuite, testName)
@@ -2293,14 +2347,17 @@ function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
 
 function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
   const meta = span.meta
-  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true' ||
+    meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true') return
 
   recordAttemptToFixExecution(attemptToFixExecutions, {
     testSuite: meta[TEST_SUITE],
     testName: meta[TEST_NAME],
     status: meta[TEST_STATUS],
-    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
   })
 }
 
@@ -2318,9 +2375,12 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
     testSuite: meta[TEST_SUITE],
     testName: meta[TEST_NAME],
     status: meta[TEST_STATUS],
-    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
-    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
+      meta[TEST_MANAGEMENT_NO_AUTO_RETRY] !== 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
   }, executions)
 }
 
@@ -2331,6 +2391,7 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
  * @param {string} data - JSON-serialized traces from a worker
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
+ *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
  *   attemptToFixExecutions?: AttemptToFixExecutions,
  *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
@@ -2340,12 +2401,21 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
     newTestsWithDynamicNames,
     attemptToFixExecutions,
     testManagementExecutions: executions = testManagementExecutions,
+    testAnnotations,
   } = summaries
 
   try {
     const traces = JSON.parse(data)
     for (const trace of traces) {
       for (const span of trace) {
+        if (testAnnotations && span.type === 'test' &&
+          (span.meta?.[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true' ||
+            span.meta?.[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true')) {
+          testAnnotations.set(`${span.meta[TEST_SUITE]} › ${span.meta[TEST_NAME]}`, {
+            mustFail: span.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true',
+            noAutoRetry: span.meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true',
+          })
+        }
         if (newTestsWithDynamicNames) {
           collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
         }

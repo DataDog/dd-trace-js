@@ -15,6 +15,7 @@ const { dependencies } = require('./package.json')
 
 const include = new Set([
   ...Object.keys(dependencies),
+  '@datadog/openfeature-node-server/rules-based',
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
   'source-map/lib/util', // TODO: remove usage of dependency internals
@@ -70,14 +71,28 @@ module.exports = {
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
-      excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      handleMissingLicenseText: (packageName, licenseType) => licenseType,
+      // Module order depends on the installer's layout, so the first module does not identify the entry package.
+      renderLicenses: modules => modules
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(licenseModule => {
+          if (!licenseModule.licenseText) {
+            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+          }
+          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+        })
+        .join(`\n${'-'.repeat(78)}\n\n`),
       stats: {
         warnings: false,
       },
     }),
     new CopyRspackPlugin({
       patterns: [
+        {
+          from: '@datadog/openfeature-node-server/rules-based.d.ts',
+          to: '@datadog/openfeature-node-server/rules-based/index.d.ts',
+        },
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',

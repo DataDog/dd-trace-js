@@ -4,7 +4,7 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 <h2 id="overview">Overview</h2>
 
-The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
+The module exported by this library is an instance of the [Tracer](./interfaces/Tracer.html) class.
 
 <h2 id="agentless-mode">Agentless mode</h2>
 
@@ -23,6 +23,163 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 `DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
+<h2 id="feature-flag-configuration">Feature Flag Configuration for SSR</h2>
+
+Use `dd-trace/openfeature/rules-based` to fetch rules and serialize configuration for browser initialization.
+These helpers do not initialize the tracer, register a provider, or enable tracking.
+The rules decoder is loaded only when this entrypoint is imported, not by `dd-trace/openfeature`
+or normal tracer or provider imports.
+
+```javascript
+import { fetchRulesConfiguration, configurationToString } from 'dd-trace/openfeature/rules-based.js'
+
+export async function getServerSideProps () {
+  const configuration = await fetchRulesConfiguration({
+    distributionChannel: 'client',
+    clientToken: process.env.DD_CLIENT_TOKEN,
+    env: process.env.DD_ENV,
+  })
+
+  return { props: { flagsConfiguration: configurationToString(configuration) } }
+}
+```
+
+The browser can parse `flagsConfiguration` with `configurationFromString` from
+`@datadog/openfeature-browser/rules-based` and pass the result to `DatadogCoreProvider.setConfiguration()`.
+Use your framework's safe SSR data serialization; do not interpolate the string directly into HTML or a script.
+
+**Only forward client-distributed configuration to browsers.** The fetch helper defaults to the `server` distribution
+channel, which requires `apiKey` instead of `clientToken`. Serialization does not remove server-only flags.
+The helper accepts explicit `env`, optional `site`, `timeoutMs` (default 5000), `signal`, and custom `fetch` options;
+it does not inherit tracer configuration or read environment variables automatically.
+Catch `ConfigurationFetchError` to handle loading failures using its `code` and optional HTTP `status`.
+
+Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
+`dd-trace/openfeature/rules-based.js` for native Node.js ESM.
+
+<h2 id="feature-flag-exposure-logging">Feature Flag Exposure Logging</h2>
+
+Built-in Datadog exposure logging is enabled by default (`DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=true`).
+Set `DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=false` before tracer initialization to disable exposure
+buffering and delivery to Datadog in both agentless and Remote Configuration modes. Local flag evaluation and
+application OpenFeature hooks continue to work.
+Only `false` (case-insensitive) or `0` disables exposure logging. The tracer ignores unrecognized values.
+
+Disabling Datadog exposure delivery prevents experiment results from using those Datadog-collected exposures. If you
+log exposures separately to your data warehouse, warehouse-native analysis can use that source instead.
+
+This switch is independent of [evaluation counts](#feature-flag-evaluation-counts), which remain enabled by default.
+Evaluation events can include targeting keys. By default, valid non-empty keys are sent as unsalted SHA-256 hashes.
+When the flag configuration sets `observeFullEvaluationData` to `true`, events can include raw keys and a bounded
+evaluation-context snapshot. To disable aggregated `flagevaluation` events as well, also set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false`.
+Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
+disable all Feature Flagging telemetry.
+
+<h2 id="feature-flag-exposures-in-your-own-data-store">Feature Flag Exposures in Your Own Data Store</h2>
+
+Use the `ExposureHook` to receive every feature flag evaluation with the same deduplication decision the tracer uses, so your application can
+record exposures in its own data store:
+
+```javascript
+const tracer = require('dd-trace').init()
+const { OpenFeature } = require('@openfeature/server-sdk')
+const { ExposureHook } = require('dd-trace/openfeature/exposure-hook')
+
+OpenFeature.addHooks(new ExposureHook((evaluation) => {
+  if (!evaluation.shouldSend()) return
+  // Queue for your own writer; the callback runs on the evaluation thread and must not do I/O.
+  recordExposure({
+    flag: evaluation.flagKey,
+    variant: evaluation.variant,
+    allocation: evaluation.allocation,
+    targetingKey: evaluation.targetingKey,
+    features: evaluation.getFeatures(),
+  })
+}))
+
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+Register the hook with `OpenFeature.addHooks` or on a client. The callback runs for every evaluation, including errors and repeats:
+
+- `isExposure()`: the evaluation succeeded and selected an allocation that logs exposures, whether or not this subject was already exposed.
+- `isCacheHit()`: this exposure repeats one already recorded for this subject (same flag, allocation, variant and serial id).
+- `shouldSend()`: a new or changed exposure; exactly what the tracer sends to Datadog.
+- `getFeatures()`: the read-only `__dd_feature.<key>` metadata of the selected split, such as `holdout.key`, `holdout.assignment_group` and
+  `holdout.should_include_in_holdout_analysis`.
+
+The callback runs on the evaluation thread: hand the data to a background queue instead of writing it from the callback. An exception from the
+callback does not affect the evaluation; the first failure is logged at warn level and later ones at debug level.
+
+To stop sending exposures to Datadog while the hook keeps working, see
+[Feature Flag Exposure Logging](#feature-flag-exposure-logging). The hook still receives every evaluation with the same
+`shouldSend()` decision, and exposure deduplication keeps running.
+
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
+
+The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
+flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+
+Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
+
+- Unless it is literally `true`, valid targeting keys are sent as unsalted SHA-256 hashes and evaluation context is omitted.
+  Hashing is pseudonymization, not anonymity: a predictable targeting key can still be guessed and hashed.
+- With consent, events may include the raw targeting key and a bounded, flattened evaluation-context snapshot.
+- When aggregation reaches its identity-level limits, degraded rows omit targeting keys and context even with consent.
+- Events may include approved error codes, but never free-form evaluation error messages.
+
+The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
+when the application event loop can run. There is no public flush API for these events. Internal flush signals and
+graceful shutdown bypass the batching delay. On Node.js `beforeExit`, shutdown attempts to drain pending evaluations
+for up to five seconds. Diagnostic counters already recorded by the worker are collected before instrumentation
+telemetry's final send; counters produced during the subsequent drain may miss that send. Delivery is best-effort:
+`process.exit()`, terminating signals, crashes, and frozen runtimes can prevent the drain and lose pending events.
+
+The worker requires its JavaScript file and dependencies to be available at runtime. Bundling `dd-trace` into a single
+file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
+external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
+are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
+
+By default, the Datadog esbuild and webpack plugins inject `DD_GIT_COMMIT_SHA` and `DD_GIT_REPOSITORY_URL` into the
+bundle for Source Code Integration. Set `DD_BUNDLER_INJECT_GIT_METADATA=false` to skip that injection when you need
+stable artifact hashes across commits (for example, content-addressed Lambda deployments).
+
+<h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
+
+Enable the context parameter before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+const enabled = await OpenFeature.getClient().getBooleanValue('checkout', false, {
+  targetingKey: 'subject-id',
+  dd_evaluation_telemetry_opt_out: true
+})
+```
+
+The option defaults to `false`. The provider captures it at construction.
+Only boolean `true` in the merged `dd_evaluation_telemetry_opt_out` context attribute suppresses new evaluation EVP events,
+OpenTelemetry evaluation metrics, and automatic flag span tags. Strings, numbers, null, missing attributes, and false keep existing behavior.
+You can also enable per-subject opt-out with `DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED=true`.
+Explicit configuration takes precedence over this environment variable, including `false`.
+This enables the context parameter; it does not disable evaluation telemetry globally.
+
+The attribute remains available to targeting rules and exposure reporting, whether this option is enabled or disabled.
+Changing it can affect assignments through targeting rules and can produce another exposure under normal deduplication rules.
+
+The telemetry control does not change flag values, variants, reasons, defaults, experiment exposures,
+exposure deduplication, or customer hooks.
+Set the subject attribute before evaluation. Changes from After or Error hooks are not a supported opt-out API.
+Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
+The option does not change protected/full-data reporting consent or debug logging.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
@@ -55,7 +212,7 @@ tracer.use('pg', {
 
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
-The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, `openai-agents`, and `typesafe`.
 
 ```javascript
 // Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
@@ -73,9 +230,14 @@ tracer.use('openai', {
 <h5 id="anthropic"></h5>
 <h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
+<h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
+
+For Amazon Bedrock LLM Observability integrations, see the
+[automatic instrumentation documentation](https://docs.datadoghq.com/llm_observability/instrument/auto_instrumentation/#amazon-bedrock).
+
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
@@ -130,6 +292,63 @@ tracer.use('openai', {
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+
+OpenAI Realtime tracing also recognizes `@openai/agents-realtime` >=0.20.0
+(WebSocket and SIP/`call_id` sideband connections), including URLs supplied to
+the transport constructor or connect options. It uses the `openai` plugin
+configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
+`realtime audio turn` / `user speech` / `OpenAI.createRealtimeResponse` /
+`agent speech` span contract. Server playback events determine speech windows;
+`response.done` ends generation, not playback.
+
+Realtime LLM spans preserve provider-reported input/output/total token counts and
+available text, audio, image, and cached-token breakdowns. Counts must be
+nonnegative safe integers; explicit zeros are preserved and absent or invalid
+counts are omitted. Modality and cache counts remain subsets of inclusive totals.
+Datadog calculates model costs and aggregate cost/token metrics server-side.
+
+When LLM Observability consumes audio, Agents SDK sideband connections using
+`call_id` can request stored conversation items to retrieve audio carried over SIP
+or WebRTC. `DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED` defaults to
+`true`. Set it to `false` before connecting to disable these tracer-issued
+sideband retrievals. The switch is resolved from environment and
+stable configuration when connecting; existing connections keep their setting. This setting preserves streamed audio capture on ordinary
+Realtime WebSocket connections, passive capture of audio already received, and
+SDK/application retrieval requests. Realtime timing, transcripts, tools, and usage
+also remain enabled. Errors linked to tracer-owned request IDs stay internal; SDK
+and application request errors retain their normal behavior. Retrieval is bounded
+and falls back to transcripts when unavailable, incomplete, or too large.
+The shared decoded retrieval cache is limited to 12 MiB per connection, with at
+most 16 tracked playback turns and a 3 MiB limit per input/output clip. The cache
+budget includes retained backing allocations of shortened clips; SDK history,
+encoded messages, conversion buffers, and emitted consumers have separate ownership.
+Transcribed input gives the SDK its first retrieval opportunity, with a bounded
+fallback when transcription is delayed or fails. Completed cached snapshots are
+reused; missing or unfinished content can still require a fresh request.
+Interrupted items honor the server truncation boundary. Successful retrievals use
+the SDK's shared transport, so application listeners can receive additional
+`conversation.item.retrieved` and SDK history-update events, including the retrieved
+audio payload. Only errors belonging to tracer-owned requests are intercepted.
+If a formatless retrieval could use a different codec from the captured item,
+the recording is omitted and any available transcript is retained.
+Input clips use paired VAD offsets to include prefix padding at the correct start,
+with wall-clock precision limited by sideband event delivery.
+Manually committed sideband input without a VAD onset can use complete retrieved
+audio to derive its start from the commit boundary and clip duration.
+Response-specific playback starts preserve boundaries across a shared output
+buffer. When a normally drained buffer spans responses without every start event,
+complete retrieved audio durations can reconstruct the missing boundaries; those
+responses include metadata `agent_speech_timing: audio_duration`. Trailing clips
+are placed backward from the drain event, so gaps within an unanchored sequence
+cannot be resolved individually. Missing, incomplete, unsupported, or inconsistent
+recordings retain the timing fallback. Interrupted windows without per-response
+boundaries are not reconstructed. ESM applications must register the tracer loader
+before importing the SDK. This path is tested with SDK 0.20.0 and 0.21.0 using
+CJS/ESM protocol replays, plus live WebRTC/SIP sideband calls on SDK 0.20.0.
+The dependency test matrix includes the supported floor and latest pinned SDK
+versions, so automated pin updates exercise hook matching and request observation.
+Playback with missing per-response start events remains a live validation gap.
+
 <h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
@@ -139,6 +358,7 @@ tracer.use('openai', {
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -147,6 +367,7 @@ tracer.use('openai', {
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
 <h5 id="web"></h5>
@@ -154,98 +375,132 @@ tracer.use('openai', {
 <h5 id="ws"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
-* [aerospike](./interfaces/export_.plugins.aerospike.html)
-* [ai](./interfaces/export_.plugins.ai.html)
-* [amqp10](./interfaces/export_.plugins.amqp10.html)
-* [amqplib](./interfaces/export_.plugins.amqplib.html)
-* [anthropic](./interfaces/export_.plugins.anthropic.html)
-* [claude-agent-sdk](./interfaces/export_.plugins.claude_agent_sdk.html)
-* [apollo](./interfaces/export_.plugins.apollo.html)
-* [avsc](./interfaces/export_.plugins.avsc.html)
-* [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
-* [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
-* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
-* [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
-* [azure-functions](./interfaces/export_.plugins.azure_functions.html)
-* [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
-* [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
-* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
-* [bullmq](./interfaces/export_.plugins.bullmq.html)
-* [bunyan](./interfaces/export_.plugins.bunyan.html)
-* [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
-* [child_process](./interfaces/export_.plugins.child_process.html)
-* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
-* [connect](./interfaces/export_.plugins.connect.html)
-* [couchbase](./interfaces/export_.plugins.couchbase.html)
-* [cucumber](./interfaces/export_.plugins.cucumber.html)
-* [cypress](./interfaces/export_.plugins.cypress.html)
-* [dns](./interfaces/export_.plugins.dns.html)
-* [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
-* [electron](./interfaces/export_.plugins.electron.html)
-* [express](./interfaces/export_.plugins.express.html)
-* [fastify](./interfaces/export_.plugins.fastify.html)
-* [fetch](./interfaces/export_.plugins.fetch.html)
-* [find-my-way](./interfaces/export_.plugins.find_my_way.html)
-* [fs](./interfaces/export_.plugins.fs.html)
-* [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
-* [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
-* [google-genai](./interfaces/export_.plugins.google_genai.html)
-* [graphql](./interfaces/export_.plugins.graphql.html)
-* [grpc](./interfaces/export_.plugins.grpc.html)
-* [hapi](./interfaces/export_.plugins.hapi.html)
-* [hono](./interfaces/export_.plugins.hono.html)
-* [http](./interfaces/export_.plugins.http.html)
-* [http2](./interfaces/export_.plugins.http2.html)
-* [ioredis](./interfaces/export_.plugins.ioredis.html)
-* [iovalkey](./interfaces/export_.plugins.iovalkey.html)
-* [jest](./interfaces/export_.plugins.jest.html)
-* [kafkajs](./interfaces/export_.plugins.kafkajs.html)
-* [koa](./interfaces/export_.plugins.koa.html)
-* [langchain](./interfaces/export_.plugins.langchain.html)
-* [langgraph](./interfaces/export_.plugins.langgraph.html)
-* [mariadb](./interfaces/export_.plugins.mariadb.html)
-* [memcached](./interfaces/export_.plugins.memcached.html)
-* [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
-* [mocha](./interfaces/export_.plugins.mocha.html)
-* [modelcontextprotocol-sdk](./interfaces/export_.plugins.modelcontextprotocol_sdk.html)
-* [moleculer](./interfaces/export_.plugins.moleculer.html)
-* [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
-* [mongoose](./interfaces/export_.plugins.mongoose.html)
-* [mysql](./interfaces/export_.plugins.mysql.html)
-* [mysql2](./interfaces/export_.plugins.mysql2.html)
-* [nats](./interfaces/export_.plugins.nats.html)
-* [net](./interfaces/export_.plugins.net.html)
-* [next](./interfaces/export_.plugins.next.html)
-* [nyc](./interfaces/export_.plugins.nyc.html)
-* [openai](./interfaces/export_.plugins.openai.html)
-* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
-* [opensearch](./interfaces/export_.plugins.opensearch.html)
-* [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [pg](./interfaces/export_.plugins.pg.html)
-* [pino](./interfaces/export_.plugins.pino.html)
-* [playwright](./interfaces/export_.plugins.playwright.html)
-* [postgres](./interfaces/export_.plugins.postgres.html)
-* [prisma](./interfaces/export_.plugins.prisma.html)
-* [protobufjs](./interfaces/export_.plugins.protobufjs.html)
-* [redis](./interfaces/export_.plugins.redis.html)
-* [restify](./interfaces/export_.plugins.restify.html)
-* [rhea](./interfaces/export_.plugins.rhea.html)
-* [router](./interfaces/export_.plugins.router.html)
-* [selenium](./interfaces/export_.plugins.selenium.html)
-* [sharedb](./interfaces/export_.plugins.sharedb.html)
-* [supabase](./interfaces/export_.plugins.supabase.html)
-* [tedious](./interfaces/export_.plugins.tedious.html)
-* [undici](./interfaces/export_.plugins.undici.html)
-* [vitest](./interfaces/export_.plugins.vitest.html)
-* [web](./interfaces/export_.plugins.web.html)
-* [winston](./interfaces/export_.plugins.winston.html)
-* [ws](./interfaces/export_.plugins.ws.html)
+* [aerospike](./interfaces/plugins.aerospike.html)
+* [ai](./interfaces/plugins.ai.html)
+* [amqp10](./interfaces/plugins.amqp10.html)
+* [amqplib](./interfaces/plugins.amqplib.html)
+* [anthropic](./interfaces/plugins.anthropic.html)
+* [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
+* [apollo](./interfaces/plugins.apollo.html)
+* [async-mutex](./interfaces/plugins.async_mutex.html)
+* [avsc](./interfaces/plugins.avsc.html)
+* [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-sdk](./interfaces/plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
+* [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)
+* [azure-functions](./interfaces/plugins.azure_functions.html)
+* [azure-service-bus](./interfaces/plugins.azure_service_bus.html)
+* [azure-durable-functions](./interfaces/plugins.azure_durable_functions.html)
+* [browser-bunyan](./interfaces/plugins.browser_bunyan.html)
+* [bullmq](./interfaces/plugins.bullmq.html)
+* [bunyan](./interfaces/plugins.bunyan.html)
+* [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
+* [child_process](./interfaces/plugins.child_process.html)
+* [confluentinc-kafka-javascript](./interfaces/plugins.confluentinc_kafka_javascript.html)
+* [connect](./interfaces/plugins.connect.html)
+* [couchbase](./interfaces/plugins.couchbase.html)
+* [cucumber](./interfaces/plugins.cucumber.html)
+* [cypress](./interfaces/plugins.cypress.html)
+* [dns](./interfaces/plugins.dns.html)
+* [elasticsearch](./interfaces/plugins.elasticsearch.html)
+* [electron](./interfaces/plugins.electron.html)
+* [elevenlabs](#elevenlabs)
+* [express](./interfaces/plugins.express.html)
+* [fastify](./interfaces/plugins.fastify.html)
+* [fetch](./interfaces/plugins.fetch.html)
+* [find-my-way](./interfaces/plugins.find_my_way.html)
+* [fs](./interfaces/plugins.fs.html)
+* [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
+* [google-cloud-vertexai](./interfaces/plugins.google_cloud_vertexai.html)
+* [google-genai](./interfaces/plugins.google_genai.html)
+* [graphql](./interfaces/plugins.graphql.html)
+* [grpc](./interfaces/plugins.grpc.html)
+* [hapi](./interfaces/plugins.hapi.html)
+* [hono](./interfaces/plugins.hono.html)
+* [http](./interfaces/plugins.http.html)
+* [http2](./interfaces/plugins.http2.html)
+* [ioredis](./interfaces/plugins.ioredis.html)
+* [iovalkey](./interfaces/plugins.iovalkey.html)
+* [jest](./interfaces/plugins.jest.html)
+* [kafkajs](./interfaces/plugins.kafkajs.html)
+* [koa](./interfaces/plugins.koa.html)
+* [langchain](./interfaces/plugins.langchain.html)
+* [langgraph](./interfaces/plugins.langgraph.html)
+* [mariadb](./interfaces/plugins.mariadb.html)
+* [memcached](./interfaces/plugins.memcached.html)
+* [microgateway-core](./interfaces/plugins.microgateway_core.html)
+* [mocha](./interfaces/plugins.mocha.html)
+* [modelcontextprotocol-sdk](./interfaces/plugins.modelcontextprotocol_sdk.html)
+* [moleculer](./interfaces/plugins.moleculer.html)
+* [mongodb-core](./interfaces/plugins.mongodb_core.html)
+* [mongoose](./interfaces/plugins.mongoose.html)
+* [mysql](./interfaces/plugins.mysql.html)
+* [mysql2](./interfaces/plugins.mysql2.html)
+* [nats](./interfaces/plugins.nats.html)
+* [net](./interfaces/plugins.net.html)
+* [next](./interfaces/plugins.next.html)
+* [nyc](./interfaces/plugins.nyc.html)
+* [openai](./interfaces/plugins.openai.html)
+* [openai-agents](./interfaces/plugins.openai_agents.html)
+* [opensearch](./interfaces/plugins.opensearch.html)
+* [oracledb](./interfaces/plugins.oracledb.html)
+* [pg](./interfaces/plugins.pg.html)
+* [pino](./interfaces/plugins.pino.html)
+* [playwright](./interfaces/plugins.playwright.html)
+* [postgres](./interfaces/plugins.postgres.html)
+* [prisma](./interfaces/plugins.prisma.html)
+* [protobufjs](./interfaces/plugins.protobufjs.html)
+* [react-router](./interfaces/plugins.react_router.html)
+* [redis](./interfaces/plugins.redis.html)
+* [restify](./interfaces/plugins.restify.html)
+* [rhea](./interfaces/plugins.rhea.html)
+* [router](./interfaces/plugins.router.html)
+* [selenium](./interfaces/plugins.selenium.html)
+* [sharedb](./interfaces/plugins.sharedb.html)
+* [supabase](./interfaces/plugins.supabase.html)
+* [tedious](./interfaces/plugins.tedious.html)
+* [typesafe](./interfaces/plugins.typesafe.html)
+* [undici](./interfaces/plugins.undici.html)
+* [vitest](./interfaces/plugins.vitest.html)
+* [web](./interfaces/plugins.web.html)
+* [winston](./interfaces/plugins.winston.html)
+* [ws](./interfaces/plugins.ws.html)
+
+<h5 id="elevenlabs"></h5>
+
+#### ElevenLabs
+
+Automatically instruments Node.js Agents WebSocket conversations from `@elevenlabs/elevenlabs-js` 2.75.0 and later
+2.x versions. Initialize `dd-trace` before importing the SDK and enable LLM Observability to record conversation
+turns, transcripts, client tools, and input/output audio. Both the default and custom SDK audio interfaces are supported.
+The SDK exposes `Conversation` and `ClientTools` at
+`@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation`.
+Browser/WebRTC conversations (`@elevenlabs/client`), telephony, and standalone speech APIs are outside this integration.
+
+Negotiated PCM16 input and output are exported as WAV using their respective sample rates. Audio shares one bounded
+budget per LLM span; unsupported or oversized clips fall back to text with omission metadata. Phase timing and playback
+are estimated, and these spans explicitly opt out of time-to-first-audio metrics.
+Tool capture retains up to 64 calls per turn with IDs and names limited to 1,024 characters. Oversized names are
+truncated; omitted calls and truncated arguments, names, or results are marked in span metadata. SDK handlers still
+receive their original input and execute normally.
+
+For optional speaker activity colors, open the ElevenLabs agent's **Advanced → Client Events** settings and enable
+**VAD score (`vad_score`)**, preserving the other events your application uses. The tracer observes this event without
+changing your agent configuration or subscriptions. Without VAD events, audio playback and phase-based colors continue
+to work. VAD estimates change activity metadata only, never the captured audio or interruption cuts.
+
+Audio capture follows delivery through the SDK's output interface. When the SDK delivers a replacement response
+at the interruption ID, the tracer assigns its audio to that response and rejects older stale audio. The tested
+2.75.0 SDK artifact instead drops audio at that boundary; full playback requires the upstream correction. Tests
+also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
+
+Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
-If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/setup/nodejs/#compatibility)), you may want to manually instrument your code.
+If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/)), you may want to manually instrument your code.
 
-This can be done using the [tracer.trace()](./interfaces/tracer.html#trace) and the [tracer.wrap()](./interfaces/tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/tracer.html#scope) method is provided.
+This can be done using the [tracer.trace()](./interfaces/Tracer.html#trace) and the [tracer.wrap()](./interfaces/Tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/Tracer.html#scope) method is provided.
 
 The different ways to use the above methods are described below.
 
@@ -440,11 +695,11 @@ scope.activate(outerSpan, () => {
 })
 ```
 
-See the [API documentation](./interfaces/scope.html) for more details.
+See the [API documentation](./interfaces/Scope.html) for more details.
 
 <h2 id="opentracing-api">OpenTracing Compatibility</h2>
 
-This library is OpenTracing compliant. Use the [OpenTracing API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
+This library is OpenTracing compliant. Use the [OpenTracing API](https://github.com/opentracing/opentracing-javascript) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
 
 ```javascript
 const tracer = require('dd-trace').init()
@@ -584,9 +839,40 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="tracer-settings">Tracer settings</h3>
 
-Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
+Options can be configured as a parameter to the [init()](./interfaces/Tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
+
+Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When `DD_TEST_FAILURE_SCREENSHOTS_ENABLED` or `DD_TEST_FAILURE_VIDEOS_ENABLED` is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to `true` also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` screenshots and `retain-on-failure` videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+`screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
+For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
+`DD_TEST_FAILURE_VIDEOS_ENABLED=true` to record and upload failure videos automatically.
+Install [FFmpeg](https://ffmpeg.org/download.html) with the `libvpx` encoder and make the `ffmpeg` executable
+available on the WDIO worker's `PATH`. Check the installation with `ffmpeg -version` and `ffmpeg -encoders`.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
+process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
+When videos are enabled and both FFmpeg and video uploads are available, dd-trace defaults new sessions to
+`unhandledPromptBehavior: 'ignore'` so background screenshots preserve open dialogs. Explicit prompt policies
+are preserved. Recording is disabled with a warning
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Policies are checked before
+each capture; reloading a session with an unsafe policy discards the active recording. Tests must handle their
+dialogs; other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
+
+WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
+[wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results
+and sample idle periods every 500ms; browser dialogs and native UI outside screenshots are not recorded.
+Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
+attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
+Videos are limited to 1280×720 pixels and use two frames per second. Temporary frames and videos are
+removed after completion. Raw frames share a 200 MiB budget per WDIO worker across capturing, encoding, and
+uploading attempts, released after file cleanup, with a limit of 16 megapixels per screenshot. Capture,
+encoding, or upload failures do not fail the test run.
 
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
@@ -689,3 +975,115 @@ function handle () {
   })
 }
 ```
+
+## Mocha test automation exclusions
+
+Mocha supports the same `preventFailureSuppression` and `noAutoRetry` callback annotations
+from `dd-trace/ci/test-annotations` shown below for Jest. Apply them to `it`, `test`, and
+parameterized callbacks, including `only` and `skip` declarations. The annotations are
+preserved in serial and parallel workers. Native Mocha retries remain available when
+`noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.
+
+## Cucumber test automation exclusions
+
+Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
+`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.
+
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/ci/test-annotations`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
+
+## Jest test automation exclusions
+
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/ci/test-annotations`:
+
+```javascript
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
+
+test('critical check', preventFailureSuppression(noAutoRetry(() => {
+  expect(check()).toBe(true)
+})))
+
+test.each(cases)('critical case %s', preventFailureSuppression(value => {
+  expect(check(value)).toBe(true)
+}))
+```
+
+`preventFailureSuppression(callback)` prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.
+
+`noAutoRetry(callback)` prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit `jest.retryTimes(...)` calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.
+
+Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding test framework instrumentation.
+
+Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
+as `true` when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
+
+Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.
+
+## Vitest test automation exclusions
+
+Annotate callbacks with `preventFailureSuppression` and `noAutoRetry` from
+`dd-trace/ci/test-annotations`. These declarations apply to all generated `test.each`
+cases and work with Vitest's test modifiers, worker processes and supported
+browser/no-worker modes. Annotation flags travel with test task metadata before
+Vitest replaces callbacks for fixtures or parameterization.
+
+Protection overrides Datadog quarantine/disabling; retry exclusion blocks Datadog
+ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
+available and are reported as framework retries. Developer skips and TIA retain
+their ordinary selection semantics. Backend-assigned property tags remain visible
+when the execution policy is overridden; observed annotation tags are true-only.
+
+## Cypress test automation exclusions
+
+With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. `noAutoRetry` excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.
+
+Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.
+
+
+## WebdriverIO test automation exclusions
+
+With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
+to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
+They apply to every declaration generated in a loop and retain annotation tags
+on explicit skips and permitted native retries.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling without
+blocking retries. `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix;
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
+Both helpers preserve ordinary selection and expected-failure behavior. Management
+property tags retain backend assignments even when their execution policy is overridden.

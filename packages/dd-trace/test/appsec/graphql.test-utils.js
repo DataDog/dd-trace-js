@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
+const addresses = require('../../src/appsec/addresses')
+const waf = require('../../src/appsec/waf')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
+const httpRequest = require('../setup/helpers/http-client')
 const { blockedTemplateJson: json, blockedTemplateGraphql: graphqlJson, setTestBlockingTemplates } = require('./utils')
 
 const schema = `
@@ -22,6 +25,7 @@ type Book {
 
 type Query {
     books(title: String): [Book!]!
+    login(id: String): String
 }`
 
 const query = `
@@ -56,6 +60,14 @@ const resolvers = {
         return book.title.includes(args.title)
       })
     },
+    login: (root, args) => {
+      require('../../').appsec.setUser({ id: args.id })
+      return args.id
+    },
+  },
+  Book: {
+    // An explicit resolver, so every Apollo version publishes this argument-less field to AppSec.
+    author: book => book.author,
   },
 }
 
@@ -66,14 +78,72 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
   }
 
   const query = makeQuery(derivativeParam)
-  return axios.post(`http://localhost:${port}/graphql`, {
+  return httpRequest.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
     variables,
   }, { headers, maxRedirects: 0 })
 }
 
+/**
+ * Earlier tests block identical requests and their traces can arrive late, so only accept the trace of this request.
+ *
+ * @param {number} port
+ * @param {number} status
+ * @param {string} userAgent
+ */
+function assertBlockedRequestTrace (port, status, userAgent) {
+  return Promise.all([
+    agent.assertSomeTraces(payload => {
+      assert.strictEqual(payload[0][0].meta['http.useragent'], userAgent)
+      assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
+    }),
+    assert.rejects(
+      makeGraphqlRequest(port, { title: 'testattack' }, 'lower', { 'user-agent': userAgent }),
+      error => error.response.status === status
+    ),
+  ])
+}
+
+/**
+ * @param {number | string} port
+ * @param {string} query
+ * @param {Record<string, boolean>} [variables]
+ */
+function postGraphqlQuery (port, query, variables) {
+  return httpRequest.post(`http://localhost:${port}/graphql`, { query, variables }, {
+    headers: { 'content-type': 'application/json' },
+    maxRedirects: 0,
+  })
+}
+
+/**
+ * Counts the WAF runs that checked `fieldName`.
+ *
+ * @param {sinon.SinonSpy} wafRun
+ * @param {string} fieldName
+ */
+function countFieldRuns (wafRun, fieldName) {
+  return wafRun.getCalls().filter(call => {
+    const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
+    return resolverInfo?.[fieldName] !== undefined
+  }).length
+}
+
 function graphqlCommonTests (config) {
+  const inclusionDirectives = [
+    ['', ''],
+    ['@include(if: true)', ''],
+    ['@skip(if: false)', ''],
+    ['@include(if: true) @skip(if: false)', ''],
+    ['@include(if: $include)', '($include: Boolean!)', { include: true }],
+    ['@skip(if: $skip)', '($skip: Boolean!)', { skip: false }],
+    ['@include(if: $include) @skip(if: $skip)', '($include: Boolean!, $skip: Boolean!)',
+      { include: true, skip: false }],
+    ['@include(if: $include) @skip(if: false)', '($include: Boolean!)', { include: true }],
+    ['@include(if: true) @skip(if: $skip)', '($skip: Boolean!)', { skip: false }],
+  ]
+
   describe('Block with content', () => {
     beforeEach(() => {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
@@ -106,15 +176,8 @@ function graphqlCommonTests (config) {
       }
     })
 
-    it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.assertSomeTraces(payload => {
-        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
-        done()
-      })
-
-      makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower').then(() => {
-        done(new Error('block expected'))
-      })
+    it('Should set appsec.blocked on blocked attack', () => {
+      return assertBlockedRequestTrace(config.port, 403, 'graphql-blocked-with-content')
     })
 
     it('Should not block a safe request', async () => {
@@ -140,7 +203,7 @@ function graphqlCommonTests (config) {
       await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
       try {
-        await axios.get(`http://localhost:${config.port}/hello`, { headers: { customHeader: 'testattack' } })
+        await httpRequest.get(`http://localhost:${config.port}/hello`, { headers: { customHeader: 'testattack' } })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -180,6 +243,155 @@ function graphqlCommonTests (config) {
     })
   })
 
+  describe('Block on field name', () => {
+    beforeEach(() => {
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'graphql-field-name-rules.json'),
+        },
+      }))
+      setTestBlockingTemplates()
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('Should block a request selecting a field without arguments', async () => {
+      const error = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower').then(() => null, error => error)
+
+      assert.ok(error, 'Request should not return 200')
+      assert.strictEqual(error.response.status, 403)
+      assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+    })
+  })
+
+  describe('WAF runs for fields without arguments', () => {
+    let wafRun
+
+    /**
+     * @param {string} rules
+     */
+    function enableAppsecWithWafSpy (rules) {
+      appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, rules) } }))
+      setTestBlockingTemplates()
+      // Enabling AppSec replaces `waf.run`, so the spy goes on afterwards.
+      wafRun = sinon.spy(waf, 'run')
+    }
+
+    afterEach(() => {
+      wafRun.restore()
+      appsec.disable()
+    })
+
+    it('Should run the WAF once for a field resolved through several aliases', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      const response = await postGraphqlQuery(config.port, `
+        query {
+          books(title: "Test") {
+            first: author
+            second: author
+            third: author
+          }
+        }`)
+
+      const author = books[0].author
+      assert.deepStrictEqual(response.data, {
+        data: { books: [{ first: author, second: author, third: author }] },
+      })
+      assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+    })
+
+    it('Should run the WAF once for repeated inclusion directive inputs', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      for (const [directive, definitions, variables] of inclusionDirectives) {
+        wafRun.resetHistory()
+        const response = await postGraphqlQuery(config.port, `
+          query ${definitions} {
+            books(title: "Test") {
+              first: author ${directive}
+              second: author ${directive}
+              third: author ${directive}
+            }
+          }`, variables)
+
+        const author = books[0].author
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+        assert.deepStrictEqual(response.data, {
+          data: { books: [{ first: author, second: author, third: author }] },
+        })
+      }
+    })
+
+    it('Should not inspect fields excluded by variable directives', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      for (const [directive, variables] of [
+        ['@include(if: $condition)', { condition: false }],
+        ['@skip(if: $condition)', { condition: true }],
+      ]) {
+        wafRun.resetHistory()
+        const response = await postGraphqlQuery(config.port, `
+          query ($condition: Boolean!) {
+            books(title: "Test") { author ${directive} }
+          }`, variables)
+
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 0)
+        assert.deepStrictEqual(response.data, { data: { books: [{}] } })
+      }
+    })
+
+    it('Should not reuse a variable directive result for a literal directive', async () => {
+      enableAppsecWithWafSpy('graphql-directive-value-rules.json')
+
+      await assert.rejects(postGraphqlQuery(config.port, `
+        query ($include: Boolean!) {
+          books(title: "Test") {
+            variable: author @include(if: $include)
+            literal: author @include(if: true)
+          }
+        }`, { include: true }), error => {
+        assert.strictEqual(error.response.status, 403)
+        assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+        return true
+      })
+
+      const calls = wafRun.getCalls().filter(call => {
+        return call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]?.author !== undefined
+      })
+      assert.strictEqual(calls.length, 2)
+      assert.deepStrictEqual(calls[0].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+        author: { include: { if: undefined } },
+      })
+      assert.deepStrictEqual(calls[1].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+        author: { include: { if: true } },
+      })
+    })
+
+    it('Should run the WAF again for a field once setUser adds a user to the request', async () => {
+      enableAppsecWithWafSpy('graphql-user-field-rules.json')
+
+      for (const [directive, definitions, variables] of inclusionDirectives) {
+        wafRun.resetHistory()
+        // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
+        await assert.rejects(postGraphqlQuery(config.port, `
+          query ${definitions} {
+            before: books(title: "Test") { author ${directive} }
+            login(id: "blocked-user")
+            after: books(title: "Test") { author ${directive} }
+          }`, variables), error => {
+          assert.strictEqual(error.response.status, 403)
+          assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+          return true
+        })
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 2)
+      }
+    })
+  })
+
   describe('Block with redirect', () => {
     beforeEach(() => {
       appsec.enable(getConfigFresh({
@@ -205,15 +417,8 @@ function graphqlCommonTests (config) {
       }
     })
 
-    it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.assertSomeTraces(payload => {
-        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
-        done()
-      })
-
-      makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower').then(() => {
-        done(new Error('block expected'))
-      })
+    it('Should set appsec.blocked on blocked attack', () => {
+      return assertBlockedRequestTrace(config.port, 301, 'graphql-blocked-with-redirect')
     })
 
     it('Should not block a safe request', async () => {

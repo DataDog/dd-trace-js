@@ -227,12 +227,12 @@ const transformers = {
     if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
     warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
   },
-  validatePropagationStyles (value, optionName) {
+  validatePropagationStyles (value, optionName, _source, reportInvalid = true) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {
       const propagator = value[index]
       if (!VALID_PROPAGATION_STYLES.has(propagator)) {
-        warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
+        if (reportInvalid) warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
         return
       }
       if (DD_MAJOR >= 6 && propagator === 'b3 single header') {
@@ -334,7 +334,15 @@ const parsers = {
       // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
       raw = raw.replaceAll(/\s+/g, ',')
     }
-    tagger.add(entries, raw, valueSeparator)
+    if (valueSeparator === '=' && raw.includes('%')) {
+      try {
+        tagger.add(entries, raw, valueSeparator, true)
+      } catch {
+        return
+      }
+    } else {
+      tagger.add(entries, raw, valueSeparator)
+    }
     return entries
   },
   JSON (raw) {
@@ -432,6 +440,7 @@ const programmaticTypeCoercions = {
 }
 
 module.exports = {
+  VALID_PROPAGATION_STYLES,
   parsers,
   programmaticTypeCoercions,
   transformers,

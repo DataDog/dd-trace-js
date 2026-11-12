@@ -26,6 +26,25 @@ const config = {
   },
 }
 
+if (['native-tags', 'plain-tags'].includes(process.env.EXCLUSIONS_MODE)) {
+  config.test.tags = Object.freeze([
+    Object.freeze({ name: 'flaky', retry: 2, meta: Object.freeze({ userTag: 'preserved' }) }),
+    Object.freeze({ name: 'plain' }),
+  ])
+}
+
+if (process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS) {
+  const plugin = { name: 'user-optimizer-plugin' }
+  const plugins = process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'scalar'
+    ? plugin
+    : process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'promised'
+      ? Promise.resolve(plugin)
+      : [null, undefined, false, []]
+  config.optimizeDeps = {
+    rolldownOptions: { plugins },
+  }
+}
+
 if (process.env.VITEST_THROWING_REPORTER) {
   config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
 }
@@ -100,6 +119,7 @@ async function getBrowserProvider () {
   if (browserProvider === 'webdriverio') {
     const { webdriverio } = await import('@vitest/browser-webdriverio')
     const capabilities = {
+      'wdio:enforceWebDriverClassic': true,
       'goog:chromeOptions': {
         args: ['disable-dev-shm-usage', 'no-sandbox'],
       },
@@ -157,7 +177,7 @@ if (process.env.VITEST_MIXED_BROWSER_MODE) {
             name: `browser-${browserName}`,
           }],
         },
-        include: ['ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
+        include: [process.env.TEST_DIR || 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
         name: 'browser-project',
       },
     },

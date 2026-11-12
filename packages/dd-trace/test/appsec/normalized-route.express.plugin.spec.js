@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const Axios = require('axios')
 const semver = require('semver')
 const { describe, it, before, afterEach, after } = require('mocha')
 
@@ -11,6 +10,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
+const HttpRequest = require('../setup/helpers/http-client')
 
 withVersions('express', 'express', version => {
   // Resolve the installed version: `version` can be a range ('>=4') that intersects both majors
@@ -24,7 +24,7 @@ withVersions('express', 'express', version => {
 
   describe('Normalized HTTP route tag (_dd.appsec.normalized_route)', () => {
     const isExpress4 = semver.satisfies(realVersion, '<5.0.0')
-    let server, axios
+    let server, httpRequest
 
     before(() => {
       // Load 'router' alongside 'express' so Express 5 populates context.paths via apm:router:middleware:enter
@@ -65,7 +65,7 @@ withVersions('express', 'express', version => {
 
       server = app.listen(0, () => {
         const port = /** @type {import('net').AddressInfo} */ (server.address()).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}` })
         done()
       })
     })
@@ -105,7 +105,7 @@ withVersions('express', 'express', version => {
 
     it('sets normalized route for a simple named param', async () => {
       enableAppsecWithApiSecurity()
-      await axios.get('/users/42')
+      await httpRequest.get('/users/42')
 
       await agent.assertSomeTraces((traces) => {
         assertNormalizedRoute(traces[0][0], '/users/{id}')
@@ -114,7 +114,7 @@ withVersions('express', 'express', version => {
 
     it('sets normalized route for a static route', async () => {
       enableAppsecWithApiSecurity()
-      await axios.get('/health')
+      await httpRequest.get('/health')
 
       await agent.assertSomeTraces((traces) => {
         assertNormalizedRoute(traces[0][0], '/health')
@@ -123,7 +123,7 @@ withVersions('express', 'express', version => {
 
     it('sets normalized route for sub-router with mount prefix', async () => {
       enableAppsecWithApiSecurity()
-      await axios.get('/api/posts/99')
+      await httpRequest.get('/api/posts/99')
 
       await agent.assertSomeTraces((traces) => {
         assertNormalizedRoute(traces[0][0], '/api/posts/{postId}')
@@ -132,7 +132,7 @@ withVersions('express', 'express', version => {
 
     it('sets normalized route for multi-param segment', async () => {
       enableAppsecWithApiSecurity()
-      await axios.get('/photos/1.jpg')
+      await httpRequest.get('/photos/1.jpg')
 
       await agent.assertSomeTraces((traces) => {
         assertNormalizedRoute(traces[0][0], '/photos/{id+format}')
@@ -141,7 +141,7 @@ withVersions('express', 'express', version => {
 
     it('sets normalized route for catch-all wildcard', async () => {
       enableAppsecWithApiSecurity()
-      await axios.get('/files/a/b/c.txt')
+      await httpRequest.get('/files/a/b/c.txt')
 
       await agent.assertSomeTraces((traces) => {
         assertNormalizedRoute(traces[0][0], '/files/{splat}')
@@ -151,7 +151,7 @@ withVersions('express', 'express', version => {
     if (isExpress4) {
       it('does NOT set normalized route on Express 4 (unsupported)', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/items/7')
+        await httpRequest.get('/items/7')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -161,7 +161,7 @@ withVersions('express', 'express', version => {
     } else {
       it('sets normalized route for Express 5 {/:id} optional-segment — param present', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/items/7')
+        await httpRequest.get('/items/7')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -171,7 +171,7 @@ withVersions('express', 'express', version => {
 
       it('sets normalized route for Express 5 {/:id} optional-segment — param absent', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/items')
+        await httpRequest.get('/items')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -182,7 +182,7 @@ withVersions('express', 'express', version => {
       // A static-only optional group is dropped (rendered absent), so both URLs give the same route.
       it('drops a static-only optional group {/draft} — present', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/posts/draft')
+        await httpRequest.get('/posts/draft')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -192,7 +192,7 @@ withVersions('express', 'express', version => {
 
       it('drops a static-only optional group {/draft} — absent', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/posts')
+        await httpRequest.get('/posts')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -202,7 +202,7 @@ withVersions('express', 'express', version => {
 
       it('sets normalized route for Express 5 nested optional groups — both present', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/tree/main/leaf1')
+        await httpRequest.get('/tree/main/leaf1')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -212,7 +212,7 @@ withVersions('express', 'express', version => {
 
       it('sets normalized route for Express 5 nested optional groups — inner absent', async () => {
         enableAppsecWithApiSecurity()
-        await axios.get('/tree/main')
+        await httpRequest.get('/tree/main')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -229,7 +229,7 @@ withVersions('express', 'express', version => {
           apiSecurity: { enabled: false },
         },
       }))
-      await axios.get('/users/42')
+      await httpRequest.get('/users/42')
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]

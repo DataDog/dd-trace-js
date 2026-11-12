@@ -2,17 +2,19 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
-const { trace } = require('@opentelemetry/api')
+const { context, propagation, trace } = require('@opentelemetry/api')
 
 require('../setup/core')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-require('../../index').init()
+const tracer = require('../../index').init()
 
 describe('OTel TracerProvider', () => {
+  afterEach(() => sinon.restore())
+
   it('should register with OTel API', () => {
     const provider = new TracerProvider()
     provider.register()
@@ -26,6 +28,35 @@ describe('OTel TracerProvider', () => {
 
     assert.ok(tracer instanceof Tracer)
     assert.strictEqual(tracer, provider.getTracer())
+  })
+
+  it('should inject OTel probability sampling state with the default propagator', () => {
+    const provider = new TracerProvider()
+    provider.register()
+    const span = provider.getTracer().startSpan('test')
+    const carrier = {}
+
+    propagation.inject(trace.setSpan(context.active(), span), carrier)
+
+    assert.match(carrier.tracestate, /^ot=rv:[0-9a-f]{14};th:0$/)
+    span.end()
+  })
+
+  it('should preserve inherited OTel sampling state with the default propagator', () => {
+    const provider = new TracerProvider()
+    provider.register()
+    const incomingCarrier = {
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      tracestate: 'ot=rv:123456789abcde;th:8,vendor=value',
+    }
+    const parentContext = propagation.extract(context.active(), incomingCarrier)
+    const span = provider.getTracer().startSpan('test', {}, parentContext)
+    const outgoingCarrier = {}
+
+    propagation.inject(trace.setSpan(parentContext, span), outgoingCarrier)
+
+    assert.strictEqual(outgoingCarrier.tracestate, incomingCarrier.tracestate)
+    span.end()
   })
 
   it('should get unique tracers by name and version key', () => {
@@ -118,8 +149,23 @@ describe('OTel TracerProvider', () => {
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
     processor.forceFlush = sinon.stub()
+    const exporterFlush = sinon.stub(tracer._tracer._exporter, 'flush')
+    const writerFlush = sinon.stub(tracer._tracer._exporter._writer, 'flush')
 
     provider.forceFlush()
+    sinon.assert.calledOnce(exporterFlush)
+    sinon.assert.notCalled(writerFlush)
     sinon.assert.calledOnce(processor.forceFlush)
+  })
+
+  it('should fall back to the writer when the exporter has no flush method', async () => {
+    const provider = new TracerProvider()
+    const exporter = tracer._tracer._exporter
+    sinon.stub(exporter, 'flush').value(undefined)
+    const writerFlush = sinon.stub(exporter._writer, 'flush')
+
+    await provider.forceFlush()
+
+    sinon.assert.calledOnce(writerFlush)
   })
 })

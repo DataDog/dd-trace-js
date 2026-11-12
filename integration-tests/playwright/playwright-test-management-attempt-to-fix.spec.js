@@ -25,6 +25,7 @@ const { assertObjectContains, getCiVisAgentlessConfig } = require('../helpers')
 const {
   PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT,
   describePlaywrightTestManagement,
+  getUniqueOutputDir,
 } = require('./playwright-test-management')
 
 const ATF_MANAGEMENT_TESTS = {
@@ -82,6 +83,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
           cwd: runtime.cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
             PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
           },
         }
@@ -119,7 +121,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
     const ATTEMPT_TO_FIX_NUM_RETRIES = 3
 
     context('attempt to fix', () => {
-      const getTestAssertions = (receiver, {
+      const getTestAssertions = (receiver, proc, {
         isAttemptingToFix,
         shouldAlwaysPass,
         shouldFailSometimes,
@@ -129,7 +131,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
         shouldNotUseEfd,
       }) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -285,7 +287,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
               assert.strictEqual(passedFlakyTest.length, 1)
               assert.strictEqual(failedFlakyTest.length, 1)
             }
-          }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
+          }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
       /**
        * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
@@ -312,15 +314,6 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
         shouldNotUseEfd,
         cliArgs = 'attempt-to-fix-test.js',
       } = {}) => {
-        const testAssertionsPromise = getTestAssertions(receiver, {
-          isAttemptingToFix,
-          shouldAlwaysPass,
-          shouldFailSometimes,
-          isDisabled,
-          isQuarantined,
-          shouldIncludeFlakyTest,
-          shouldNotUseEfd,
-        })
         let stdout = ''
         let proc
         try {
@@ -330,6 +323,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
@@ -339,6 +333,16 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
               },
             }
           )
+
+          const testAssertionsPromise = getTestAssertions(receiver, proc, {
+            isAttemptingToFix,
+            shouldAlwaysPass,
+            shouldFailSometimes,
+            isDisabled,
+            isQuarantined,
+            shouldIncludeFlakyTest,
+            shouldNotUseEfd,
+          })
 
           proc.stdout?.on('data', data => { stdout += data })
           proc.stderr?.on('data', data => { stdout += data })
@@ -438,8 +442,21 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
           known_tests_enabled: true,
         })
 
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+          {
+            cwd: runtime.cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
+              PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+            },
+          }
+        )
+
         const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const atfTests = tests.filter(
@@ -452,19 +469,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
                 'ATF test that is in known tests should not be tagged as new'
               )
             }
-          }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
-
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-          {
-            cwd: runtime.cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-test-management',
-            },
-          }
-        )
+          }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
         await Promise.all([once(proc, 'exit'), eventsPromise])
       })
@@ -590,8 +595,22 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
           test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
         })
 
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+          {
+            cwd: runtime.cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              SHOULD_ALWAYS_PASS: '1',
+              SHOULD_INCLUDE_SKIPPED_TEST: '1',
+            },
+          }
+        )
+
         const testAssertionsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events
               .filter(event => event.type === 'test')
@@ -604,20 +623,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
             }
-          }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
-
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-          {
-            cwd: runtime.cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: './ci-visibility/playwright-tests-test-management',
-              SHOULD_ALWAYS_PASS: '1',
-              SHOULD_INCLUDE_SKIPPED_TEST: '1',
-            },
-          }
-        )
+          }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
         let testOutput = ''
         proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
         proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
@@ -659,6 +665,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
               TEST_DIR: './ci-visibility/playwright-did-not-run',
               ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
             },
@@ -715,9 +722,23 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
-      // Playwright runs are slow (browser startup); need longer than default 15s to receive test_session_end
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+        {
+          cwd: runtime.cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
+            PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-test-management',
+            DD_TRACE_DEBUG: '1',
+          },
+        }
+      )
+
       const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(
+        .gatherPayloadsUntilChildExit(
+          proc,
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -731,21 +752,8 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
           },
-          120000
+          { hardTimeout: 120000 }
         )
-
-      const proc = run(
-        './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-        {
-          cwd: runtime.cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
-            TEST_DIR: './ci-visibility/playwright-tests-test-management',
-            DD_TRACE_DEBUG: '1',
-          },
-        }
-      )
 
       proc.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()

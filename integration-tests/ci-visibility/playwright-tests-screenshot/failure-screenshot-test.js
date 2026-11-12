@@ -45,6 +45,12 @@ test.skip('does not reserve a worker trace slot for an expected skip', () => {})
 test('uploads only the automatic failure screenshot', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)
 
+  if (process.env.PLAYWRIGHT_LOG_MEDIA_CONFIG === 'true') {
+    const { screenshot, video } = testInfo.project.use
+    // eslint-disable-next-line no-console
+    console.log(`FAILURE_MEDIA_CONFIG=${JSON.stringify({ screenshot, video })}`)
+  }
+
   const manualScreenshotPath = testInfo.outputPath('test-failed-99.png')
   await page.screenshot({ path: manualScreenshotPath })
   await testInfo.attach('screenshot', {

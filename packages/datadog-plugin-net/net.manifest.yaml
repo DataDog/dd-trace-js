@@ -1,0 +1,9 @@
+_v: 1
+name: net
+display_name: Node.js net
+description: Instruments outgoing TCP and IPC socket connections through the Node.js net module.
+packages: []
+category:
+- other
+systems: []
+creation_date: '2019-02-06'
