@@ -55,47 +55,24 @@ function annotateLayer (layer, matchers) {
 }
 
 /**
- * Resolve the route for a dispatched layer. Single-pattern layers carry a
- * constant route; only multi-pattern stacks need the per-request path match
- * the host already computed. Hosts that keep it on the layer expose it as
- * `layer.path`; hosts that return it from `Layer.prototype.match` have it
- * recorded as `meta.matchedPath` by `wrapLayerMatch`.
+ * Single-pattern layers carry a constant route. Multi-pattern layers use the
+ * host's request-local pattern when available, or match its legacy `layer.path`.
  *
- * @param {{ captureRoute?: string, needMultiMatch: boolean, matchedPath?: string,
+ * @param {{ captureRoute?: string, needMultiMatch: boolean,
  *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
  * @param {{ path?: string }} layer
+ * @param {import('node:http').IncomingMessage} [req]
+ * @param {symbol} [matchedRoute]
  * @returns {string | undefined}
  */
-function resolveLayerRoute (meta, layer) {
+function resolveLayerRoute (meta, layer, req, matchedRoute) {
   if (!meta.needMultiMatch) return meta.captureRoute
 
-  const matchedPath = layer.path ?? meta.matchedPath
+  const pattern = matchedRoute && req[matchedRoute]
+  if (typeof pattern === 'string') return pattern
 
   for (const matcher of meta.matchers) {
-    if (matcher.regex?.test(matchedPath)) return matcher.path
-  }
-}
-
-/**
- * Newer router releases return the match (`{ params, path, keys, pattern }`)
- * from `Layer.prototype.match` instead of storing it on the shared layer, so
- * `layer.path` is no longer available at dispatch. Record the matched path for
- * multi-pattern layers, the only ones that resolve their route per request.
- * Releases that return a boolean keep `layer.path` and skip the bookkeeping.
- *
- * @param {Function} originalMatch
- * @returns {Function}
- */
-function wrapLayerMatch (originalMatch) {
-  return function match () {
-    const result = Reflect.apply(originalMatch, this, arguments)
-
-    if (result !== null && typeof result === 'object') {
-      const meta = getLayerMeta(this)
-      if (meta?.needMultiMatch) meta.matchedPath = result.path
-    }
-
-    return result
+    if (matchedRoute ? matcher.regex === pattern : matcher.regex?.test(layer.path)) return matcher.path
   }
 }
 
@@ -107,11 +84,13 @@ function wrapLayerMatch (originalMatch) {
  *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
  * @param {{ path?: string }} layer
  * @param {Function} next
+ * @param {import('node:http').IncomingMessage} req
+ * @param {symbol | undefined} matchedRoute
  * @returns {string | undefined | typeof ROUTE_RESOLUTION_FAILED}
  */
-function resolveLayerRouteOrForwardError (meta, layer, next) {
+function resolveLayerRouteOrForwardError (meta, layer, next, req, matchedRoute) {
   try {
-    return resolveLayerRoute(meta, layer)
+    return resolveLayerRoute(meta, layer, req, matchedRoute)
   } catch (error) {
     next(error)
     return ROUTE_RESOLUTION_FAILED
@@ -148,13 +127,14 @@ function adoptRequestNext (req, hostNext, wrappedNext) {
  * span is published only for the layer the host actually runs.
  *
  * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
+ * @param {symbol} [matchedRoute] Native request-local route key, when provided by the host.
  * @returns {{
  *   wrapLayerRequest: (originalRequest: Function) => Function,
  *   wrapLayerError: (originalError: Function) => Function,
  *   wrapLegacyHandle: (layer: object, original: Function, guardRepeatedNext?: boolean) => Function
  * }}
  */
-function createLayerDispatchWrappers (name) {
+function createLayerDispatchWrappers (name, matchedRoute) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
   const exitChannel = channel(`apm:${name}:middleware:exit`)
   const finishChannel = channel(`apm:${name}:middleware:finish`)
@@ -215,7 +195,7 @@ function createLayerDispatchWrappers (name) {
 
       let route = meta.captureRoute
       if (meta.needMultiMatch) {
-        route = resolveLayerRouteOrForwardError(meta, this, next)
+        route = resolveLayerRouteOrForwardError(meta, this, next, req, matchedRoute)
         if (route === ROUTE_RESOLUTION_FAILED) return
       }
 
@@ -244,7 +224,7 @@ function createLayerDispatchWrappers (name) {
 
       let route = meta.captureRoute
       if (meta.needMultiMatch) {
-        route = resolveLayerRouteOrForwardError(meta, this, next)
+        route = resolveLayerRouteOrForwardError(meta, this, next, req, matchedRoute)
         if (route === ROUTE_RESOLUTION_FAILED) return
       }
 
@@ -671,10 +651,26 @@ function wrapHandleRequest (original) {
   }
 }
 
+/** @type {Map<string | undefined, symbol>} */
+const matchedRouteSymbols = new Map()
+
+addHook({ name: 'router', file: 'lib/symbols.js', versions: ['>=2'] },
+  /**
+   * @param {{ matchedRoute: symbol }} symbols
+   * @param {string} version
+   * @param {boolean} isIitm
+   * @param {{ moduleBaseDir?: string }} hookMeta
+   */
+  function captureMatchedRoute (symbols, version, isIitm, { moduleBaseDir }) {
+    matchedRouteSymbols.set(moduleBaseDir, symbols.matchedRoute)
+    return symbols
+  })
+
 addHook({
   name: 'router', file: 'lib/layer.js', versions: ['>=2'],
-}, Layer => {
-  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router')
+}, (Layer, version, isIitm, { moduleBaseDir }) => {
+  const matchedRoute = matchedRouteSymbols.get(moduleBaseDir)
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router', matchedRoute)
 
   // `handleRequest` carries two concerns: the middleware dispatch span and the
   // param-start publish (`wrapHandleRequest`). Wrap the dispatch first so it
@@ -683,7 +679,6 @@ addHook({
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapLayerRequest)
   shimmer.wrap(Layer.prototype, 'handleError', wrapLayerError)
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
-  shimmer.wrap(Layer.prototype, 'match', wrapLayerMatch)
   return Layer
 })
 
@@ -723,4 +718,4 @@ addHook({
   return router
 })
 
-module.exports = { createWrapRouterMethod, createLayerDispatchWrappers, wrapLayerMatch }
+module.exports = { createWrapRouterMethod, createLayerDispatchWrappers }

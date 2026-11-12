@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
-const { createWrapRouterMethod, createLayerDispatchWrappers, wrapLayerMatch } = require('../src/router')
+const { createWrapRouterMethod, createLayerDispatchWrappers } = require('../src/router')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 // `createWrapRouterMethod` annotates each layer with dispatch metadata;
@@ -1273,83 +1273,34 @@ describe('createWrapRouterMethod', () => {
     })
   })
 
-  describe('wrapLayerMatch', () => {
-    /**
-     * Register a multi-pattern layer the host leaves without a `path`, then
-     * give it a `match` that returns `result`, as newer router releases do.
-     *
-     * @param {unknown} result Value the host `match` returns.
-     * @param {string | string[]} [paths]
-     * @returns {object} The annotated layer.
-     */
-    function makeMatchingLayer (result, paths = ['/users', '/products']) {
-      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
-      const router = { stack: [] }
+  describe('request-local matched patterns', () => {
+    for (const errorHandler of [false, true]) {
+      for (const pattern of ['/products/:id', /^\/products\/([^/]+)/]) {
+        it(`captures ${pattern} for ${errorHandler ? 'error' : 'request'} dispatch`, () => {
+          subscribeAll()
+          const matchedRoute = Symbol('matchedRoute')
+          const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers(namespace, matchedRoute)
+          FakeLayer = makeLayerClass(wrapLayerRequest, wrapLayerError)
+          const router = { stack: [] }
+          const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+          const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/users/1' }))
+          const handler = errorHandler
+            ? function handleError (error, req, res, next) { next(error) }
+            : function handleRequest (req, res, next) { next() }
+          wrappedUse.call(router, ['/users/:id', pattern], handler)
 
-      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: null }))
-      wrappedUse.call(router, paths, function handler (req, res, next) {
-        next()
-      })
+          const req = { [matchedRoute]: pattern }
+          const layer = router.stack[0]
+          if (errorHandler) {
+            layer.handle_error(new Error('failure'), req, {}, () => {})
+          } else {
+            layer.handle_request(req, {}, () => {})
+          }
 
-      const layer = router.stack[0]
-      layer.match = wrapLayerMatch(function hostMatch () {
-        return result
-      })
-      return layer
-    }
-
-    it('captures the route from a returned match when the layer keeps no path', () => {
-      subscribeAll()
-      const result = { params: {}, path: '/products', keys: [], pattern: '/products' }
-      const layer = makeMatchingLayer(result)
-
-      assert.strictEqual(layer.match('/products'), result)
-      layer.handle_request({}, {}, () => {})
-
-      assert.strictEqual(events.find(e => e.label === 'enter').data.route, '/products')
-    })
-
-    it('follows the latest returned match', () => {
-      subscribeAll()
-      const layer = makeMatchingLayer({ path: '/users' })
-
-      layer.match('/users')
-      layer.match = wrapLayerMatch(() => ({ path: '/products' }))
-      layer.match('/products')
-      layer.handle_request({}, {}, () => {})
-
-      assert.strictEqual(events.find(e => e.label === 'enter').data.route, '/products')
-    })
-
-    it('leaves the route undefined when the host returns a boolean and keeps no path', () => {
-      subscribeAll()
-      const layer = makeMatchingLayer(true)
-
-      assert.strictEqual(layer.match('/products'), true)
-      layer.handle_request({}, {}, () => {})
-
-      assert.strictEqual(events.find(e => e.label === 'enter').data.route, undefined)
-    })
-
-    it('passes a failed match through', () => {
-      const layer = makeMatchingLayer(false)
-
-      assert.strictEqual(layer.match('/missing'), false)
-    })
-
-    it('forwards the receiver and arguments and ignores layers that were never annotated', () => {
-      const calls = []
-      const layer = {
-        match: wrapLayerMatch(function hostMatch (...args) {
-          calls.push({ receiver: this, args })
-          return { path: '/users' }
-        }),
+          const expected = pattern instanceof RegExp ? `(${pattern})` : pattern
+          assert.strictEqual(events.find(event => event.label === 'enter').data.route, expected)
+        })
       }
-
-      assert.deepStrictEqual(layer.match('/users', true), { path: '/users' })
-      assert.strictEqual(calls.length, 1)
-      assert.strictEqual(calls[0].receiver, layer)
-      assert.deepStrictEqual(calls[0].args, ['/users', true])
-    })
+    }
   })
 })
