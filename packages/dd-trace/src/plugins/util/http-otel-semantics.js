@@ -48,9 +48,9 @@ function stripIpv6Brackets (host) {
 
 /**
  * Decompose a server request URL into the OpenTelemetry `url.*` / `server.*`
- * parts. Structural fields (scheme, address, port, path) are read from the raw
- * URL; the query is taken from the already-obfuscated URL so the configured
- * query-string obfuscation is preserved.
+ * parts. Structural fields (scheme, address, path) are read from the raw URL;
+ * the port is explicit or inferred from the scheme. The query comes from the
+ * already-obfuscated URL so configured query-string obfuscation is preserved.
  *
  * @param {string} rawUrl full request URL (`scheme://host[:port]/path?query`)
  * @param {string} obfuscatedUrl same URL with its query string obfuscated
@@ -69,10 +69,8 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     const hostname = parsed.hostname
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
-    }
-    if (parsed.port) {
-      const parsedPort = Number.parseInt(parsed.port, 10)
-      if (parsedPort > 0) port = parsedPort
+      port = parsed.port ? Number.parseInt(parsed.port, 10) : defaultPortForUrl(rawUrl)
+      if (port === 0) port = undefined
     }
     path = parsed.pathname || '/'
   } catch {
@@ -100,8 +98,8 @@ function toHttpScheme (scheme) {
 
 /**
  * Redact any userinfo embedded in a URL's authority, since `url.full` must not
- * leak credentials: `user:pass@host` -> `REDACTED:REDACTED@host`, `user@host` ->
- * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
+ * leak credentials. Any userinfo becomes `REDACTED:REDACTED@host`, matching OpenTelemetry HTTP
+ * instrumentation. Returns the URL unchanged when no userinfo is present.
  *
  * @param {string} url
  */
@@ -124,17 +122,13 @@ function redactUrlCredentials (url) {
   const at = url.lastIndexOf('@', authorityEnd - 1)
   if (at < authorityStart) return url
 
-  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
-  return url.slice(0, authorityStart) + redacted + url.slice(at)
+  return url.slice(0, authorityStart) + 'REDACTED:REDACTED' + url.slice(at)
 }
 
 /**
- * The scheme's default port, used as the `server.port` fallback for client spans
- * (the attribute is required for clients but the explicit port is absent for
- * default-port requests).
+ * Return the required client `server.port` when the URL omits its default port.
  *
  * @param {string} [url]
- * @returns {number | undefined}
  */
 function defaultPortForUrl (url) {
   if (url === undefined) return

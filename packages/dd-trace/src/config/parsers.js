@@ -448,6 +448,7 @@ const programmaticTypeCoercions = {
 }
 
 module.exports = {
+  VALID_PROPAGATION_STYLES,
   parsers,
   programmaticTypeCoercions,
   transformers,

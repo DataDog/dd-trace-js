@@ -213,7 +213,9 @@ interface Tracer extends opentracing.Tracer {
   /**
    * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Agentless delivery is enabled by default and starts when the provider is first accessed.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed. The default agentless
+   * endpoint requires DD_API_KEY. Without it, provider initialization fails at once. A custom agentless base URL
+   * and Remote Config delivery do not need the key.
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
@@ -312,6 +314,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -1011,7 +1014,8 @@ declare namespace tracer {
         enabled?: boolean
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
-         * If configuration is not received within this time, initialization fails.
+         * If configuration is not received within this time, initialization fails. It fails at once when the agentless
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
@@ -2151,11 +2155,21 @@ declare namespace tracer {
        * @param opts - Optional configuration object:
        *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
        *              and the AI Guard service has blocking mode enabled (default: false).
+       *   - `tags`: Custom tags to set on the AI Guard span. Keys are set verbatim. Keys equal to
+       *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
+       *             empty key, a key longer than 200 characters, a string value longer than 25000
+       *             characters, or a value that is not a string, finite number or boolean are dropped.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
-      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+      evaluate (
+        messages: Message[],
+        opts?: {
+          block?: boolean,
+          tags?: { [key: string]: string | number | boolean },
+        }
+      ): Promise<Evaluation>;
     }
   }
 
@@ -2771,6 +2785,12 @@ declare namespace tracer {
        */
       net?: boolean;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the

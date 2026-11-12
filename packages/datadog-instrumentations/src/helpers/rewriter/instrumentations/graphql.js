@@ -214,18 +214,6 @@ const instrumentations = [
     module: {
       name: 'graphql',
       versionRange: '>=0.10',
-      filePath: 'language/printer.mjs',
-    },
-    functionQuery: {
-      functionName: '__module_export__',
-      kind: 'Sync',
-    },
-    channelName: 'dd:graphql:printer:load',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
       filePath: 'language/visitor.js',
     },
     functionQuery: {
@@ -238,31 +226,7 @@ const instrumentations = [
     module: {
       name: 'graphql',
       versionRange: '>=0.10',
-      filePath: 'language/visitor.mjs',
-    },
-    functionQuery: {
-      functionName: '__module_export__',
-      kind: 'Sync',
-    },
-    channelName: 'dd:graphql:visitor:load',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
       filePath: 'utilities/index.js',
-    },
-    functionQuery: {
-      functionName: '__module_export__',
-      kind: 'Sync',
-    },
-    channelName: 'dd:graphql:utilities:load',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
-      filePath: 'utilities/index.mjs',
     },
     functionQuery: {
       functionName: '__module_export__',

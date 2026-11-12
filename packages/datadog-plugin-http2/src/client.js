@@ -30,14 +30,18 @@ class Http2ClientPlugin extends ClientPlugin {
 
   bindStart (message) {
     const { authority, options, headers = {} } = message
-    const sessionDetails = extractSessionDetails(authority, options)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const sessionDetails = extractSessionDetails(authority, options, otelSemantics)
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/, 1)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
-    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const otelBase = sessionDetails.hasAuth
+      ? `${sessionDetails.protocol}//REDACTED:REDACTED@${sessionDetails.host}:${sessionDetails.port}`
+      : base
+    const otelUri = sessionDetails.hasAuth ? `${otelBase}${pathname}` : uri
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
@@ -51,7 +55,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, path, otelUri) : uri,
         'out.host': sessionDetails.host,
       },
       metrics: {
@@ -123,7 +127,12 @@ class Http2ClientPlugin extends ClientPlugin {
   }
 }
 
-function extractSessionDetails (authority, options) {
+/**
+ * @param {string | URL | import('node:http2').ClientSessionOptions} authority
+ * @param {import('node:http2').SecureClientSessionOptions} options
+ * @param {boolean} otelSemantics
+ */
+function extractSessionDetails (authority, options, otelSemantics) {
   if (typeof authority === 'string') {
     authority = new URL(authority)
   }
@@ -139,7 +148,8 @@ function extractSessionDetails (authority, options) {
     host = options.host || host
   }
 
-  return { protocol, port, host }
+  const hasAuth = otelSemantics && Boolean(authority.username || authority.password)
+  return { protocol, port, host, hasAuth }
 }
 
 function hasAmazonSignature (headers, path) {

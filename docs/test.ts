@@ -403,6 +403,8 @@ tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('electron');
 tracer.use('electron', { net: false, ipc: false });
+tracer.use('elevenlabs');
+tracer.use('elevenlabs', { llmobs: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
@@ -1034,6 +1036,10 @@ aiguard.evaluate([
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
+
+aiguard.evaluate([
+  { role: 'user', content: 'What is 2 + 2' },
+], { block: false, tags: { 'app.flow': 'checkout', 'app.attempt': 2, 'app.retry': false } })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
