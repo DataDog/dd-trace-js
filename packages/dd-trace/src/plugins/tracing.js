@@ -203,7 +203,7 @@ class TracingPlugin extends Plugin {
    * @param {import('../tracer')} [options.tracer] - The tracer.
    * @param {object} [options.config] - The config for the span.
    *
-   * @param {boolean | object} enterOrCtx - Whether to enter the span context, or the context to populate with stores.
+   * @param {boolean | { parentStore?: object, currentStore?: object }} enterOrCtx - Enter the span or bind a context.
    */
   startSpan (name, options = {}, enterOrCtx = true) {
     // TODO: modularize this code to a helper function
