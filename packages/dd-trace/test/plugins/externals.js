@@ -691,7 +691,7 @@ module.exports = {
     {
       name: 'pino-pretty',
       dep: true,
-      versions: ['8.0.0'],
+      versions: ['13.2.0'],
     },
   ],
   postgres: [
@@ -765,7 +765,7 @@ module.exports = {
   redis: [
     {
       name: 'redis',
-      versions: ['^4'],
+      versions: ['>=4'],
     },
   ],
   rhea: [

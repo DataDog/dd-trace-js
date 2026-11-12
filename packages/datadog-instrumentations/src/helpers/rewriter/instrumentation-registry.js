@@ -23,6 +23,7 @@
 /** @satisfies {InstrumentationRegistryEntry[]} */
 const registry = [
   { instrumentations: require('./instrumentations/ai') },
+  { activate: true, instrumentations: require('./instrumentations/async-mutex') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
   { activate: true, instrumentations: require('./instrumentations/bullmq') },
@@ -45,6 +46,7 @@ const registry = [
     activate: { setup: () => require('../../modelcontextprotocol-server') },
     instrumentations: require('./instrumentations/modelcontextprotocol-server'),
   },
+  { instrumentations: require('./instrumentations/next') },
   { instrumentations: require('./instrumentations/openai-agents') },
   {
     activate: { setup: () => require('../../openai-agents-realtime') },

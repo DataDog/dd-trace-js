@@ -182,7 +182,7 @@ describe('generate supported integrations', () => {
       ],
     })
 
-    assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', ['8.0.0'])])
+    assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', ['13.2.0'])])
   })
 
   for (const nodeRange of ['>=18', '>=22']) {
