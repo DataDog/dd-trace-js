@@ -545,9 +545,8 @@ Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to 
 
 <h2 id="vite">Vite</h2>
 
-Applications whose Node.js code is built with Vite 6 or newer can add the Datadog Vite plugin to instrument the
-dependencies bundled into that code. This covers SSR servers (`vite build --ssr`), SSR frameworks exposing their Vite
-configuration, and Node.js libraries and services built in library mode.
+Use the Datadog Vite plugin to instrument CommonJS and ES module dependencies bundled into Node.js SSR or library
+builds with Vite 6 or newer:
 
 ```javascript
 // vite.config.mjs
@@ -560,57 +559,23 @@ export default defineConfig({
 })
 ```
 
-The plugin only runs during `vite build`, and only for environments producing Node.js code: client builds are left
-untouched. It instruments bundled CommonJS packages, ES module packages and packages supported through source
-rewriting. To make instrumented ES module exports replaceable, importers of those modules are pointed at a generated
-wrapper that keeps every export of the module, so tree shaking cannot remove their unused exports.
+The plugin does not load the tracer. Import a module that initializes `dd-trace` with `tracer.init()` before other
+application modules.
 
-The plugin does not load the tracer. Import and initialize `dd-trace` in the application, in a module imported before
-the others:
-
-```javascript
-// src/tracer.js, imported first by src/server.js
-import tracer from 'dd-trace'
-
-tracer.init()
-```
-
-The plugin also keeps function and class names during minification, as some instrumentations rely on them. It enables
-`keepNames` for esbuild and Rolldown, and `keep_classnames` and `keep_fnames` for terser, unless the configuration sets
-them. Like the esbuild and webpack plugins, it injects git metadata into entry chunks unless
-`DD_BUNDLER_INJECT_GIT_METADATA=false`.
-
-<h3 id="vite-bundled-or-external">Bundled or external tracer</h3>
-
-Like any other dependency, `dd-trace` is bundled or loaded from `node_modules` at runtime depending on the Vite
-configuration. For SSR builds, this is controlled by `ssr.noExternal`.
-
-* With a bundled tracer, the optional dependencies of `dd-trace`, which include native addons, stay out of the bundle
-  and are loaded from `node_modules` when available. The features that run in worker threads, such as the OpenFeature
-  flag evaluation writer, Dynamic Instrumentation and Test Optimization Dynamic Instrumentation, need `dd-trace` to be
-  external with its installed package available.
-* Packages that stay external can be loaded before a bundled tracer starts, and are then not instrumented. Node.js
-  built-ins are the exception: the tracer patches them when it starts. Bundle the packages to instrument, or keep
-  `dd-trace` external.
-* ES modules loaded from `node_modules` at runtime are only instrumented by the loader hook: start the application with
-  `--import dd-trace/initialize.mjs`.
-* Node.js builds using a client environment, such as library mode, should produce CommonJS output.
-
-<h3 id="vite-ssr-frameworks">SSR servers and frameworks</h3>
-
-Add the plugin to the Vite configuration used for the server build: `vite.config` for React Router, SvelteKit and
-TanStack Start, or `vite.plugins` in `astro.config` for Astro. Vite externalizes the dependencies of SSR builds by
-default, so they are loaded from `node_modules` at runtime: start the server with `--import dd-trace/initialize.mjs`
-(or `--require dd-trace/init` for CommonJS output) to instrument them.
+SSR dependencies stay external by default (`ssr.noExternal` controls bundling). To instrument external packages,
+preload `--import dd-trace/initialize.mjs` for ESM or `--require dd-trace/init` for CommonJS. External packages may
+load before a bundled tracer starts and miss instrumentation.
 
 <h3 id="vite-limitations">Limitations</h3>
 
-* The development server (`vite dev`) is not instrumented.
-* Like the esbuild plugin, bundled ES module interception uses `import-in-the-middle`. The generated wrappers and
-  tracer must share the same IITM runtime, and the packages' `package.json` files must remain accessible at their
-  build-time paths for runtime version lookup.
+* Only Node.js builds are instrumented, not client builds or the development server (`vite dev`).
+* Optional native dependencies stay external; deploy them separately when needed. Features using worker threads
+  require an external tracer with its installed package available.
+* Intercepted ES modules retain their unused exports. Their wrappers and the tracer must share one
+  `import-in-the-middle` runtime, and their `package.json` files must remain accessible at their build-time paths.
 * Packages outside `node_modules`, such as linked workspace packages, and Yarn Plug'n'Play installations are not
   instrumented.
+* Node.js builds using a client environment, such as library mode, should produce CommonJS output.
 * Vite 6.0.0 cannot bundle Node.js built-ins with `ssr.noExternal: true` unless they are listed in
   `build.rollupOptions.external`.
 
