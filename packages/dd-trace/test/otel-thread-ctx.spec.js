@@ -1060,12 +1060,15 @@ function runRetentionScenario (scenario, otelSemantics = false) {
 
 describe('otel-thread-ctx waiter retention', () => {
   it('releases finished and retargeted waiters before the request ends', async () => {
-    const scenarios = ['finish', 'retarget', 'finish-resolved', 'retarget-resolved', 'late', 'late-resolved']
+    const scenarios = [
+      'finish', 'retarget', 'finish-resolved', 'retarget-resolved',
+      'late', 'late-resolved', 'late-no-web', 'late-own', 'late-promoted',
+    ]
     await Promise.all(scenarios.map(scenario => runRetentionScenario(scenario)))
   })
 
   it('keeps route updates and retargeting after collecting reactivated records', async () => {
-    await Promise.all(['compact', 'compact-resolved'].map(scenario => runRetentionScenario(scenario)))
+    await Promise.all(['retained', 'retained-resolved'].map(scenario => runRetentionScenario(scenario)))
   })
 
   it('refines native endpoints as nested HTTP routes resolve', async () => {

@@ -72,7 +72,7 @@ async function main () {
   if (process.argv[2] === 'refinement') return checkRouteRefinements()
   const resolved = process.argv[2].endsWith('-resolved')
   if (process.argv[2].startsWith('late')) return checkReactivatedSpans(resolved)
-  if (process.argv[2].startsWith('compact')) return checkCompaction(resolved)
+  if (process.argv[2].startsWith('retained')) return checkRetainedCallbacks(resolved)
   const root = startRequest(resolved)
   const refs = []
   tracer.scope().activate(root, () => {
@@ -108,27 +108,39 @@ async function main () {
 
 /** @param {boolean} resolved */
 async function checkReactivatedSpans (resolved) {
-  const root = startRequest(resolved)
+  const root = process.argv[2] === 'late-no-web' || process.argv[2] === 'late-promoted'
+    ? tracer.startSpan('request')
+    : startRequest(resolved)
   const refs = []
   const scope = tracer.scope()
   scope.activate(root, () => {
     for (let i = 0; i < 32; i++) {
-      const child = tracer.startSpan('child', { childOf: root })
+      const child = tracer.startSpan('child', {
+        childOf: root,
+        tags: process.argv[2] === 'late-own' ? { 'span.type': 'web', 'http.method': 'GET' } : undefined,
+      })
       if (i % 2) scope.activate(child, () => {})
-      const callback = scope.bind(() => { refs.push(cacheRef(child)) }, child)
+      const callback = scope.bind(() => {
+        refs.push(cacheRef(child))
+        return current
+      }, child)
       child.finish()
-      callback()
+      const context = callback()
+      if (i === 0 && process.argv[2] === 'late-promoted') {
+        assert.equal(context.attributes[1], undefined)
+        root.addTags({ 'span.type': 'web', 'http.method': 'GET', 'resource.name': 'GET /promoted' })
+        assert.equal(context.attributes[1], 'GET /promoted')
+      }
     }
   })
-  await setImmediate()
-  global.gc?.()
+  await collectReleasedRecords()
   assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
   root.setTag('resource.name', 'GET /refined')
   root.finish()
 }
 
 /** @param {boolean} resolved */
-async function checkCompaction (resolved) {
+async function checkRetainedCallbacks (resolved) {
   const root = startRequest(resolved)
   const scope = tracer.scope()
   const live = []
@@ -149,8 +161,7 @@ async function checkCompaction (resolved) {
         callback()
       }
     })
-    await setImmediate()
-    global.gc?.()
+    await collectReleasedRecords()
     assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
     if (batch === 0) {
       live[0].finish()
@@ -193,6 +204,15 @@ async function checkCompaction (resolved) {
   parent.finish()
   for (const child of live) child.finish()
   root.finish()
+}
+
+async function collectReleasedRecords () {
+  await setImmediate()
+  global.gc()
+  // Finalizers remove registry entries before a second collection releases their records.
+  await setImmediate()
+  await setImmediate()
+  global.gc()
 }
 
 async function checkRouteRefinements () {
