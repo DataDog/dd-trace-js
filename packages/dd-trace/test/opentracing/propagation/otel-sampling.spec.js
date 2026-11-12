@@ -62,6 +62,24 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       })
     })
 
+    it('derives probability fields from the lower 64 bits of 128-bit IDs', () => {
+      for (const upper of ['0000000000000000', '6af1eb9300000000', 'ffffffffffffffff']) {
+        const parent = new SpanContext({
+          traceId: id(upper + '0000000000000001', 16),
+          spanId: id('1', 16),
+          isRemote: false,
+        })
+        const { span, prioritySampler } = startSpan({ parent, sampleRate: 0.1 })
+        const carrier = inject(span, prioritySampler)
+
+        assert.deepStrictEqual(parseOtel(carrier.tracestate), {
+          rv: 'f0948a54d43b8e',
+          th: 'e6666666666668',
+        })
+        assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
+      }
+    })
+
     it('adjusts rv up when 56-bit precision would reverse a keep', () => {
       const { carrier, context } = sampleAndInject({
         traceId: '263811222310854400',

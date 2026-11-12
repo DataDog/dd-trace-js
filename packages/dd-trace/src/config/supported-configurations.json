@@ -32,6 +32,138 @@
         "description": "Override the automatic log submission intake URL."
       }
     ],
+    "DD_API_KEY_SECRET_ARN": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "lambda",
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "namespace": "lambda",
+        "default": "10",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_COLD_START_TRACE_SKIP_LIB": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "namespace": "lambda",
+        "default": "./opentracing/tracer"
+      }
+    ],
+    "DD_COLD_START_TRACING": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_DECODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_ENCODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_ENHANCED_METRICS": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_FLUSH_TO_LOG": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_KMS_API_KEY": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "lambda",
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_LAMBDA_FIPS_MODE": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_MERGE_XRAY_TRACES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_MIN_COLD_START_DURATION": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "namespace": "lambda",
+        "default": "3",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_TRACE_AWS_LAMBDA_ENABLED": [
+      {
+        "implementation": "B",
+        "namespace": "lambda",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_MANAGED_SERVICES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
@@ -1614,6 +1746,14 @@
         ]
       }
     ],
+    "DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
+      }
+    ],
     "DD_OPENAI_REALTIME_ENABLED": [
       {
         "implementation": "A",
@@ -1646,9 +1786,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -2322,6 +2462,13 @@
       }
     ],
     "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_ASYNC_MUTEX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

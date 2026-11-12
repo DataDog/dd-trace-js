@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@elevenlabs/elevenlabs-js': () => require('../elevenlabs'),
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
@@ -81,7 +82,7 @@ module.exports = {
   fastify: () => require('../fastify'),
   'find-my-way': () => require('../find-my-way'),
   'generic-pool': () => require('../generic-pool'),
-  graphql: () => require('../graphql'),
+  graphql: { esmFirst: true, fn: () => require('../graphql') },
   'graphql-jit': { esmFirst: true, fn: () => require('../graphql') },
   grpc: () => require('../grpc'),
   handlebars: () => require('../handlebars'),

@@ -149,6 +149,31 @@ describe('test suite', () => {
           agent.subscribe(findBodyThreat)
         })
 
+        describe('with a response blocking rule', () => {
+          it('should report the blocking status code when a Next.js 404 page is blocked', async () => {
+            const [response] = await Promise.all([
+              httpRequest.get(`http://127.0.0.1:${serverData.port}/api/blockresponse`, { validateStatus: false }),
+              agent.assertSomeTraces(traces => {
+                assertObjectContains(getWebSpan(traces), {
+                  error: 0,
+                  meta: {
+                    'appsec.blocked': 'true',
+                    'http.status_code': '403',
+                  },
+                })
+
+                for (const span of traces.flat()) {
+                  if (span.meta['http.status_code'] === undefined) continue
+                  assert.strictEqual(span.meta['http.status_code'], '403', `${span.name} span status code`)
+                }
+              }),
+            ])
+
+            assert.strictEqual(response.status, 403)
+            assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          })
+        })
+
         describe('with a blocking rule', () => {
           const appDirTest = appName === 'app-dir' ? it : it.skip
           const appDirBodyBlockingTest = appName === 'app-dir' && satisfies(realVersion, '>=13.3') ? it : it.skip

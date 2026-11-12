@@ -49,6 +49,8 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'async-mutex',
+  'aws-lambda', // AWS Lambda is activated by the serverless bootstrap rather than a module load
   'azure-cosmos',
   'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
@@ -61,6 +63,7 @@ const missingInstrumentationHooks = [
 ]
 
 const hooklessOrchestrionPlugins = new Set([
+  'async-mutex',
   'azure-cosmos',
   'bullmq',
   'langchain',
@@ -118,13 +121,14 @@ describe('Plugin Structure Validation', () => {
 
   const instrumentationFiles = new Set(
     fs.readdirSync(instrumentationsDir)
-      .filter(file => file.endsWith('.js'))
+      .filter(file => file.endsWith('.js') || fs.existsSync(path.join(instrumentationsDir, file, 'index.js')))
       .map(file => file.replace('.js', ''))
   )
 
   const allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
 
   let dtsPluginKeys
+  let v5DtsPluginKeys
   let apiMdSource
 
   pluginDirs.forEach(pluginDir => {
@@ -144,7 +148,7 @@ describe('Plugin Structure Validation', () => {
           return
         }
 
-        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation entry point: ${pluginId}`)
       })
     })
   })
@@ -153,12 +157,15 @@ describe('Plugin Structure Validation', () => {
     const repoRoot = path.join(packagesDir, '..')
 
     const dtsPath = path.join(repoRoot, 'index.d.ts')
+    const v5DtsPath = path.join(repoRoot, 'index.d.v5.ts')
     const apiMdPath = path.join(repoRoot, 'docs', 'API.md')
 
     const dtsSource = fs.readFileSync(dtsPath, 'utf8')
+    const v5DtsSource = fs.readFileSync(v5DtsPath, 'utf8')
     apiMdSource = fs.readFileSync(apiMdPath, 'utf8')
 
     dtsPluginKeys = extractPluginsInterfaceKeys(dtsSource)
+    v5DtsPluginKeys = extractPluginsInterfaceKeys(v5DtsSource)
   })
 
   it('should have all plugins accounted for with an instrumentation file', () => {
@@ -205,6 +212,7 @@ describe('Plugin Structure Validation', () => {
       '@azure/cosmos',
       '@langchain/core',
       '@langchain/langgraph',
+      '@openai/agents-realtime',
       '@supabase/auth-js',
       '@supabase/functions-js',
       '@supabase/postgrest-js',
@@ -232,14 +240,15 @@ describe('Plugin Structure Validation', () => {
       assert.equal(isRewriteActivationEnabled(name), false)
     }
     assert.equal(isRewriteActivationEnabled('graphql'), false)
-    assert.equal(typeof hooks.graphql, 'function')
+    assert.equal(hooks.graphql.esmFirst, true)
+    assert.equal(typeof hooks.graphql.fn, 'function')
   })
 
   it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
     assert.strictEqual(plugins['@graphql-tools/executor'], plugins.graphql)
   })
 
-  it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {
+  it('should include all canonical plugin ids used by the runtime plugin registry in public declarations', () => {
     const pluginsIndexPath = path.join(packagesDir, 'dd-trace', 'src', 'plugins', 'index.js')
 
     const pluginsIndexSource = fs.readFileSync(pluginsIndexPath, 'utf8')
@@ -260,6 +269,7 @@ describe('Plugin Structure Validation', () => {
 
       if (!internalPluginIds.has(id)) {
         assert.ok(dtsPluginKeys.has(id), `Missing plugin in index.d.ts: ${id}`)
+        assert.ok(v5DtsPluginKeys.has(id), `Missing plugin in index.d.v5.ts: ${id}`)
       }
     }
   })
