@@ -27,6 +27,7 @@ const {
   responseWriteHead,
   responseSetHeader,
   informationalResponse,
+  lambdaStartInvocation,
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -1587,6 +1588,70 @@ describe('AppSec Index', function () {
 
       assert.strictEqual(metrics, undefined)
     })
+  })
+})
+
+describe('AppSec Lambda AWS access key ID', () => {
+  const ACCESS_KEY_ID = 'ASIAEXAMPLE000000001'
+
+  let env
+
+  const publishInvocation = () => {
+    const tags = {}
+    const span = {
+      addTags (newTags) { Object.assign(tags, newTags) },
+      setTag (key, value) { tags[key] = value },
+      context () { return { _sampling: {}, getTag (key) { return tags[key] } } },
+    }
+
+    lambdaStartInvocation.publish({ span, headers: { host: 'example.com' }, method: 'GET', path: '/' })
+
+    return tags
+  }
+
+  beforeEach(() => {
+    env = process.env
+    process.env = {
+      ...env,
+      AWS_ACCESS_KEY_ID: ACCESS_KEY_ID,
+      AWS_SECRET_ACCESS_KEY: 'CANARY-SECRET',
+      AWS_SESSION_TOKEN: 'CANARY-TOKEN',
+    }
+  })
+
+  afterEach(() => {
+    appsec.disable()
+    process.env = env
+  })
+
+  it('should tag the Lambda invocation span when the feature is enabled', () => {
+    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED = 'true'
+    appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
+
+    const tags = publishInvocation()
+
+    assert.equal(tags['_dd.appsec.enabled'], 1)
+    assert.equal(tags['aws.lambda.access_key_id'], ACCESS_KEY_ID)
+  })
+
+  it('should not tag the Lambda invocation span by default', () => {
+    delete process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED
+    appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
+
+    const tags = publishInvocation()
+
+    assert.equal(tags['_dd.appsec.enabled'], 1)
+    assert.equal(tags['aws.lambda.access_key_id'], undefined)
+  })
+
+  it('should not tag the Lambda invocation span once AppSec is disabled (S4)', () => {
+    process.env.DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED = 'true'
+    appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
+    appsec.disable()
+
+    const tags = publishInvocation()
+
+    assert.deepStrictEqual(tags, {})
   })
 })
 
