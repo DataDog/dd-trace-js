@@ -226,6 +226,14 @@ describe('blocking', () => {
       })
     })
 
+    it('should resolve a delegation without a response as not blocked', async () => {
+      const blocked = await registerBlockDelegation(req, undefined, rootSpan)
+
+      assert.strictEqual(blocked, false)
+      assert.strictEqual(callBlockDelegation(undefined), undefined)
+      sinon.assert.notCalled(rootSpan.setTag)
+    })
+
     it('should do nothing if no blocking delegation exists', () => {
       const blocked = callBlockDelegation(res)
 

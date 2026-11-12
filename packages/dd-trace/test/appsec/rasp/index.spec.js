@@ -172,6 +172,22 @@ describe('RASP', () => {
       })
     })
 
+    it('should report a failed block when the abort error has no response to block', async () => {
+      const raspWithRealDelegation = proxyquire('../../../src/appsec/rasp', {
+        '../telemetry': {
+          updateRaspRuleMatchMetricTags,
+        },
+      })
+
+      raspWithRealDelegation.blockOnDatadogRaspAbortError({
+        error: new DatadogRaspAbortError(req, undefined, blockingAction, raspRule, true),
+      })
+
+      await new Promise(resolve => setImmediate(resolve))
+
+      sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, false)
+    })
+
     it('should block without delegate when called by handleUncaughtExceptionMonitor', (done) => {
       rasp.handleUncaughtExceptionMonitor(new DatadogRaspAbortError(req, res, blockingAction, raspRule, true))
 

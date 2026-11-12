@@ -283,6 +283,25 @@ describe('RASP - utils.js', () => {
       sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, false, false)
     })
 
+    it('should report a failed block when there is no response to block', async () => {
+      const { getBlockingAction } = blocking
+      const utilsWithRealDelegation = proxyquire('../../../src/appsec/rasp/utils', {
+        '../../plugins/util/web': web,
+        '../stack_trace': stackTrace,
+        '../telemetry': telemetry,
+        '../blocking': { getBlockingAction },
+      })
+      utilsWithRealDelegation.markToBlockOnDetection(req)
+
+      utilsWithRealDelegation.handleResult(result, req, undefined, abortController, config, raspRule)
+
+      sinon.assert.calledOnce(abortController.abort)
+
+      await new Promise(resolve => setImmediate(resolve))
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, false)
+    })
+
     it('should not abort or delegate in a request that is not blocked on detection', () => {
       utils.handleResult(result, {}, res, abortController, config, raspRule)
 
