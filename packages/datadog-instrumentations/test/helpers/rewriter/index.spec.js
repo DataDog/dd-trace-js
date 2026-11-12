@@ -1968,39 +1968,4 @@ describe('rewriter initialization', () => {
       starts: 1,
     })
   })
-
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection for require(esm).
-  const itRequireEsm = process.features.require_module ? it : it.skip
-
-  itRequireEsm('rewrites targets that a require(esm) entry imports', () => {
-    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-require-esm-'))
-    const targetDirectory = join(root, 'node_modules', 'ai')
-
-    mkdirSync(join(targetDirectory, 'dist'), { recursive: true })
-    writeFileSync(join(targetDirectory, 'package.json'), JSON.stringify({
-      version: '4.0.0',
-      exports: { '.': { 'module-sync': './entry.mjs', default: './dist/index.js' } },
-    }))
-    writeFileSync(join(targetDirectory, 'entry.mjs'), "export { getTracer } from './dist/index.mjs'\n")
-    writeFileSync(join(targetDirectory, 'dist', 'index.mjs'), `
-      function getTracer () { return 'tracer' }
-      export { getTracer }
-    `)
-
-    writeFileSync(join(root, 'main.js'), `
-      require(${JSON.stringify(loaderPath)})
-
-      const { tracingChannel } = require(${JSON.stringify(require.resolve('dc-polyfill'))})
-      let starts = 0
-
-      tracingChannel('orchestrion:ai:getTracer').subscribe({ start () { starts++ } })
-
-      console.log(JSON.stringify({ result: require('ai').getTracer(), starts }))
-    `)
-
-    const result = spawnSync(process.execPath, [join(root, 'main.js')], { cwd: root, encoding: 'utf8' })
-
-    assert.strictEqual(result.status, 0, result.stderr)
-    assert.deepStrictEqual(JSON.parse(result.stdout), { result: 'tracer', starts: 1 })
-  })
 })

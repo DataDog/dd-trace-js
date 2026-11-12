@@ -2,7 +2,6 @@ import * as Module from 'module'
 
 const require = Module.createRequire(import.meta.url)
 const { getRewriteTarget } = require('./targets.js')
-const { disableReadRewrite } = require('./require-esm.js')
 let rewriter
 
 async function load (url, context, nextLoad) {
@@ -12,8 +11,6 @@ async function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  disableReadRewrite()
-
   const result = nextLoad(url, context)
 
   return rewriteResult(result, url, context)

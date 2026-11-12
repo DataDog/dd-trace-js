@@ -53,14 +53,3 @@ for (const extension of ['js', 'mjs']) {
     return utilities
   })
 }
-
-// require(esm) evaluates the internal modules above without module hooks; the root namespace re-exports them.
-addHook({ name: 'graphql', file: 'index.mjs', versions: ['>=17'] }, graphql => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) {
-    ddGlobal.graphql_printer ??= graphql
-    ddGlobal.graphql_visitor ??= graphql
-    ddGlobal.graphql_utilities ??= graphql
-  }
-  return graphql
-})
