@@ -293,6 +293,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "claude-agent-sdk": tracer.plugins.claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
+  "async-mutex": tracer.plugins.async_mutex;
   "avsc": tracer.plugins.avsc;
   "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -2559,6 +2560,12 @@ declare namespace tracer {
         postprocessing?: (span?: Span, ctx?: any) => void;
       };
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [async-mutex](https://github.com/DirtyHairy/async-mutex) module.
+     */
+    interface async_mutex extends Instrumentation {}
 
     /**
      * This plugin automatically patches the [avsc](https://github.com/mtth/avsc) module

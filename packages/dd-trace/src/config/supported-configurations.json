@@ -2336,6 +2336,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_ASYNC_MUTEX_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_AVSC_ENABLED": [
       {
         "implementation": "A",
