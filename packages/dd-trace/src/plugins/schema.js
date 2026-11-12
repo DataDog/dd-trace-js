@@ -14,9 +14,8 @@ class SchemaPlugin extends Plugin {
   }
 
   handleSerializeStart (args) {
-    if (!this.config.dsmEnabled) return
     const activeSpan = this.tracer.scope().active()
-    if (activeSpan) {
+    if (activeSpan && this.config.dsmEnabled) {
       this.constructor.schemaExtractor.attachSchemaOnSpan(
         args, activeSpan, SERIALIZATION, this.tracer
       )
@@ -24,9 +23,8 @@ class SchemaPlugin extends Plugin {
   }
 
   handleDeserializeFinish (args) {
-    if (!this.config.dsmEnabled) return
     const activeSpan = this.tracer.scope().active()
-    if (activeSpan) {
+    if (activeSpan && this.config.dsmEnabled) {
       this.constructor.schemaExtractor.attachSchemaOnSpan(
         args, activeSpan, DESERIALIZATION, this.tracer
       )
