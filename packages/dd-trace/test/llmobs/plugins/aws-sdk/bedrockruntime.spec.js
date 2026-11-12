@@ -5,7 +5,7 @@ const assert = require('node:assert')
 const { describe, it, before } = require('mocha')
 
 const { assertLlmObsSpanEvent, useLlmObs, MOCK_STRING, MOCK_NUMBER } = require('../../util')
-const { withAwsSdkVersions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
+const { withAwsSdkV3Versions } = require('../../../../../datadog-plugin-aws-sdk/test/spec_helpers')
 const {
   models,
   modelConfig,
@@ -28,21 +28,15 @@ describe('Plugin', () => {
 
     const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
 
-    withAwsSdkVersions('>=3', (version, moduleName) => {
+    withAwsSdkV3Versions('@aws-sdk/client-bedrock-runtime', version => {
       let AWS
       let bedrockRuntimeClient
 
-      const bedrockRuntimeClientName =
-        moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
-
       describe('with configuration', () => {
         before(() => {
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
-          AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
-          const NodeHttpHandler =
-            require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
-              .get('@smithy/node-http-handler')
-              .NodeHttpHandler
+          const fixture = require(`../../../../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
+          AWS = fixture.get()
+          const { NodeHttpHandler } = fixture.get('@smithy/node-http-handler')
 
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
             {
@@ -520,20 +514,14 @@ describe('Plugin with LLMObs direct traces', () => {
     },
   })
 
-  withAwsSdkVersions('>=3', (version, moduleName) => {
+  withAwsSdkV3Versions('@aws-sdk/client-bedrock-runtime', version => {
     let AWS
     let bedrockRuntimeClient
 
-    const bedrockRuntimeClientName =
-      moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
-
     before(() => {
-      const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
-      AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
-      const NodeHttpHandler =
-        require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
-          .get('@smithy/node-http-handler')
-          .NodeHttpHandler
+      const fixture = require(`../../../../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
+      AWS = fixture.get()
+      const { NodeHttpHandler } = fixture.get('@smithy/node-http-handler')
 
       bedrockRuntimeClient = new AWS.BedrockRuntimeClient({
         endpoint: { url: 'http://127.0.0.1:9126/vcr/bedrock-runtime' },

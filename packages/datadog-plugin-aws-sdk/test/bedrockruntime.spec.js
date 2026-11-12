@@ -4,7 +4,7 @@ const assert = require('node:assert')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { setup, withAwsSdkV3Versions } = require('./spec_helpers')
 const { models, converseRequest } = require('./fixtures/bedrockruntime')
 const serviceName = 'bedrock-service-name-test'
 
@@ -12,12 +12,10 @@ describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     setup()
 
-    withAwsSdkVersions('>=3', (version, moduleName) => {
+    withAwsSdkV3Versions('@aws-sdk/client-bedrock-runtime', version => {
       let AWS
       let bedrockRuntimeClient
 
-      const bedrockRuntimeClientName =
-        moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
       describe('with configuration', () => {
         before(() => {
           return agent.load('aws-sdk')
@@ -25,12 +23,9 @@ describe('Plugin', () => {
 
         before(function () {
           this.timeout(10_000)
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
-          AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
-          const NodeHttpHandler =
-            require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
-              .get('@smithy/node-http-handler')
-              .NodeHttpHandler
+          const fixture = require(`../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
+          AWS = fixture.get()
+          const { NodeHttpHandler } = fixture.get('@smithy/node-http-handler')
 
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
             {

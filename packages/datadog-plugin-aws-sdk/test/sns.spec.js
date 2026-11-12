@@ -16,7 +16,7 @@ describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-sns', (version, moduleName) => {
     let sns
     let sqs
     let subParams
@@ -28,8 +28,8 @@ describe('Sns', function () {
     let spanId
     let tracer
 
-    const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
-    const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+    const snsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sns' : 'aws-sdk'
+    const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
     let childSpansFound = 0
     const assertPropagation = (done, childSpans = 1) => {
@@ -242,7 +242,7 @@ describe('Sns', function () {
             case 'aws-sdk':
               // aws-sdk-js phone notifications introduced in c6d1bb1a
               return semver.intersects(version, '>=2.10.0')
-            case '@aws-sdk/smithy-client':
+            case '@aws-sdk/client-sns':
               return true
             default:
               return false

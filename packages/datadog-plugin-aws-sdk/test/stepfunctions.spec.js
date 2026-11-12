@@ -23,7 +23,7 @@ const helloWorldSMD = {
 describe('Sfn', () => {
   let tracer
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-sfn', (version, moduleName) => {
     let stateMachineArn
     let client
 
@@ -35,7 +35,7 @@ describe('Sfn', () => {
 
     function getClient () {
       const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
-      if (moduleName === '@aws-sdk/smithy-client') {
+      if (moduleName !== 'aws-sdk') {
         const lib = require(`../../../versions/@aws-sdk/client-sfn@${version}`).get()
         const client = new lib.SFNClient(params)
         return {

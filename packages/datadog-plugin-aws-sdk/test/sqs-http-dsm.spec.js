@@ -18,9 +18,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
-      const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
-
+    withAwsSdkVersions('@aws-sdk/client-sqs', (version, sqsClientName) => {
       let server
       let received
       let sqs

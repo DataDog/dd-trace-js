@@ -1,9 +1,11 @@
 'use strict'
 
+const { minVersion } = require('semver')
+
+const externals = require('../../dd-trace/test/plugins/externals')
+const { getInstrumentation } = require('../../dd-trace/test/setup/helpers/load-inst')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../version')
-
-const AWS_SDK_V3_RANGE = NODE_MAJOR === 18 ? '3.0.0' : '>3.0.0'
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -60,37 +62,45 @@ function withAwsSdkV2Versions (range, cb) {
 }
 
 /**
+ * @param {string} moduleName
  * @param {string|AwsSdkVersionCallback} range
  * @param {AwsSdkVersionCallback} [cb]
  */
-function withAwsSdkV3Versions (range, cb) {
+function withAwsSdkV3Versions (moduleName, range, cb) {
   if (typeof range === 'function') {
     cb = range
     range = '*'
   }
 
-  withVersions('aws-sdk', ['@aws-sdk/smithy-client'], getAwsSdkV3Range(range), cb)
+  withVersions('aws-sdk', moduleName, getAwsSdkV3Range(moduleName, range), cb)
 }
 
 /**
+ * @param {string} moduleName
  * @param {string|AwsSdkVersionCallback} range
  * @param {AwsSdkVersionCallback} [cb]
  */
-function withAwsSdkVersions (range, cb) {
+function withAwsSdkVersions (moduleName, range, cb) {
   if (typeof range === 'function') {
     cb = range
     range = '*'
   }
 
   withAwsSdkV2Versions(range, cb)
-  withAwsSdkV3Versions(range, cb)
+  withAwsSdkV3Versions(moduleName, range, cb)
 }
 
 /**
+ * @param {string} moduleName
  * @param {string} range
  */
-function getAwsSdkV3Range (range) {
-  return range === '*' ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`
+function getAwsSdkV3Range (moduleName, range) {
+  if (NODE_MAJOR !== 18) return range
+
+  const declarations = [...getInstrumentation('aws-sdk'), ...externals['aws-sdk']]
+    .filter(declaration => declaration.name === moduleName)
+  const supported = minVersion(declarations.flatMap(declaration => declaration.versions).join(' || ')).version
+  return range === '*' ? supported : `${range} ${supported}`
 }
 
 const helpers = {

@@ -30,12 +30,12 @@ describe('Plugin', () => {
     setup()
     this.timeout(10000)
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-dynamodb', (version, moduleName) => {
       let tracer
       let AWS
       let dynamo
 
-      const dynamoClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-dynamodb' : 'aws-sdk'
+      const dynamoClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-dynamodb' : 'aws-sdk'
 
       // Test both cases: tables with only partition key and with partition+sort key.
       const oneKeyTableName = 'OneKeyTable'
@@ -144,7 +144,7 @@ describe('Plugin', () => {
             const boundFn = typeof fn === 'function' ? fn.bind(dynamo) : fn
 
             // For AWS SDK v3, it's already promise-based
-            if (moduleName === '@aws-sdk/smithy-client') {
+            if (moduleName !== 'aws-sdk') {
               return boundFn(...args)
             }
 

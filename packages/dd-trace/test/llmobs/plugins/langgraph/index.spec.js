@@ -200,8 +200,8 @@ describe('integrations', () => {
           )
 
           const parsedOutput = JSON.parse(workflowSpan.meta.output.value)
-          assert.ok(Array.isArray(parsedOutput.messages), `Expected array, got ${inspect(parsedOutput.messages)}`)
-          const lastMessage = parsedOutput.messages[parsedOutput.messages.length - 1]
+          assert.ok(Array.isArray(parsedOutput.chat.messages), `Expected messages array, got ${inspect(parsedOutput)}`)
+          const lastMessage = parsedOutput.chat.messages[parsedOutput.chat.messages.length - 1]
           assert.deepStrictEqual(lastMessage, { content: 'Pong', role: 'assistant' })
         })
 

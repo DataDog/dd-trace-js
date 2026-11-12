@@ -520,6 +520,20 @@ module.exports = {
       dep: true,
     },
   ],
+  '@langchain/anthropic': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/cohere': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/google-genai': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/langgraph': [
+    { name: '@langchain/core', dep: true },
+    { name: 'zod', dep: true },
+    { name: 'zod-to-json-schema', dep: true },
+  ],
   ldapjs: [
     {
       name: 'ldapjs',

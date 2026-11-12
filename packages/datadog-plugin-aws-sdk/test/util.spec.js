@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 
 const {
   encodeValue,
@@ -354,5 +355,66 @@ describe('extractQueueMetadata', () => {
         arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue',
       })
     })
+  })
+})
+
+/**
+ * @param {number} nodeMajor
+ */
+function getVersionTargets (nodeMajor) {
+  const calls = []
+  const { withAwsSdkVersions, withAwsSdkV3Versions } = proxyquire('./spec_helpers', {
+    '../../dd-trace/test/setup/mocha': { withVersions: (...args) => calls.push(args) },
+    '../../../version': { NODE_MAJOR: nodeMajor },
+  })
+  return { calls, withAwsSdkVersions, withAwsSdkV3Versions }
+}
+
+describe('AWS SDK version targets', () => {
+  for (const nodeMajor of [18, 22]) {
+    it(`selects the service client and keeps the v2 target on Node ${nodeMajor}`, () => {
+      const { calls, withAwsSdkVersions } = getVersionTargets(nodeMajor)
+      const callback = () => {}
+
+      withAwsSdkVersions('@aws-sdk/client-lambda', callback)
+
+      assert.deepEqual(calls, [
+        ['aws-sdk', ['aws-sdk'], '*', callback],
+        ['aws-sdk', '@aws-sdk/client-lambda', nodeMajor === 18 ? '3.0.0' : '*', callback],
+      ])
+    })
+  }
+
+  it('retains a caller version constraint when selecting a service client', () => {
+    const { calls, withAwsSdkV3Versions } = getVersionTargets(22)
+    const callback = () => {}
+
+    withAwsSdkV3Versions('@aws-sdk/client-bedrock-runtime', '>=3.785.0', callback)
+
+    assert.deepEqual(calls, [
+      ['aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', callback],
+    ])
+  })
+
+  it('selects the declared Bedrock floor on Node 18', () => {
+    const { calls, withAwsSdkV3Versions } = getVersionTargets(18)
+    const callback = () => {}
+
+    withAwsSdkV3Versions('@aws-sdk/client-bedrock-runtime', callback)
+
+    assert.deepEqual(calls, [
+      ['aws-sdk', '@aws-sdk/client-bedrock-runtime', '3.422.0', callback],
+    ])
+  })
+
+  it('selects the native Smithy floor on Node 18', () => {
+    const { calls, withAwsSdkV3Versions } = getVersionTargets(18)
+    const callback = () => {}
+
+    withAwsSdkV3Versions('@aws-sdk/smithy-client', callback)
+
+    assert.deepEqual(calls, [
+      ['aws-sdk', '@aws-sdk/smithy-client', '3.0.0', callback],
+    ])
   })
 })
