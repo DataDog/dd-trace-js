@@ -33,20 +33,23 @@ addRewriterHooks('graphql-jit')
 // (read lazily inside each callback so agent.load() between mocha suites can
 // rebind globalThis[dd-trace] without us stashing a stale reference).
 
-addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_printer = printer
-  return printer
-})
+// Capture ESM namespace exports through module hooks: __module_export__ only matches CommonJS exports.
+for (const extension of ['js', 'mjs']) {
+  addHook({ name: 'graphql', file: `language/printer.${extension}`, versions: ['>=0.10'] }, printer => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_printer = printer
+    return printer
+  })
 
-addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_visitor = visitor
-  return visitor
-})
+  addHook({ name: 'graphql', file: `language/visitor.${extension}`, versions: ['>=0.10'] }, visitor => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_visitor = visitor
+    return visitor
+  })
 
-addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
-  const ddGlobal = globalThis[Symbol.for('dd-trace')]
-  if (ddGlobal) ddGlobal.graphql_utilities = utilities
-  return utilities
-})
+  addHook({ name: 'graphql', file: `utilities/index.${extension}`, versions: ['>=0.10'] }, utilities => {
+    const ddGlobal = globalThis[Symbol.for('dd-trace')]
+    if (ddGlobal) ddGlobal.graphql_utilities = utilities
+    return utilities
+  })
+}

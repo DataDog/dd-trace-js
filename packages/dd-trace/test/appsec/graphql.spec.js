@@ -52,6 +52,12 @@ describe('GraphQL', () => {
       updateBlockFailureMetric: sinon.stub(),
     }
 
+    sinon.stub(waf, 'wafManager').value({
+      getWAFContext: sinon.stub().returns({
+        knownAddresses: new Set([addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]),
+      }),
+    })
+
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking,
       './telemetry': telemetry,
@@ -155,6 +161,16 @@ describe('GraphQL', () => {
       sinon.assert.notCalled(message.createResolverInfo)
     })
 
+    it('Should not materialize resolver inputs when the context does not use GraphQL data', () => {
+      waf.wafManager.getWAFContext().knownAddresses.clear()
+      const message = createResolverMessage({ user: {} })
+
+      startGraphqlResolver.publish(message)
+
+      sinon.assert.notCalled(message.createResolverInfo)
+      sinon.assert.notCalled(waf.run)
+    })
+
     it('Should call waf if resolvers is well formatted', () => {
       const resolverInfo = {
         user: [{ id: '1234' }],
@@ -177,6 +193,7 @@ describe('GraphQL', () => {
       startGraphqlResolver.publish(createResolverMessage({ title: {} }))
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
 
+      sinon.assert.calledOnce(waf.wafManager.getWAFContext)
       sinon.assert.calledTwice(waf.run)
       sinon.assert.calledWithExactly(waf.run.firstCall, {
         ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: {} } },
@@ -186,23 +203,61 @@ describe('GraphQL', () => {
       }, {})
     })
 
-    it('Should call waf again for fields without arguments in a different request', () => {
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+    it('Should call waf again for cached fields in a different request', () => {
+      for (const input of [{}, { include: { if: undefined } }, { skip: { if: undefined } }]) {
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
 
-      storage('legacy').getStore.returns(withRequest(undefined, {}))
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+        storage('legacy').getStore.returns(withRequest(undefined, {}))
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+      }
 
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.callCount(waf.run, 6)
     })
 
-    it('Should call waf for every field with arguments or directives', () => {
+    it('Should call waf for every field with arguments or custom directives', () => {
       startGraphqlResolver.publish(createResolverMessage({ user: { id: '1234' } }))
       startGraphqlResolver.publish(createResolverMessage({ user: { id: '1234' } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { case: { format: 'lower' } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { case: { format: 'lower' } } }))
 
       sinon.assert.callCount(waf.run, 4)
     })
+
+    it('Should cache each distinct inclusion directive payload separately', () => {
+      const inputs = [
+        {},
+        { include: { if: true } },
+        { include: { if: false } },
+        { skip: { if: true } },
+        { skip: { if: false } },
+        { include: { if: undefined } },
+        { skip: { if: undefined } },
+        { include: { if: true }, skip: { if: false } },
+        { include: { if: undefined }, skip: { if: undefined } },
+        { include: { if: true }, skip: { if: undefined } },
+        { include: { if: undefined }, skip: { if: false } },
+      ]
+      for (const input of inputs) {
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+      }
+
+      sinon.assert.callCount(waf.run, inputs.length)
+      for (const [index, input] of inputs.entries()) {
+        assert.deepStrictEqual(waf.run.getCall(index).args[0], {
+          ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: input } },
+        })
+      }
+    })
+
+    for (const include of [null, true, { if: 'true' }, { if: null }, { if: true, extra: true }, { extra: true }]) {
+      it(`Should not cache an unsupported directive shape ${JSON.stringify(include)}`, () => {
+        startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
+        startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
+
+        sinon.assert.calledTwice(waf.run)
+      })
+    }
 
     it('Should not serve a field with arguments from the argument-less results', () => {
       // The same field name reaches both shapes when a query aliases it, e.g. `name, upper: name(upper: true)`.
@@ -221,8 +276,14 @@ describe('GraphQL', () => {
 
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
 
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.callCount(waf.run, 8)
     })
 
     it('Should not keep the result of a run that returned nothing', () => {
@@ -230,8 +291,14 @@ describe('GraphQL', () => {
 
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
 
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.callCount(waf.run, 8)
     })
 
     it('Should forget fields without arguments when a run carries persistent inputs', () => {
@@ -342,7 +409,7 @@ describe('GraphQL', () => {
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
-    it('Should abort every occurrence of a blocked field without arguments', () => {
+    it('Should abort every occurrence of a blocked cached field', () => {
       const firstAbortController = { abort: sinon.stub() }
       const secondAbortController = { abort: sinon.stub() }
 
@@ -356,10 +423,18 @@ describe('GraphQL', () => {
 
       startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, firstAbortController))
       startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, secondAbortController))
+      const resolverInfo = { __schema: { include: { if: true } } }
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, firstAbortController))
+      startGraphqlResolver.publish(createResolverMessage(resolverInfo, secondAbortController))
+      for (const directive of ['include', 'skip']) {
+        const resolverInfo = { __schema: { [directive]: { if: undefined } } }
+        startGraphqlResolver.publish(createResolverMessage(resolverInfo, firstAbortController))
+        startGraphqlResolver.publish(createResolverMessage(resolverInfo, secondAbortController))
+      }
 
-      sinon.assert.calledOnce(waf.run)
-      sinon.assert.calledOnce(firstAbortController.abort)
-      sinon.assert.calledOnce(secondAbortController.abort)
+      sinon.assert.callCount(waf.run, 4)
+      sinon.assert.callCount(firstAbortController.abort, 4)
+      sinon.assert.callCount(secondAbortController.abort, 4)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController: firstAbortController, abortData })
