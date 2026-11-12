@@ -181,6 +181,45 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
+<h3 id="feature-flag-selection">Flag Selection</h3>
+
+Load only the flags a service needs by passing a flag selection before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
+Tags and key patterns are case-sensitive. Tags match exactly. A key pattern matches the whole key: `*` matches any run
+of characters, including none, and every other character, including `?`, is literal.
+Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
+Without a selection, the provider loads every flag.
+
+Values are trimmed, deduplicated and sorted before they are sent. Each list accepts at most 31 values, each value is
+at most 200 UTF-8 bytes, and the request URL is at most 8192 bytes. A selection over these limits, or one that is not an
+object with optional `tags` and `keyPatterns` string arrays, is not sent: the provider logs an error and loads every
+flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
+logs, these errors are written only when `DD_TRACE_DEBUG=true`.
+
+Flag selection has no environment variable. `node --require dd-trace/init` and `node --import dd-trace/initialize.mjs`
+call `init()` without options, and later `init()` calls are ignored, so they cannot set a selection; call `init()` with
+the option in your application or in your own preload file instead. With Single Step Instrumentation, an application
+that installs `dd-trace` and calls `init()` with the option can set a selection, because the injected tracer then skips
+its own `init()`. An application that relies only on the injected tracer cannot set one.
+
+Flag selection applies to agentless delivery only. When flags are delivered through Remote Config
+(`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, or `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true` without a
+configuration source), the provider logs a warning and loads every flag.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -230,8 +269,10 @@ tracer.use('openai', {
 <h5 id="anthropic"></h5>
 <h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
+<h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
+<h5 id="aws-lambda"></h5>
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the
@@ -381,8 +422,10 @@ Playback with missing per-response start events remains a live validation gap.
 * [anthropic](./interfaces/plugins.anthropic.html)
 * [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/plugins.apollo.html)
+* [async-mutex](./interfaces/plugins.async_mutex.html)
 * [avsc](./interfaces/plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-lambda](./interfaces/plugins.aws_lambda.html)
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)
@@ -402,6 +445,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [dns](./interfaces/plugins.dns.html)
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [electron](./interfaces/plugins.electron.html)
+* [elevenlabs](#elevenlabs)
 * [express](./interfaces/plugins.express.html)
 * [fastify](./interfaces/plugins.fastify.html)
 * [fetch](./interfaces/plugins.fetch.html)
@@ -462,6 +506,36 @@ Playback with missing per-response start events remains a live validation gap.
 * [web](./interfaces/plugins.web.html)
 * [winston](./interfaces/plugins.winston.html)
 * [ws](./interfaces/plugins.ws.html)
+
+<h5 id="elevenlabs"></h5>
+
+#### ElevenLabs
+
+Automatically instruments Node.js Agents WebSocket conversations from `@elevenlabs/elevenlabs-js` 2.75.0 and later
+2.x versions. Initialize `dd-trace` before importing the SDK and enable LLM Observability to record conversation
+turns, transcripts, client tools, and input/output audio. Both the default and custom SDK audio interfaces are supported.
+The SDK exposes `Conversation` and `ClientTools` at
+`@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation`.
+Browser/WebRTC conversations (`@elevenlabs/client`), telephony, and standalone speech APIs are outside this integration.
+
+Negotiated PCM16 input and output are exported as WAV using their respective sample rates. Audio shares one bounded
+budget per LLM span; unsupported or oversized clips fall back to text with omission metadata. Phase timing and playback
+are estimated, and these spans explicitly opt out of time-to-first-audio metrics.
+Tool capture retains up to 64 calls per turn with IDs and names limited to 1,024 characters. Oversized names are
+truncated; omitted calls and truncated arguments, names, or results are marked in span metadata. SDK handlers still
+receive their original input and execute normally.
+
+For optional speaker activity colors, open the ElevenLabs agent's **Advanced → Client Events** settings and enable
+**VAD score (`vad_score`)**, preserving the other events your application uses. The tracer observes this event without
+changing your agent configuration or subscriptions. Without VAD events, audio playback and phase-based colors continue
+to work. VAD estimates change activity metadata only, never the captured audio or interruption cuts.
+
+Audio capture follows delivery through the SDK's output interface. When the SDK delivers a replacement response
+at the interruption ID, the tracer assigns its audio to that response and rejects older stale audio. The tested
+2.75.0 SDK artifact instead drops audio at that boundary; full playback requires the upstream correction. Tests
+also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
+
+Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
@@ -738,6 +812,9 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+When exporting traces over OTLP, the tracing library delegates span metrics computation
+to the OpenTelemetry Collector or Datadog intake by default.
 
 dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 
