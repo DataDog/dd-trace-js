@@ -43,11 +43,13 @@ describe('OpenFeature configuration source', () => {
     return AgentlessConfigurationSource.firstCall.args[0]
   }
 
-  it('forwards completed fetch observations to the agentless source', () => {
+  it('forwards fetch observations to the agentless source', () => {
     const observer = sinon.spy()
     const applyConfiguration = sinon.spy()
-    configurationSource.create(config, applyConfiguration, observer)
+    const onFetchStart = sinon.spy()
+    configurationSource.create(config, applyConfiguration, observer, onFetchStart)
     assert.strictEqual(AgentlessConfigurationSource.firstCall.args[2], observer)
+    assert.strictEqual(AgentlessConfigurationSource.firstCall.args[3], onFetchStart)
   })
 
   it('defaults to the Datadog UFC CDN endpoint and includes the environment', () => {
@@ -210,6 +212,7 @@ describe('OpenFeature configuration source', () => {
         requestTimeoutMs: 5000,
       }),
       applyConfiguration,
+      undefined,
       undefined
     )
     assert.ok(source instanceof AgentlessConfigurationSource)

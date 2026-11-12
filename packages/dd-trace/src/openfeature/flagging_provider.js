@@ -92,7 +92,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     this.#configurationSource = configurationSource.create(
-      config, this.setConfiguration.bind(this), sdkTelemetry && (success => sdkTelemetry.fetchResult(success))
+      config, this.setConfiguration.bind(this),
+      sdkTelemetry && (success => sdkTelemetry.fetchResult(success)),
+      sdkTelemetry && (() => sdkTelemetry.fetchStarted())
     )
     this.#configurationSource?.start()
   }

@@ -64,16 +64,19 @@ class AgentlessConfigurationSource {
   #malformedPayloadLogged = false
 
   #onFetchResult
+  #onFetchStart
 
   /**
    * @param {AgentlessSourceConfig} config
    * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
    * @param {(success: boolean) => void} [onFetchResult]
+   * @param {() => void} [onFetchStart]
    */
-  constructor (config, applyConfiguration, onFetchResult) {
+  constructor (config, applyConfiguration, onFetchResult, onFetchStart) {
     this.#config = config
     this.#applyConfiguration = applyConfiguration
     this.#onFetchResult = onFetchResult
+    this.#onFetchStart = onFetchStart
   }
 
   start () {
@@ -120,6 +123,9 @@ class AgentlessConfigurationSource {
    * @returns {Promise<void>}
    */
   async #pollOnce (abortController) {
+    try {
+      this.#onFetchStart?.()
+    } catch { /* Diagnostic observers must not stop polling. */ }
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       log.debug('Feature Flags: agentless configuration poll attempt %d/%d', attempt, MAX_ATTEMPTS)
       const response = await this.#request(abortController.signal)

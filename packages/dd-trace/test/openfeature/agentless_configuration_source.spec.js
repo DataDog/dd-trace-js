@@ -35,6 +35,7 @@ describe('AgentlessConfigurationSource', () => {
   let AgentlessConfigurationSource
   let applyConfiguration
   let onFetchResult
+  let onFetchStart
   let clock
   let config
   let log
@@ -48,6 +49,7 @@ describe('AgentlessConfigurationSource', () => {
     clock = sinon.useFakeTimers()
     applyConfiguration = sinon.stub()
     onFetchResult = sinon.spy()
+    onFetchStart = sinon.spy()
     config = {
       endpoint: new URL('http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'),
       pollIntervalMs: 30_000,
@@ -120,7 +122,7 @@ describe('AgentlessConfigurationSource', () => {
   })
 
   function source () {
-    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration, onFetchResult)
+    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration, onFetchResult, onFetchStart)
     sources.push(configurationSource)
     return configurationSource
   }
@@ -146,13 +148,17 @@ describe('AgentlessConfigurationSource', () => {
     source().start()
     await flush()
     assert.deepStrictEqual(onFetchResult.args, [[true]])
+    sinon.assert.calledOnce(onFetchStart)
+    sinon.assert.callOrder(onFetchStart, request, onFetchResult)
     await tick(30_000)
     await tick(5000)
     assert.deepStrictEqual(onFetchResult.args, [[true]])
     await tick(10_000)
     assert.deepStrictEqual(onFetchResult.args, [[true], [false]])
+    sinon.assert.calledTwice(onFetchStart)
     await tick(30_000)
     assert.deepStrictEqual(onFetchResult.args, [[true], [false], [true]])
+    sinon.assert.calledThrice(onFetchStart)
     sinon.assert.calledOnce(applyConfiguration)
   })
 
@@ -188,6 +194,7 @@ describe('AgentlessConfigurationSource', () => {
 
   it('continues polling if a diagnostic observer throws', async () => {
     onFetchResult = () => { throw new Error('observer failure') }
+    onFetchStart = () => { throw new Error('observer failure') }
     responses.push({ statusCode: 401 }, { statusCode: 200, body: responseBody() })
     source().start()
     await flush()

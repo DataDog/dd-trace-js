@@ -25,6 +25,7 @@ class SDKTelemetry {
   #configurationElapsed
   #finished = false
   #closed = false
+  #startupFetch = false
   #fetchFailed = false
   #lastErrorAt = -Infinity
 
@@ -87,6 +88,11 @@ class SDKTelemetry {
     this.#emit(fields)
   }
 
+  fetchStarted () {
+    // Polls are sequential; all retries belong to the same initialization phase.
+    this.#startupFetch = !this.#finished
+  }
+
   /** @param {boolean} success - Result of a completed fetch, after retries. */
   fetchResult (success) {
     if (this.#closed) return
@@ -95,7 +101,7 @@ class SDKTelemetry {
       return
     }
     // Startup failures are represented by the initialization result.
-    if (!this.#finished || this.#fetchFailed) return
+    if (this.#startupFetch || !this.#finished || this.#fetchFailed) return
     this.#fetchFailed = true
     const now = performance.now()
     if (now - this.#lastErrorAt < ERROR_INTERVAL_MS) return

@@ -14,7 +14,8 @@ const { testBooleanAndStringFlags: configuration } =
 const NOW = Date.UTC(2026, 10, 5)
 
 describe('Feature Flags SDK diagnostics', () => {
-  let clock, provider, Provider, config, request, selectRoute, stopDelivery, onFetchResult, handlers, telemetryNow
+  let clock, provider, Provider, config, request, selectRoute, stopDelivery, onFetchResult, onFetchStart
+  let handlers, telemetryNow
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now: NOW })
@@ -51,7 +52,10 @@ describe('Feature Flags SDK diagnostics', () => {
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './sdk-telemetry': Telemetry,
       './configuration_source': {
-        create: (config, apply, observe) => { onFetchResult = observe },
+        create: (config, apply, observe, start) => {
+          onFetchResult = observe
+          onFetchStart = start
+        },
       },
     })
   })
@@ -266,6 +270,32 @@ describe('Feature Flags SDK diagnostics', () => {
     assert.strictEqual(events().length, 3)
   })
 
+  for (const outcome of ['ready', 'failed']) {
+    it(`does not report a startup fetch failure that completes after initialization is ${outcome}`, async () => {
+      create()
+      onFetchStart()
+      const pending = provider.initialize()
+      const settled = pending.catch(() => {})
+      if (outcome === 'ready') {
+        provider.setConfiguration(configuration)
+        await pending
+      } else {
+        await clock.tickAsync(30_000)
+        await assert.rejects(pending, /Initialization timeout/)
+      }
+      onFetchResult(false)
+      await clock.tickAsync(1000)
+      assert.deepStrictEqual(events().map(event => event.event_type), ['sdk_initialization'])
+
+      // A new poll after initialization may report its own failure.
+      onFetchStart()
+      onFetchResult(false)
+      provider.onClose()
+      assert.deepStrictEqual(events().map(event => event.event_type), ['sdk_initialization', 'provider_error'])
+      await settled
+    })
+  }
+
   it('does not turn arbitrary provider errors into configuration fetch errors', async () => {
     await ready()
     provider.setError(new Error('not a fetch failure'))
@@ -280,6 +310,7 @@ describe('Feature Flags SDK diagnostics', () => {
         await ready()
         provider.onClose()
         assert.strictEqual(onFetchResult, undefined)
+        assert.strictEqual(onFetchStart, undefined)
         sinon.assert.notCalled(telemetryNow)
         sinon.assert.notCalled(selectRoute)
         sinon.assert.notCalled(request)
@@ -303,6 +334,7 @@ describe('Feature Flags SDK diagnostics', () => {
         }
         provider.onClose()
         assert.strictEqual(onFetchResult, undefined)
+        assert.strictEqual(onFetchStart, undefined)
         sinon.assert.notCalled(telemetryNow)
         sinon.assert.notCalled(selectRoute)
         sinon.assert.notCalled(request)
