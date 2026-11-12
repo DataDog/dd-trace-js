@@ -1,11 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
 
 const ddpv = require('mocha/package.json').version
 const { storage } = require('../../datadog-core')
@@ -72,6 +74,81 @@ describe('Plugin', () => {
       await connection?.close()
       throw error
     }
+  }
+
+  /**
+   * @param {import('oracledb').Pool} failurePool
+   * @param {boolean} useCallback
+   * @param {Error | RegExp} expectedError
+   * @param {number} [timeoutMs]
+   */
+  async function assertAcquisitionFailure (failurePool, useCallback, expectedError, timeoutMs) {
+    const parent = tracer.startSpan('oracle-failed-acquisition-parent')
+    let actualError
+    let publishedError
+    let finished = 0
+    const onError = ctx => { if (ctx.pool === failurePool) publishedError = ctx.error }
+    const onFinish = ctx => { if (ctx.pool === failurePool) finished++ }
+    dc.subscribe('apm:oracledb:pool:acquire:error', onError)
+    dc.subscribe('apm:oracledb:pool:acquire:finish', onFinish)
+    const assertTraces = traces => {
+      const spans = traces.flat().filter(span => span.name === expectedSchema.poolAcquire.opName)
+      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(spans[0].parent_id.toString(), parent.context().toSpanId())
+      assert.strictEqual(spans[0].meta[ERROR_MESSAGE], actualError.message)
+      assert.strictEqual(spans[0].meta[ERROR_TYPE], actualError.name)
+      assert.strictEqual(spans[0].meta[ERROR_STACK], actualError.stack)
+    }
+    let received
+    const clock = timeoutMs === undefined ? undefined : sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      await tracer.scope().activate(parent, async () => {
+        const acquisition = useCallback
+          ? new Promise((resolve, reject) => {
+            const returnValue = failurePool.getConnection((error, connection) => {
+              try {
+                assert.strictEqual(tracer.scope().active(), parent)
+                if (error) {
+                  reject(error)
+                } else {
+                  resolve(connection)
+                }
+              } catch (error) {
+                reject(error)
+              }
+            })
+            assert.strictEqual(returnValue, undefined)
+          })
+          : failurePool.getConnection()
+        const rejected = assert.rejects(acquisition, error => {
+          actualError = error
+          assert.strictEqual(error, publishedError)
+          if (expectedError instanceof RegExp) {
+            assert.match(error.message, expectedError)
+          } else {
+            assert.strictEqual(error, expectedError)
+          }
+          return true
+        })
+        if (clock) {
+          await clock.tickAsync(/** @type {number} */ (timeoutMs) - 1)
+          assert.strictEqual(finished, 0)
+          await clock.tickAsync(1)
+          clock.restore()
+        }
+        await rejected
+        assert.strictEqual(tracer.scope().active(), parent)
+        assert.strictEqual(finished, 1)
+        received = agent.assertSomeTraces(assertTraces)
+      })
+    } finally {
+      clock?.restore()
+      dc.unsubscribe('apm:oracledb:pool:acquire:error', onError)
+      dc.unsubscribe('apm:oracledb:pool:acquire:finish', onFinish)
+      parent.finish()
+    }
+    await received
   }
 
   describe('oracledb', () => {
@@ -354,32 +431,109 @@ describe('Plugin', () => {
             })
             let heldConnection
             let queuedConnection
+            let finished = 0
+            const onFinish = () => { finished++ }
 
             try {
               heldConnection = await getTracedConnection(queuePool)
+              dc.subscribe('apm:oracledb:pool:acquire:finish', onFinish)
 
-              let traceFinished = false
               const tracePromise = agent.assertFirstTraceSpan(span => {
-                traceFinished = true
                 assertObjectContains(span, expectedPoolAcquireSpan)
               }, { spanResourceMatch: /^oracle\.pool\.acquire$/ })
               const queuedPromise = queuePool.getConnection()
 
               await new Promise(resolve => setImmediate(resolve))
-              assert.strictEqual(traceFinished, false)
+              assert.strictEqual(finished, 0)
 
               await heldConnection.close()
               heldConnection = undefined
               queuedConnection = await queuedPromise
+              assert.strictEqual(finished, 1)
               await tracePromise
               await queuedConnection.close()
               queuedConnection = undefined
             } finally {
+              dc.unsubscribe('apm:oracledb:pool:acquire:finish', onFinish)
               if (heldConnection !== undefined) await heldConnection.close()
               if (queuedConnection !== undefined) await queuedConnection.close()
               await queuePool.close()
             }
           })
+
+          for (const useCallback of [false, true]) {
+            const api = useCallback ? 'callback' : 'Promise'
+
+            for (const timeout of [false, true]) {
+              it(`traces ${api} queue ${timeout ? 'timeouts' : 'overflow'}`, async () => {
+                const failurePool = await oracledb.createPool({
+                  ...config,
+                  poolMin: 0,
+                  poolMax: 1,
+                  queueMax: timeout ? 1 : 0,
+                  queueTimeout: 60000,
+                })
+                let heldConnection
+                try {
+                  heldConnection = await getTracedConnection(failurePool)
+                  await assertAcquisitionFailure(
+                    failurePool, useCallback, timeout ? /^NJS-040:/ : /^NJS-076:/, timeout ? 60000 : undefined
+                  )
+                } finally {
+                  await heldConnection?.close()
+                  await failurePool.close(0)
+                }
+              })
+            }
+
+            it(`traces ${api} session callback failures after a query`, async () => {
+              const failure = new Error('session setup failed')
+              const failurePool = await oracledb.createPool({
+                ...config,
+                poolMin: 0,
+                sessionCallback (connection, requestedTag, callback) {
+                  connection.execute(dbQuery, error => callback(error ?? failure))
+                },
+              })
+              try {
+                await assertAcquisitionFailure(failurePool, useCallback, failure)
+              } finally {
+                await failurePool.close(0)
+              }
+            })
+
+            it(`uses resolved TNS connection metadata for ${api} acquisitions`, async function () {
+              if (!oracledb.thin) this.skip()
+              const aliasPool = await oracledb.createPool({
+                ...config,
+                connectString: 'DD_TRACE_TEST',
+                configDir: path.join(__dirname, 'fixtures'),
+                poolMin: 0,
+              })
+              const peerService = sinon.stub(
+                global._ddtrace._pluginManager._pluginsByName.oracledb._tracerConfig,
+                'spanComputePeerService'
+              ).value(true)
+              let connection
+              try {
+                const acquireConnection = useCallback ? promisify(aliasPool.getConnection) : aliasPool.getConnection
+                connection = await getTracedConnection({
+                  getConnection: options => acquireConnection.call(aliasPool, options),
+                }, undefined, {
+                  ...expectedPoolAcquireSpan,
+                  meta: {
+                    ...expectedPoolAcquireSpan.meta,
+                    'peer.service': dbInstance,
+                    '_dd.peer.service.source': 'db.instance',
+                  },
+                })
+              } finally {
+                peerService.restore()
+                await connection?.close()
+                await aliasPool.close(0)
+              }
+            })
+          }
 
           for (const useCallback of [false, true]) {
             it(`parents queued ${useCallback ? 'callback' : 'Promise'} session queries to acquisition`, async () => {
@@ -853,6 +1007,33 @@ describe('Plugin', () => {
             } finally {
               if (acquiredConnection !== undefined) await acquiredConnection.close()
               await servicePool.close()
+            }
+          })
+        })
+
+        describe('with connectionString fallback', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service: attrs => attrs.connectString || attrs.connectionString,
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+          })
+
+          after(() => agent.close())
+
+          it('uses standalone connectionString parameters for the query service', async () => {
+            const connection = await oracledb.getConnection({
+              user: config.user,
+              password: config.password,
+              connectionString: config.connectString,
+            })
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ name: expectedSchema.outbound.opName, service: config.connectString }),
+                connection.execute(dbQuery),
+              ])
+            } finally {
+              await connection.close()
             }
           })
         })

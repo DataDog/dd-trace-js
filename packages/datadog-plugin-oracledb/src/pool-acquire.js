@@ -53,6 +53,30 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
 
     return ctx.currentStore
   }
+
+  /**
+   * @param {{
+   *   currentStore?: { span: import('../../..').Span },
+   *   dbInstance?: string,
+   *   hostname?: string,
+   *   port?: string
+   * }} ctx
+   */
+  finish (ctx) {
+    const span = ctx.currentStore?.span
+    if (span) {
+      if (ctx.dbInstance !== undefined) {
+        span.setTag('db.instance', ctx.dbInstance)
+        span.setTag('db.name', ctx.dbInstance)
+      }
+      if (ctx.hostname !== undefined) {
+        span.setTag('db.hostname', ctx.hostname)
+        span.setTag('out.host', ctx.hostname)
+      }
+      if (ctx.port !== undefined) span.setTag(CLIENT_PORT_KEY, ctx.port)
+    }
+    super.finish(ctx)
+  }
 }
 
 module.exports = OracledbPoolAcquirePlugin

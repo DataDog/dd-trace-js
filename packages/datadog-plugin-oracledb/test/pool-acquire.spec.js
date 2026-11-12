@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const { promisify } = require('node:util')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -80,6 +81,26 @@ describe('oracledb pool acquisition without a database service', () => {
       try {
         await Promise.all([
           agent.assertFirstTraceSpan(acquireSpan, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
+          assert.rejects(aliasPool.getConnection(null), { code: 'NJS-005' }),
+        ])
+      } finally {
+        await aliasPool.close(0)
+      }
+    })
+
+    it('omits unresolved TNS metadata from failed acquisitions', async () => {
+      const aliasPool = await oracledb.createPool({
+        ...poolConfig,
+        connectString: 'DD_TRACE_TEST',
+        configDir: path.join(__dirname, 'fixtures'),
+      })
+      try {
+        await Promise.all([
+          agent.assertFirstTraceSpan(span => {
+            for (const tag of ['db.hostname', 'out.host', 'network.destination.port', 'db.instance', 'db.name']) {
+              assert.strictEqual(span.meta[tag], undefined)
+            }
+          }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
           assert.rejects(aliasPool.getConnection(null), { code: 'NJS-005' }),
         ])
       } finally {

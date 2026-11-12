@@ -1,6 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const {
   channel,
   addHook,
@@ -20,6 +21,27 @@ const poolAcquireErrorChannel = channel('apm:oracledb:pool:acquire:error')
 const poolAcquireFinishChannel = channel('apm:oracledb:pool:acquire:finish')
 const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
 const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
+
+/**
+ * @param {import('oracledb').Connection} connection
+ * @param {{ dbInstance?: string, hostname?: string, port?: string }} ctx
+ */
+function addConnectionMetadata (connection, ctx) {
+  try {
+    if (connection.thin) {
+      const details = connection._impl ?? connection
+      ctx.dbInstance = connection.serviceName ?? details.serviceName
+      ctx.hostname = connection.hostName ?? details.nscon?.ntAdapter?.hostName
+      const port = connection.port ?? details.nscon?.ntAdapter?.port
+      if (port != null) ctx.port = String(port)
+    } else {
+      // Thick-mode host and port getters can throw.
+      ctx.dbInstance = connection.serviceName
+    }
+  } catch (error) {
+    log.error('Error reading OracleDB connection metadata: %s', error)
+  }
+}
 
 function finish (ctx) {
   if (ctx.error) {
@@ -77,6 +99,9 @@ function wrapPoolGetConnection (getConnection) {
           pool,
           connectionAttrs,
           poolAttrs,
+          dbInstance: undefined,
+          hostname: undefined,
+          port: undefined,
           user: connectionAttrs.homogeneous
             ? connectionAttrs.user
             : options?.user ?? options?.username ?? connectionAttrs.user,
@@ -94,6 +119,7 @@ function wrapPoolGetConnection (getConnection) {
         if (acquireCtx === undefined) {
           return callPoolCallback(sessionCtx, callback, this, arguments)
         }
+        if (connection) addConnectionMetadata(connection, acquireCtx)
         if (error) {
           acquireCtx.error = error
           poolAcquireErrorChannel.publish(acquireCtx)
@@ -134,6 +160,7 @@ function wrapPoolGetConnection (getConnection) {
     return promise.then(
       connection => {
         connectionAttributes.set(connection, poolAttrs)
+        addConnectionMetadata(connection, acquireCtx)
         poolAcquireFinishChannel.publish(acquireCtx)
         return connection
       },
@@ -218,36 +245,19 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         })
       }
 
-      let hostname
-      let port
-      let dbInstance
-
-      try {
-        if (this.thin) {
-          const details = this._impl ?? this
-          // Prefer public getters when available (v6), fallback to nscon in v5.
-          dbInstance = this.serviceName ?? details.serviceName
-          hostname = this.hostName ?? details.nscon?.ntAdapter?.hostName
-          const p = this.port ?? details.nscon?.ntAdapter?.port
-          if (p != null) port = String(p)
-        } else {
-          // Avoid host/port getters in thick mode, as they may throw.
-          dbInstance = this.serviceName
-        }
-      } catch {}
-
       // The connAttrs are used to pass through the argument to the potential
       // serviceName method a user might have passed through as well as parsing
       // the connection string in v5 as well as in thick mode.
       const connAttrs = connectionAttributes.get(this)
 
       const ctx = {
-        dbInstance,
-        port,
-        hostname,
+        dbInstance: undefined,
+        port: undefined,
+        hostname: undefined,
         query: dbQuery,
         connAttrs,
       }
+      addConnectionMetadata(this, ctx)
 
       return startChannel.runStores(ctx, () => {
         // bindStart is skipped when tracing is suppressed (legacy store is `noop`),

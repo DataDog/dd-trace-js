@@ -33,23 +33,38 @@ describe('oracledb connection parser', () => {
     assert.deepStrictEqual(getDBInformation(attrs), first)
   })
 
-  it('preserves default fields for URLs and descriptors', () => {
-    for (const connectString of ['db.example', '(DESCRIPTION=(ADDRESS=(HOST=db.example)))']) {
-      assert.deepStrictEqual(getDBInformation({ connectString }), {
-        hostname: 'db.example',
-        port: '1521',
-        dbInstance: 'XEPDB1',
-      })
+  it('omits unresolved aliases and absent connection strings', () => {
+    for (const connectString of [undefined, '', 'PRODDB', 'db.example']) {
+      assert.deepStrictEqual(getDBInformation({ connectString }), {})
     }
-    assert.deepStrictEqual(getDBInformation({ connectString: '(DESCRIPTION=(CONNECT_DATA=(SID=service)))' }), {
-      hostname: 'localhost',
+    assert.deepStrictEqual(getDBInformation(), {})
+  })
+
+  it('omits unknown host and database fields', () => {
+    assert.deepStrictEqual(getDBInformation({ connectString: '/service' }), {
+      hostname: undefined,
       port: '1521',
       dbInstance: 'service',
     })
-    assert.deepStrictEqual(getDBInformation({}), {
-      hostname: 'localhost',
+    assert.deepStrictEqual(getDBInformation({ connectString: 'db.example/service' }), {
+      hostname: 'db.example',
       port: '1521',
-      dbInstance: 'XEPDB1',
+      dbInstance: 'service',
+    })
+    assert.deepStrictEqual(getDBInformation({ connectString: 'db.example:1522' }), {
+      hostname: 'db.example',
+      port: '1522',
+      dbInstance: undefined,
+    })
+    assert.deepStrictEqual(getDBInformation({ connectString: '(DESCRIPTION=(ADDRESS=(HOST=db.example)))' }), {
+      hostname: 'db.example',
+      port: '1521',
+      dbInstance: undefined,
+    })
+    assert.deepStrictEqual(getDBInformation({ connectString: '(DESCRIPTION=(CONNECT_DATA=(SID=service)))' }), {
+      hostname: undefined,
+      port: '1521',
+      dbInstance: 'service',
     })
   })
 

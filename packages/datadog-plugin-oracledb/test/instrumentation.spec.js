@@ -7,6 +7,8 @@ const { afterEach, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
+const log = require('../../dd-trace/src/log')
+
 const poolAcquireStartChannel = dc.channel('apm:oracledb:pool:acquire:start')
 const poolAcquireFinishChannel = dc.channel('apm:oracledb:pool:acquire:finish')
 
@@ -206,4 +208,28 @@ describe('oracledb instrumentation', () => {
     assert.ok(connection)
     assert.strictEqual(finishContext, undefined)
   })
+
+  for (const useCallback of [false, true]) {
+    it(`preserves ${useCallback ? 'callback' : 'Promise'} results when connection metadata throws`, async () => {
+      let finishContext
+      subscribe(poolAcquireStartChannel, () => {})
+      subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
+      const oracledb = createOracledb({})
+      const failure = new Error('metadata unavailable')
+      Object.defineProperty(oracledb.Connection.prototype, 'serviceName', {
+        get () { throw failure },
+      })
+      const pool = await oracledb.createPool({ user: 'test' })
+      const logged = sinon.stub(log, 'error')
+      try {
+        const connection = useCallback ? await getConnectionWithCallback(pool) : await pool.getConnection()
+        assert.ok(connection instanceof oracledb.Connection)
+        assert.strictEqual(finishContext.error, undefined)
+        assert.strictEqual(logged.callCount, 1)
+        assert.strictEqual(logged.firstCall.args[1], failure)
+      } finally {
+        logged.restore()
+      }
+    })
+  }
 })
