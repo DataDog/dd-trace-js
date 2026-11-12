@@ -115,14 +115,25 @@ describe('id', () => {
     }
   })
 
-  it('should match Buffer#readBigUInt64BE on the underlying buffer', () => {
-    const cases = ['abcd', '12293a8527e70a7f27c8d624ace0f559', '7f00ff00ff00ff00']
+  it('should convert the lower 64 bits to BigInt without changing the full ID', () => {
+    const cases = [
+      ['0', 0n],
+      ['ffffffffffffffff', 0xffffffffffffffffn],
+      ['10000000000000000', 0n],
+      ['00000000000000000000000000000002', 2n],
+      ['6af1eb93000000000000000000000002', 2n],
+      ['ffffffffffffffffffffffffffffffff', 0xffffffffffffffffn],
+      ['100000000000000000000000000000002', 2n],
+    ]
 
-    for (const hex of cases) {
-      const spanId = id(hex, 16)
-      const expected = Buffer.from(spanId.toBuffer()).readBigUInt64BE(0)
+    for (const [hex, expected] of cases) {
+      const identifier = id(hex, 16)
+      const fullId = Buffer.from(identifier.toBuffer()).toString('hex')
 
-      assert.strictEqual(spanId.toBigInt(), expected)
+      assert.strictEqual(identifier.toBigInt(), expected)
+      assert.strictEqual(identifier.toBigInt(), expected)
+      assert.strictEqual(identifier.toString(10), expected.toString())
+      assert.strictEqual(identifier.toString(16), fullId)
     }
   })
 

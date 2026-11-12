@@ -2,7 +2,6 @@
 
 const log = require('../log')
 const web = require('../plugins/util/web')
-const { isEmpty } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   addSpecificEndpoint,
@@ -25,10 +24,9 @@ const { updateBlockFailureMetric } = require('./telemetry')
 const graphqlRequestData = new WeakMap()
 
 /**
- * Per request, the blocking action of every field already checked without arguments, `undefined` when the WAF
- * requested none. A `{ fieldName: {} }` payload exposes nothing but the field name, so the WAF returns the same
- * action for every occurrence of that field, as long as the request's WAF context keeps the same
- * inputs. List queries resolve the same fields once per item.
+ * Per request, the blocking action of every field checked with empty arguments or inclusion directives,
+ * including variable directives represented by `if: undefined`. Identical payloads return the same action while
+ * the request's WAF context keeps the same persistent inputs. List queries resolve the same fields once per item.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
  */
@@ -52,13 +50,16 @@ function onGraphqlStartResolver (data) {
 
   if (!req) return
 
+  const knownActions = fieldsWithoutArgumentsActions.get(req)
+  if (knownActions === undefined &&
+    !waf.wafManager.getWAFContext(req).knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const fieldName = getFieldNameWithoutArguments(resolverInfo)
-  const knownActions = fieldName === undefined ? undefined : fieldsWithoutArgumentsActions.get(req)
-  if (knownActions?.has(fieldName)) {
-    applyBlockingAction(req, data, knownActions.get(fieldName))
+  const cacheKey = getFieldCacheKey(resolverInfo)
+  if (cacheKey !== undefined && knownActions?.has(cacheKey)) {
+    applyBlockingAction(req, data, knownActions.get(cacheKey))
     return
   }
 
@@ -67,11 +68,13 @@ function onGraphqlStartResolver (data) {
 
   // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
   // occurrence run again instead of reading it back as "allowed".
-  if (fieldName !== undefined && result !== undefined && !result.timeout && !(result.errorCode < 0)) {
+  if (cacheKey !== undefined && result !== undefined && !result.timeout && !(result.errorCode < 0)) {
     if (knownActions === undefined) {
-      fieldsWithoutArgumentsActions.set(req, new Map([[fieldName, blockingAction]]))
+      const blockingActions = new Map()
+      blockingActions.set(cacheKey, blockingAction)
+      fieldsWithoutArgumentsActions.set(req, blockingActions)
     } else {
-      knownActions.set(fieldName, blockingAction)
+      knownActions.set(cacheKey, blockingAction)
     }
   }
 
@@ -92,21 +95,28 @@ function onWafRunFinished ({ req, payload, isSubcontext }) {
 }
 
 /**
- * @param {object} resolverInfo
- * @returns {string | undefined} the field name when the payload is `{ fieldName: {} }`
+ * Resolver materializers return exactly one field.
+ *
+ * @param {Record<string, Record<string, unknown>>} resolverInfo
  */
-function getFieldNameWithoutArguments (resolverInfo) {
-  let fieldName
-  for (const key in resolverInfo) {
-    if (fieldName !== undefined) return
-    fieldName = key
-  }
-  if (fieldName === undefined) return
-
+function getFieldCacheKey (resolverInfo) {
+  const fieldName = Object.keys(resolverInfo)[0]
   const fieldArguments = resolverInfo[fieldName]
-  if (!fieldArguments || typeof fieldArguments !== 'object' || !isEmpty(fieldArguments)) return
+  const names = Object.keys(fieldArguments)
+  if (names.length === 0) return fieldName
 
-  return fieldName
+  let cacheKey = fieldName
+  for (const name of names) {
+    const directive = fieldArguments[name]
+    if ((name !== 'include' && name !== 'skip') ||
+      !directive || typeof directive !== 'object') return
+    const argumentNames = Object.keys(directive)
+    if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
+    const value = directive.if
+    if (value !== undefined && typeof value !== 'boolean') return
+    cacheKey += `:${name}:${value}`
+  }
+  return cacheKey
 }
 
 /**

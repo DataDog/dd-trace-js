@@ -15,7 +15,8 @@ describe('Plugin', () => {
       const { GoogleGenAI } = require(`../../../versions/@google/genai@${version}`).get()
       client = new GoogleGenAI({
         apiKey: process.env.GOOGLE_API_KEY || '<not-a-real-key>',
-        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai' },
+        // Match the API version used by the VCR cassettes.
+        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai', apiVersion: 'v1beta' },
       })
     })
 

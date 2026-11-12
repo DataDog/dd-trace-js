@@ -968,6 +968,30 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', () => {
+    it('defaults to enabled independently of Realtime tracing', () => {
+      const config = getConfig()
+      assert.strictEqual(defaults['openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED'], true)
+      assert.strictEqual(config.openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED, true)
+      assert.strictEqual(config.openai.DD_OPENAI_REALTIME_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+
+    for (const enabled of [false, true]) {
+      it('accepts ' + enabled + ' from the environment without disabling Realtime tracing', () => {
+        process.env.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED, enabled)
+        assert.strictEqual(config.openai.DD_OPENAI_REALTIME_ENABLED, true)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: enabled, origin: 'env_var' },
+        ])
+      })
+    }
+  })
+
   describe('DD_BUNDLER_INJECT_GIT_METADATA', () => {
     it('should default to true', () => {
       const config = getConfig()
@@ -1791,12 +1815,13 @@ describe('Config', () => {
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_OPENAI_LOGS_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_REALTIME_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: '', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
-      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },
