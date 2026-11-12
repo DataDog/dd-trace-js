@@ -154,6 +154,35 @@ describe('Plugin', () => {
           })
         })
 
+        it('should add the matching route to the request span with arrays of paths', done => {
+          const router = Router()
+          const childRouter = Router()
+
+          childRouter.use(['/child/:id', '/kid/:id'], (req, res) => {
+            res.writeHead(200)
+            res.end()
+          })
+
+          router.use(['/parent', '/guardian'], childRouter)
+
+          appListener = server(router).listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+
+                assert.strictEqual(spans[0].resource, 'GET /guardian/kid/:id')
+              })
+              .then(done)
+              .catch(done)
+
+            httpRequest
+              .get(`http://localhost:${port}/guardian/kid/123`)
+              .catch(done)
+          })
+        })
+
         it('should keep req.next equal to the next passed to middleware', async () => {
           const router = Router()
           const childRouter = Router()
