@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
 const { inspect, isDeepStrictEqual } = require('node:util')
+const vm = require('node:vm')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -1389,6 +1390,233 @@ describe('AIGuard SDK', () => {
       const guardSpan = traces[0].find(span => span.name === 'ai_guard')
       assert.ok(parentSpan && guardSpan, 'expected both explicit-parent and ai_guard spans')
       assert.strictEqual(guardSpan.parent_id.toString(), parentSpan.span_id.toString())
+    })
+  })
+
+  describe('custom tags', () => {
+    const mockAllow = () => mockRequest({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    const assertGuardSpan = (callback) => agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'ai_guard')
+      callback(span)
+    }, { rejectFirst: true })
+
+    it('sets custom tags on the ai_guard span', async () => {
+      mockAllow()
+
+      const evaluation = await aiguard.evaluate(prompt, {
+        tags: { 'app.flow': 'checkout', team: 'payments', attempt: 2, retry: false },
+      })
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, {
+          'app.flow': 'checkout',
+          team: 'payments',
+          'ai_guard.action': 'ALLOW',
+        })
+        assert.strictEqual(span.metrics.attempt, 2)
+        assert.strictEqual(span.metrics.retry, 0)
+      })
+    })
+
+    it('ignores reserved ai_guard keys so core values win', async () => {
+      mockRequest({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: true } } },
+      })
+
+      await aiguard.evaluate(toolCall, {
+        tags: {
+          'ai_guard.action': 'DENY',
+          'ai_guard.target': 'prompt',
+          'ai_guard.blocked': 'true',
+          'ai_guard.tool_name': 'evil',
+          'ai_guard.custom': 'value',
+          ai_guard: 'DENY',
+          kept: 'yes',
+        },
+      })
+
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, {
+          'ai_guard.action': 'ALLOW',
+          'ai_guard.target': 'tool',
+          'ai_guard.tool_name': 'calc',
+          kept: 'yes',
+        })
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.blocked'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.custom'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard'))
+      })
+    })
+
+    it('ignores the reserved ai_guard key when its value is an object', async () => {
+      mockRequest({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: true } } },
+      })
+
+      await aiguard.evaluate(prompt, { tags: { ai_guard: { action: 'DENY', target: 'tool' } } })
+
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, { 'ai_guard.action': 'ALLOW', 'ai_guard.target': 'prompt' })
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard'))
+      })
+    })
+
+    for (const value of [2, true]) {
+      it(`drops a non-string service.name (${value}) so the span can still be exported`, async () => {
+        mockAllow()
+
+        const evaluation = await aiguard.evaluate(prompt, { tags: { 'service.name': value, kept: 'yes' } })
+
+        assert.strictEqual(evaluation.action, 'ALLOW')
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.service, 'ai_guard_demo')
+          assertObjectContains(span.meta, { kept: 'yes', 'ai_guard.action': 'ALLOW' })
+        })
+      })
+    }
+
+    it('keeps a string service.name override', async () => {
+      mockAllow()
+
+      await aiguard.evaluate(prompt, { tags: { 'service.name': 'custom-service' } })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.service, 'custom-service')
+      })
+    })
+
+    it('drops invalid and oversized entries and keeps boundary values', async () => {
+      mockAllow()
+      const maxKey = 'k'.repeat(200)
+      const tooLongKey = 'x'.repeat(201)
+      const maxValue = 'v'.repeat(25_000)
+
+      const evaluation = await aiguard.evaluate(prompt, {
+        tags: {
+          [maxKey]: 'max-key',
+          [tooLongKey]: 'dropped',
+          '': 'empty-key',
+          'value.max': maxValue,
+          'value.too_long': 'w'.repeat(25_001),
+          'value.object': { nested: 'x' },
+          'value.array': ['x'],
+          'value.null': null,
+          'value.undefined': undefined,
+          'value.symbol': Symbol('x'),
+          'value.bigint': 1n,
+          'value.function': () => {},
+          'value.nan': Number.NaN,
+          'value.infinity': Infinity,
+          'value.valid': 'ok',
+        },
+      })
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.meta[maxKey], 'max-key')
+        assert.strictEqual(span.meta['value.max'], maxValue)
+        assert.strictEqual(span.meta['value.valid'], 'ok')
+        for (const key of [
+          tooLongKey,
+          '',
+          'value.too_long',
+          'value.object',
+          'value.object.nested',
+          'value.array',
+          'value.null',
+          'value.undefined',
+          'value.symbol',
+          'value.bigint',
+          'value.function',
+          'value.nan',
+          'value.infinity',
+        ]) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected meta key: ${key}`)
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric key: ${key}`)
+        }
+      })
+    })
+
+    for (const [description, tags] of [
+      ['null', null],
+      ['an array', ['a', 'b']],
+      ['a string', 'tag'],
+      ['a number', 42],
+      ['a function', () => {}],
+    ]) {
+      it(`ignores tags given as ${description}`, async () => {
+        mockAllow()
+
+        const evaluation = await aiguard.evaluate(prompt, { tags })
+
+        assert.strictEqual(evaluation.action, 'ALLOW')
+        await assertGuardSpan(span => {
+          for (const key of ['0', '1', 'leaked']) {
+            assert.ok(!Object.hasOwn(span.meta, key), `Unexpected meta key: ${key}`)
+            assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric key: ${key}`)
+          }
+          assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+        })
+      })
+    }
+
+    for (const [description, createTags] of [
+      ['an object from another realm', () => vm.runInNewContext("({ 'team.name': 'checkout' })")],
+      ['an object with a custom prototype', () => Object.assign(Object.create({ inherited: 'skip' }), {
+        'team.name': 'checkout',
+      })],
+      ['a class instance', () => new (class Tags { constructor () { this['team.name'] = 'checkout' } })()],
+    ]) {
+      it(`sets own enumerable tags given as ${description}`, async () => {
+        mockAllow()
+
+        await aiguard.evaluate(prompt, { tags: createTags() })
+
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.meta['team.name'], 'checkout')
+          assert.ok(!Object.hasOwn(span.meta, 'inherited'), 'Unexpected meta key: inherited')
+        })
+      })
+    }
+
+    it('does not copy custom tags into reserved keys when the ai_guard span is the trace root', async () => {
+      mockAllow()
+
+      await aiguard.evaluate(prompt, { tags: { 'usr.id': 'x', 'http.client_ip': '6.6.6.6' } })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.parent_id.toString(), '0')
+        assert.strictEqual(span.meta['usr.id'], 'x')
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.usr.id'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.http.client_ip'))
+      })
+    })
+
+    it('accepts tags in the noop implementation', async () => {
+      const result = await new NoopAIGuard().evaluate(prompt, { tags: { a: 'b' } })
+
+      assert.strictEqual(result.action, 'ALLOW')
+    })
+
+    it('passes tags through the integrations evaluate helper', async () => {
+      mockAllow()
+      const { evaluate } = require('../../src/aiguard/integrations/evaluate')
+
+      await evaluate(undefined, aiguard, [prompt], {
+        block: false,
+        source: 'auto',
+        integration: 'openai',
+        tags: { 'app.flow': 'auto' },
+      })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.meta['app.flow'], 'auto')
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+      })
     })
   })
 
