@@ -566,6 +566,7 @@ export interface GeneratedConfig {
   spanRemoveIntegrationFromService: boolean;
   spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
   startupLogs: boolean;
+  startupLogsOutput: "stderr" | "stdout" | "stderr-json";
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   };
@@ -1170,6 +1171,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_STARTUP_LOGS: boolean;
+  DD_TRACE_STARTUP_LOGS_OUTPUT: "stderr" | "stdout" | "stderr-json";
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
   DD_TRACE_SUPABASE_ENABLED: boolean;

@@ -2036,6 +2036,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
+      { name: 'DD_TRACE_STARTUP_LOGS_OUTPUT', value: 'stderr', origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },
       { name: 'DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED', value: true, origin: 'default' },
@@ -2625,6 +2626,55 @@ describe('Config', () => {
     assertConfigUpdateContains(updateConfig.firstCall.args[0], [
       { name: 'DD_OPENAI_LOGS_ENABLED', value: true, origin: 'code' },
     ])
+  })
+
+  describe('startup log output', () => {
+    it('defaults to stderr', () => {
+      assert.strictEqual(getConfig().startupLogsOutput, 'stderr')
+    })
+
+    it('preserves the v5 startup logs default', () => {
+      const config = getConfig({ startupLogsOutput: 'stdout' }, { ddMajor: 5 })
+      assert.strictEqual(config.startupLogs, false)
+      assert.strictEqual(config.startupLogsOutput, 'stdout')
+    })
+
+    for (const output of ['stderr', 'stdout', 'stderr-json']) {
+      it(`accepts ${output} from the environment and reports its origin`, () => {
+        process.env.DD_TRACE_STARTUP_LOGS_OUTPUT = output.toUpperCase()
+        assert.strictEqual(getConfig().startupLogsOutput, output)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [{
+          name: 'DD_TRACE_STARTUP_LOGS_OUTPUT', value: output.toUpperCase(), origin: 'env_var',
+        }])
+      })
+
+      it(`gives programmatic ${output} precedence over the environment`, () => {
+        process.env.DD_TRACE_STARTUP_LOGS_OUTPUT = output === 'stdout' ? 'stderr' : 'stdout'
+        assert.strictEqual(getConfig({ startupLogsOutput: output }).startupLogsOutput, output)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [{
+          name: 'DD_TRACE_STARTUP_LOGS_OUTPUT', value: output, origin: 'code',
+        }])
+      })
+    }
+
+    for (const output of ['auto', '', 'file']) {
+      it(`rejects unsupported environment output ${JSON.stringify(output)}`, () => {
+        process.env.DD_TRACE_STARTUP_LOGS_OUTPUT = output
+        assert.strictEqual(getConfig().startupLogsOutput, 'stderr')
+        sinon.assert.calledWithExactly(
+          log.warn,
+          `Invalid value: ${inspect(output)} for DD_TRACE_STARTUP_LOGS_OUTPUT (source: env_var), picked default`,
+        )
+      })
+
+      it(`rejects unsupported programmatic output ${JSON.stringify(output)}`, () => {
+        assert.strictEqual(getConfig({ startupLogsOutput: output }).startupLogsOutput, 'stderr')
+        sinon.assert.calledWithExactly(
+          log.warn,
+          `Invalid value: ${inspect(output)} for startupLogsOutput (source: code), picked default`,
+        )
+      })
+    }
   })
 
   it('should transform safe programmatic option types', () => {
