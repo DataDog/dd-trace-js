@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { on } = require('node:events')
 
 const { spawn } = require('child_process')
 const {
@@ -105,6 +106,7 @@ describe('esm', () => {
           }),
         ])
         assert.strictEqual(response.status, 200)
+        assert.strictEqual(response.headers.get('x-sampling-priority'), '2')
         await response.text()
 
         const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
@@ -137,31 +139,17 @@ describe('esm', () => {
  * @param {number} timeout
  * @returns {Promise<OtlpSpan>}
  */
-function waitForOtlpSpan (agent, name, timeout) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      agent.off('otlp-traces', onTraces)
-      reject(new Error(`Timed out waiting for OTLP span ${name}`))
-    }, timeout)
-
-    /** @param {{ payload: OtlpTracePayload }} message */
-    function onTraces ({ payload }) {
-      for (const resourceSpan of payload.resourceSpans) {
-        for (const scopeSpan of resourceSpan.scopeSpans) {
-          for (const span of scopeSpan.spans) {
-            if (span.name !== name) continue
-
-            clearTimeout(timer)
-            agent.off('otlp-traces', onTraces)
-            resolve(span)
-            return
-          }
+async function waitForOtlpSpan (agent, name, timeout) {
+  for await (const [message] of on(agent, 'otlp-traces', { signal: AbortSignal.timeout(timeout) })) {
+    const { payload } = /** @type {{ payload: OtlpTracePayload }} */ (message)
+    for (const { scopeSpans } of payload.resourceSpans) {
+      for (const { spans } of scopeSpans) {
+        for (const span of spans) {
+          if (span.name === name) return span
         }
       }
     }
-
-    agent.on('otlp-traces', onTraces)
-  })
+  }
 }
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
