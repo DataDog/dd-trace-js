@@ -1266,8 +1266,10 @@ export default [
       import: eslintPluginImport,
     },
     files: [
+      'integration-tests/**/*.cjs',
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
+      'packages/*/test/integration-test/**/*.cjs',
       'packages/*/test/integration-test/**/*.js',
       'packages/*/test/integration-test/**/*.mjs',
       // TODO: Move the files in esm-test to integration-test
