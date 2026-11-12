@@ -1,5 +1,6 @@
 'use strict'
 
+const { setTimeout } = require('node:timers')
 const path = require('path')
 
 const iitm = require('../../../dd-trace/src/iitm')
@@ -7,6 +8,8 @@ const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const { isNodeBuiltinModuleName } = require('./shared-utils')
+
+const VERSION_CACHE_IDLE_TIMEOUT_MS = 1000
 
 /**
  * @param {string} moduleBaseDir
@@ -49,8 +52,10 @@ function Hook (modules, hookOptions, onrequire) {
 
   this._patched = Object.create(null)
   const patched = new WeakMap()
-  /** @type {Map<string|undefined, string|undefined>} */
-  const versions = new Map()
+  /** @type {Map<string|undefined, string|undefined>|undefined} */
+  let versions
+  /** @type {ReturnType<typeof setTimeout>|undefined} */
+  let clearVersionsTimer
 
   /**
    * @param {object|Function|undefined} moduleExports
@@ -82,10 +87,27 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     try {
-      moduleVersion ||= versions.get(moduleBaseDir)
       if (!moduleVersion) {
-        moduleVersion = getVersion(moduleBaseDir)
-        versions.set(moduleBaseDir, moduleVersion)
+        moduleVersion = versions?.get(moduleBaseDir)
+        if (!moduleVersion) {
+          moduleVersion = getVersion(moduleBaseDir)
+          if (moduleBaseDir) {
+            versions ??= new Map()
+            versions.set(moduleBaseDir, moduleVersion)
+          }
+        }
+        if (versions) {
+          if (clearVersionsTimer) {
+            clearVersionsTimer.refresh()
+          } else {
+            const cache = versions
+            clearVersionsTimer = setTimeout(() => {
+              cache.clear()
+              clearVersionsTimer = undefined
+            }, VERSION_CACHE_IDLE_TIMEOUT_MS)
+            clearVersionsTimer.unref?.()
+          }
+        }
       }
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)

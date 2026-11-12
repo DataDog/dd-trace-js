@@ -1,17 +1,26 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const timers = require('node:timers')
+const { promisify } = require('node:util')
 
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
+
+const execFileAsync = promisify(execFile)
 
 describe('Hook', () => {
   let Hook
   let iitm
   let ritm
   let requirePackageJson
+  let clock
+  let schedule
 
   beforeEach(() => {
+    clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    schedule = sinon.spy(timers, 'setTimeout')
     iitm = sinon.stub()
     ritm = sinon.stub()
     requirePackageJson = sinon.stub().returns({ version: '1.0.0' })
@@ -85,6 +94,71 @@ describe('Hook', () => {
 
     assert.deepStrictEqual(onrequire.getCalls().map(call => call.args[3]), ['1.0.0', '2.0.0'])
     sinon.assert.calledTwice(requirePackageJson)
+  })
+
+  for (const first of ['cjs', 'esm']) {
+    it(`clears versions after loading becomes idle, starting with ${first}`, () => {
+      const onrequire = sinon.stub().returnsArg(0)
+      Hook(['test-package'], onrequire)
+      const hooks = { cjs: ritm.args[0][2], esm: iitm.args[0][2] }
+      const second = first === 'cjs' ? 'esm' : 'cjs'
+
+      hooks[first]({}, 'test-package/first', '/test-package')
+      requirePackageJson.returns({ version: '2.0.0' })
+      for (let i = 0; i < 4; i++) {
+        clock.tick(500)
+        hooks[second]({}, `test-package/file-${i}`, '/test-package')
+      }
+      clock.tick(999)
+      hooks[first]({}, 'test-package/before-expiry', '/test-package')
+      sinon.assert.calledOnce(requirePackageJson)
+      assert.ok(onrequire.getCalls().every(call => call.args[3] === '1.0.0'))
+
+      clock.tick(1000)
+      hooks[second]({}, 'test-package/after-expiry', '/test-package')
+      assert.strictEqual(onrequire.lastCall.args[3], '2.0.0')
+      sinon.assert.calledTwice(requirePackageJson)
+
+      requirePackageJson.returns({ version: '3.0.0' })
+      clock.tick(1000)
+      hooks[first]({}, 'test-package/after-second-expiry', '/test-package')
+      assert.strictEqual(onrequire.lastCall.args[3], '3.0.0')
+      sinon.assert.calledThrice(requirePackageJson)
+      sinon.assert.callCount(schedule, 3)
+      for (const call of schedule.getCalls()) assert.strictEqual(call.returnValue.hasRef(), false)
+    })
+  }
+
+  it('keeps instrumentation active with browser-style global timers', () => {
+    const globalTimeout = sinon.stub(globalThis, 'setTimeout').returns(1)
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    const hook = ritm.args[0][2]
+
+    hook({}, 'test-package/first', '/test-package')
+    requirePackageJson.returns({ version: '2.0.0' })
+    clock.tick(500)
+    hook({}, 'test-package/second', '/test-package')
+    clock.tick(999)
+    hook({}, 'test-package/before-expiry', '/test-package')
+    clock.tick(1000)
+    hook({}, 'test-package/after-expiry', '/test-package')
+
+    sinon.assert.notCalled(globalTimeout)
+    assert.deepStrictEqual(onrequire.getCalls().map(call => call.args[3]), ['1.0.0', '1.0.0', '1.0.0', '2.0.0'])
+  })
+
+  it('does not schedule cache cleanup for unused hooks, builtins, or supplied versions', () => {
+    const onrequire = sinon.stub().returnsArg(0)
+    Hook(['test-package'], onrequire)
+    assert.strictEqual(clock.countTimers(), 0)
+
+    ritm.args[0][2]({}, 'test-package/first', '/test-package', '1.0.0')
+    Hook(['url'], onrequire)
+    ritm.args[1][2]({}, 'url', undefined)
+
+    sinon.assert.notCalled(requirePackageJson)
+    assert.strictEqual(clock.countTimers(), 0)
   })
 
   it('does not read ESM exports from a CommonJS hook result', () => {
@@ -203,5 +277,14 @@ describe('Hook', () => {
     const hook = iitm.args[0][2]
     assert.strictEqual(hook(namespace, 'test-package', '/test-package'), namespace)
     sinon.assert.notCalled(ownKeys)
+  })
+})
+
+describe('Hook idle cleanup', () => {
+  it('releases the request store after a lazy package load becomes idle', async () => {
+    const { stdout } = await execFileAsync(process.execPath, [
+      '--expose-gc', require.resolve('../fixtures/hook-version-cache'),
+    ], { timeout: 4000 })
+    assert.strictEqual(stdout, 'collected\n')
   })
 })
