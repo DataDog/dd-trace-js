@@ -178,17 +178,20 @@ describe('test suite', () => {
           const appDirTest = appName === 'app-dir' ? it : it.skip
           const appDirBodyBlockingTest = appName === 'app-dir' && satisfies(realVersion, '>=13.3') ? it : it.skip
 
-          async function assertBlocked (request, spanMeta) {
+          async function assertBlocked (request) {
             const [response] = await Promise.all([
               request,
               agent.assertSomeTraces(traces => {
                 assertObjectContains(getWebSpan(traces).meta, {
                   'appsec.blocked': 'true',
-                  ...spanMeta,
                 })
 
                 for (const span of traces.flat()) {
                   assert.strictEqual(span.meta['error.type'], undefined, `${span.name} span has an error`)
+                  if (span.type === 'web') {
+                    assert.strictEqual(span.meta['http.status_code'], '403', `${span.name} span status code`)
+                  }
+                  assert.strictEqual(span.error, 0, `${span.name} span is flagged as an error`)
                 }
               }),
             ])
@@ -201,8 +204,7 @@ describe('test suite', () => {
             return assertBlocked(
               httpRequest.get(`http://127.0.0.1:${serverData.port}/api/test?param=blockattack`, {
                 validateStatus: false,
-              }),
-              { 'http.status_code': '403' }
+              })
             )
           })
 
@@ -211,8 +213,7 @@ describe('test suite', () => {
               return assertBlocked(
                 httpRequest.get(`http://127.0.0.1:${serverData.port}/api/test?${param}=blockattack`, {
                   validateStatus: false,
-                }),
-                { 'http.status_code': '403' }
+                })
               )
             })
           }
