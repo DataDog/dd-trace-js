@@ -24,7 +24,6 @@ function setupEnv () {
 }
 
 function loadAgent () {
-  require('../../src/lambda')
   // The shared agent harness disables plugins globally; opt the Lambda lifecycle
   // back in so this suite exercises the same plugin that the Lambda bootstrap enables.
   return agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
@@ -32,7 +31,7 @@ function loadAgent () {
 
 async function closeAgent () {
   // `Hook.reset` clears RITM's per-module cache and registered hooks
-  // so the next test re-evaluates `src/lambda`'s `registerLambdaHook`
+  // so the next test initializes `src/lambda`'s hooks
   // against the new env and re-patches the freshly-loaded fixture.
   // Safe in `test:lambda` because no test in this process loads other
   // integrations.

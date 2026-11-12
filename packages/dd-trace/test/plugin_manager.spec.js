@@ -196,14 +196,14 @@ describe('Plugin Manager', () => {
       },
     })
     const loadPluginManager = proxyquire.noPreserveCache()
+    const initializeLambda = loadPluginManager('../src/lambda', {
+      '../../../datadog-instrumentations/src/helpers/hook': () => {},
+    })
     PluginManager = loadPluginManager('../src/plugin_manager', {
       './plugins': pluginModules,
-      './lambda': {},
+      './lambda': initializeLambda,
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {
-        getEnvironmentVariable (name) {
-          return process.env[name]
-        },
         getValueFromEnvSources (name, skipDefault) {
           if (name === 'DD_TRACE_NINE_ENABLED') {
             throw new Error(`${name} is not registered`)
@@ -416,11 +416,21 @@ describe('Plugin Manager', () => {
         delete process.env.AWS_LAMBDA_FUNCTION_NAME
       })
 
-      it('registers the aws-lambda plugin without a module-load event', () => {
+      it('registers the aws-lambda plugin through Lambda initialization', () => {
         pm.configure(makeTracerConfig())
 
         assert.deepStrictEqual(instantiated, ['aws-lambda'])
         sinon.assert.calledWithMatch(AwsLambda.prototype.configure, { enabled: true })
+      })
+
+      it('configures the plugin once per configuration with the latest settings', () => {
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'first' } }))
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'second' } }))
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledTwice(AwsLambda.prototype.configure)
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure.firstCall, { service: 'first' })
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure.secondCall, { service: 'second' })
       })
 
       it('forwards the centralized Lambda namespace and shared tracer settings', () => {
@@ -597,6 +607,20 @@ describe('Plugin Manager', () => {
             })
           })
         }
+      }
+    })
+
+    it('activates Lambda when its environment appears after the manager was imported and configured', () => {
+      pm.configure(makeTracerConfig())
+      assert.deepStrictEqual(instantiated, [])
+
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'late-lambda'
+      try {
+        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'late-service' } }))
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledOnceWithMatch(AwsLambda.prototype.configure, { enabled: true, service: 'late-service' })
+      } finally {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
       }
     })
 

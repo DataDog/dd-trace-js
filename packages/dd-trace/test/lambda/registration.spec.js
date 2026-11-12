@@ -16,7 +16,8 @@ const log = require('../../src/log')
 const oldEnv = process.env
 const hookedModules = new Set()
 
-function loadLambdaWithHookSpy () {
+/** @param {boolean} [activate] Whether to initialize after importing the module. */
+function loadLambdaWithHookSpy (activate = true) {
   /** @type {Array<{ modules: string[], onrequire: Function }>} */
   const hookCalls = []
   /**
@@ -27,16 +28,18 @@ function loadLambdaWithHookSpy () {
     hookCalls.push({ modules, onrequire })
     for (const name of modules) hookedModules.add(name)
   }
-  proxyquire('../../src/lambda', {
+  const initialize = proxyquire('../../src/lambda', {
     '../../../datadog-instrumentations/src/helpers/hook': HookSpy,
   })
-  return { hookCalls }
+  if (activate) initialize()
+  return { hookCalls, initialize }
 }
 
 describe('lambda', () => {
   describe('registerLambdaHook', () => {
     beforeEach(() => {
-      process.env = { ...oldEnv }
+      process.env = { ...oldEnv, AWS_LAMBDA_FUNCTION_NAME: 'registration-test' }
+      delete process.env.DD_TRACE_DISABLED_PLUGINS
       delete process.env.DD_LAMBDA_HANDLER
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
       // Drop cached `runtime/patch` so its module-level `addHook` calls run
@@ -49,6 +52,33 @@ describe('lambda', () => {
       process.env = oldEnv
       for (const name of hookedModules) delete instrumentations[name]
       hookedModules.clear()
+      delete require.cache[require.resolve('../../src/lambda/runtime/patch')]
+    })
+
+    it('defers hook registration until initialization', () => {
+      const { hookCalls, initialize } = loadLambdaWithHookSpy(false)
+
+      assert.strictEqual(hookCalls.length, 0)
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
+    })
+
+    it('can initialize after an earlier call outside Lambda', () => {
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      const { hookCalls, initialize } = loadLambdaWithHookSpy()
+
+      assert.strictEqual(hookCalls.length, 0)
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'late-lambda'
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
+    })
+
+    it('registers hooks only once across repeated initialization', () => {
+      const { hookCalls, initialize } = loadLambdaWithHookSpy()
+
+      initialize()
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
     })
 
     it('registers a hook on the resolved handler file paths', () => {
@@ -438,8 +468,10 @@ describe('lambda', () => {
     })
 
     for (const file of ['dist/utils/handler.js', 'utils/handler.js']) {
-      for (const pending of [false, true]) {
-        it(`${pending ? 'monitors pending' : 'clears completed'} datadog-lambda-js handlers via ${file}`, async () => {
+      for (const [pending, disabled] of [[false, ''], [true, ''], [true, 'lambda'], [true, 'aws-lambda']]) {
+        const description = `${pending ? 'monitors pending' : 'clears completed'} shim handlers via ${file}`
+        it(`${description} with DD_TRACE_DISABLED_PLUGINS=${disabled}`, async () => {
+          process.env.DD_TRACE_DISABLED_PLUGINS = disabled
           process.env.LAMBDA_TASK_ROOT = '/var/task'
           process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
           const { hookCalls } = loadLambdaWithHookSpy()

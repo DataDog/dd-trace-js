@@ -3,7 +3,6 @@
 const { channel } = require('dc-polyfill')
 
 const {
-  getEnvironmentVariable,
   getValueFromEnvSources,
   isSupportedConfiguration,
 } = require('./config/helper')
@@ -45,24 +44,6 @@ loadChannel.subscribe(({ name }) => {
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-
-function enableLambdaEnvironment () {
-  if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return
-
-  // `DD_TRACE_DISABLED_PLUGINS` is matched against the plugin id below, so the legacy `lambda`
-  // spelling would otherwise be ignored. Normalize it to the id before that check runs.
-  if (disabledPlugins.has('lambda')) disabledPlugins.add('aws-lambda')
-
-  // Register the handler hook only after Config observes the Lambda environment.
-  // This also avoids freezing the decision when dd-trace is imported for its facade.
-  require('./lambda')
-  // Disabling the instrumentation disables the span too: there is no hook left to carry it.
-  const disabledInstrumentations = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
-    ?.split(',').map(name => name.trim()) ?? []
-  if (!disabledInstrumentations.includes('lambda') && !disabledInstrumentations.includes('aws-lambda')) {
-    maybeEnable(plugins['aws-lambda'])
-  }
-}
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
@@ -168,13 +149,16 @@ module.exports = class PluginManager {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   configure (config) {
-    enableLambdaEnvironment()
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
+
+    // Initialization can publish load events that configure plugins immediately; use the current settings.
+    const initializeLambda = require('./lambda')
+    initializeLambda()
   }
 
   // This is basically just for testing. like intrumenter.disable()
