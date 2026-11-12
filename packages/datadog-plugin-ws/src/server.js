@@ -80,12 +80,11 @@ class WSServerPlugin extends TracingPlugin {
       service,
       childOf,
       meta,
-
     }, ctx)
     ctx.span = span
 
     ctx.socket.spanTags = {
-      path: route,
+      messageResource: `websocket ${route}`,
       'resource.name': resourceName,
       'service.name': service,
     }

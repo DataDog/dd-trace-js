@@ -624,6 +624,10 @@ describe('Plugin', () => {
       })
 
       describe('with OTel semantics enabled', () => {
+        /**
+         * @param {string} [path]
+         * @param {import('ws').ClientOptions} [options]
+         */
         const connectClient = (path = `/${route}?active=true&password=secret`, options) => {
           client = new WebSocket(`ws://127.0.0.1:${clientPort}${path}`, options)
           return client
@@ -635,7 +639,7 @@ describe('Plugin', () => {
             service: 'some',
             traceWebsocketMessagesEnabled: true,
             queryStringObfuscation: 'password=[^&]*',
-          }])
+          }], { samplingRules: [{ resource: 'GET', sampleRate: 1 }] })
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: 0, host: '127.0.0.1' })
@@ -664,17 +668,65 @@ describe('Plugin', () => {
           connectClient(undefined, { headers: { 'user-agent': 'test-user-agent' } })
 
           return agent.assertSomeTraces(traces => {
-            const span = findSpan(traces, span => span.name === 'web.request' && span.type === 'websocket')
+            const span = findSpan(traces, span => span.meta['http.upgraded'] === 'websocket')
+            assert.ok(span)
+            assert.strictEqual(span.meta['http.method'], undefined)
+            assert.strictEqual(span.meta['http.url'], undefined)
+            assert.strictEqual(span.meta['operation.name'], undefined)
+            assert.strictEqual(span.meta['span.type'], undefined)
             assertObjectContains(span, {
               resource: 'GET',
               meta: {
                 'http.request.method': 'GET',
                 'network.peer.address': '127.0.0.1',
+                'url.path': '/test',
+                'url.scheme': 'http',
                 'url.query': 'active=true&<redacted>',
                 'user_agent.original': 'test-user-agent',
               },
+              metrics: { _sampling_priority_v1: 2 },
             })
           })
+        })
+
+        for (const [name, obfuscation, path, query] of [
+          ['default', undefined, '/chat?active=true&password=secret', 'active=true&<redacted>'],
+          ['disabled', false, '/chat?active=true', 'active=true'],
+          ['empty pattern', '', '/chat?active=true', 'active=true'],
+          ['full', true, '/chat?active=true', undefined],
+          ['wildcard', '.*', '/chat?active=true', undefined],
+          ['invalid pattern', '[', '/chat?active=true', undefined],
+          ['no query', 'password=[^&]*', '/chat', undefined],
+          ['empty query', 'password=[^&]*', '/chat?', undefined],
+        ]) {
+          it(`applies ${name} query obfuscation to connection spans`, () => {
+            const config = { service: 'some', traceWebsocketMessagesEnabled: true }
+            if (obfuscation !== undefined) config.queryStringObfuscation = obfuscation
+            agent.reload('ws', config)
+            wsServer.once('connection', socket => socket.close())
+            connectClient(path)
+
+            return agent.assertSomeTraces(traces => {
+              const span = findSpan(traces, span => span.meta['http.upgraded'] === 'websocket')
+              assert.ok(span)
+              assert.strictEqual(span.meta['url.query'], query)
+              assert.strictEqual(span.meta['url.path'], '/chat')
+              assert.strictEqual(span.meta['user_agent.original'], undefined)
+              assert.strictEqual(span.resource, 'GET')
+            })
+          })
+        }
+
+        it('preserves the path when the server closes the connection', async () => {
+          wsServer.once('connection', socket => socket.close(1000, 'done'))
+          const trace = agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, span => span.meta['span.kind'] === 'producer' &&
+              span.metrics['websocket.close.code'] === 1000)
+            assert.ok(span)
+            assert.strictEqual(span.resource, 'websocket /chat')
+          })
+          const socket = connectClient('/chat')
+          await Promise.all([trace, once(socket, 'close')])
         })
 
         for (const separateTraces of [false, true]) {
@@ -691,18 +743,24 @@ describe('Plugin', () => {
               const trace = agent.assertSomeTraces(traces => {
                 for (const batch of traces) {
                   for (const span of batch) {
-                    if (span.type === 'websocket') spans.set(span.name, span)
+                    if (span.meta['http.upgraded'] === 'websocket') {
+                      spans.set('connection', span)
+                    } else if (span.meta['websocket.message.type']) {
+                      spans.set(span.meta['span.kind'], span)
+                    } else if (span.metrics['websocket.close.code'] !== undefined) {
+                      spans.set(`close.${span.meta['span.kind']}`, span)
+                    }
                   }
                 }
 
-                const connection = spans.get('web.request')
+                const connection = spans.get('connection')
                 assert.ok(connection)
                 assert.strictEqual(connection.resource, 'GET')
-                for (const name of ['websocket.send', 'websocket.receive', 'websocket.close']) {
+                for (const name of ['producer', 'consumer', 'close.consumer']) {
                   const span = spans.get(name)
                   assert.ok(span, `Expected ${name}`)
                   assert.strictEqual(span.resource, 'websocket /chat')
-                  if (name !== 'websocket.send') {
+                  if (name === 'consumer' || name === 'close.consumer') {
                     assert.strictEqual(span.meta['_dd.dm.resource'],
                       separateTraces && inheritSampling ? 'GET' : undefined)
                   }
