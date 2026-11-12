@@ -2377,6 +2377,8 @@ describe(`cucumber@${version} commonJS`, () => {
               cwd,
               env: {
                 ...envVars,
+                // The sandbox remote is a local path; replay links need an explicit source URL.
+                DD_GIT_REPOSITORY_URL: 'https://github.com/DataDog/dd-trace-js',
                 DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
                 DD_TRACE_DEBUG: '1',
                 DD_TRACE_LOG_LEVEL: 'warn',
