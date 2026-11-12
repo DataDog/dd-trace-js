@@ -118,9 +118,9 @@ function wrapAbortControllers (protocol) {
   })
 }
 
-function wrapProtocol (Protocol) {
-  // Inject trace context into MCP request metadata so out-of-process MCP servers
-  // can parent server spans to the client operation span.
+// Inject trace context into MCP request metadata so out-of-process MCP servers
+// can parent server spans to the client operation span.
+function wrapProtocolRequest (Protocol) {
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
       if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
@@ -137,6 +137,10 @@ function wrapProtocol (Protocol) {
       return original.call(this, addTraceContextToRequest(request, ctx.traceContext), resultSchema, options)
     }
   })
+}
+
+function wrapProtocol (Protocol) {
+  wrapProtocolRequest(Protocol)
 
   // Start spans in _onrequest — this runs inside the express POST /mcp handler's
   // async context, so ALS correctly parents server spans under the HTTP span.
@@ -254,5 +258,11 @@ addHook({
   file: 'dist/esm/server/mcp.js',
 }, exports => {
   wrapMcpServer(exports.McpServer)
+  return exports
+})
+
+// SDK 2.x clients bundle Protocol into a chunk with a hashed name. The package entry re-exports it, so hook the entry.
+addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
+  wrapProtocolRequest(exports.Protocol)
   return exports
 })

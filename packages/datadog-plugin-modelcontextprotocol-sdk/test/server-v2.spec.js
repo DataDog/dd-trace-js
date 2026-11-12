@@ -234,23 +234,23 @@ describe('Plugin', () => {
           assert.equal(result.content[0].text, 'confirmed')
         })
 
-        it('parents the server request span to the trace context in _meta', async () => {
-          const parent = tracer.startSpan('mcp.client.parent')
-          const traceContext = {}
-          tracer.inject(parent, 'text_map', traceContext)
-          parent.finish()
-
+        it('parents the server request span to the client span through _meta', async () => {
+          // The client and server spans can arrive in separate payloads.
+          const spans = []
           const traceAssertion = agent.assertSomeTraces(traces => {
-            const requestSpan = findSpan(traces, 'mcp.request', 'server_tool_call')
+            spans.push(...traces.flat())
+            const clientSpans = spans.filter(span => span.resource === 'client_tool_call')
+            const serverSpans = spans.filter(span => span.resource === 'server_tool_call')
 
-            assert.ok(requestSpan)
-            assert.equal(requestSpan.trace_id.toString(), parent.context().toTraceId())
-            assert.equal(requestSpan.parent_id.toString(), parent.context().toSpanId())
+            assert.ok(serverSpans.some(serverSpan => clientSpans.some(clientSpan => {
+              return serverSpan.trace_id.toString() === clientSpan.trace_id.toString() &&
+                serverSpan.parent_id.toString() === clientSpan.span_id.toString()
+            })), 'a server request span should be a child of a client tool call span')
           })
 
           await Promise.all([
             traceAssertion,
-            client.callTool({ name: 'test-tool', arguments: {}, _meta: { _dd_trace_context: traceContext } }),
+            client.callTool({ name: 'test-tool', arguments: {} }),
           ])
         })
       })

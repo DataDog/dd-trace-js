@@ -1,5 +1,11 @@
 [
   {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/(?:index|public-[\\w-]+)\\.[cm]js$",
+    "flags": "",
+    "sourceMatch": "var Client = class"
+  },
+  {
     "name": "@modelcontextprotocol/server",
     "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
     "flags": ""
