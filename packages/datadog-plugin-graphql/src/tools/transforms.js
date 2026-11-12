@@ -89,6 +89,7 @@ function transformForSignature (ast) {
     OperationDefinition (node) {
       return {
         ...node,
+        name: node.name ?? undefined,
         variableDefinitions: sortByVariableName(node.variableDefinitions),
       }
     },

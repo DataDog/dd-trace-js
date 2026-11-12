@@ -3571,7 +3571,7 @@ describe('Plugin', () => {
         })
 
         it('should run the execute hook for a rejected executor result', () => {
-          const document = graphql.parse('query RejectedExecutor { hello }')
+          const document = graphql.parse('{ hello }')
           const error = new Error('Executor rejected')
           // Match the Sync orchestrion wrapper around @graphql-tools/executor while providing its rejected result.
           const executeChannel = dc.tracingChannel(
@@ -3586,11 +3586,12 @@ describe('Plugin', () => {
 
             assert.strictEqual(spans.length, 1)
             assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].resource, '{hello}')
             assert.strictEqual(spans[0].error, 1)
             assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
             sinon.assert.calledOnce(config.hooks.execute)
             assert.strictEqual(config.hooks.execute.firstCall.args[2], undefined)
-          }, { spanResourceMatch: /RejectedExecutor/ })
+          }, { spanResourceMatch: /hello/ })
 
           const execution = executeChannel.traceSync(() => Promise.reject(error), context)
 

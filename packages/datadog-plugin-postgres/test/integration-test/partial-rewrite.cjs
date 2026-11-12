@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 
+// The sandbox installs dd-trace as a dependency before this fixture runs.
+/* eslint import/no-extraneous-dependencies: ["error", { "whitelist": ["dd-trace"] }] */
 require('dd-trace').init() // eslint-disable-line n/no-missing-require
 const postgres = require('postgres') // eslint-disable-line n/no-missing-require
 
