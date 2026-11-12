@@ -96,7 +96,7 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagSpanTags(span, spanTags)
 
     const output = ctx.error ? undefined : safeStringify(ctx.result)
-    this._tagger.tagTextIO(span, formatServerInput(request, extra?.mcpReq?.id), output)
+    this._tagger.tagTextIO(span, formatServerInput(request, extra?.mcpReq), output)
   }
 }
 

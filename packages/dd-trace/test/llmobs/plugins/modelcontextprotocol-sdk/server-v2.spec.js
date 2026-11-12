@@ -115,7 +115,7 @@ describe('integrations', () => {
           await handler.close()
         })
 
-        it('tags the envelope client info and leaves reserved _meta keys out of the input', async () => {
+        it('tags the envelope client info and keeps the reserved _meta keys in the input', async () => {
           await client.callTool({ name: 'test-tool', arguments: {}, _meta: { _dd_trace_context: {}, keep: 'me' } })
 
           const { apmSpans, llmobsSpans } = await getEvents()
@@ -126,7 +126,16 @@ describe('integrations', () => {
             name: 'test-tool',
             inputValue: JSON.stringify({
               method: 'tools/call',
-              params: { name: 'test-tool', arguments: {}, _meta: { keep: 'me' } },
+              params: {
+                name: 'test-tool',
+                arguments: {},
+                _meta: {
+                  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                  'io.modelcontextprotocol/clientInfo': { name: 'stateless-client', version: '3.0.0' },
+                  'io.modelcontextprotocol/clientCapabilities': {},
+                  keep: 'me',
+                },
+              },
               jsonrpc: '2.0',
               id: 0,
             }),
