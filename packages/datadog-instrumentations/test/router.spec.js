@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire').preserveCache()
+const sinon = require('sinon')
 
 const { createWrapRouterMethod, createLayerDispatchWrappers } = require('../src/router')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -1299,6 +1301,69 @@ describe('createWrapRouterMethod', () => {
 
           const expected = pattern instanceof RegExp ? `(${pattern})` : pattern
           assert.strictEqual(events.find(event => event.label === 'enter').data.route, expected)
+        })
+      }
+    }
+  })
+
+  describe('router module hooks', () => {
+    for (const errorHandler of [false, true]) {
+      for (const pattern of ['/products/:id', /^\/products\/([^/]+)/]) {
+        it(`captures ${pattern} with package-local symbols for ${errorHandler ? 'error' : 'request'} dispatch`, () => {
+          const instrument = require('../src/helpers/instrument')
+          const addHook = sinon.spy()
+          const { createWrapRouterMethod } = proxyquire('../src/router', {
+            './helpers/instrument': { ...instrument, addHook },
+          })
+          const hooks = addHook.getCalls().filter(call => {
+            return call.args[0].name === 'router' && call.args[0].versions[0] === '>=2'
+          })
+          const symbolsHook = hooks.find(call => call.args[0].file === 'lib/symbols.js').args[1]
+          const layerHook = hooks.find(call => call.args[0].file === 'lib/layer.js').args[1]
+          const copies = ['/app/node_modules/router', '/app/node_modules/other/node_modules/router']
+            .map(moduleBaseDir => ({ moduleBaseDir, matchedRoute: Symbol('matchedRoute') }))
+
+          for (const { moduleBaseDir, matchedRoute } of copies) {
+            const symbols = { matchedRoute }
+            assert.strictEqual(symbolsHook(symbols, '2.2.0', false, { moduleBaseDir }), symbols)
+          }
+
+          const enter = dc.channel('apm:router:middleware:enter')
+          const listener = data => events.push(data)
+          enter.subscribe(listener)
+          subscriptions.push([enter, listener])
+
+          for (const { moduleBaseDir, matchedRoute } of copies) {
+            FakeLayer = makeLayerClass(original => original, original => original)
+            FakeLayer.prototype.handleRequest = FakeLayer.prototype.handle_request
+            FakeLayer.prototype.handleError = FakeLayer.prototype.handle_error
+            assert.strictEqual(layerHook(FakeLayer, '2.2.0', false, { moduleBaseDir }), FakeLayer)
+
+            const router = { stack: [] }
+            const wrapMethod = createWrapRouterMethod('router', compileRegex)
+            const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/users/1' }))
+            const failure = new Error('failure')
+            const handler = errorHandler
+              ? function handleError (error, req, res, next) { next(error) }
+              : function handleRequest (req, res, next) { next() }
+            wrappedUse.call(router, ['/users/:id', pattern], handler)
+
+            const req = { params: {}, [matchedRoute]: pattern }
+            const layer = router.stack[0]
+            const next = sinon.spy()
+            if (errorHandler) {
+              layer.handleError(failure, req, {}, next)
+              sinon.assert.calledOnceWithExactly(next, failure)
+            } else {
+              layer.handleRequest(req, {}, next)
+              sinon.assert.calledOnceWithExactly(next)
+            }
+
+            const expected = pattern instanceof RegExp ? `(${pattern})` : pattern
+            assert.strictEqual(events.at(-1).req, req)
+            assert.strictEqual(events.at(-1).route, expected)
+          }
+          assert.strictEqual(events.length, copies.length)
         })
       }
     }
