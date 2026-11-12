@@ -168,7 +168,7 @@ describe('GraphQL', () => {
       startGraphqlResolver.publish(message)
 
       sinon.assert.notCalled(message.createResolverInfo)
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
@@ -202,13 +202,13 @@ describe('GraphQL', () => {
 
     it('Should call waf again for cached fields in a different request', () => {
       for (const input of [{}, { include: { if: undefined } }, { skip: { if: undefined } }]) {
+        waf.runSubContext.resetHistory()
         startGraphqlResolver.publish(createResolverMessage({ name: input }))
 
         storage('legacy').getStore.returns(withRequest(undefined, {}))
         startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        sinon.assert.calledTwice(waf.runSubContext)
       }
-
-      sinon.assert.calledTwice(waf.runSubContext)
     })
 
     it('Should call waf for every field with arguments or custom directives', () => {
@@ -239,10 +239,10 @@ describe('GraphQL', () => {
         startGraphqlResolver.publish(createResolverMessage({ name: input }))
       }
 
-      sinon.assert.callCount(waf.run, inputs.length)
+      sinon.assert.callCount(waf.runSubContext, inputs.length)
       for (const [index, input] of inputs.entries()) {
-        assert.deepStrictEqual(waf.run.getCall(index).args[0], {
-          ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: input } },
+        assert.deepStrictEqual(waf.runSubContext.getCall(index).args[0], {
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: input },
         })
       }
     })
@@ -252,7 +252,7 @@ describe('GraphQL', () => {
         startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
         startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
 
-        sinon.assert.calledTwice(waf.run)
+        sinon.assert.calledTwice(waf.runSubContext)
       })
     }
 
@@ -271,31 +271,25 @@ describe('GraphQL', () => {
     it('Should not keep the result of a timed out run', () => {
       waf.runSubContext.returns({ timeout: true })
 
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
-
-      sinon.assert.calledTwice(waf.runSubContext)
+      for (const input of [{}, { include: { if: true } }, { include: { if: undefined } },
+        { skip: { if: undefined } }]) {
+        waf.runSubContext.resetHistory()
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        sinon.assert.calledTwice(waf.runSubContext)
+      }
     })
 
     it('Should not keep the result of a run that returned nothing', () => {
       waf.runSubContext.returns(undefined)
 
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
-      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { skip: { if: undefined } } }))
-
-      sinon.assert.calledTwice(waf.runSubContext)
+      for (const input of [{}, { include: { if: true } }, { include: { if: undefined } },
+        { skip: { if: undefined } }]) {
+        waf.runSubContext.resetHistory()
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        startGraphqlResolver.publish(createResolverMessage({ name: input }))
+        sinon.assert.calledTwice(waf.runSubContext)
+      }
     })
 
     it('does not cache a failed evaluation that includes useful output', () => {
@@ -440,20 +434,19 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, firstAbortController))
-      startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, secondAbortController))
-      const resolverInfo = { __schema: { include: { if: true } } }
-      startGraphqlResolver.publish(createResolverMessage(resolverInfo, firstAbortController))
-      startGraphqlResolver.publish(createResolverMessage(resolverInfo, secondAbortController))
-      for (const directive of ['include', 'skip']) {
-        const resolverInfo = { __schema: { [directive]: { if: undefined } } }
+      for (const input of [{}, { include: { if: true } }, { include: { if: undefined } },
+        { skip: { if: undefined } }]) {
+        waf.runSubContext.resetHistory()
+        firstAbortController.abort.resetHistory()
+        secondAbortController.abort.resetHistory()
+        const resolverInfo = { __schema: input }
         startGraphqlResolver.publish(createResolverMessage(resolverInfo, firstAbortController))
         startGraphqlResolver.publish(createResolverMessage(resolverInfo, secondAbortController))
-      }
 
-      sinon.assert.calledOnce(waf.runSubContext)
-      sinon.assert.calledOnce(firstAbortController.abort)
-      sinon.assert.calledOnce(secondAbortController.abort)
+        sinon.assert.calledOnce(waf.runSubContext)
+        sinon.assert.calledOnce(firstAbortController.abort)
+        sinon.assert.calledOnce(secondAbortController.abort)
+      }
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController: firstAbortController, abortData })

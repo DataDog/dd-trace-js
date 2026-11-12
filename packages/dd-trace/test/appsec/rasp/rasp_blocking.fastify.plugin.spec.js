@@ -116,9 +116,11 @@ describe('RASP - fastify blocking', () => {
     })
 
     after(async () => {
+      // The blocked loopback request can leave an accepted socket open on Node 26.
+      app.server.closeAllConnections()
+      await app.close()
       // The pg.Pool keeps connections and a reaper timer alive; leaking one per fastify version starves the
       // event loop until later `before` hooks (server startup) time out.
-      await app.close()
       await pool?.end()
       appsec.disable()
       await agent.close()

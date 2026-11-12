@@ -360,13 +360,13 @@ function graphqlCommonTests (config) {
       })
 
       const calls = wafRun.getCalls().filter(call => {
-        return call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]?.author !== undefined
+        return call.args[0]?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]?.author !== undefined
       })
       assert.strictEqual(calls.length, 2)
-      assert.deepStrictEqual(calls[0].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+      assert.deepStrictEqual(calls[0].args[0][addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
         author: { include: { if: undefined } },
       })
-      assert.deepStrictEqual(calls[1].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+      assert.deepStrictEqual(calls[1].args[0][addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
         author: { include: { if: true } },
       })
     })
