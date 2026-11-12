@@ -28,7 +28,6 @@ class WSReceiverPlugin extends TracingPlugin {
     if (!socket.spanContext) return
 
     const spanTags = socket.spanTags
-    const path = spanTags.path
     const opCode = binary ? 'binary' : 'text'
 
     const service = this.serviceName({ pluginConfig: this.config })
@@ -37,7 +36,7 @@ class WSReceiverPlugin extends TracingPlugin {
       meta: {
         'span.type': 'websocket',
         'span.kind': 'consumer',
-        'resource.name': `websocket ${path}`,
+        'resource.name': spanTags.messageResource,
         'websocket.duration.style': 'handler',
         'websocket.message.type': opCode,
       },
@@ -49,7 +48,7 @@ class WSReceiverPlugin extends TracingPlugin {
 
     if (traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
       span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
-      span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
+      span.setTag('_dd.dm.resource', spanTags['resource.name'])
       span.setTag('_dd.dm.inherited', 1)
     }
 

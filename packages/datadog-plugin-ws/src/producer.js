@@ -22,7 +22,6 @@ class WSProducerPlugin extends TracingPlugin {
     const { byteLength, socket, binary } = ctx
     if (!socket?.spanContext) return
 
-    const path = socket.spanTags.path
     const opCode = binary ? 'binary' : 'text'
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -30,7 +29,7 @@ class WSProducerPlugin extends TracingPlugin {
       meta: {
         'span.type': 'websocket',
         'span.kind': 'producer',
-        'resource.name': `websocket ${path}`,
+        'resource.name': socket.spanTags.messageResource,
         'websocket.message.type': opCode,
 
       },
