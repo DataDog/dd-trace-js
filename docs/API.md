@@ -547,7 +547,7 @@ Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to 
 
 Applications whose Node.js code is built with Vite 6 or newer can add the Datadog Vite plugin to instrument the
 dependencies bundled into that code. This covers SSR servers (`vite build --ssr`), SSR frameworks exposing their Vite
-configuration, Node.js libraries and services built in library mode, and Electron main processes.
+configuration, and Node.js libraries and services built in library mode.
 
 ```javascript
 // vite.config.mjs
@@ -560,8 +560,7 @@ export default defineConfig({
 })
 ```
 
-Applications using `dd-trace-electron` import the plugin from `dd-trace-electron/vite.js`. The plugin only runs during
-`vite build`, and only for environments producing Node.js code: client, browser, renderer and preload builds are left
+The plugin only runs during `vite build`, and only for environments producing Node.js code: client builds are left
 untouched. It instruments bundled CommonJS packages, ES module packages and packages supported through source
 rewriting. To make instrumented ES module exports replaceable, importers of those modules are pointed at a generated
 wrapper that keeps every export of the module, so tree shaking cannot remove their unused exports.
@@ -584,28 +583,18 @@ them. Like the esbuild and webpack plugins, it injects git metadata into entry c
 <h3 id="vite-bundled-or-external">Bundled or external tracer</h3>
 
 Like any other dependency, `dd-trace` is bundled or loaded from `node_modules` at runtime depending on the Vite
-configuration. For example, `ssr.noExternal` decides it for SSR builds, electron-vite externalizes the `dependencies`
-of `package.json` by default, and Electron Forge bundles every dependency.
+configuration. For SSR builds, this is controlled by `ssr.noExternal`.
 
 * With a bundled tracer, the optional dependencies of `dd-trace`, which include native addons, stay out of the bundle
   and are loaded from `node_modules` when available. The features that run in worker threads, such as the OpenFeature
   flag evaluation writer, Dynamic Instrumentation and Test Optimization Dynamic Instrumentation, need `dd-trace` to be
   external with its installed package available.
 * Packages that stay external can be loaded before a bundled tracer starts, and are then not instrumented. Node.js
-  built-ins and `electron` are the exception: the tracer patches them when it starts. Bundle the packages to
-  instrument, or keep `dd-trace` external.
+  built-ins are the exception: the tracer patches them when it starts. Bundle the packages to instrument, or keep
+  `dd-trace` external.
 * ES modules loaded from `node_modules` at runtime are only instrumented by the loader hook: start the application with
   `--import dd-trace/initialize.mjs`.
 * Node.js builds using a client environment, such as library mode, should produce CommonJS output.
-
-<h3 id="vite-electron">Electron</h3>
-
-Add the plugin to the main process build only, and never to the preload script build:
-
-* electron-vite: add it to `main.plugins` in `electron.vite.config`.
-* Electron Forge: add it to `vite.main.config`.
-
-`dd-trace-electron` can be bundled into the main process, or kept external and shipped with the packaged application.
 
 <h3 id="vite-ssr-frameworks">SSR servers and frameworks</h3>
 
