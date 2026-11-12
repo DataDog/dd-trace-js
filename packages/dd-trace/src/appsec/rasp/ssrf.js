@@ -12,12 +12,8 @@ const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const { isEmpty } = require('../../util')
 const downstream = require('../downstream_requests')
-const Reporter = require('../reporter')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 const { RULE_TYPES, handleResult } = require('./utils')
-
-const firstRedirects = new WeakMap()
-const redirectTags = ['appsec.api.redirection.move_target', 'api.security.redirection.move_target']
 
 let config
 
@@ -26,7 +22,7 @@ function enable (_config) {
   downstream.enable(_config)
 
   httpClientRequestStart.subscribe(analyzeSsrf)
-  httpClientResponseStart.subscribe(planResponseBodyCollection)
+  httpClientResponseStart.subscribe(handleResponseStart)
   httpClientResponseFinish.subscribe(handleResponseFinish)
 }
 
@@ -34,7 +30,7 @@ function disable () {
   downstream.disable()
 
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
-  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
+  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(handleResponseStart)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
 }
 
@@ -55,20 +51,25 @@ function analyzeSsrf (ctx) {
 
   const result = waf.runSubContext(subcontextData, raspRule, ctx)
 
-  reportRedirect(result, req)
-
   handleResult(result, req, web.getContext(req)?.res, ctx.abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
 }
 
 /**
- * Channel handler: plans downstream response body capture once response headers are available.
+ * Evaluates redirects before the next hop, or plans response body capture.
  * @param {{ ctx: object, res: import('http').IncomingMessage }} payload channel payload.
  */
-function planResponseBodyCollection ({ ctx, res }) {
+function handleResponseStart ({ ctx, res }) {
   const originatingRequest = waf.getRequest(ctx)
   if (!originatingRequest || !res) return
+
+  if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+    // Record the redirect before application code can start the next hop.
+    ctx.ssrfResponseEvaluated = true
+    runResponseEvaluation(res, originatingRequest, null, ctx)
+    return
+  }
 
   downstream.planResponseBodyCollection(originatingRequest, res, ctx)
 }
@@ -85,7 +86,7 @@ function handleResponseFinish ({ ctx, res, body }) {
   if (!req) return
 
   try {
-    if (!res) return
+    if (!res || ctx.ssrfResponseEvaluated) return
     const responseBody = ctx.shouldCollectBody ? body : null
     runResponseEvaluation(res, req, responseBody, ctx)
   } finally {
@@ -107,31 +108,12 @@ function runResponseEvaluation (res, req, responseBody, ctx) {
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'response' }
   const result = waf.runSubContext(responseAddresses, raspRule, ctx)
-  reportRedirect(result, req)
 
   // TODO: this should be done in the waf functions directly instead of calling it everywhere
   const ruleTriggered = !!result?.events?.length
 
   if (ruleTriggered) {
     updateRaspRuleMatchMetricTags(req, raspRule, false, false)
-  }
-}
-
-/**
- * @param {object} result WAF evaluation result.
- * @param {object} req Originating incoming request.
- */
-function reportRedirect (result, req) {
-  if (!result?.attributes) return
-
-  for (const tag of redirectTags) {
-    if (!Object.hasOwn(result.attributes, tag)) continue
-    if (firstRedirects.has(req)) {
-      // WAF reporting updates attributes; retain this request's first SSRF redirect target.
-      Reporter.reportAttributes({ [tag]: firstRedirects.get(req) }, req)
-    } else {
-      firstRedirects.set(req, result.attributes[tag])
-    }
   }
 }
 

@@ -829,15 +829,24 @@ describe('reporter', () => {
         assert.strictEqual(span.context().getTag(tag), 'ssn-8c6976e5-df6143bc-60ba1602-269500d3')
       })
 
-      it('updates attributes with the latest reported values', () => {
-        const tag = 'appsec.api.redirection.move_target'
-        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=2', 'custom.output': 0 })
-        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=1', 'custom.output': 42 })
-        Reporter.reportAttributes({ [tag]: '/mirror/200' })
+      for (const tag of [
+        'appsec.api.redirection.move_target',
+        'appsec.api.redirection.redirect_target',
+        'api.security.redirection.move_target',
+        'api.security.redirection.redirect_target',
+      ]) {
+        it(`keeps the first ${tag} while updating other attributes`, () => {
+          sinon.spy(span, 'addTags')
+          Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=2', 'custom.output': 0 })
+          Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=1', 'custom.output': 42 })
+          Reporter.reportAttributes({ [tag]: '/mirror/200' })
 
-        assert.strictEqual(span.context().getTag(tag), '/mirror/200')
-        assert.strictEqual(span.context().getTag('custom.output'), 42)
-      })
+          assert.strictEqual(span.context().getTag(tag), '/redirect?totalRedirects=2')
+          assert.strictEqual(span.context().getTag('custom.output'), 42)
+          const writes = span.addTags.getCalls().filter(call => Object.hasOwn(call.args[0], tag))
+          assert.strictEqual(writes.length, 1)
+        })
+      }
 
       for (const value of [0, false, '', null]) {
         it(`updates an existing attribute whose value is ${JSON.stringify(value)}`, () => {
@@ -874,7 +883,7 @@ describe('reporter', () => {
         Reporter.reportAttributes({ [tag]: '/later-hop' }, undefined, otherSpan)
 
         assert.strictEqual(span.context().getTag(tag), '/first-request')
-        assert.strictEqual(otherSpan.context().getTag(tag), '/later-hop')
+        assert.strictEqual(otherSpan.context().getTag(tag), '/second-request')
       })
     })
 

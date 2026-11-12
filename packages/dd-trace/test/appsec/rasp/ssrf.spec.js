@@ -14,7 +14,6 @@ const {
   httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const Reporter = require('../../../src/appsec/reporter')
 const { getActiveRequest, withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
@@ -69,20 +68,22 @@ describe('RASP - ssrf.js', () => {
     contexts = new WeakMap()
     waf = {
       runSubContext: sinon.stub().callsFake((data, rule, ctx) => {
-        let context = contexts.get(ctx)
+        let context = ctx.wafSubcontext
         if (!context) {
           context = {
             parent: { req: getActiveRequest() },
             run: sinon.spy((...args) => run(...args)),
             dispose: sinon.spy(),
           }
-          contexts.set(ctx, context)
+          ctx.wafSubcontext = context
         }
+        contexts.set(ctx, context)
         return context.run(data, rule)
       }),
-      getRequest: sinon.spy(ctx => contexts.get(ctx)?.parent.req),
+      getRequest: sinon.spy(ctx => ctx.wafSubcontext?.parent.req),
       disposeSubContext: sinon.spy(ctx => {
-        contexts.get(ctx)?.dispose()
+        ctx.wafSubcontext?.dispose()
+        ctx.wafSubcontext = undefined
         contexts.delete(ctx)
       }),
     }
@@ -135,48 +136,48 @@ describe('RASP - ssrf.js', () => {
     clearStore()
   })
 
-  for (const tag of ['appsec.api.redirection.move_target', 'api.security.redirection.move_target']) {
-    it(`keeps the first WAF-reported redirect (${tag}) per incoming request`, () => {
-      const reported = new Map()
-      sinon.stub(Reporter, 'reportAttributes').callsFake((attributes, req) => {
-        reported.set(req, { ...reported.get(req), ...attributes })
-      })
-      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302' })
-      let responseResult
-      run.callsFake((data, rule) => rule.variant === 'response' ? responseResult : undefined)
-      // Mirror the WAF's generic reporting before returning the result to SSRF.
-      waf.runSubContext.callsFake((data, rule, ctx) => {
-        if (!contexts.has(ctx)) contexts.set(ctx, { parent: { req: getActiveRequest() }, dispose: sinon.spy() })
-        const result = run(data, rule)
-        Reporter.reportAttributes(result?.attributes, contexts.get(ctx).parent.req)
-        return result
-      })
-      const req = {}
-      const evaluate = (request, attributes) => {
-        stubStore(request)
-        const ctx = makeCtx()
-        publishRequestStart({ ctx })
-        responseResult = { attributes, events: [{}] }
-        clearStore() // Response handling must use the originating incoming request.
-        httpClientResponseFinish.publish({ ctx, res: createResponse({ statusCode: 302 }), body: null })
-      }
+  it('unsubscribes from requests when disabled', () => {
+    assert.strictEqual(httpClientRequestStart.hasSubscribers, true)
+    ssrf.disable()
+    assert.strictEqual(httpClientRequestStart.hasSubscribers, false)
+  })
 
-      evaluate(req, {}) // A redirect response without WAF metadata must not consume the first target.
-      evaluate(req, { [tag]: '/first', '_dd.appsec.fp.http.endpoint': 'first' })
-      evaluate(req, { [tag]: '/later', '_dd.appsec.fp.http.endpoint': 'updated' })
-      assert.deepStrictEqual(reported.get(req), {
-        [tag]: '/first', '_dd.appsec.fp.http.endpoint': 'updated',
-      })
-      assert.strictEqual(responseResult.attributes[tag], '/later')
-      sinon.assert.calledThrice(telemetry.updateRaspRuleMatchMetricTags)
-      sinon.assert.callCount(run, 6)
+  it('evaluates redirect headers immediately and disposes each hop independently', () => {
+    stubStore()
+    const first = makeCtx()
+    const second = makeCtx({ args: { uri: 'http://example.com/next', options: {} } })
+    publishRequestStart({ ctx: first })
+    const firstScope = contexts.get(first)
+    downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302' })
+    const redirect = createResponse({ statusCode: 302, headers: { location: '/next' } })
+    publishResponseStart(first, redirect)
+    sinon.assert.calledTwice(firstScope.run)
+    sinon.assert.notCalled(downstream.planResponseBodyCollection)
+    publishRequestStart({ ctx: second })
+    const secondScope = contexts.get(second)
+    assert.notStrictEqual(firstScope, secondScope)
 
-      const otherReq = {}
-      evaluate(otherReq, { [tag]: '/independent' })
-      assert.deepStrictEqual(reported.get(otherReq), { [tag]: '/independent' })
-      assert.strictEqual(reported.get(req)[tag], '/first')
+    httpClientResponseFinish.publish({ ctx: first, res: redirect, body: null })
+    sinon.assert.calledTwice(firstScope.run)
+    sinon.assert.calledOnce(firstScope.dispose)
+    sinon.assert.notCalled(secondScope.dispose)
+
+    httpClientResponseFinish.publish({ ctx: second, res: createResponse(), body: null })
+    sinon.assert.calledTwice(secondScope.run)
+    sinon.assert.calledOnce(secondScope.dispose)
+  })
+
+  it('prefers the outgoing URL from request options', () => {
+    stubStore()
+    const ctx = makeCtx({
+      args: {
+        uri: 'http://fallback.example/wrong/start',
+        options: { uri: { protocol: 'http:', host: 'example.com', pathname: '/right/start' } },
+      },
     })
-  }
+    publishRequestStart({ ctx })
+    assert.strictEqual(run.firstCall.args[0][addresses.HTTP_OUTGOING_URL], 'http://example.com/right/start')
+  })
 
   describe('analyzeSsrf', () => {
     it('should analyze ssrf', () => {
