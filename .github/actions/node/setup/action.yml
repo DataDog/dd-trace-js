@@ -54,6 +54,14 @@ runs:
         node-version: ${{ steps.node-version.outputs.version }}
         registry-url: ${{ inputs.registry-url }}
 
+    # Yarn Classic defaults to registry.yarnpkg.com, including for installs outside the checkout
+    # that cannot inherit the root .yarnrc. Yarn Berry uses a separate configuration key.
+    - name: Configure Yarn registries
+      shell: bash
+      run: |
+        echo "YARN_REGISTRY=https://registry.npmjs.org" >> "$GITHUB_ENV"
+        echo "YARN_NPM_REGISTRY_SERVER=https://registry.npmjs.org" >> "$GITHUB_ENV"
+
     # The shipped package.json pins engines.node to the supported runtime range, but CI keeps
     # running the full suite on Node 18/20. Widen the field to >=18 for this checkout so the
     # runtime guard and the withVersions test helper don't bail and silently skip those jobs.

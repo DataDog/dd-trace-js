@@ -23,7 +23,13 @@ esbuildVersions.forEach((version) => {
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
       execSync('npm install -g yarn', { cwd })
 
-      execSync('yarn --ignore-engines', { cwd })
+      execSync('yarn --ignore-engines', {
+        cwd,
+        env: {
+          ...process.env,
+          YARN_REGISTRY: 'https://registry.npmjs.org',
+        },
+      })
     })
 
     beforeEach(async () => {
