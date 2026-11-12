@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
-  let rasp, channels, blocking, blocked, updateRaspRuleMatchMetricTags
+  let rasp, channels, blocking, blocked, updateRaspRuleMatchMetricTags, utils
 
   beforeEach(() => {
     const config = {
@@ -34,6 +34,11 @@ describe('RASP', () => {
         unsubscribe: sinon.stub(),
         hasSubscribers: true,
       },
+      nextRequestStart: {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        hasSubscribers: true,
+      },
     }
 
     blocked = false
@@ -46,12 +51,17 @@ describe('RASP', () => {
 
     updateRaspRuleMatchMetricTags = sinon.stub()
 
+    utils = {
+      markToBlockOnDetection: sinon.stub(),
+    }
+
     rasp = proxyquire('../../../src/appsec/rasp', {
       '../blocking': blocking,
       '../channels': channels,
       '../telemetry': {
         updateRaspRuleMatchMetricTags,
       },
+      './utils': utils,
     })
 
     rasp.enable(config)
@@ -84,6 +94,24 @@ describe('RASP', () => {
       sinon.assert.calledOnce(channels.expressMiddlewareError.unsubscribe)
       sinon.assert.calledOnce(channels.fastifyMiddlewareError.unsubscribe)
       sinon.assert.calledOnce(channels.routerMiddlewareError.unsubscribe)
+    })
+
+    it('should block Next.js requests on detection', () => {
+      const req = {}
+
+      sinon.assert.calledOnce(channels.nextRequestStart.subscribe)
+      channels.nextRequestStart.subscribe.firstCall.args[0]({ req })
+
+      sinon.assert.calledOnceWithExactly(utils.markToBlockOnDetection, req)
+    })
+
+    it('should unsubscribe from the Next.js request start channel', () => {
+      rasp.disable()
+
+      sinon.assert.calledOnceWithExactly(
+        channels.nextRequestStart.unsubscribe,
+        channels.nextRequestStart.subscribe.firstCall.args[0]
+      )
     })
   })
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 
 const { satisfies } = require('semver')
 
@@ -288,6 +289,103 @@ describe('test suite', () => {
 
             assert.strictEqual(response.status, 200)
             assert.deepStrictEqual(response.data.data, { key: 'blockattack' })
+          })
+        })
+
+        describe('with a RASP blocking rule', () => {
+          // Next.js 13.2 route handlers do not report a status code, whether the request is blocked or not.
+          const reportsStatusCode = appName === 'pages-dir' || satisfies(realVersion, '>=13.3')
+
+          let target
+          let targetConnections
+          let targetHits
+
+          before(done => {
+            target = http.createServer((req, res) => {
+              targetHits++
+              res.end()
+            })
+            target.on('connection', () => {
+              targetConnections++
+            })
+            target.listen(0, '127.0.0.1', done)
+          })
+
+          beforeEach(() => {
+            targetConnections = 0
+            targetHits = 0
+          })
+
+          after(done => {
+            target.closeAllConnections()
+            target.close(done)
+          })
+
+          function getTargetPort () {
+            return (/** @type {import('node:net').AddressInfo} */ (target.address())).port
+          }
+
+          async function assertRaspBlocked (path, ruleId) {
+            const [response] = await Promise.all([
+              httpRequest.get(`http://127.0.0.1:${serverData.port}${path}`, { validateStatus: false }),
+              agent.assertSomeTraces(traces => {
+                const span = getWebSpan(traces)
+
+                assert.strictEqual(span.meta['appsec.blocked'], 'true')
+                if (reportsStatusCode) {
+                  assert.strictEqual(span.meta['http.status_code'], '403')
+                }
+                assert.deepStrictEqual(
+                  JSON.parse(span.meta['_dd.appsec.json']).triggers.map(trigger => trigger.rule.id),
+                  [ruleId]
+                )
+                assert.strictEqual(span.meta['error.type'], undefined)
+              }),
+            ])
+
+            assert.strictEqual(response.status, 403)
+            assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          }
+
+          it('should not block an outgoing request without an SSRF', async () => {
+            const [response] = await Promise.all([
+              httpRequest.get(`http://127.0.0.1:${serverData.port}/api/rasp-ssrf?port=${getTargetPort()}`),
+              agent.assertSomeTraces(traces => {
+                const span = getWebSpan(traces)
+
+                assert.strictEqual(span.metrics['_dd.appsec.downstream_request'], 1)
+                assert.strictEqual(span.meta['_dd.appsec.json'], undefined)
+                assert.strictEqual(span.meta['appsec.blocked'], undefined)
+              }),
+            ])
+
+            assert.strictEqual(response.status, 200)
+            assert.deepStrictEqual(response.data, { status: 200 })
+            assert.strictEqual(targetConnections, 1)
+            assert.strictEqual(targetHits, 1)
+          })
+
+          it('should block an SSRF whose error is caught by the route handler', async () => {
+            await assertRaspBlocked(`/api/rasp-ssrf?host=127.0.0.1:${getTargetPort()}`, 'rasp-ssrf-rule-id-1')
+
+            assert.strictEqual(targetConnections, 0)
+          })
+
+          it('should block an SSRF whose error is thrown by the route handler', async () => {
+            await assertRaspBlocked(
+              `/api/rasp-ssrf?host=127.0.0.1:${getTargetPort()}&rethrow`,
+              'rasp-ssrf-rule-id-1'
+            )
+
+            assert.strictEqual(targetConnections, 0)
+          })
+
+          it('should block an LFI whose error is caught by the route handler', () => {
+            return assertRaspBlocked('/api/rasp-lfi?file=/test.file', 'rasp-lfi-rule-id-5')
+          })
+
+          it('should block an LFI whose error is thrown by the route handler', () => {
+            return assertRaspBlocked('/api/rasp-lfi?file=/test.file&rethrow', 'rasp-lfi-rule-id-5')
           })
         })
       })

@@ -6,6 +6,7 @@ const {
   expressMiddlewareError,
   fastifyMiddlewareError,
   routerMiddlewareError,
+  nextRequestStart,
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
@@ -14,7 +15,7 @@ const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
 
-const { DatadogRaspAbortError } = require('./utils')
+const { DatadogRaspAbortError, markToBlockOnDetection } = require('./utils')
 
 function removeAllListeners (emitter, event) {
   const listeners = emitter.listeners(event)
@@ -106,6 +107,10 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   return true
 }
 
+function onNextRequestStart ({ req }) {
+  markToBlockOnDetection(req)
+}
+
 function enable (config) {
   ssrf.enable(config)
   sqli.enable(config)
@@ -117,6 +122,7 @@ function enable (config) {
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   routerMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
+  nextRequestStart.subscribe(onNextRequestStart)
 }
 
 function disable () {
@@ -130,6 +136,7 @@ function disable () {
   expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
   routerMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+  nextRequestStart.unsubscribe(onNextRequestStart)
 }
 
 module.exports = {

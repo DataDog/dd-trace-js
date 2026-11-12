@@ -2,7 +2,7 @@
 
 const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
-const { getBlockingAction } = require('../blocking')
+const { getBlockingAction, registerBlockDelegation } = require('../blocking')
 const log = require('../../log')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
@@ -23,6 +23,15 @@ const ALLOWED_ROOTSPAN_NAMES = new Set([
   'express.request',
   'fastify.request',
 ])
+
+const requestsToBlockOnDetection = new WeakSet()
+
+/**
+ * @param {import('http').IncomingMessage} req
+ */
+function markToBlockOnDetection (req) {
+  requestsToBlockOnDetection.add(req)
+}
 
 class DatadogRaspAbortError extends Error {
   constructor (req, res, blockingAction, raspRule, ruleTriggered) {
@@ -67,9 +76,17 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   if (abortController && !abortOnUncaughtException) {
     const blockingAction = getBlockingAction(result?.actions)
-    const rootSpanName = rootSpan?.context?.()?._name
+    const shouldBlockOnDetection = requestsToBlockOnDetection.has(req)
 
-    if (blockingAction && ALLOWED_ROOTSPAN_NAMES.has(rootSpanName)) {
+    if (blockingAction && (shouldBlockOnDetection || ALLOWED_ROOTSPAN_NAMES.has(rootSpan?.context?.()?._name))) {
+      if (shouldBlockOnDetection) {
+        registerBlockDelegation(req, res, rootSpan, null, blockingAction).then(blocked => {
+          if (ruleTriggered) {
+            updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+          }
+        })
+      }
+
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
 
@@ -84,6 +101,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
 module.exports = {
   handleResult,
+  markToBlockOnDetection,
   RULE_TYPES,
   DatadogRaspAbortError,
 }

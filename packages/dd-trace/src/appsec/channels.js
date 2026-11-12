@@ -34,6 +34,7 @@ module.exports = {
   mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
+  nextRequestStart: dc.channel('apm:next:request:start'),
   passportUser: dc.channel('datadog:passport:deserializeUser:finish'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
   pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
