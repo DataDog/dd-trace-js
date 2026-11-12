@@ -19,6 +19,7 @@ const {
   addField,
   createResolverInfo,
   findCollapsedField,
+  wrapFields,
 } = GraphQLExecutePlugin
 
 const legacyStorage = storage('legacy')
@@ -75,9 +76,16 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
     return store
   }
 
-  // The resolve plugin traces every field from GraphQL's resolve channel, so the schema stays untouched.
+  // The resolve plugin traces every field from GraphQL's resolve channel. Only AppSec has to stop a resolver before
+  // it runs, which takes a wrapper around the schema's resolvers.
   wrapExecutionResolvers (ctx, args) {
     ctx.ddArgs = args
+    const { schema } = args
+    if (schema && resolverStartCh.hasSubscribers) {
+      wrapFields(schema.getQueryType(), schema)
+      wrapFields(schema.getMutationType(), schema)
+      wrapFields(schema.getSubscriptionType(), schema)
+    }
   }
 
   // A promise result is published on asyncEnd.
@@ -134,7 +142,8 @@ function startField (ctx) {
   if (!rootCtx?.native) return store
 
   const hasIastSub = iastResolveCh.hasSubscribers
-  const hasResolverSub = resolverStartCh.hasSubscribers
+  // The schema wrapper publishes the fields that have their own resolver.
+  const hasResolverSub = rootCtx.hasResolverSub && ctx.isDefaultResolver
   if (rootCtx.depthDisabled && !hasIastSub && !hasResolverSub) return store
 
   const config = rootCtx.config

@@ -568,6 +568,15 @@ function wrapResolve (resolve, isJit = false) {
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
 
+    // GraphQL 17 traces fields from its resolve channel. Its schema is wrapped only so AppSec can stop a resolver.
+    if (rootCtx.native) {
+      if (rootCtx.hasResolverSub) {
+        resolverStartCh.publish({ abortController: rootCtx.abortController, createResolverInfo, info, args })
+        if (rootCtx.abortController.signal.aborted) throw new AbortError()
+      }
+      return invokeResolver(resolve, this, arguments, false)
+    }
+
     const infoPath = info?.path
     const config = rootCtx.config
     const traceResolver = !depthDisabled && shouldInstrumentNode(config, infoPath)
@@ -1641,6 +1650,7 @@ module.exports.REUSED_FIELD_END_TIME = REUSED_FIELD_END_TIME
 module.exports.addField = addField
 module.exports.createResolverInfo = createResolverInfo
 module.exports.findCollapsedField = findCollapsedField
+module.exports.wrapFields = wrapFields
 module.exports.readJitDefaultInScope = readJitDefaultInScope
 module.exports.recordJitResolverError = recordJitResolverError
 module.exports.resolveCompiledJitField = resolveCompiledJitField

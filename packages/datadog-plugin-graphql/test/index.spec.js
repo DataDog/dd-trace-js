@@ -2950,10 +2950,29 @@ describe('Plugin', () => {
           assert.strictEqual(result.errors.length, 1)
         })
 
-        it('should honor resolver abort for fields gated by depth', async function () {
-          // GraphQL 17's resolve channel cannot stop a resolver, and the plugin leaves the schema untouched.
-          if (nativeChannels) this.skip()
+        it('should leave schema resolvers unwrapped without a resolver subscriber', async function () {
+          if (!nativeChannels) this.skip()
 
+          const resolve = () => 'world'
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'UnwrappedResolverQuery',
+              fields: { hello: { type: graphql.GraphQLString, resolve } },
+            }),
+          })
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: '{ hello }' }),
+            agent.assertSomeTraces(traces => {
+              assert.ok(traces[0].some(span => span.name === 'graphql.resolve'))
+            }, { spanResourceMatch: /hello:String/ }),
+          ])
+
+          assert.strictEqual(result.data?.hello, 'world')
+          assert.strictEqual(localSchema.getQueryType()?.getFields().hello.resolve, resolve)
+        })
+
+        it('should honor resolver abort for fields gated by depth', async () => {
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
           /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
