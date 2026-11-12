@@ -230,6 +230,7 @@ tracer.use('openai', {
 <h5 id="anthropic"></h5>
 <h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
+<h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
@@ -381,6 +382,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [anthropic](./interfaces/plugins.anthropic.html)
 * [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/plugins.apollo.html)
+* [async-mutex](./interfaces/plugins.async_mutex.html)
 * [avsc](./interfaces/plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)

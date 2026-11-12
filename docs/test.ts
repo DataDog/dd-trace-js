@@ -352,6 +352,8 @@ tracer.use('anthropic');
 tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
 tracer.use('claude-agent-sdk', { llmobs: false });
+tracer.use('async-mutex');
+tracer.use('async-mutex', { service: 'mutex' });
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });
