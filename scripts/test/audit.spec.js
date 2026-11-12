@@ -158,14 +158,11 @@ describe('scripts/audit.js', () => {
     assert.match(result.stderr, /Unknown level 'medium'/)
   })
 
-  it('runs audits only on Dependabot pull requests', () => {
+  it('preserves the audit workflow branch filter', () => {
     const auditWorkflow = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/workflows/audit.yml'), 'utf8'))
     assert.deepStrictEqual(Object.keys(auditWorkflow.on), ['pull_request'])
-    assert.strictEqual(
-      auditWorkflow.jobs.dependencies.if,
-      "github.event.pull_request.user.login == 'dependabot[bot]'"
-    )
-    assert.strictEqual(auditWorkflow.on.pull_request, null)
+    assert.strictEqual(auditWorkflow.jobs.dependencies.if, undefined)
+    assert.deepStrictEqual(auditWorkflow.on.pull_request, { branches: ['dependabot/**'] })
 
     const expectedDirectories = [
       '.',
