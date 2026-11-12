@@ -407,6 +407,7 @@ Playback with missing per-response start events remains a live validation gap.
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -500,6 +501,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [trpc](./interfaces/plugins.trpc.html)
 * [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)
@@ -812,6 +814,9 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+When exporting traces over OTLP, the tracing library delegates span metrics computation
+to the OpenTelemetry Collector or Datadog intake by default.
 
 dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 

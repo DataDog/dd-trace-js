@@ -146,6 +146,45 @@ describe('user_blocking - Integration with the tracer', () => {
       httpRequest.get(`http://localhost:${port}/`)
     })
 
+    it('should keep the blocking status code when the status code is changed after blocking', async () => {
+      let statusCodeAfterChange
+      controller = (req, res) => {
+        tracer.appsec.blockRequest(req, res)
+        res.statusCode = 500
+        statusCodeAfterChange = res.statusCode
+      }
+
+      const [response] = await Promise.all([
+        httpRequest.get(`http://localhost:${port}/`, { validateStatus: false }),
+        agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].meta['appsec.blocked'], 'true')
+          assert.strictEqual(traces[0][0].meta['http.status_code'], '403')
+        }),
+      ])
+
+      assert.strictEqual(response.status, 403)
+      assert.strictEqual(statusCodeAfterChange, 403)
+    })
+
+    it('should keep the status code writable when the response could not be blocked', async () => {
+      let statusCodeAfterChange
+      controller = (req, res) => {
+        res.end()
+        tracer.appsec.blockRequest(req, res)
+        res.statusCode = 500
+        statusCodeAfterChange = res.statusCode
+      }
+
+      await Promise.all([
+        httpRequest.get(`http://localhost:${port}/`, { validateStatus: false }),
+        agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
+        }),
+      ])
+
+      assert.strictEqual(statusCodeAfterChange, 500)
+    })
+
     it('should not set the proper tags when response has already been sent', (done) => {
       controller = (req, res) => {
         res.end()

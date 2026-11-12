@@ -27,7 +27,42 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishTrpcRequestInfo (state, node, _parent, ancestry) {
+  let insertionBlock
+  let insertionIndex = -1
+  for (const block of query(node, 'TryStatement > BlockStatement')) {
+    for (let index = 0; index < block.body.length; index++) {
+      const statement = block.body[index]
+      if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression' ||
+        statement.expression.left.name !== 'paths') continue
+
+      assert.strictEqual(insertionBlock, undefined, 'publishTrpcRequestInfo: multiple paths assignments')
+      insertionBlock = block
+      insertionIndex = index
+    }
+  }
+  assert(insertionBlock, 'publishTrpcRequestInfo: paths assignment not found')
+
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  insertionBlock.body.splice(insertionIndex + 1, 0, ...parse(`
+    if (${channelVariable}.asyncEnd.hasSubscribers) {
+      ${channelVariable}.asyncEnd.publish({ result: {
+        isBatchCall,
+        path: paths.length === 1 ? paths[0] : undefined
+      } })
+    }
+  `).body)
 }
 
 /**

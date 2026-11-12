@@ -814,4 +814,14 @@ module.exports = {
       honourEnvRange: true,
     },
   ],
+  trpc: [
+    {
+      name: '@trpc/server',
+      versions: ['>=10.45.2 <11', '>=11 <11.4', '>=11.4'],
+    },
+    {
+      name: 'express',
+      versions: ['^5'],
+    },
+  ],
 }
