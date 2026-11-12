@@ -2,8 +2,7 @@
   {
     "name": "@modelcontextprotocol/server",
     "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
-    "flags": "",
-    "sourceMatch": "var McpServer = class"
+    "flags": ""
   },
   {
     "name": "react-router",

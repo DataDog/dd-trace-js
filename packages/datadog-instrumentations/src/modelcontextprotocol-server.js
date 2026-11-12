@@ -5,7 +5,7 @@ const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 
 const wrapHandlerCh = tracingChannel('orchestrion:@modelcontextprotocol/server:Server__wrapHandler')
-const createToolCh = tracingChannel('orchestrion:@modelcontextprotocol/server:McpServer__createRegisteredTool')
+const registerToolCh = tracingChannel('orchestrion:@modelcontextprotocol/server:McpServer_registerTool')
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
 const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
@@ -18,15 +18,15 @@ wrapHandlerCh.end.subscribe(ctx => {
   if (typeof handler !== 'function' || !TRACED_METHOD_PREFIX.test(ctx.arguments?.[0])) return
 
   const server = ctx.self
-  ctx.result = function tracedRequestHandler (request, extra) {
+  ctx.result = shimmer.wrapFunction(handler, handler => function tracedRequestHandler (request, extra) {
     if (!serverRequestCh.hasSubscribers) return handler.apply(this, arguments)
 
     return serverRequestCh.tracePromise(handler, { request, extra, server }, this, ...arguments)
-  }
+  })
 })
 
 // Tool objects are created at runtime, so their `update` method is wrapped to follow renames.
-createToolCh.end.subscribe(ctx => {
+registerToolCh.end.subscribe(ctx => {
   const tool = ctx.result
   if (!tool || !serverToolRegisteredCh.hasSubscribers) return
 
