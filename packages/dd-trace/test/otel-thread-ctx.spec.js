@@ -1040,30 +1040,35 @@ describe('otel-thread-ctx', () => {
   })
 })
 
+/**
+ * @param {string} scenario
+ * @param {boolean} [otelSemantics]
+ */
+function runRetentionScenario (scenario, otelSemantics = false) {
+  return execFileAsync(process.execPath, [
+    '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
+  ], {
+    env: {
+      ...process.env,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: String(otelSemantics),
+      DD_CRASHTRACKING_ENABLED: 'false',
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+    },
+  })
+}
+
 describe('otel-thread-ctx waiter retention', () => {
   it('releases finished and retargeted waiters before the request ends', async () => {
-    const scenarios = ['finish', 'retarget', 'finish-resolved', 'retarget-resolved']
-    await Promise.all(scenarios.map(scenario => execFileAsync(process.execPath, [
-      '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
-    ], {
-      env: {
-        ...process.env,
-        DD_CRASHTRACKING_ENABLED: 'false',
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-      },
-    })))
+    const scenarios = ['finish', 'retarget', 'finish-resolved', 'retarget-resolved', 'late', 'late-resolved']
+    await Promise.all(scenarios.map(scenario => runRetentionScenario(scenario)))
+  })
+
+  it('keeps route updates and retargeting after collecting reactivated records', async () => {
+    await Promise.all(['compact', 'compact-resolved'].map(scenario => runRetentionScenario(scenario)))
   })
 
   it('refines native endpoints as nested HTTP routes resolve', async () => {
-    await execFileAsync(process.execPath, [require.resolve('./fixtures/otel-thread-ctx-retention'), 'refinement'], {
-      env: {
-        ...process.env,
-        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
-        DD_CRASHTRACKING_ENABLED: 'false',
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-      },
-    })
+    await runRetentionScenario('refinement', true)
   })
 })

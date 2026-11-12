@@ -50,6 +50,8 @@ const webTagsCache = require('./web-tags-cache')
  * @property {ReturnType<DatadogSpanContext['getTags']> | undefined} webTags
  * @property {number} endpointIndex
  */
+/** @typedef {CachedContext | WeakRef<CachedContext>} EndpointEntry */
+/** @typedef {Array<EndpointEntry> & { nextPruneAt?: number }} PendingEndpoints */
 
 // OTEP-4947 duplicates are last-wins, so later endpoint values refine existing
 // records. finalEndpoint excludes bare methods until routing supplies an endpoint.
@@ -69,7 +71,8 @@ const webTagsCache = require('./web-tags-cache')
 // a bag, on already-expired spans under manual-GC debug mode — and webTagsCache
 // already depends on it, holding bags the wall profiler dereferences much later.
 //
-// Records leave on span finish or ancestry changes, so later routes can refine their endpoints.
+// Records rebuilt after finish have no second finish event, so the request must not retain them.
+/** @type {WeakMap<ReturnType<DatadogSpanContext['getTags']>, PendingEndpoints>} */
 const pendingEndpoints = new WeakMap()
 const NOT_WAITING = -1
 const AWAITING_OWN_ENDPOINT = -2
@@ -235,13 +238,46 @@ function awaitEndpoint (span, webTags, cached) {
     cached.endpointIndex = AWAITING_OWN_ENDPOINT
     return
   }
-  const waiting = pendingEndpoints.get(webTags)
+  let waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) {
-    cached.endpointIndex = 0
-    pendingEndpoints.set(webTags, [cached])
+    waiting = []
+    pendingEndpoints.set(webTags, waiting)
+  } else if (waiting.nextPruneAt !== undefined && waiting.length >= waiting.nextPruneAt) {
+    for (let i = 0; i < waiting.length;) {
+      if (derefEndpointEntry(waiting[i]) === undefined) {
+        removeEndpointEntry(waiting, i)
+      } else {
+        i++
+      }
+    }
+    waiting.nextPruneAt = Math.max(32, waiting.length * 2)
+  }
+  cached.endpointIndex = waiting.length
+  if (span.context()._isFinished) {
+    // Grow the threshold geometrically so registration does not scan on every late activation.
+    waiting.nextPruneAt ??= Math.max(32, waiting.length * 2)
+    waiting.push(new WeakRef(cached))
   } else {
-    cached.endpointIndex = waiting.length
     waiting.push(cached)
+  }
+}
+
+/** @param {EndpointEntry} entry */
+function derefEndpointEntry (entry) {
+  const cached = /** @type {CachedContext} */ (entry)
+  return cached.context === undefined ? /** @type {WeakRef<CachedContext>} */ (entry).deref() : cached
+}
+
+/**
+ * @param {PendingEndpoints} waiting
+ * @param {number} index
+ */
+function removeEndpointEntry (waiting, index) {
+  const last = /** @type {EndpointEntry} */ (waiting.pop())
+  if (index !== waiting.length) {
+    waiting[index] = last
+    const cached = derefEndpointEntry(last)
+    if (cached !== undefined) cached.endpointIndex = index
   }
 }
 
@@ -249,12 +285,8 @@ function awaitEndpoint (span, webTags, cached) {
 function removePendingEndpoint (cached) {
   const index = cached.endpointIndex
   if (index < 0) return
-  const waiting = pendingEndpoints.get(cached.webTags)
-  const last = waiting.pop()
-  if (last !== cached) {
-    waiting[index] = last
-    last.endpointIndex = index
-  }
+  const waiting = /** @type {PendingEndpoints} */ (pendingEndpoints.get(cached.webTags))
+  removeEndpointEntry(waiting, index)
   cached.endpointIndex = NOT_WAITING
 }
 
@@ -336,9 +368,16 @@ function onEndpointResolved (span) {
     appendEndpoint(own.context, endpoint)
   }
   if (waiting === undefined) return
-  for (const cached of waiting) {
-    appendEndpoint(cached.context, endpoint)
+  for (let i = 0; i < waiting.length;) {
+    const cached = derefEndpointEntry(waiting[i])
+    if (cached === undefined) {
+      removeEndpointEntry(waiting, i)
+    } else {
+      appendEndpoint(/** @type {ThreadContext} */ (cached.context), endpoint)
+      i++
+    }
   }
+  if (waiting.nextPruneAt !== undefined) waiting.nextPruneAt = Math.max(32, waiting.length * 2)
 }
 
 // webTagsCache has changed which request it attributes this span to: the span

@@ -6,6 +6,8 @@ const { setImmediate } = require('node:timers/promises')
 
 const proxyquire = require('proxyquire')
 
+assert.equal(typeof global.gc, 'function')
+
 let current
 class ThreadContext {
   /**
@@ -52,19 +54,26 @@ const tracer = require('../../../..').init({
   flushInterval: 0,
 })
 
-/** @param {import('../../src/opentracing/span')} span */
+/** @param {import('../../../../index').Span} span */
 function cacheRef (span) {
   const key = Object.getOwnPropertySymbols(span).find(symbol => symbol.description === 'OtelThreadCtx.cached')
   assert.ok(key)
   return new WeakRef(span[key])
 }
 
+/** @param {boolean} resolved */
+function startRequest (resolved) {
+  return tracer.startSpan('request', {
+    tags: { 'span.type': 'web', 'http.method': 'GET', 'resource.name': resolved ? 'GET /stream' : 'GET' },
+  })
+}
+
 async function main () {
   if (process.argv[2] === 'refinement') return checkRouteRefinements()
   const resolved = process.argv[2].endsWith('-resolved')
-  const root = tracer.startSpan('request', {
-    tags: { 'span.type': 'web', 'http.method': 'GET', 'resource.name': resolved ? 'GET /stream' : 'GET' },
-  })
+  if (process.argv[2].startsWith('late')) return checkReactivatedSpans(resolved)
+  if (process.argv[2].startsWith('compact')) return checkCompaction(resolved)
+  const root = startRequest(resolved)
   const refs = []
   tracer.scope().activate(root, () => {
     const parent = tracer.startSpan('parent', {
@@ -90,10 +99,99 @@ async function main () {
     parent.finish()
   })
   await setImmediate()
-  global.gc()
+  global.gc?.()
   assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0, process.argv[2])
   // Keep the unresolved request alive across collection.
   root.setTag('http.route', '/stream')
+  root.finish()
+}
+
+/** @param {boolean} resolved */
+async function checkReactivatedSpans (resolved) {
+  const root = startRequest(resolved)
+  const refs = []
+  const scope = tracer.scope()
+  scope.activate(root, () => {
+    for (let i = 0; i < 32; i++) {
+      const child = tracer.startSpan('child', { childOf: root })
+      if (i % 2) scope.activate(child, () => {})
+      const callback = scope.bind(() => { refs.push(cacheRef(child)) }, child)
+      child.finish()
+      callback()
+    }
+  })
+  await setImmediate()
+  global.gc?.()
+  assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
+  root.setTag('resource.name', 'GET /refined')
+  root.finish()
+}
+
+/** @param {boolean} resolved */
+async function checkCompaction (resolved) {
+  const root = startRequest(resolved)
+  const scope = tracer.scope()
+  const live = []
+  scope.activate(root, () => {
+    for (let i = 0; i < 64; i++) {
+      const child = tracer.startSpan('live', { childOf: root })
+      scope.activate(child, () => {})
+      live.push(child)
+    }
+  })
+  for (let batch = 0; batch < 4; batch++) {
+    const refs = []
+    scope.activate(root, () => {
+      for (let i = 0; i < 128; i++) {
+        const child = tracer.startSpan('late', { childOf: root })
+        child.finish()
+        const callback = scope.bind(() => { refs.push(cacheRef(child)) }, child)
+        callback()
+      }
+    })
+    await setImmediate()
+    global.gc?.()
+    assert.equal(refs.filter(ref => ref.deref() !== undefined).length, 0)
+    if (batch === 0) {
+      live[0].finish()
+      live[2].finish()
+    }
+  }
+  const retained = []
+  scope.activate(root, () => {
+    for (let i = 0; i < 4; i++) {
+      const child = tracer.startSpan('retained', { childOf: root })
+      child.finish()
+      const callback = scope.bind(() => current, child)
+      const context = callback()
+      assert.ok(context)
+      retained.push({ child, callback, context })
+    }
+  })
+  live[1].finish()
+  live[3].finish()
+  await setImmediate()
+  global.gc?.()
+  root.setTag('resource.name', 'GET /refined')
+  for (const entry of retained) assert.equal(entry.context.attributes[1], 'GET /refined')
+  retained[3].child.addTags({ 'span.type': 'web', 'http.method': 'GET', 'resource.name': 'GET /own' })
+  root.setTag('resource.name', 'GET /outer')
+  assert.equal(retained[3].context.attributes[1], 'GET /own')
+  for (const entry of retained.slice(0, 3)) assert.equal(entry.context.attributes[1], 'GET /outer')
+
+  const parent = tracer.startSpan('parent', { childOf: root, tags: { 'http.method': 'GET' } })
+  const child = tracer.startSpan('retargeted', { childOf: parent })
+  child.finish()
+  const callback = scope.bind(() => current, child)
+  const context = callback()
+  assert.ok(context)
+  parent.addTags({ 'span.type': 'web', 'resource.name': 'GET /nearer' })
+  assert.equal(context.attributes[1], 'GET /nearer')
+  root.setTag('resource.name', 'GET /outer/refined')
+  assert.equal(context.attributes[1], 'GET /nearer')
+  assert.equal(callback(), context)
+  parent.finish()
+  for (const child of live) child.finish()
   root.finish()
 }
 
