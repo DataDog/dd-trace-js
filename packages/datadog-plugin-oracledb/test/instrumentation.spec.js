@@ -210,7 +210,7 @@ describe('oracledb instrumentation', () => {
   })
 
   for (const useCallback of [false, true]) {
-    it(`preserves ${useCallback ? 'callback' : 'Promise'} results when connection metadata throws`, async () => {
+    it(`preserves ${useCallback ? 'callback' : 'Promise'} results without logging metadata failures`, async () => {
       let finishContext
       subscribe(poolAcquireStartChannel, () => {})
       subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
@@ -222,11 +222,12 @@ describe('oracledb instrumentation', () => {
       const pool = await oracledb.createPool({ user: 'test' })
       const logged = sinon.stub(log, 'error')
       try {
-        const connection = useCallback ? await getConnectionWithCallback(pool) : await pool.getConnection()
-        assert.ok(connection instanceof oracledb.Connection)
-        assert.strictEqual(finishContext.error, undefined)
-        assert.strictEqual(logged.callCount, 1)
-        assert.strictEqual(logged.firstCall.args[1], failure)
+        for (let i = 0; i < 3; i++) {
+          const connection = useCallback ? await getConnectionWithCallback(pool) : await pool.getConnection()
+          assert.strictEqual(logged.callCount, 0)
+          assert.ok(connection instanceof oracledb.Connection)
+          assert.strictEqual(finishContext.error, undefined)
+        }
       } finally {
         logged.restore()
       }

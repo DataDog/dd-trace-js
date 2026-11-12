@@ -1,7 +1,6 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 const {
   channel,
   addHook,
@@ -38,8 +37,8 @@ function addConnectionMetadata (connection, ctx) {
       // Thick-mode host and port getters can throw.
       ctx.dbInstance = connection.serviceName
     }
-  } catch (error) {
-    log.error('Error reading OracleDB connection metadata: %s', error)
+  } catch {
+    // Optional metadata failures must not log on every acquisition or query.
   }
 }
 

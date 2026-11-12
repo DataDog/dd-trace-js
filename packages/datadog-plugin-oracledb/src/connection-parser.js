@@ -11,14 +11,14 @@ let cachedInfo
 /** @param {string} descriptor */
 function parseOracleDescriptor (descriptor) {
   const hostnameMatch = descriptor.match(/HOST\s*=\s*([^)]+)/i)
-  const hostname = hostnameMatch?.[1]?.trim()
+  const hostname = hostnameMatch?.[1]
 
   const portMatch = descriptor.match(/PORT\s*=\s*([^)]+)/i)
-  const port = portMatch?.[1]?.trim() || '1521'
+  const port = portMatch?.[1] || '1521'
 
   const sidMatch = descriptor.match(/SID\s*=\s*([^)]+)/i)
 
-  const dbInstance = (sidMatch?.[1] || descriptor.match(/SERVICE_NAME\s*=\s*([^)]+)/i)?.[1])?.trim()
+  const dbInstance = sidMatch?.[1] || descriptor.match(/SERVICE_NAME\s*=\s*([^)]+)/i)?.[1]
 
   return { hostname, port, dbInstance }
 }
