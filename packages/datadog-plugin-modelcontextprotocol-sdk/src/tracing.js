@@ -54,6 +54,13 @@ class McpPropagationPlugin extends Plugin {
     this.addSub('apm:mcp:client:request:inject', this.injectTraceContext.bind(this))
   }
 
+  /**
+   * @param {Parameters<Plugin['configure']>[0]} config
+   */
+  configure (config) {
+    super.configure(this._tracerConfig.DD_MCP_DISTRIBUTED_TRACING ? config : false)
+  }
+
   injectTraceContext (ctx) {
     const span = this.tracer.scope().active()
     if (!span) return
@@ -120,6 +127,8 @@ class McpServerRequestPlugin extends McpPlugin {
   static kind = 'server'
   getResource (ctx) { return getServerRequestResource(ctx.request) }
   getChildOf (ctx) {
+    if (!this._tracerConfig.DD_MCP_DISTRIBUTED_TRACING) return
+
     const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
     if (!traceContext || typeof traceContext !== 'object') return
 

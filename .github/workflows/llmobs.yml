@@ -323,6 +323,13 @@ jobs:
       PLUGINS: modelcontextprotocol-sdk
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the Python MCP peer
+        env:
+          MCP_PYTHON: ${{ runner.temp }}/mcp-python/bin/python
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/mcp-python"
+          "${MCP_PYTHON}" -m pip install -r packages/datadog-plugin-modelcontextprotocol-sdk/test/integration-test/requirements.txt
+          echo "MCP_PYTHON=${MCP_PYTHON}" >> "${GITHUB_ENV}"
       - uses: ./.github/actions/plugins/test
 
   openai-agents:

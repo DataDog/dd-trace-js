@@ -1589,6 +1589,13 @@
         "allowed": "debug|info|warn|error"
       }
     ],
+    "DD_MCP_DISTRIBUTED_TRACING": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_METRICS_OTEL_ENABLED": [
       {
         "implementation": "A",
