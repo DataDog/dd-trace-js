@@ -208,9 +208,6 @@ describe('Plugin', () => {
 
   describe('graphql', () => {
     withVersions('graphql', 'graphql', (version, moduleName, graphqlVersion) => {
-      // GraphQL 17 publishes its own tracing channels wherever `process.getBuiltinModule` exists.
-      const nativeChannels = semver.gte(graphqlVersion, '17.0.0') && 'getBuiltinModule' in process
-
       before(() => {
         sort = spans => spans.sort((a, b) => {
           const order = [
@@ -2017,10 +2014,7 @@ describe('Plugin', () => {
           return assertion
         })
 
-        it('should handle execution exceptions', function () {
-          // GraphQL 17 reads the arguments before it publishes on its execute channel.
-          if (nativeChannels) this.skip()
-
+        it('should handle execution exceptions', () => {
           const source = '{ hello }'
           const document = graphql.parse(source)
 
@@ -2040,7 +2034,7 @@ describe('Plugin', () => {
           })
 
           try {
-            graphql.execute(null, document)
+            graphql.execute({ schema: null, document })
           } catch (e) {
             error = e
           }
@@ -2950,28 +2944,6 @@ describe('Plugin', () => {
           assert.strictEqual(result.errors.length, 1)
         })
 
-        it('should leave schema resolvers unwrapped without a resolver subscriber', async function () {
-          if (!nativeChannels) this.skip()
-
-          const resolve = () => 'world'
-          const localSchema = new graphql.GraphQLSchema({
-            query: new graphql.GraphQLObjectType({
-              name: 'UnwrappedResolverQuery',
-              fields: { hello: { type: graphql.GraphQLString, resolve } },
-            }),
-          })
-
-          const [result] = await Promise.all([
-            graphql.graphql({ schema: localSchema, source: '{ hello }' }),
-            agent.assertSomeTraces(traces => {
-              assert.ok(traces[0].some(span => span.name === 'graphql.resolve'))
-            }, { spanResourceMatch: /hello:String/ }),
-          ])
-
-          assert.strictEqual(result.data?.hello, 'world')
-          assert.strictEqual(localSchema.getQueryType()?.getFields().hello.resolve, resolve)
-        })
-
         it('should honor resolver abort for fields gated by depth', async () => {
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
@@ -3342,7 +3314,7 @@ describe('Plugin', () => {
             span.setTag('error', false)
           }
 
-          context.contextValue?.executeHook?.()
+          nestedExecute?.()
         }
 
         /**
@@ -3357,6 +3329,8 @@ describe('Plugin', () => {
         }
 
         let throwingHook
+        /** @type {(() => void) | undefined} */
+        let nestedExecute
 
         /** @param {'execute' | 'parse' | 'resolve' | 'validate'} name */
         function throwHookError (name) {
@@ -3408,7 +3382,7 @@ describe('Plugin', () => {
         after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', () => {
-          const document = graphql.parse(source)
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
 
           graphql.validate(schema, document)
 
@@ -3421,8 +3395,6 @@ describe('Plugin', () => {
             contextValue: {},
             variableValues: { who: 'world' },
             operationName: 'MyQuery',
-            fieldResolver: (source, args, contextValue, info) => args.name,
-            typeResolver: (value, context, info, abstractType) => 'Query',
           }
 
           let result
@@ -3430,8 +3402,7 @@ describe('Plugin', () => {
           const assertion = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.deepStrictEqual(spans.map(span => span.name), [expectedSchema.server.opName, 'graphql.resolve'])
             sinon.assert.calledOnce(config.hooks.execute)
 
             const span = config.hooks.execute.firstCall.args[0]
@@ -3444,27 +3415,15 @@ describe('Plugin', () => {
             assert.deepStrictEqual(args.document, params.document)
             assert.deepStrictEqual(args.schema, params.schema)
 
-            // GraphQL 17's execute channel carries only the schema, document, variables and operation name.
-            if (nativeChannels) {
-              const keys = Object.keys(args).sort()
-              assert.deepStrictEqual(keys, ['document', 'operationName', 'schema', 'variableValues'])
-              assert.deepStrictEqual(args.variableValues, params.variableValues)
-              assert.strictEqual(args.operationName, params.operationName)
-              assert.strictEqual(res, result)
-              return
-            }
-
             // The helper can not handle circular structures properly.
             assertObjectContains(args, {
               rootValue: params.rootValue,
               contextValue: params.contextValue,
               variableValues: params.variableValues,
               operationName: params.operationName,
-              typeResolver: params.typeResolver,
             })
-            assert.strictEqual(typeof args.fieldResolver, 'function')
-            assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
             assert.strictEqual(res, result)
+            assert.strictEqual(result.data.hello, 'world')
           }, { spanResourceMatch: /MyQuery/ })
 
           const action = Promise.resolve(graphql.execute(params))
@@ -3475,17 +3434,14 @@ describe('Plugin', () => {
           return Promise.all([assertion, action])
         })
 
-        it('should trace executions started by the execute hook', function () {
-          // The hook finds the nested execution through contextValue, which GraphQL 17's execute channel omits.
-          if (nativeChannels) this.skip()
-
+        it('should trace executions started by the execute hook', () => {
           const localSchema = graphql.buildSchema('type Query { outer: String, nested: String }')
           const outerDocument = graphql.parse('query Outer { outer }')
           const nestedDocument = graphql.parse('query Nested { nested }')
           const contextValue = {}
 
-          contextValue.executeHook = () => {
-            contextValue.executeHook = undefined
+          nestedExecute = () => {
+            nestedExecute = undefined
             graphql.execute({
               schema: localSchema,
               document: nestedDocument,
@@ -3593,10 +3549,7 @@ describe('Plugin', () => {
           ])
         })
 
-        it('should run the execute hook for synchronous exceptions', function () {
-          // GraphQL 17 reads the arguments before it publishes on its execute channel.
-          if (nativeChannels) this.skip()
-
+        it('should run the execute hook for synchronous exceptions', () => {
           const document = graphql.parse('{ hello }')
 
           const assertion = agent.assertSomeTraces(traces => {
@@ -3609,7 +3562,7 @@ describe('Plugin', () => {
             assert.strictEqual(config.hooks.execute.firstCall.args[2], undefined)
           })
 
-          assert.throws(() => graphql.execute(null, document))
+          assert.throws(() => graphql.execute({ schema: null, document }))
 
           return assertion
         })
@@ -4251,14 +4204,11 @@ describe('Plugin', () => {
         })
 
         it('should preserve GraphQL errors for a missing health-check document', () => {
-          // GraphQL 17 no longer asserts the document and fails on its own property access.
-          const message = semver.gte(graphqlVersion, '17.0.0')
-            ? "Cannot read properties of undefined (reading 'definitions')"
-            : 'Must provide document.'
+          // The error must come from GraphQL itself, not from the health-check detection.
           assert.throws(() => graphql.execute({
             schema: createHealthCheckSchema(),
             operationName: '__ApolloServiceHealthCheck__',
-          }), { message })
+          }), error => /node_modules[\\/]graphql[\\/]/.test(error.stack.split('\n')[1]))
         })
 
         it('should trace a health-check document changed after parsing', async () => {

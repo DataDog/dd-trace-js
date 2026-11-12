@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const semver = require('semver')
-
 const {
   FakeAgent,
   sandboxCwd,
@@ -19,10 +17,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  withVersions('graphql', 'graphql', (version, moduleName, resolvedVersion) => {
-    // GraphQL 17 has no default export; its ESM loading is covered by esm-first.spec.js.
-    if (semver.gte(resolvedVersion, '17.0.0')) return
-
+  withVersions('graphql', 'graphql', version => {
     useSandbox([`'graphql@${version}'`], false, [
       './packages/datadog-plugin-graphql/test/integration-test/*'])
 
@@ -33,9 +28,9 @@ describe('esm', () => {
     const variants = varySandbox('server.mjs', {
       bindingName: 'graphqlLib',
       packageName: 'graphql',
-      defaultExport: true,
+      defaultExport: false,
       namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
-      namedExportBinding: 'namespace',
+      namedExportBinding: 'destructure',
     })
 
     afterEach(async () => {

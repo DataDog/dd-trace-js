@@ -72,16 +72,17 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
       rootCtx.native = true
       rootCtx.document = document
       rootCtx.operation = getOperation(document, operationName)
+      if (this.config.hooks.execute) rootCtx.hookArgs = ctx.ddArgs
     }
     return store
   }
 
-  // The resolve plugin traces every field from GraphQL's resolve channel. Only AppSec has to stop a resolver before
-  // it runs, which takes a wrapper around the schema's resolvers.
+  // The resolve plugin traces every field from GraphQL's resolve channel. Only AppSec, to stop a resolver before it
+  // runs, and the execute hook, to get the context and root value, need a wrapper around the schema's resolvers.
   wrapExecutionResolvers (ctx, args) {
     ctx.ddArgs = args
     const { schema } = args
-    if (schema && resolverStartCh.hasSubscribers) {
+    if (schema && (resolverStartCh.hasSubscribers || this.config.hooks.execute)) {
       wrapFields(schema.getQueryType(), schema)
       wrapFields(schema.getMutationType(), schema)
       wrapFields(schema.getSubscriptionType(), schema)

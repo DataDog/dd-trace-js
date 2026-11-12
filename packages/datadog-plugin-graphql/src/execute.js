@@ -59,6 +59,7 @@ const walkedTypes = new WeakMap()
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
+let hasExecuteHook = false
 
 // Initial key for the per-operation variables-filter cache. A unique sentinel
 // so the first #filterVariables call never falsely matches, even when the
@@ -156,6 +157,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   configure (config) {
     super.configure(config)
     depthDisabled = config.depth === 0
+    hasExecuteHook = config.hooks?.execute !== undefined
   }
 
   addTraceSubs () {
@@ -390,7 +392,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     } else if (rootCtx?.jitResolveHooksPending === true) {
       runResolveHooks(rootCtx)
     }
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+    this.config.hooks.execute?.(span, ctx.ddArgs, res)
     if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
@@ -559,7 +561,7 @@ function wrapResolve (resolve, isJit = false) {
 
     // Combined fast-path: depth=0 AND no IAST/AppSec subscriber means nothing
     // to do — skip rootCtx lookup, path walk, publish gates.
-    if (depthDisabled && !hasIastSub && !hasResolverSub) {
+    if (depthDisabled && !hasIastSub && !hasResolverSub && !hasExecuteHook) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
@@ -568,8 +570,15 @@ function wrapResolve (resolve, isJit = false) {
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
 
-    // GraphQL 17 traces fields from its resolve channel. Its schema is wrapped only so AppSec can stop a resolver.
+    // GraphQL 17 traces fields from its resolve channel. Its schema is wrapped only so AppSec can stop a resolver
+    // and the execute hook gets the context and root value its execute channel leaves out.
     if (rootCtx.native) {
+      const hookArgs = rootCtx.hookArgs
+      if (hookArgs !== undefined) {
+        rootCtx.hookArgs = undefined
+        hookArgs.rootValue = info.rootValue
+        hookArgs.contextValue = contextValue
+      }
       if (rootCtx.hasResolverSub) {
         resolverStartCh.publish({ abortController: rootCtx.abortController, createResolverInfo, info, args })
         if (rootCtx.abortController.signal.aborted) throw new AbortError()

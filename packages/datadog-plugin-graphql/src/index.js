@@ -100,12 +100,13 @@ function getErrorExtensions (config) {
 }
 
 const noop = () => {}
-const noopHooks = { execute: noop, parse: noop, validate: noop, resolve: undefined }
+const noopHooks = { execute: undefined, parse: noop, validate: noop, resolve: undefined }
 
 function getHooks ({ hooks }) {
   if (!hooks) return noopHooks
   return {
-    execute: guardHook('execute', hooks.execute) ?? noop,
+    // No noop fallback: GraphQL 17 wraps resolvers only to feed a configured `execute` hook.
+    execute: guardHook('execute', hooks.execute),
     parse: guardHook('parse', hooks.parse) ?? noop,
     validate: guardHook('validate', hooks.validate) ?? noop,
     // No noop fallback: `resolve` runs per-field (hot path); the plugin
