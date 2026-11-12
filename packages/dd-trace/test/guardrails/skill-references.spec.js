@@ -26,16 +26,51 @@ function skillFiles (files) {
   })
 }
 
-function codeSpans (source) {
-  return [...source.matchAll(/`([^`\n]+)`/g)].map(([, span]) => span)
+function codeSpans (source, { fenced = true } = {}) {
+  const spans = []
+  let fence
+
+  for (const line of source.split('\n')) {
+    const marker = line.trimStart().match(/^(`{3,}|~{3,})/)?.[1]
+
+    if (fence) {
+      if (marker?.[0] === fence[0] && marker.length >= fence.length) fence = undefined
+      else if (fenced) spans.push(...line.split(' ').filter(Boolean))
+    } else if (marker) {
+      fence = marker
+    } else {
+      spans.push(...[...line.matchAll(/`([^`]+)`/g)].map(([, span]) => span))
+    }
+  }
+
+  return spans
 }
 
 function markdownLinks (source) {
-  return [...source.matchAll(/\]\(([^\s)#]+)(?:#[^)]+)?\)/g)].map(([, destination]) => destination)
+  return [...source.matchAll(/\]\(([^\s)#]*)(?:#([^)]+))?\)/g)]
+    .map(([, destination, fragment]) => ({ destination, fragment }))
+}
+
+function headingAnchors (source) {
+  const anchors = new Set()
+
+  for (const line of source.split('\n')) {
+    if (!/^#{1,6} /.test(line)) continue
+
+    anchors.add(line
+      .replace(/^#+ /, '')
+      .trim()
+      .toLowerCase()
+      .replaceAll('`', '')
+      .replace(/[^\w -]/g, '')
+      .replaceAll(' ', '-'))
+  }
+
+  return anchors
 }
 
 function isTemplate (value) {
-  return /[<{]|\$\{|…/.test(value)
+  return /[<{…]|\$\{/.test(value)
 }
 
 function isRepositoryPath (value) {
@@ -43,11 +78,11 @@ function isRepositoryPath (value) {
 
   if (path.posix.isAbsolute(value)) return value.startsWith(`${REPOSITORY_ROOT}/`)
 
-  if (!value.startsWith('.') && !value.endsWith('/') && !value.split('/').some(segment => path.posix.extname(segment))) {
-    return false
-  }
+  if (!/^[\w.@*-]+(?:\/[\w.@*-]+)*\/?$/.test(value)) return false
+  if (value.startsWith('.') || fs.existsSync(path.join(REPOSITORY_ROOT, value.split('/')[0]))) return true
 
-  return value.startsWith('./') || value.startsWith('../') || fs.existsSync(path.join(REPOSITORY_ROOT, value.split('/')[0]))
+  // Package-relative shorthand such as `src/pg.js`; `dist/` paths name a published package, not this repository.
+  return !value.startsWith('dist/') && !value.endsWith('/') && Boolean(path.posix.extname(value))
 }
 
 function isRepositoryLink (value) {
@@ -104,7 +139,7 @@ function classDefinitions (files) {
 }
 
 function pluginClasses (source) {
-  return new Set(codeSpans(source).flatMap(span => {
+  return new Set(codeSpans(source, { fenced: false }).flatMap(span => {
     if (isTemplate(span)) return []
 
     return span.match(/\b[A-Z][A-Za-z0-9]*Plugin\b/g) ?? []
@@ -123,13 +158,21 @@ describe('skill references', () => {
     for (const file of skills) {
       const source = fs.readFileSync(file, 'utf8')
 
-      for (const destination of markdownLinks(source)) {
-        if (isTemplate(destination) || !isRepositoryLink(destination)) continue
+      for (const { destination, fragment } of markdownLinks(source)) {
+        if (isTemplate(destination) || (destination && !isRepositoryLink(destination))) continue
 
+        const target = destination ? path.resolve(path.dirname(file), destination) : file
         assert.ok(
-          pathExists(path.resolve(path.dirname(file), destination)),
+          pathExists(target),
           `${path.relative(REPOSITORY_ROOT, file)} links to missing path \`${destination}\``
         )
+
+        if (fragment && target.endsWith('.md') && fs.statSync(target).isFile()) {
+          assert.ok(
+            headingAnchors(fs.readFileSync(target, 'utf8')).has(fragment),
+            `${path.relative(REPOSITORY_ROOT, file)} links to missing anchor \`${destination}#${fragment}\``
+          )
+        }
       }
 
       for (const span of codeSpans(source)) {
@@ -149,7 +192,10 @@ describe('skill references', () => {
     for (const file of skills) {
       const source = fs.readFileSync(file, 'utf8')
       for (const className of pluginClasses(source)) {
-        assert.ok(definitions.has(className), `${path.relative(REPOSITORY_ROOT, file)} references missing class \`${className}\``)
+        assert.ok(
+          definitions.has(className),
+          `${path.relative(REPOSITORY_ROOT, file)} references missing class \`${className}\``
+        )
       }
     }
   })

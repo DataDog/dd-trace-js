@@ -26,7 +26,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  * Optional fields assert their own absence when omitted, except `traceId`, which defaults to `MOCK_STRING`.
  * @typedef {{
- *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'step' | 'tool' | 'retrieval',
+ *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'step' | 'tool' | 'retrieval' | 'experiment',
  *   name: string,
  *   inputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,
  *   outputMessages?: Array<Record<string, unknown> | MockValue> | MockValue,

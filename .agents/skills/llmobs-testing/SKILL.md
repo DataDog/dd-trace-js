@@ -142,9 +142,10 @@ Pinning a field the kind never emits asserts metadata production does not produc
   `metadata`, never
   model fields or token metrics
 
-For an `llm` operation that exposes `audioParts` or `imageParts`, assert the parts on both input and output
-messages instead of only their flattened text. Each part has a `mimeType` and exactly one of base64 `content` or
-`attachmentKey`.
+For an `llm` operation that exposes audio or image parts, assert the parts on both input and output messages
+instead of only their flattened text. The tagger takes `audioParts` / `imageParts` with `mimeType` and
+`attachmentKey`, but the expected messages in `assertLlmObsSpanEvent` use the serialized shape: `audio_parts` /
+`image_parts`, each part with `mime_type` and exactly one of base64 `content` or `attachment_key`.
 
 Cover every instrumented method, and a multi-turn conversation where the surface takes one.
 
