@@ -120,7 +120,7 @@ function postGraphqlQuery (port, query) {
  */
 function countFieldWithoutArgumentsRuns (wafRun, fieldName) {
   return wafRun.getCalls().filter(call => {
-    const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
+    const resolverInfo = call.args[0]?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
     const fieldArguments = resolverInfo?.[fieldName]
     return fieldArguments !== undefined &&
       Object.keys(resolverInfo).length === 1 &&
@@ -261,8 +261,8 @@ function graphqlCommonTests (config) {
     function enableAppsecWithWafSpy (rules) {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, rules) } }))
       setTestBlockingTemplates()
-      // Enabling AppSec replaces `waf.run`, so the spy goes on afterwards.
-      wafRun = sinon.spy(waf, 'run')
+      // Enabling AppSec replaces `waf.runSubContext`, so the spy goes on afterwards.
+      wafRun = sinon.spy(waf, 'runSubContext')
     }
 
     afterEach(() => {

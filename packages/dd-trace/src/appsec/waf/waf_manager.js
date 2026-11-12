@@ -63,7 +63,8 @@ class WAFManager {
         this.wafTimeout,
         this.ddwafVersion,
         this.rulesVersion,
-        this.ddwaf.knownAddresses
+        this.ddwaf.knownAddresses,
+        req
       )
       contexts.set(req, wafContext)
     }

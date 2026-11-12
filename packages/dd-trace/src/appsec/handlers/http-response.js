@@ -21,9 +21,7 @@ function onResponseBody ({ req, res, body }) {
 
   // we don't support blocking at this point, so no results needed
   waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
-    },
+    [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
   }, req)
 }
 
@@ -59,10 +57,8 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   if (!rootSpan) return
 
   const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
-    },
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
+    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
   }, req)
 
   responseAnalyzedSet.add(res)

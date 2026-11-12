@@ -37,9 +37,7 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
     }
 
     wafContextWrapper.run(payload)
@@ -56,9 +54,7 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
     }
 
     wafContextWrapper.run(payload)
@@ -74,7 +70,7 @@ describe('WAFContextWrapper', () => {
     assert.strictEqual(secondCall.errorCode, -127)
   })
 
-  it('Should send ephemeral addresses every time', () => {
+  it('Should deduplicate query data without dropping other addresses', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
         events: {},
@@ -84,12 +80,8 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
-      ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
     }
 
     wafContextWrapper.run(payload)
@@ -98,10 +90,8 @@ describe('WAFContextWrapper', () => {
     sinon.assert.calledTwice(ddwafContext.run)
     sinon.assert.calledWithExactly(ddwafContext.run.firstCall, payload, 1000)
     sinon.assert.calledWithExactly(ddwafContext.run.secondCall, {
-      ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: {
-          anotherKey: 'anotherValue',
-        },
+      [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: {
+        anotherKey: 'anotherValue',
       },
     }, 1000)
     sinon.assert.calledTwice(Reporter.reportMetrics)
@@ -114,12 +104,8 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        'persistent-unknown-address': { key: 'value' },
-      },
-      ephemeral: {
-        'ephemeral-unknown-address': { key: 'value' },
-      },
+      'requestData-unknown-address': { key: 'value' },
+      'subcontextData-unknown-address': { key: 'value' },
     }
 
     wafContextWrapper.run(payload)
@@ -133,12 +119,8 @@ describe('WAFContextWrapper', () => {
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
-      ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
     }
     const finishedCallback = sinon.stub()
 
@@ -157,9 +139,7 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
     }
 
     wafContextWrapper.run(payload)
@@ -196,9 +176,7 @@ describe('WAFContextWrapper', () => {
     hrtimeStub.onCall(1).returns(endNs)
 
     wafContextWrapper.run({
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
     })
 
     sinon.assert.calledOnce(Reporter.reportMetrics)
@@ -232,9 +210,7 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
-      persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-      },
+      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
     }
 
     wafContextWrapper.run(payload)
@@ -255,18 +231,18 @@ describe('WAFContextWrapper', () => {
     })
   })
 
-  describe('persistent and ephemeral addresses', () => {
-    let parent, scoped, wrapper, clock
-    const persistent = { [addresses.HTTP_INCOMING_QUERY]: { key: 'value' } }
-    const ephemeral = { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { field: 'value' } }
+  describe('context and subcontext evaluation', () => {
+    let parent, scoped, wrapper
+    const requestData = { [addresses.HTTP_INCOMING_QUERY]: { key: 'value' } }
+    const subcontextData = { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { field: 'value' } }
 
     beforeEach(() => {
-      clock = sinon.stub(process.hrtime, 'bigint').returns(0n)
+      sinon.stub(process.hrtime, 'bigint').returns(0n)
       sinon.stub(Reporter, 'reportAttack')
       sinon.stub(Reporter, 'reportAttributes')
       scoped = {
         run: sinon.stub().returns({ duration: 2000, timeout: false, metrics: {} }),
-        dispose: sinon.spy(),
+        dispose: sinon.spy(function () { this.disposed = true }),
       }
       parent = {
         run: sinon.stub().returns({ duration: 1000, timeout: false, metrics: {} }),
@@ -275,13 +251,13 @@ describe('WAFContextWrapper', () => {
       wrapper = new WAFContextWrapper(parent, 1000, '2.1.0', '1.8.0', knownAddresses)
     })
 
-    it('evaluates persistent request data without ephemeral data', () => {
-      wrapper.run({ persistent })
-      sinon.assert.calledOnceWithExactly(parent.run, persistent, 1000)
+    it('evaluates request data on the main context', () => {
+      wrapper.run(requestData)
+      sinon.assert.calledOnceWithExactly(parent.run, requestData, 1000)
       sinon.assert.notCalled(parent.createSubcontext)
     })
 
-    it('evaluates ephemeral data independently for each operation', () => {
+    it('evaluates separate checks on independent subcontexts', () => {
       const nextOperation = { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { field: 'next' } }
       const nextContext = {
         run: sinon.stub().returns({ duration: 2000, timeout: false, metrics: {} }),
@@ -289,105 +265,142 @@ describe('WAFContextWrapper', () => {
       }
       parent.createSubcontext.onSecondCall().returns(nextContext)
 
-      wrapper.run({ ephemeral })
-      wrapper.run({ ephemeral: nextOperation })
+      const first = wrapper.createSubcontext()
+      first.run(subcontextData)
+      first.dispose()
+      const second = wrapper.createSubcontext()
+      second.run(nextOperation)
+      second.dispose()
 
       sinon.assert.notCalled(parent.run)
       sinon.assert.calledTwice(parent.createSubcontext)
-      sinon.assert.calledOnceWithExactly(scoped.run, ephemeral, 1000)
+      sinon.assert.calledOnceWithExactly(scoped.run, subcontextData, 1000)
       sinon.assert.calledOnceWithExactly(nextContext.run, nextOperation, 1000)
       sinon.assert.calledOnce(scoped.dispose)
       sinon.assert.calledOnce(nextContext.dispose)
     })
 
-    it('combines findings from request and operation data within one timeout budget', () => {
-      clock.onCall(0).returns(0n)
-      clock.onCall(1).returns(250000n)
-      clock.onCall(2).returns(300000n)
-      parent.run.returns({
-        status: 'match',
-        events: [{ rule_matches: [] }],
-        attributes: { first: 1, shared: 0 },
-        keep: true,
-        duration: 1000,
-        metrics: { maxTruncatedString: 8000 },
-      })
-      scoped.run.returns({
-        attributes: { second: 2, shared: 2 },
-        duration: 2000,
-        timeout: false,
-        keep: false,
-        metrics: { maxTruncatedString: 5000 },
-      })
-
-      const result = wrapper.run({ persistent, ephemeral })
-
-      sinon.assert.calledOnceWithExactly(parent.run, persistent, 1000)
-      sinon.assert.calledOnceWithExactly(scoped.run, ephemeral, 750)
-      sinon.assert.calledOnce(scoped.dispose)
-      assert.deepStrictEqual(result.attributes, { first: 1, second: 2, shared: 0 })
-      assert.strictEqual(result.events.length, 1)
-      assert.strictEqual(result.duration, 3000)
-      assert.strictEqual(result.keep, true)
-      assert.strictEqual(result.metrics.maxTruncatedString, 8000)
-      const metrics = Reporter.reportMetrics.firstCall.args[0]
-      assert.strictEqual(metrics.duration, 3)
-      sinon.assert.calledOnce(Reporter.reportAttack)
-    })
-
-    for (const [outcome, result] of [
-      ['times out', { timeout: true }],
-      ['fails', { errorCode: -2 }],
-      ['blocks the request', { actions: { block_request: { status_code: 403 } } }],
-    ]) {
-      it(`skips operation data when request evaluation ${outcome}`, () => {
-        parent.run.returns(result)
-        wrapper.run({ persistent, ephemeral })
-        sinon.assert.notCalled(parent.createSubcontext)
-      })
-    }
-
-    it('skips operation data when the request evaluation exhausts the timeout budget', () => {
-      clock.onCall(1).returns(1000000n)
-      const result = wrapper.run({ persistent, ephemeral })
-      assert.strictEqual(result.timeout, true)
-      sinon.assert.notCalled(scoped.run)
-      sinon.assert.calledOnce(scoped.dispose)
-    })
-
-    for (const throws of [false, true]) {
-      it(`releases operation data when evaluation ${throws ? 'throws' : 'returns an error'}`, () => {
-        if (throws) scoped.run.throws(new Error('scoped evaluation failed'))
-        else scoped.run.returns({ errorCode: -2 })
-        wrapper.run({ ephemeral })
-        sinon.assert.calledOnce(scoped.dispose)
-        assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, throws ? -127 : -2)
-      })
-    }
-
-    it('reports attacks detected in request data even when operation evaluation fails', () => {
-      parent.run.returns({ events: [{ rule_matches: [] }], duration: 1000 })
-      scoped.run.returns({ errorCode: -2 })
-      const result = wrapper.run({ persistent, ephemeral })
-      assert.strictEqual(result.events.length, 1)
-      sinon.assert.calledOnce(Reporter.reportAttack)
-      assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, -2)
-    })
-
-    it('reports request attributes even when operation evaluation cannot start', () => {
-      parent.run.returns({ attributes: { tag: 'ordinary' }, duration: 1000 })
+    it('handles native subcontext creation failures without throwing', () => {
       parent.createSubcontext.throws(new Error('creation failed'))
-      const result = wrapper.run({ persistent, ephemeral })
-      assert.deepStrictEqual(result.attributes, { tag: 'ordinary' })
-      assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, -127)
+      assert.strictEqual(wrapper.createSubcontext(), undefined)
+    })
+
+    it('does not create a subcontext after the parent is disposed', () => {
+      parent.disposed = true
+      assert.strictEqual(wrapper.createSubcontext(), undefined)
+      sinon.assert.notCalled(parent.createSubcontext)
+    })
+
+    it('retains request and response data until the subcontext is disposed', () => {
+      const scope = wrapper.createSubcontext()
+      scope.run(subcontextData)
+      scope.run(subcontextData)
+      sinon.assert.calledOnce(parent.createSubcontext)
+      sinon.assert.calledTwice(scoped.run)
       sinon.assert.notCalled(scoped.dispose)
+      scope.dispose()
+      scope.dispose()
+      sinon.assert.calledOnce(scoped.dispose)
+    })
+
+    it('releases active scopes before disposing the parent request', () => {
+      parent.dispose = sinon.spy()
+      const scope = wrapper.createSubcontext()
+      scope.run(subcontextData)
+      wrapper.dispose()
+      sinon.assert.calledOnce(parent.createSubcontext)
+      sinon.assert.calledOnce(scoped.dispose)
+      sinon.assert.callOrder(scoped.dispose, parent.dispose)
     })
 
     it('reports attributes without reporting an attack when no rule was triggered', () => {
       scoped.run.returns({ status: 'match', events: [], attributes: { tag: 'value' } })
-      wrapper.run({ ephemeral })
+      wrapper.createSubcontext().run(subcontextData)
       sinon.assert.notCalled(Reporter.reportAttack)
       sinon.assert.calledOnceWithMatch(Reporter.reportAttributes, { tag: 'value' })
+    })
+  })
+
+  describe('blocked users', () => {
+    const req = {}
+    const userData = { [addresses.USER_ID]: 'blocked-user' }
+    let native, wrapper, blocked
+
+    beforeEach(() => {
+      sinon.stub(Reporter, 'reportAttack')
+      sinon.stub(Reporter, 'reportAttributes')
+      blocked = {
+        duration: 1000,
+        keep: true,
+        actions: { block_request: { status_code: 403 }, generate_stack: { stack_id: 'old' } },
+        events: [{ rule_matches: [{ parameters: [{ address: addresses.USER_ID }] }] }],
+        attributes: { original: 'attribute' },
+      }
+      native = { run: sinon.stub().returns(blocked) }
+      wrapper = new WAFContextWrapper(native, 1000, '2.2.0', 'test', new Set([
+        addresses.USER_ID, addresses.USER_LOGIN,
+      ]), req)
+      wrapper.run(userData)
+      Reporter.reportAttack.resetHistory()
+      Reporter.reportAttributes.resetHistory()
+    })
+
+    for (const data of [userData, { ...userData, [addresses.USER_LOGIN]: 'new-login' }]) {
+      it(`returns the cached result without evaluating ${Object.keys(data).length} input addresses`, () => {
+        const result = wrapper.run(data)
+
+        assert.strictEqual(result, blocked)
+        sinon.assert.calledOnce(native.run)
+        sinon.assert.notCalled(Reporter.reportAttack)
+        sinon.assert.notCalled(Reporter.reportAttributes)
+      })
+    }
+  })
+
+  describe('outgoing request and response correlation', () => {
+    it('matches paired data without sharing it with another outgoing request', () => {
+      const { DDWAF } = require('@datadog/native-appsec')
+      const waf = new DDWAF({
+        version: '2.2',
+        rules: [{
+          id: 'outgoing-redirect',
+          name: 'Detect redirects from outgoing GET requests',
+          tags: { type: 'ssrf', category: 'attack_attempt' },
+          conditions: [
+            {
+              operator: 'exact_match',
+              parameters: { inputs: [{ address: addresses.HTTP_OUTGOING_METHOD }], list: ['GET'] },
+            },
+            {
+              operator: 'exact_match',
+              parameters: { inputs: [{ address: addresses.HTTP_OUTGOING_RESPONSE_STATUS }], list: ['302'] },
+            },
+          ],
+        }],
+      }, 'outgoing-correlation', {})
+      const wrapper = new WAFContextWrapper(waf.createContext(), 100000, DDWAF.version(), 'test', waf.knownAddresses)
+      sinon.stub(Reporter, 'reportAttack')
+      sinon.stub(Reporter, 'reportAttributes')
+      const first = wrapper.createSubcontext()
+      const second = wrapper.createSubcontext()
+      const request = { [addresses.HTTP_OUTGOING_METHOD]: 'GET' }
+      const response = { [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302' }
+      try {
+        const requestResult = first.run(request)
+        assert.strictEqual(requestResult.events?.length || 0, 0)
+        const unrelatedResult = second.run(response)
+        assert.strictEqual(unrelatedResult.events?.length || 0, 0)
+        const pairedResult = first.run(response)
+        assert.strictEqual(pairedResult.events.length, 1)
+        assert.strictEqual(pairedResult.events[0].rule.id, 'outgoing-redirect')
+        first.dispose()
+        const nextHop = wrapper.createSubcontext()
+        const nextResult = nextHop.run(response)
+        assert.strictEqual(nextResult.events?.length || 0, 0)
+      } finally {
+        wrapper.dispose()
+        waf.dispose()
+      }
     })
   })
 
@@ -420,9 +433,7 @@ describe('WAFContextWrapper', () => {
       ddwafContext.disposed = false
 
       const payload = {
-        persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-        },
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       }
 
       wafContextWrapper.run(payload)
@@ -435,9 +446,7 @@ describe('WAFContextWrapper', () => {
       ddwafContext.disposed = true
 
       const payload = {
-        persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-        },
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       }
 
       wafContextWrapper.run(payload)
@@ -452,9 +461,7 @@ describe('WAFContextWrapper', () => {
       ddwafContext.disposed = true
 
       const payload = {
-        persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
-        },
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       }
 
       const raspRule = { type: 'rule-type' }

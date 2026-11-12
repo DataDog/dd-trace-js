@@ -71,7 +71,6 @@ describe('reporter', () => {
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
-      updateRateLimitedMetric: sinon.stub(),
       getRequestMetrics: sinon.stub(),
     }
 
@@ -806,32 +805,50 @@ describe('reporter', () => {
   })
 
   describe('reportAttributes', () => {
-    describe('attribute retention', () => {
+    describe('attribute updates', () => {
       beforeEach(() => {
         span = new Span({ _config: {} }, {}, {}, { operationName: 'web.request' })
         web.root.returns(span)
       })
 
-      it('keeps the first redirect target while adding attributes from later evaluations', () => {
+      it('updates endpoint fingerprints when the request body becomes available', () => {
+        const tag = '_dd.appsec.fp.http.endpoint'
+        Reporter.reportAttributes({ [tag]: 'http-post-8a5edab2-2c70e12b-' })
+        Reporter.reportAttributes({ [tag]: 'http-post-8a5edab2-2c70e12b-be31090f' })
+
+        assert.strictEqual(span.context().getTag(tag), 'http-post-8a5edab2-2c70e12b-be31090f')
+      })
+
+      it('updates session fingerprints when user and session IDs become available', () => {
+        const tag = '_dd.appsec.fp.session'
+        Reporter.reportAttributes({ [tag]: 'ssn--df6143bc-60ba1602-' })
+        Reporter.reportAttributes({ [tag]: 'ssn-8c6976e5-df6143bc-60ba1602-' })
+        assert.strictEqual(span.context().getTag(tag), 'ssn-8c6976e5-df6143bc-60ba1602-')
+
+        Reporter.reportAttributes({ [tag]: 'ssn-8c6976e5-df6143bc-60ba1602-269500d3' })
+        assert.strictEqual(span.context().getTag(tag), 'ssn-8c6976e5-df6143bc-60ba1602-269500d3')
+      })
+
+      it('updates attributes with the latest reported values', () => {
         const tag = 'appsec.api.redirection.move_target'
-        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=2' })
+        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=2', 'custom.output': 0 })
         Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=1', 'custom.output': 42 })
         Reporter.reportAttributes({ [tag]: '/mirror/200' })
 
-        assert.strictEqual(span.context().getTag(tag), '/redirect?totalRedirects=2')
+        assert.strictEqual(span.context().getTag(tag), '/mirror/200')
         assert.strictEqual(span.context().getTag('custom.output'), 42)
       })
 
       for (const value of [0, false, '', null]) {
-        it(`keeps an existing attribute whose value is ${JSON.stringify(value)}`, () => {
+        it(`updates an existing attribute whose value is ${JSON.stringify(value)}`, () => {
           Reporter.reportAttributes({ 'custom.output': value })
           Reporter.reportAttributes({ 'custom.output': 'replacement' })
 
-          assert.strictEqual(span.context().getTag('custom.output'), value)
+          assert.strictEqual(span.context().getTag('custom.output'), 'replacement')
         })
       }
 
-      it('keeps the first encoded schema and adds schemas discovered later', () => {
+      it('updates encoded schemas and adds schemas discovered later', () => {
         const requestSchema = [{ query: [8] }]
         const responseSchema = [{ result: [4] }]
         Reporter.reportAttributes({ '_dd.appsec.s.req.query': requestSchema })
@@ -841,7 +858,7 @@ describe('reporter', () => {
         })
 
         for (const [tag, expected] of [
-          ['_dd.appsec.s.req.query', requestSchema],
+          ['_dd.appsec.s.req.query', [{ replacement: [2] }]],
           ['_dd.appsec.s.res.body', responseSchema],
         ]) {
           const encoded = span.context().getTag(tag)
@@ -857,7 +874,7 @@ describe('reporter', () => {
         Reporter.reportAttributes({ [tag]: '/later-hop' }, undefined, otherSpan)
 
         assert.strictEqual(span.context().getTag(tag), '/first-request')
-        assert.strictEqual(otherSpan.context().getTag(tag), '/second-request')
+        assert.strictEqual(otherSpan.context().getTag(tag), '/later-hop')
       })
     })
 

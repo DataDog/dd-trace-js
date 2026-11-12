@@ -83,10 +83,8 @@ describe('set_user', () => {
         assert.strictEqual(rootSpan.setTag.getCall(3).calledWithExactly('usr.session_id', '133769'), true)
         assert.strictEqual(rootSpan.setTag.getCall(4).calledWithExactly('_dd.appsec.user.collection_mode', 'sdk'), true)
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.id': '123',
-            'usr.session_id': '133769',
-          },
+          'usr.id': '123',
+          'usr.session_id': '133769',
         })
       })
     })

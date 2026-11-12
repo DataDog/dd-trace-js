@@ -109,11 +109,9 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_SUCCESS]: null,
-          [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_id',
-        },
+        [LOGIN_SUCCESS]: null,
+        [USER_ID]: 'user_id',
+        [USER_LOGIN]: 'user_id',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -132,11 +130,9 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_SUCCESS]: null,
-          [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_id',
-        },
+        [LOGIN_SUCCESS]: null,
+        [USER_ID]: 'user_id',
+        [USER_LOGIN]: 'user_id',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -155,11 +151,9 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_SUCCESS]: null,
-          [USER_ID]: 'user_id',
-          [USER_LOGIN]: 'user_login',
-        },
+        [LOGIN_SUCCESS]: null,
+        [USER_ID]: 'user_id',
+        [USER_LOGIN]: 'user_login',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_success', 'v1')
     })
@@ -209,10 +203,8 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id',
-        },
+        [LOGIN_FAILURE]: null,
+        [USER_LOGIN]: 'user_id',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -238,10 +230,8 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id',
-        },
+        [LOGIN_FAILURE]: null,
+        [USER_LOGIN]: 'user_id',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -260,10 +250,8 @@ describe('track_event - Internal API', () => {
       })
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, rootSpan, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_FAILURE]: null,
-          [USER_LOGIN]: 'user_id',
-        },
+        [LOGIN_FAILURE]: null,
+        [USER_LOGIN]: 'user_id',
       })
       sinon.assert.calledWithExactly(telemetry.incrementSdkEventMetric, 'login_failure', 'v1')
     })
@@ -329,9 +317,7 @@ describe('track_event - Internal API', () => {
       trackCustomEvent(tracer, 'users.login.success')
 
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_SUCCESS]: null,
-        },
+        [LOGIN_SUCCESS]: null,
       })
     })
 
@@ -339,9 +325,7 @@ describe('track_event - Internal API', () => {
       trackCustomEvent(tracer, 'users.login.failure')
 
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          [LOGIN_FAILURE]: null,
-        },
+        [LOGIN_FAILURE]: null,
       })
     })
   })
@@ -391,10 +375,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_SUCCESS]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_SUCCESS]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -412,11 +394,9 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_SUCCESS]: null,
-            [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_SUCCESS]: null,
+          [USER_ID]: 'userId',
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -440,11 +420,9 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_SUCCESS]: null,
-            [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_SUCCESS]: null,
+          [USER_ID]: 'userId',
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -470,10 +448,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_SUCCESS]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_SUCCESS]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -502,11 +478,9 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_SUCCESS]: null,
-            [USER_ID]: 'userId',
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_SUCCESS]: null,
+          [USER_ID]: 'userId',
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -633,10 +607,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_FAILURE]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -653,10 +625,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_FAILURE]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -673,10 +643,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_FAILURE]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -702,10 +670,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_FAILURE]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 
@@ -731,10 +697,8 @@ describe('track_event - Internal API', () => {
         })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [LOGIN_FAILURE]: null,
-            [USER_LOGIN]: 'login',
-          },
+          [LOGIN_FAILURE]: null,
+          [USER_LOGIN]: 'login',
         })
       })
 

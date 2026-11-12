@@ -192,7 +192,9 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with SSRF', async () => {
-      const res = await httpRequest('/ssrf?payload=169.254.169.254')
+      // Use a reachable private target so a host routing error cannot race the RASP abort error.
+      const target = `127.0.0.1:${app.server.address().port}`
+      const res = await httpRequest(`/ssrf?payload=${target}`)
 
       // some hooks won't be called because SSRF is blocked out of band
       sinon.assert.notCalled(hooks.onSend)

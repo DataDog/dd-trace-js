@@ -90,11 +90,9 @@ describe('User Tracking', () => {
         'usr.id': '123',
       })
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'usr.login': 'login',
-          'usr.id': '123',
-          'server.business_logic.users.login.success': null,
-        },
+        'usr.login': 'login',
+        'usr.id': '123',
+        'server.business_logic.users.login.success': null,
       })
     })
 
@@ -122,11 +120,9 @@ describe('User Tracking', () => {
         'usr.id': 'a@b.c',
       })
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'usr.login': 'login',
-          'usr.id': 'a@b.c',
-          'server.business_logic.users.login.success': null,
-        },
+        'usr.login': 'login',
+        'usr.id': 'a@b.c',
+        'server.business_logic.users.login.success': null,
       })
     })
 
@@ -160,11 +156,9 @@ describe('User Tracking', () => {
         'usr.id': '123',
       })
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'usr.login': 'login',
-          'usr.id': '123',
-          'server.business_logic.users.login.success': null,
-        },
+        'usr.login': 'login',
+        'usr.id': '123',
+        'server.business_logic.users.login.success': null,
       })
     })
   })
@@ -235,11 +229,9 @@ describe('User Tracking', () => {
           'usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'usr.id': '123',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'login',
+          'usr.id': '123',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -261,10 +253,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'login',
+          'server.business_logic.users.login.failure': null,
         })
       })
 
@@ -290,10 +280,8 @@ describe('User Tracking', () => {
           '_dd.appsec.usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'login',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -319,10 +307,8 @@ describe('User Tracking', () => {
           '_dd.appsec.usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'login',
+          'server.business_logic.users.login.failure': null,
         })
       })
 
@@ -342,10 +328,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.usr.login': 'login',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'login',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -365,10 +349,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.usr.login': 'login',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'login',
+          'server.business_logic.users.login.failure': null,
         })
       })
     })
@@ -396,11 +378,9 @@ describe('User Tracking', () => {
           'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -422,10 +402,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'server.business_logic.users.login.failure': null,
         })
       })
 
@@ -451,10 +429,8 @@ describe('User Tracking', () => {
           '_dd.appsec.usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -480,10 +456,8 @@ describe('User Tracking', () => {
           '_dd.appsec.usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'server.business_logic.users.login.failure': null,
         })
       })
 
@@ -503,10 +477,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.success.usr.login': 'anon_428821350e9691491f616b754cd8315f',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -526,10 +498,8 @@ describe('User Tracking', () => {
           'appsec.events.users.login.failure.usr.login': 'anon_428821350e9691491f616b754cd8315f',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'server.business_logic.users.login.failure': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'server.business_logic.users.login.failure': null,
         })
       })
     })
@@ -560,11 +530,9 @@ describe('User Tracking', () => {
           'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -588,11 +556,9 @@ describe('User Tracking', () => {
           'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'anon_428821350e9691491f616b754cd8315f',
-            'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'anon_428821350e9691491f616b754cd8315f',
+          'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -621,11 +587,9 @@ describe('User Tracking', () => {
           'usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'usr.id': '123',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'login',
+          'usr.id': '123',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -649,11 +613,9 @@ describe('User Tracking', () => {
           'usr.id': '123',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.login': 'login',
-            'usr.id': '123',
-            'server.business_logic.users.login.success': null,
-          },
+          'usr.login': 'login',
+          'usr.id': '123',
+          'server.business_logic.users.login.success': null,
         })
       })
 
@@ -721,9 +683,7 @@ describe('User Tracking', () => {
           '_dd.appsec.user.collection_mode': 'identification',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.id': '123',
-          },
+          'usr.id': '123',
         })
       })
 
@@ -770,9 +730,7 @@ describe('User Tracking', () => {
           '_dd.appsec.user.collection_mode': 'anonymization',
         })
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
-          },
+          'usr.id': 'anon_a665a45920422f9d417e4867efdc4fb8',
         })
       })
 

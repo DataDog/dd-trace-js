@@ -48,9 +48,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   }
 
   const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_BODY]: body,
-    },
+    [addresses.HTTP_INCOMING_BODY]: body,
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -64,9 +62,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   analyzedCookies.add(cookies)
 
   const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_COOKIES]: cookies,
-    },
+    [addresses.HTTP_INCOMING_COOKIES]: cookies,
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -91,82 +87,84 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     }
   }
 
-  const persistent = {
+  const requestData = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: copyHeadersOmitting(req.headers, 'cookie'),
     [addresses.HTTP_INCOMING_METHOD]: req.method,
   }
 
   if (clientIp) {
-    persistent[addresses.HTTP_CLIENT_IP] = clientIp
+    requestData[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const results = waf.run({ persistent }, req)
+  const results = waf.run(requestData, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
-  const persistent = {}
+  try {
+    const requestData = {}
 
-  // we need to keep this to support other body parsers
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === 'object') {
-      if (!isEmpty(req.body) && !analyzedBodies.has(req.body)) {
-        persistent[addresses.HTTP_INCOMING_BODY] = req.body
+    // we need to keep this to support other body parsers
+    if (req.body !== undefined && req.body !== null) {
+      if (typeof req.body === 'object') {
+        if (!isEmpty(req.body) && !analyzedBodies.has(req.body)) {
+          requestData[addresses.HTTP_INCOMING_BODY] = req.body
+        }
+      } else {
+        requestData[addresses.HTTP_INCOMING_BODY] = req.body
       }
-    } else {
-      persistent[addresses.HTTP_INCOMING_BODY] = req.body
     }
-  }
 
-  // we need to keep this to support other cookie parsers
-  if (
-    req.cookies !== null &&
-    typeof req.cookies === 'object' &&
-    !isEmpty(req.cookies) &&
-    !analyzedCookies.has(req.cookies)
-  ) {
-    persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
-  }
+    // we need to keep this to support other cookie parsers
+    if (
+      req.cookies !== null &&
+      typeof req.cookies === 'object' &&
+      !isEmpty(req.cookies) &&
+      !analyzedCookies.has(req.cookies)
+    ) {
+      requestData[addresses.HTTP_INCOMING_COOKIES] = req.cookies
+    }
 
-  // we need to keep this to support nextjs
-  const query = req.query
-  if (
-    query !== null &&
-    typeof query === 'object' &&
-    !isEmpty(query)
-  ) {
-    persistent[addresses.HTTP_INCOMING_QUERY] = query
-  }
+    // we need to keep this to support nextjs
+    const query = req.query
+    if (
+      query !== null &&
+      typeof query === 'object' &&
+      !isEmpty(query)
+    ) {
+      requestData[addresses.HTTP_INCOMING_QUERY] = query
+    }
 
-  // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
-  web.setRouteOrEndpointTag(req)
+    // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
+    web.setRouteOrEndpointTag(req)
 
-  if (config.appsec.DD_API_SECURITY_ENABLED) {
-    try {
-      const normalized = normalizeRoute(req)
-      if (normalized !== null) {
-        web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
+    if (config.appsec.DD_API_SECURITY_ENABLED) {
+      try {
+        const normalized = normalizeRoute(req)
+        if (normalized !== null) {
+          web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
+        }
+      } catch (e) {
+        log.debug('[ASM] Unable to compute normalized route: %s', e.message)
       }
-    } catch (e) {
-      log.debug('[ASM] Unable to compute normalized route: %s', e.message)
     }
+
+    const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
+    if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
+      requestData[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+    }
+
+    let wafResult
+    if (!isEmpty(requestData)) {
+      wafResult = waf.run(requestData, req)
+    }
+
+    apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
+  } finally {
+    waf.disposeContext(req)
   }
-
-  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
-  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
-    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-  }
-
-  let wafResult
-  if (!isEmpty(persistent)) {
-    wafResult = waf.run({ persistent }, req)
-  }
-
-  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
-
-  waf.disposeContext(req)
 
   const storedHeaders = storedResponseHeaders.get(req) || {}
 
@@ -190,9 +188,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!rootSpan || isEmpty(query)) return
 
   const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_QUERY]: query,
-    },
+    [addresses.HTTP_INCOMING_QUERY]: query,
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)
@@ -203,9 +199,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
   if (!rootSpan || !params || typeof params !== 'object' || isEmpty(params)) return
 
   const results = waf.run({
-    persistent: {
-      [addresses.HTTP_INCOMING_PARAMS]: params,
-    },
+    [addresses.HTTP_INCOMING_PARAMS]: params,
   }, req)
 
   handleResults(results?.actions, req, res, rootSpan, abortController)

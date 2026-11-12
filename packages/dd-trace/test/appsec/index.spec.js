@@ -385,12 +385,10 @@ describe('AppSec Index', function () {
         'http.client_ip': '127.0.0.1',
       })
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1',
-        },
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1',
       }, req)
     })
 
@@ -506,6 +504,22 @@ describe('AppSec Index', function () {
 
       web.root.returns(rootSpan)
     })
+
+    for (const failingStep of ['sampleRequest', 'reportRequest']) {
+      it(`disposes the request context when API Security ${failingStep} fails`, () => {
+        const error = new Error('API Security failure')
+        const req = { headers: {}, method: 'GET', socket: {} }
+        const res = { statusCode: 200, getHeaders: () => ({}) }
+        web.patch(req)
+        sinon.stub(waf, 'disposeContext')
+        if (failingStep === 'sampleRequest') apiSecurity.sampleRequest.restore()
+        sinon.stub(apiSecurity, failingStep).throws(error)
+
+        assert.throws(() => AppSec.incomingHttpEndTranslator({ req, res }), error)
+
+        sinon.assert.calledOnceWithExactly(waf.disposeContext, req)
+      })
+    }
 
     it('should not propagate incoming http end data without express', () => {
       const req = {
@@ -700,11 +714,9 @@ describe('AppSec Index', function () {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'server.request.body': { a: '1' },
-          'server.request.cookies': { d: '4', e: '5' },
-          'server.request.query': { b: '2' },
-        },
+        'server.request.body': { a: '1' },
+        'server.request.cookies': { d: '4', e: '5' },
+        'server.request.query': { b: '2' },
       }, req)
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, req.body)
     })
@@ -850,10 +862,8 @@ describe('AppSec Index', function () {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'server.request.body': { a: '1' },
-          'server.request.query': { b: '2' },
-        },
+        'server.request.body': { a: '1' },
+        'server.request.query': { b: '2' },
       }, req)
     })
 
@@ -902,10 +912,8 @@ describe('AppSec Index', function () {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       sinon.assert.calledOnceWithExactly(waf.run, {
-        persistent: {
-          'server.request.body': { a: '1' },
-          'waf.context.processor': { 'extract-schema': true },
-        },
+        'server.request.body': { a: '1' },
+        'waf.context.processor': { 'extract-schema': true },
       }, req)
     })
 
@@ -950,9 +958,7 @@ describe('AppSec Index', function () {
 
         sinon.assert.calledOnceWithMatch(apiSecurity.sampleRequest, req, res)
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
-          },
+          [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
         }, req)
       })
     })
@@ -1035,9 +1041,7 @@ describe('AppSec Index', function () {
         bodyParser.publish({ req, res, body, abortController })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.body': { key: 'value' },
-          },
+          'server.request.body': { key: 'value' },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1051,9 +1055,7 @@ describe('AppSec Index', function () {
         bodyParser.publish({ req, res, body, abortController })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.body': 'value',
-          },
+          'server.request.body': 'value',
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1067,9 +1069,7 @@ describe('AppSec Index', function () {
         bodyParser.publish({ req, res, body, abortController })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.body': { key: 'value' },
-          },
+          'server.request.body': { key: 'value' },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1099,9 +1099,7 @@ describe('AppSec Index', function () {
         cookieParser.publish({ req, res, abortController, cookies })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.cookies': { key: 'value' },
-          },
+          'server.request.cookies': { key: 'value' },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1114,9 +1112,7 @@ describe('AppSec Index', function () {
         cookieParser.publish({ req, res, abortController, cookies })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.cookies': { key: 'value' },
-          },
+          'server.request.cookies': { key: 'value' },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1147,9 +1143,7 @@ describe('AppSec Index', function () {
         queryParser.publish({ req, res, query, abortController })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.query': { key: 'value' },
-          },
+          'server.request.query': { key: 'value' },
         })
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1163,9 +1157,7 @@ describe('AppSec Index', function () {
         queryParser.publish({ req, res, query, abortController })
 
         sinon.assert.calledOnceWithMatch(waf.run, {
-          persistent: {
-            'server.request.query': { key: 'value' },
-          },
+          'server.request.query': { key: 'value' },
         })
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1352,9 +1344,7 @@ describe('AppSec Index', function () {
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.notCalled(log.warn)
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.session_id': '1234',
-          },
+          'usr.session_id': '1234',
         }, req)
         sinon.assert.notCalled(abortController.abort)
         sinon.assert.notCalled(res.constructor.prototype.end)
@@ -1368,9 +1358,7 @@ describe('AppSec Index', function () {
         sinon.assert.calledOnceWithExactly(web.root, req)
         sinon.assert.notCalled(log.warn)
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'usr.session_id': '1234',
-          },
+          'usr.session_id': '1234',
         }, req)
         sinon.assert.called(abortController.abort)
         sinon.assert.called(res.constructor.prototype.end)
@@ -1390,12 +1378,10 @@ describe('AppSec Index', function () {
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'server.response.status': '404',
-            'server.response.headers.no_cookies': {
-              'content-type': 'application/json',
-              'content-length': 42,
-            },
+          'server.response.status': '404',
+          'server.response.headers.no_cookies': {
+            'content-type': 'application/json',
+            'content-length': 42,
           },
         }, req)
         sinon.assert.calledOnce(abortController.abort)
@@ -1434,12 +1420,10 @@ describe('AppSec Index', function () {
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'server.response.status': '404',
-            'server.response.headers.no_cookies': {
-              'content-type': 'application/json',
-              'content-length': 42,
-            },
+          'server.response.status': '404',
+          'server.response.headers.no_cookies': {
+            'content-type': 'application/json',
+            'content-length': 42,
           },
         }, req)
         sinon.assert.notCalled(abortController.abort)
@@ -1481,12 +1465,10 @@ describe('AppSec Index', function () {
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         sinon.assert.calledOnceWithExactly(waf.run, {
-          persistent: {
-            'server.response.status': '404',
-            'server.response.headers.no_cookies': {
-              'content-type': 'application/json',
-              'content-length': 42,
-            },
+          'server.response.status': '404',
+          'server.response.headers.no_cookies': {
+            'content-type': 'application/json',
+            'content-length': 42,
           },
         }, req)
         sinon.assert.calledOnce(abortController.abort)
@@ -1732,6 +1714,38 @@ describe('IP blocking', function () {
   after(() => {
     appListener && appListener.close()
     return agent.close()
+  })
+
+  it('disposes request contexts when the client aborts before a response', async () => {
+    let context, subcontext, client, requestStarted, responseClosed
+    const started = new Promise(resolve => { requestStarted = resolve })
+    const closed = new Promise(resolve => { responseClosed = resolve })
+    const server = new http.Server((req, res) => {
+      context = waf.wafManager.getWAFContext(req)
+      const state = {}
+      waf.runSubContext({ 'server.request.body': 'ordinary' }, undefined, state)
+      subcontext = state.wafSubcontext
+      res.once('close', responseClosed)
+      requestStarted()
+    })
+
+    try {
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+      const response = new Promise((resolve, reject) => {
+        client = http.get(`http://127.0.0.1:${server.address().port}/`, resolve)
+        client.once('error', reject)
+      })
+      const aborted = assert.rejects(response, { code: 'ECONNRESET' })
+      await started
+      client.destroy()
+      await Promise.all([aborted, closed])
+
+      assert.strictEqual(context.ddwafContext.disposed, true)
+      assert.strictEqual(subcontext.ddwafContext.disposed, true)
+    } finally {
+      client?.destroy()
+      await new Promise(resolve => server.close(resolve))
+    }
   })
 
   describe('do not block the request', () => {

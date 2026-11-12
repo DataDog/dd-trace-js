@@ -44,10 +44,11 @@ describe('WAFManager', () => {
     it('should construct WAFContextWrapper with knownAddresses', () => {
       const wafManager = new WAFManager({}, {})
 
-      wafManager.getWAFContext({})
+      const req = {}
+      wafManager.getWAFContext(req)
 
       const any = sinon.match.any
-      sinon.assert.calledOnceWithMatch(WAFContextWrapper, any, any, any, any, knownAddresses)
+      sinon.assert.calledOnceWithMatch(WAFContextWrapper, any, any, any, any, knownAddresses, req)
     })
   })
 

@@ -9,6 +9,7 @@ const { match } = require('sinon')
 
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
+const { ASM } = require('../../../src/standalone/product')
 const { getConfigFresh } = require('../../helpers/config')
 
 describe('WAF Manager', () => {
@@ -20,26 +21,17 @@ describe('WAF Manager', () => {
     'server.request.body',
     'waf.context.processor',
   ])
-  let waf, WAFManager
+  let waf, WAFManager, keepTrace, updateRateLimitedMetric, root, getActiveRequest
   let DDWAF
   const config = getConfigFresh()
-  let webContext
-  let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
-    limiterStub = {
-      isAllowed: sinon.stub().returns(true),
-    }
-
-    keepTrace = sinon.stub()
-    updateRateLimitedMetric = sinon.stub()
-
     DDWAF = sinon.stub()
     DDWAF.version = sinon.stub().returns('1.2.3')
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub().returns({
       run: sinon.stub(),
-      dispose: sinon.stub(),
+      dispose: sinon.stub().callsFake(function () { this.disposed = true }),
       disposed: false,
     })
     DDWAF.prototype.diagnostics = {
@@ -56,18 +48,16 @@ describe('WAF Manager', () => {
       '@datadog/native-appsec': { DDWAF },
     })
 
-    const webMock = {
-      root: sinon.stub().returns({ mock: 'rootSpan' }),
-      getContext: sinon.stub().returns(webContext),
-    }
-
+    getActiveRequest = sinon.stub().returns({})
+    keepTrace = sinon.spy()
+    updateRateLimitedMetric = sinon.spy()
+    root = sinon.stub().returns({})
     waf = proxyquire('../../../src/appsec/waf', {
-      './waf_manager': WAFManager,
-      '../../rate_limiter': function () { return limiterStub },
       '../../priority_sampler': { keepTrace },
-      '../../standalone/product': { ASM: 'ASM' },
-      '../../plugins/util/web': webMock,
+      '../../plugins/util/web': { root },
       '../telemetry': { updateRateLimitedMetric },
+      './waf_manager': WAFManager,
+      '../store': { getActiveRequest },
     })
     waf.destroy()
 
@@ -77,8 +67,6 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportAttributes')
     sinon.spy(Reporter, 'reportWafInit')
     sinon.spy(Reporter, 'reportWafConfigUpdate')
-
-    webContext = {}
   })
 
   afterEach(() => {
@@ -127,8 +115,10 @@ describe('WAF Manager', () => {
       DDWAF.prototype.createContext.returns(null)
       waf.init(rules, config.appsec)
       const req = {}
-      assert.strictEqual(waf.run({ persistent: { 'server.request.body': 'ordinary' } }, req), undefined)
+      getActiveRequest.returns(req)
+      assert.strictEqual(waf.run({ 'server.request.body': 'ordinary' }, req), undefined)
       waf.disposeContext(req)
+      sinon.assert.calledTwice(DDWAF.prototype.createContext)
       sinon.assert.notCalled(Reporter.reportMetrics)
     })
 
@@ -137,11 +127,12 @@ describe('WAF Manager', () => {
       WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
       waf.init(rules, config.appsec)
 
-      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const payload = { 'server.io.net.url': 'http://example.com' }
       const req = {}
+      getActiveRequest.returns(req)
       waf.run(payload, req, 'ssrf')
 
-      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf', req, undefined)
+      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf', undefined)
     })
 
     it('should call wafManager.run without raspRuleType', () => {
@@ -149,81 +140,239 @@ describe('WAF Manager', () => {
       WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
       waf.init(rules, config.appsec)
 
-      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const payload = { 'server.io.net.url': 'http://example.com' }
       const req = {}
+      getActiveRequest.returns(req)
       waf.run(payload, req)
 
-      sinon.assert.calledOnceWithExactly(run, payload, undefined, req, undefined)
+      sinon.assert.calledOnceWithExactly(run, payload, undefined, undefined)
+    })
+  })
+
+  describe('trace retention', () => {
+    beforeEach(() => {
+      sinon.useFakeTimers()
+      waf.init(rules, { ...config.appsec, DD_APPSEC_TRACE_RATE_LIMIT: 1 })
     })
 
-    describe('sampling priority', () => {
-      let mockWafContext, req
+    it('shares the limit between request and subcontext evaluations', () => {
+      const req = {}
+      getActiveRequest.returns(req)
+      const data = { 'server.request.body': 'body' }
+      const context = waf.wafManager.getWAFContext(req)
+      context.ddwafContext.run.returns({ duration: 1000, keep: true })
+      context.ddwafContext.createSubcontext = sinon.stub().returns({
+        run: sinon.stub().returns({ duration: 1000, keep: true }),
+        dispose: sinon.spy(),
+      })
+      const state = {}
+      waf.runSubContext(data, { type: 'ssrf' }, state)
+      waf.run(data, req)
 
-      beforeEach(() => {
-        req = { mock: 'request' }
-        mockWafContext = { run: sinon.stub() }
-        WAFManager.prototype.getWAFContext = sinon.stub().returns(mockWafContext)
+      sinon.assert.calledOnceWithExactly(keepTrace, root.firstCall.returnValue, ASM)
+      sinon.assert.calledOnceWithExactly(updateRateLimitedMetric, req)
+      waf.disposeContext(req)
+    })
+
+    it('only consumes capacity for keep decisions and resets the limit on init', () => {
+      const req = {}
+      getActiveRequest.returns(req)
+      const data = { 'server.request.body': 'body' }
+      const native = waf.wafManager.getWAFContext(req).ddwafContext
+      native.run.returns({ duration: 1000 })
+      waf.run(data, req)
+      native.run.returns({ duration: 1000, keep: true })
+      waf.run(data, req)
+      waf.run(data, req)
+      waf.init(rules, { ...config.appsec, DD_APPSEC_TRACE_RATE_LIMIT: 1 })
+      waf.run(data, req)
+
+      sinon.assert.calledTwice(keepTrace)
+      sinon.assert.calledOnceWithExactly(updateRateLimitedMetric, req)
+      waf.disposeContext(req)
+    })
+  })
+
+  describe('isolated evaluations', () => {
+    const data = { 'server.request.body': 'ordinary' }
+
+    for (const outcome of ['success', 'error', 'throw']) {
+      it(`disposes the subcontext after a native ${outcome}`, () => {
+        const child = {
+          run: sinon.stub().returns({ duration: 1000, keep: true }),
+          dispose: sinon.spy(),
+        }
+        if (outcome === 'error') child.run.returns({ errorCode: -2 })
+        if (outcome === 'throw') child.run.throws(new Error('native failure'))
+        const parent = DDWAF.prototype.createContext()
+        parent.createSubcontext = sinon.stub().returns(child)
         waf.init(rules, config.appsec)
+        const req = {}
+        getActiveRequest.returns(req)
+
+        waf.runSubContext(data, { type: 'sql_injection' })
+
+        sinon.assert.calledOnceWithExactly(child.run, data, config.appsec.DD_APPSEC_WAF_TIMEOUT)
+        sinon.assert.calledOnce(child.dispose)
+        sinon.assert.notCalled(parent.run)
+        waf.disposeContext(req)
+        sinon.assert.calledOnce(child.dispose)
+        if (outcome === 'success') {
+          sinon.assert.calledOnce(keepTrace)
+          sinon.assert.calledWithExactly(root, req)
+        } else assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, outcome === 'error' ? -2 : -127)
       })
+    }
 
-      it('should call keepTrace when result.keep is true and rate limiter allows', () => {
-        const result = { keep: true, events: [] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(true)
+    it('reuses a subcontext for paired evaluations and releases it after disable', () => {
+      const child = {
+        run: sinon.stub().returns({ duration: 1000 }),
+        dispose: sinon.spy(function () { this.disposed = true }),
+      }
+      const parent = DDWAF.prototype.createContext()
+      parent.createSubcontext = sinon.stub().returns(child)
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const state = {}
 
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
+      waf.runSubContext(data, { type: 'ssrf', variant: 'request' }, state)
+      assert.strictEqual(waf.getRequest(state), req)
+      getActiveRequest.returns(undefined) // Later callbacks need not have the original active request.
+      waf.runSubContext(data, { type: 'ssrf', variant: 'response' }, state)
 
-        sinon.assert.calledOnceWithExactly(keepTrace, { mock: 'rootSpan' }, 'ASM')
-        sinon.assert.notCalled(updateRateLimitedMetric)
-      })
+      sinon.assert.calledOnce(parent.createSubcontext)
+      sinon.assert.calledTwice(child.run)
+      sinon.assert.notCalled(child.dispose)
+      waf.destroy()
+      waf.disposeSubContext(state)
+      waf.disposeSubContext(state)
+      sinon.assert.calledOnce(child.dispose)
+      assert.strictEqual(waf.getRequest(state), undefined)
+    })
 
-      it('should call updateRateLimitedMetric when result.keep is true but rate limiter denies', () => {
-        const result = { keep: true, events: [] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(false)
+    it('keeps simultaneous outgoing evaluations in separate subcontexts', () => {
+      const first = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
+      const second = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
+      const parent = DDWAF.prototype.createContext()
+      parent.createSubcontext = sinon.stub().onFirstCall().returns(first).onSecondCall().returns(second)
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const firstState = {}
+      const secondState = {}
 
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
+      waf.runSubContext(data, undefined, firstState)
+      waf.runSubContext(data, undefined, secondState)
+      waf.runSubContext(data, undefined, firstState)
+      waf.disposeSubContext(firstState)
 
-        sinon.assert.calledOnceWithExactly(updateRateLimitedMetric, req)
-        sinon.assert.notCalled(keepTrace)
-      })
+      sinon.assert.calledTwice(first.run)
+      sinon.assert.calledOnce(second.run)
+      sinon.assert.calledOnce(first.dispose)
+      sinon.assert.notCalled(second.dispose)
+      waf.disposeSubContext(secondState)
+    })
 
-      it('should not call keepTrace or updateRateLimitedMetric when result.keep is false', () => {
-        const result = { keep: false, events: [] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(true)
+    it('skips isolated checks when there is no active ruleset', () => {
+      DDWAF.prototype.createContext.returns(null)
+      waf.init(rules, config.appsec)
+      assert.strictEqual(waf.runSubContext(data), undefined)
+      sinon.assert.notCalled(Reporter.reportMetrics)
+    })
 
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
+    it('reports skipped RASP checks after the request context is disposed', () => {
+      const parent = DDWAF.prototype.createContext()
+      parent.disposed = true
+      parent.createSubcontext = sinon.stub()
+      const skipped = sinon.stub(Reporter, 'reportRaspRuleSkipped')
+      waf.init(rules, config.appsec)
+      const rule = { type: 'sql_injection' }
 
-        sinon.assert.notCalled(keepTrace)
-        sinon.assert.notCalled(updateRateLimitedMetric)
-      })
+      assert.strictEqual(waf.runSubContext(data, rule), undefined)
 
-      it('should not call keepTrace or updateRateLimitedMetric when result.keep is undefined', () => {
-        const result = { events: [] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(true)
+      sinon.assert.calledOnceWithExactly(skipped, rule, 'after-request')
+      sinon.assert.notCalled(parent.createSubcontext)
+      sinon.assert.notCalled(parent.run)
+    })
 
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
+    it('does not create a context when looking up an unbound outgoing request', () => {
+      waf.init(rules, config.appsec)
+      assert.strictEqual(waf.getRequest({}), undefined)
+      sinon.assert.notCalled(DDWAF.prototype.createContext)
+    })
 
-        sinon.assert.notCalled(keepTrace)
-        sinon.assert.notCalled(updateRateLimitedMetric)
-      })
+    it('skips new subcontexts without an active incoming request', () => {
+      waf.init(rules, config.appsec)
+      getActiveRequest.returns(undefined)
+      assert.strictEqual(waf.runSubContext(data), undefined)
+      sinon.assert.notCalled(DDWAF.prototype.createContext)
+    })
 
-      it('should not call keepTrace or updateRateLimitedMetric when result is null', () => {
-        mockWafContext.run.returns(null)
-        limiterStub.isAllowed.returns(true)
+    it('skips isolated checks while AppSec is disabled', () => {
+      assert.strictEqual(waf.runSubContext(data), undefined)
+      sinon.assert.notCalled(DDWAF.prototype.createContext)
+    })
+  })
 
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
+  describe('request context ownership', () => {
+    it('does not dispose or create contexts through the facade while disabled', () => {
+      waf.disposeContext({})
+      sinon.assert.notCalled(DDWAF.prototype.createContext)
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const context = waf.wafManager.getWAFContext(req)
+      waf.destroy()
+      waf.disposeContext(req)
+      sinon.assert.notCalled(context.ddwafContext.dispose)
+      context.dispose()
+    })
 
-        sinon.assert.notCalled(keepTrace)
-        sinon.assert.notCalled(updateRateLimitedMetric)
-      })
+    it('does not recreate a context for late checks after request disposal', () => {
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const context = waf.wafManager.getWAFContext(req)
+      context.ddwafContext.dispose.callsFake(() => { context.ddwafContext.disposed = true })
+      waf.disposeContext(req)
+
+      waf.run({ 'server.request.body': 'late' }, req)
+      waf.disposeContext(req)
+
+      sinon.assert.calledOnce(DDWAF.prototype.createContext)
+      sinon.assert.calledOnce(context.ddwafContext.dispose)
+      sinon.assert.notCalled(context.ddwafContext.run)
+    })
+
+    it('preserves in-flight request contexts when the manager is replaced', () => {
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const context = waf.wafManager.getWAFContext(req)
+      waf.init(rules, config.appsec)
+
+      assert.strictEqual(waf.wafManager.getWAFContext(req), context)
+      assert.strictEqual(context.ddwafContext.disposed, false)
+      waf.disposeContext(req)
+
+      sinon.assert.calledOnce(context.ddwafContext.dispose)
+      sinon.assert.calledOnce(DDWAF.prototype.createContext)
+    })
+
+    it('reports against the explicit Lambda root span', () => {
+      waf.init(rules, config.appsec)
+      const req = {}
+      getActiveRequest.returns(req)
+      const span = {}
+      const result = { duration: 1000, attributes: { 'appsec.tag': 'value' }, keep: true }
+      DDWAF.prototype.createContext().run.returns(result)
+
+      waf.run({ 'server.request.body': 'body' }, req, undefined, span)
+
+      sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req, span)
+      sinon.assert.calledOnceWithExactly(keepTrace, span, ASM)
+      sinon.assert.notCalled(root)
     })
   })
 
@@ -380,12 +529,14 @@ describe('WAF Manager', () => {
 
     it('should call ddwaf.createContext', () => {
       const req = {}
+      getActiveRequest.returns(req)
       waf.wafManager.getWAFContext(req)
       sinon.assert.calledOnce(waf.wafManager.ddwaf.createContext)
     })
 
     it('should pass waf version when invoking ddwaf.createContext', () => {
       const req = {}
+      getActiveRequest.returns(req)
       const context = waf.wafManager.getWAFContext(req)
       assert.strictEqual(context.wafVersion, '4.5.6')
     })
@@ -439,19 +590,15 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ duration: 1, durationExt: 1 })
 
         wafContextWrapper.run({
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-            'server.request.uri.raw': 'https://testurl',
-            'processor.address': { 'extract-schema': true },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
+          'server.request.uri.raw': 'https://testurl',
+          'processor.address': { 'extract-schema': true },
         })
 
         sinon.assert.calledOnceWithExactly(ddwafContext.run, {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-            'server.request.uri.raw': 'https://testurl',
-            'processor.address': { 'extract-schema': true },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
+          'server.request.uri.raw': 'https://testurl',
+          'processor.address': { 'extract-schema': true },
         }, config.appsec.DD_APPSEC_WAF_TIMEOUT)
       })
 
@@ -464,12 +611,10 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
-        wafContextWrapper.run(params, undefined, req)
+        wafContextWrapper.run(params)
 
         sinon.assert.calledOnceWithExactly(Reporter.reportAttack, match({ events: ['ATTACK DATA'] }), req, undefined)
       })
@@ -483,9 +628,7 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         wafContextWrapper.run(params)
@@ -504,9 +647,7 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         wafContextWrapper.run(params, 'rule_type')
@@ -523,9 +664,7 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         wafContextWrapper.run(params)
@@ -537,9 +676,7 @@ describe('WAF Manager', () => {
       it('should not report attack when ddwafContext does not return events', () => {
         ddwafContext.run.returns({ duration: 1, durationExt: 1 })
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         wafContextWrapper.run(params)
@@ -550,9 +687,7 @@ describe('WAF Manager', () => {
       it('should not report attack when ddwafContext returns empty data', () => {
         ddwafContext.run.returns({ duration: 1, durationExt: 1, events: [] })
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         wafContextWrapper.run(params)
@@ -567,9 +702,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         const params = {
-          persistent: {
-            'server.request.headers.no_cookies': { header: 'value' },
-          },
+          'server.request.headers.no_cookies': { header: 'value' },
         }
 
         const wafResult = wafContextWrapper.run(params)
@@ -584,17 +717,15 @@ describe('WAF Manager', () => {
           attributes: [{ '_dd.appsec.s.req.body': [8] }],
         }
         const params = {
-          persistent: {
-            'server.request.body': 'value',
-            'waf.context.processor': {
-              'extract-schema': true,
-            },
+          'server.request.body': 'value',
+          'waf.context.processor': {
+            'extract-schema': true,
           },
         }
 
         ddwafContext.run.returns(result)
 
-        wafContextWrapper.run(params, undefined, req)
+        wafContextWrapper.run(params)
         sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req, undefined)
       })
 
@@ -613,10 +744,8 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run({
-          persistent: {
-            'server.request.body': 'foo',
-          },
-        }, undefined, req)
+          'server.request.body': 'foo',
+        })
         sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req, undefined)
       })
     })

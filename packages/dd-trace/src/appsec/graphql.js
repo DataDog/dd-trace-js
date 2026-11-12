@@ -27,7 +27,7 @@ const graphqlRequestData = new WeakMap()
 /**
  * Per request, the blocking action of every field already checked without arguments, `undefined` when the WAF
  * requested none. A `{ fieldName: {} }` payload exposes nothing but the field name, so the WAF returns the same
- * action for every occurrence of that field, as long as the request's WAF context keeps the same persistent
+ * action for every occurrence of that field, as long as the request's WAF context keeps the same
  * inputs. List queries resolve the same fields once per item.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
@@ -62,12 +62,12 @@ function onGraphqlStartResolver (data) {
     return
   }
 
-  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const result = waf.runSubContext({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo })
   const blockingAction = getBlockingAction(result?.actions)
 
   // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
   // occurrence run again instead of reading it back as "allowed".
-  if (fieldName !== undefined && result !== undefined && !result.timeout) {
+  if (fieldName !== undefined && result !== undefined && !result.timeout && !(result.errorCode < 0)) {
     if (knownActions === undefined) {
       fieldsWithoutArgumentsActions.set(req, new Map([[fieldName, blockingAction]]))
     } else {
@@ -79,17 +79,14 @@ function onGraphqlStartResolver (data) {
 }
 
 /**
- * Persistent inputs stay in the request's WAF context, so they can change the action of a field checked before
- * they arrived. Forget what we know about the request when a run carries them. Resolver runs send ephemeral
- * inputs only, so they never invalidate their own answers.
+ * Inputs stay in the request's WAF context, so they can change the action of a field checked before
+ * they arrived. Invalidate cached answers after evaluations on the request context.
+ * Resolver evaluations use subcontexts, so they never invalidate their own answers.
  *
- * @param {{ payload?: { persistent?: object } }} data
+ * @param {{ req?: object, payload?: object, isSubcontext?: boolean }} data
  */
-function onWafRunFinished ({ payload }) {
-  if (!payload?.persistent) return
-
-  const req = getActiveRequest()
-  if (!req) return
+function onWafRunFinished ({ req, payload, isSubcontext }) {
+  if (!req || !payload || isSubcontext) return
 
   fieldsWithoutArgumentsActions.delete(req)
 }
