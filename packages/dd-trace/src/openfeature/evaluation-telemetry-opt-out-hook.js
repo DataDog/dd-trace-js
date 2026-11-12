@@ -2,7 +2,7 @@
 
 const PARAMETER = 'dd_evaluation_telemetry_opt_out'
 
-/** Gates an owned finally-only telemetry hook without changing evaluation or exposure handling. */
+/** Gates an owned telemetry hook without changing evaluation or exposure handling. */
 class EvaluationTelemetryOptOutHook {
   #delegate
   #decisions = new WeakMap()
@@ -23,6 +23,17 @@ class EvaluationTelemetryOptOutHook {
     // A customer before hook can fail before this hook runs. Capture opt-out before customer error hooks change it.
     if (!this.#decisions.has(hookContext)) {
       this.#decisions.set(hookContext, isOptedOut(hookContext.context))
+    }
+  }
+
+  /**
+   * @param {import('@openfeature/core').HookContext} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   * @param {import('@openfeature/core').HookHints} [hints]
+   */
+  after (hookContext, evaluationDetails, hints) {
+    if (this.#decisions.get(hookContext) !== true) {
+      return this.#delegate.after?.(hookContext, evaluationDetails, hints)
     }
   }
 
