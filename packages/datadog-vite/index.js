@@ -4,10 +4,13 @@ const fs = require('node:fs')
 const { createRequire } = require('node:module')
 const path = require('node:path')
 
-const { createEsmResolver, processModule } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const {
+  createEsmResolver,
   createEsmWrapper,
-  getEsmInterception,
+  processModule,
+} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const {
+  classify,
   instrument,
   packagePathPattern,
 } = require('../datadog-instrumentations/src/helpers/bundler-transform')
@@ -75,7 +78,6 @@ const mergedFunctions = new WeakSet()
  *   resolve: (source: string, importer: string | undefined, options: ResolveOptions) => Promise<ResolvedId | null>,
  *   warn: (message: string) => void,
  * }} ResolveContext
- * @typedef {{ dcModule: string, publications: Array<{ package: string, path: string, version: string }> }} Interception
  */
 
 /**
@@ -236,9 +238,9 @@ class EsmInterception {
   /**
    * Kept across watch mode rebuilds, which load cached modules without resolving their imports again.
    *
-   * @type {Map<string, Interception>}
+   * @type {Map<string, string>}
    */
-  #interceptions = new Map()
+  #specifiers = new Map()
   /** @type {Map<string, Promise<string[] | undefined>>} */
   #exports = new Map()
   /** @type {Map<string, string>} */
@@ -255,8 +257,7 @@ class EsmInterception {
   resolveId (context, source, importer, options) {
     if (importer === undefined || options?.isEntry) return
     if (isWrapperId(importer)) {
-      // The wrapper imports the wrapped module and the diagnostic channel module of the tracer, both relative to the
-      // wrapped module, and must reach the wrapped module itself.
+      // Imports from generated modules resolve relative to the original. The wrapper must reach that module unwrapped.
       return context.resolve(source, importer.slice(GENERATED_ID_PREFIX.length), { ...options, skipSelf: true })
     }
     if (!mayResolveToTarget(source, importer)) return
@@ -269,13 +270,11 @@ class EsmInterception {
    * @param {string} id The id of the wrapped module.
    */
   load (context, id) {
-    const interception = this.#interceptions.get(id)
     return this.#getExports(context, id).then(setters => {
       if (!setters) throw new Error(`Could not analyze the exports of ${id}`)
       return createEsmWrapper({
-        dcModule: interception?.dcModule ?? '',
-        publications: interception?.publications ?? [],
-        resourcePath: id,
+        path: id,
+        specifier: this.#specifiers.get(id),
         setters,
       })
     })
@@ -301,36 +300,19 @@ class EsmInterception {
     // A module importing itself must not reach its wrapper, which would import it in turn.
     if (!resolved || resolved.external || resolved.id === importer || !isInstrumentable(resolved.id)) return resolved
     const { id } = resolved
-    const interception = getEsmInterception({
+    const kind = classify({
       resourcePath: id,
       // Package root hooks only apply to imports of the package name.
       request: isBareSpecifier(source) ? source : undefined,
       warn: warning => context.warn(warning.message),
     })
-    if (!interception) return resolved
-    this.#addInterception(id, interception)
+    if (kind !== 'esm-intercept') return resolved
+    this.#specifiers.set(id, source)
     return this.#getExports(context, id).then(setters => {
       if (!setters) return resolved
-      // The wrapper publishes the module to the tracer, even when importers only re-export it.
+      // IITM registration must run even when importers only re-export the module.
       return { id: GENERATED_ID_PREFIX + id, moduleSideEffects: true }
     })
-  }
-
-  /**
-   * Importers may resolve the same file with and without the package name, so publications are merged.
-   *
-   * @param {string} id
-   * @param {Interception} interception
-   */
-  #addInterception (id, interception) {
-    const existing = this.#interceptions.get(id)
-    if (!existing) {
-      this.#interceptions.set(id, { dcModule: interception.dcModule, publications: [...interception.publications] })
-      return
-    }
-    for (const publication of interception.publications) {
-      if (!existing.publications.some(({ path }) => path === publication.path)) existing.publications.push(publication)
-    }
   }
 
   /**

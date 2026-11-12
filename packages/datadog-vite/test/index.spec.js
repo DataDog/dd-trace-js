@@ -7,7 +7,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const vm = require('node:vm')
 
-const dc = require('dc-polyfill')
+const iitm = require('import-in-the-middle')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -489,15 +489,16 @@ describe('datadogVite', () => {
       sinon.assert.calledOnceWithExactly(context.resolve, './hono.js', indexPath, { skipSelf: true })
       sinon.assert.notCalled(context.warn)
 
-      // The wrapper reaches the wrapped module, and the diagnostic channel module relative to it.
+      // The wrapper reaches the original module unwrapped and the same IITM runtime as esbuild.
       const wrapper = await runResolveId(plugin, honoPath, wrapperId, honoPath, { attributes: {} })
       assert.deepStrictEqual(wrapper.result, { id: honoPath })
       sinon.assert.calledOnceWithExactly(wrapper.context.resolve, honoPath, honoPath, {
         attributes: {},
         skipSelf: true,
       })
-      const dc = await runResolveId(plugin, '../../dc-polyfill/index.js', wrapperId, '/dc-polyfill/index.js')
-      sinon.assert.calledOnceWithExactly(dc.context.resolve, '../../dc-polyfill/index.js', honoPath, { skipSelf: true })
+      const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+      const runtime = await runResolveId(plugin, iitmPath, wrapperId, iitmPath)
+      sinon.assert.calledOnceWithExactly(runtime.context.resolve, iitmPath, honoPath, { skipSelf: true })
 
       // A module importing itself reaches itself.
       assert.deepStrictEqual((await runResolveId(plugin, './hono.js', honoPath, honoPath)).result, { id: honoPath })
@@ -534,7 +535,7 @@ describe('datadogVite', () => {
       }
     })
 
-    it('generates a wrapper whose exports hooks replace through the published proxy', async () => {
+    it('registers replaceable exports with IITM instead of publishing on the bundler channel', async () => {
       const { honoPath, indexPath } = createHono()
       const plugin = datadogVite()
       const wrapperId = `\0dd-trace-vite:${honoPath}`
@@ -542,28 +543,25 @@ describe('datadogVite', () => {
       const code = await plugin.load.handler.call(createResolveContext(), wrapperId)
 
       assert.equal(plugin.load.filter.id.test(wrapperId), true)
-      const payloads = []
+      assert.doesNotMatch(code, /dd-trace:bundler:load|new Proxy/)
+      const registrations = []
       let proxy
       const importerSource = 'import { Hono } from "./wrapper.mjs";\nexport const getHono = () => Hono;\n'
-      const { exports, importer } = await importWrapper(honoPath, code, importerSource, payload => {
-        const { module, ...rest } = payload
-        payloads.push(rest)
+      const { exports, importer } = await importWrapper(honoPath, code, importerSource, (module, specifier) => {
+        registrations.push(specifier)
         proxy = module
         assert.equal(Object.prototype.toString.call(module), '[object Module]')
         assert.deepStrictEqual(Object.keys(module).sort(), ['Hono', 'default', 'star'])
         assert.equal(new module.Hono().name(), 'original')
         module.Hono = class Instrumented extends module.Hono {}
         Object.defineProperty(module, 'star', { value: 'replaced' })
-        module.unknown = true
-        assert.throws(() => Object.defineProperty(module, 'star', { get: () => 'star' }), /Getters\/setters are not supported/)
       })
 
-      assert.deepStrictEqual(payloads, [{ esm: true, package: 'hono', path: 'hono/dist/hono.js', version: '4.13.14' }])
+      assert.deepStrictEqual(registrations, ['./hono.js'])
       assert.equal(exports.Hono.name, 'Instrumented')
       assert.equal(importer.getHono(), exports.Hono)
       assert.equal(exports.star, 'replaced')
       assert.deepStrictEqual(exports.default, { kind: 'default' })
-      assert.equal('unknown' in exports, false)
 
       // Replacements stay live for every importer.
       proxy.default = { kind: 'replaced' }
@@ -572,7 +570,7 @@ describe('datadogVite', () => {
       assert.equal(new proxy.Hono().name(), 'original')
     })
 
-    it('publishes package root hooks only for imports of the package name, merging publications', async () => {
+    it('registers package-name imports once and lets IITM replace the default export returned by a hook', async () => {
       const projectDir = createProject()
       const packageDir = createPackage(projectDir, 'connect', { main: 'index.js', type: 'module', version: '3.7.0' })
       const indexPath = write(packageDir, 'index.js', 'export default function connect () { return "app" }\n')
@@ -586,17 +584,57 @@ describe('datadogVite', () => {
         { id: wrapperId, moduleSideEffects: true })
       await runResolveId(plugin, 'connect', path.join(projectDir, 'src/other.mjs'), indexPath)
 
-      const payloads = []
+      const registrations = []
       const code = await plugin.load.handler.call(createResolveContext(), wrapperId)
-      const { exports } = await importWrapper(indexPath, code, '', payload => {
-        const { module, ...rest } = payload
-        payloads.push(rest)
-        // Hooks returning a new object replace the default export through the proxy.
-        module.default = () => 'instrumented'
+      const onHook = sinon.stub().returns(() => 'instrumented')
+      let namespace
+      const hook = new iitm.Hook(['connect'], (namespace, name, baseDir) => {
+        return baseDir === packageDir ? onHook(namespace, name, baseDir) : namespace
       })
+      try {
+        const { exports } = await importWrapper(indexPath, code, '', (module, specifier) => {
+          namespace = module
+          registrations.push(specifier)
+        })
 
-      assert.deepStrictEqual(payloads, [{ esm: true, package: 'connect', path: 'connect', version: '3.7.0' }])
-      assert.equal(exports.default(), 'instrumented')
+        assert.deepStrictEqual(registrations, ['connect'])
+        sinon.assert.calledOnceWithExactly(onHook, namespace, 'connect', packageDir)
+        assert.equal(exports.default(), 'instrumented')
+      } finally {
+        hook.unhook()
+      }
+    })
+
+    it('keeps registrations available to hooks installed after the wrapper runs', async () => {
+      const { honoPath, indexPath } = createHono()
+      const plugin = datadogVite()
+      await runResolveId(plugin, './hono.js', indexPath, honoPath)
+      const code = await plugin.load.handler.call(createResolveContext(), `\0dd-trace-vite:${honoPath}`)
+      const { exports } = await importWrapper(honoPath, code, '', () => {})
+      const hook = new iitm.Hook([honoPath], namespace => {
+        namespace.Hono = class Instrumented {}
+      })
+      try {
+        assert.equal(exports.Hono.name, 'Instrumented')
+      } finally {
+        hook.unhook()
+      }
+    })
+
+    it('keeps named-only exports when an IITM hook returns a replacement object', async () => {
+      const { honoPath, indexPath } = createHono()
+      fs.writeFileSync(honoPath, 'export class Hono {}\n')
+      const plugin = datadogVite()
+      await runResolveId(plugin, './hono.js', indexPath, honoPath)
+      const code = await plugin.load.handler.call(createResolveContext(), `\0dd-trace-vite:${honoPath}`)
+      const hook = new iitm.Hook([honoPath], () => ({ replacement: true }))
+      try {
+        const { exports } = await importWrapper(honoPath, code, '', () => {})
+        assert.deepStrictEqual(Object.keys(exports), ['Hono'])
+        assert.equal(exports.Hono.name, 'Hono')
+      } finally {
+        hook.unhook()
+      }
     })
 
     it('leaves Orchestrion targets to the transform and fails open when exports cannot be analyzed', async () => {
@@ -645,12 +683,12 @@ describe('datadogVite', () => {
       const wrapperId = `\0dd-trace-vite:${honoPath}`
 
       await runResolveId(plugin, './hono.js', indexPath, honoPath, {}, ssr)
+      await runResolveId(plugin, 'hono/dist/hono.js', indexPath, honoPath, {}, main)
       const ssrCode = await plugin.load.handler.call(createResolveContext(ssr), wrapperId)
-      // Another environment that never resolved the module loads a wrapper without publications.
       const mainCode = await plugin.load.handler.call(createResolveContext(main), wrapperId)
 
-      assert.match(ssrCode, /dd-trace:bundler:load/)
-      assert.doesNotMatch(mainCode, /dd-trace:bundler:load/)
+      assert.ok(ssrCode.includes('_, set, get, "./hono.js")'))
+      assert.ok(mainCode.includes('_, set, get, "hono/dist/hono.js")'))
       assert.match(mainCode, /export \{ \$dd\w+ as "star" \}/)
       assert.equal(resolvers.length, 2)
 
@@ -660,8 +698,12 @@ describe('datadogVite', () => {
       sinon.assert.calledOnce(resolvers[0].close)
       sinon.assert.notCalled(resolvers[1].close)
 
-      // Rebuilds in watch mode load cached modules without resolving them again, and keep their publications.
-      assert.match(await plugin.load.handler.call(createResolveContext(ssr), wrapperId), /dd-trace:bundler:load/)
+      // Rebuilds retain each environment's original specifier but analyze changed exports again.
+      write(path.dirname(honoPath), 'nested.js', 'export const changed = "changed";\n')
+      const rebuilt = await plugin.load.handler.call(createResolveContext(ssr), wrapperId)
+      assert.ok(rebuilt.includes('_, set, get, "./hono.js")'))
+      assert.match(rebuilt, /export \{ \$dd\w+ as "changed" \}/)
+      assert.doesNotMatch(rebuilt, /as "star"/)
       assert.equal(resolvers.length, 3)
     })
 
@@ -783,30 +825,32 @@ async function runResolveId (plugin, source, importer, resolved, options = {}, e
 }
 
 /**
- * Imports a generated wrapper next to the wrapped module, so its diagnostic channel import resolves.
+ * Imports a generated wrapper with the real IITM runtime, observing only this module's registration.
  *
  * @param {string} resourcePath
  * @param {string} code
  * @param {string} importerSource A module importing `./wrapper.mjs`.
- * @param {(payload: { module: Record<string, unknown> }) => void} onPublish
+ * @param {(namespace: Record<string, unknown>, specifier: string) => void} onRegister
  */
-async function importWrapper (resourcePath, code, importerSource, onPublish) {
+async function importWrapper (resourcePath, code, importerSource, onRegister) {
   const directory = fs.mkdtempSync(path.join(path.dirname(resourcePath), 'wrapper-'))
+  const moduleURL = pathToFileURL(resourcePath).href
+  const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
   const wrapperPath = write(directory, 'wrapper.mjs', code
-    .replace(JSON.stringify(resourcePath), JSON.stringify(pathToFileURL(resourcePath).href))
-    .replace(/from "\.\.?\//, match => `${match}../`))
+    .replace(JSON.stringify(resourcePath), JSON.stringify(moduleURL))
+    .replace(JSON.stringify(iitmPath), JSON.stringify(pathToFileURL(iitmPath).href)))
   const importerPath = write(directory, 'importer.mjs', importerSource)
-  const onLoad = payload => {
-    if (payload.esm) onPublish(payload)
+  const hook = (url, namespace, specifier) => {
+    if (url === moduleURL) onRegister(namespace, specifier)
   }
-  dc.channel('dd-trace:bundler:load').subscribe(onLoad)
+  iitm.addHook(hook)
   try {
     return {
       exports: await import(pathToFileURL(wrapperPath).href),
       importer: await import(pathToFileURL(importerPath).href),
     }
   } finally {
-    dc.channel('dd-trace:bundler:load').unsubscribe(onLoad)
+    iitm.removeHook(hook)
   }
 }
 

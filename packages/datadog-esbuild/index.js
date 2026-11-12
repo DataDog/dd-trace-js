@@ -2,11 +2,12 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { pathToFileURL, fileURLToPath } = require('node:url')
+const { fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const {
   createEsmResolver,
+  createEsmWrapper,
   processModule,
 } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
@@ -348,20 +349,12 @@ ${build.initialOptions.banner.js}`
             transform: build.esbuild.transformSync,
           })
 
-          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
-          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
-          contents = `
-import { register } from ${JSON.stringify(iitmPath)};
-import * as namespace from ${JSON.stringify(args.path)};
-const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
-const set = {};
-const get = {};
-
-${[...setters.values()].join(';\n')};
-
-register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
-`
+          contents = createEsmWrapper({
+            path: args.path,
+            internal: data.internal,
+            specifier: data.raw,
+            setters: setters.values(),
+          })
         } else {
           contents = fs.readFileSync(args.path, 'utf8')
         }
