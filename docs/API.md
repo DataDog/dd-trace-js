@@ -147,31 +147,6 @@ By default, the Datadog esbuild and webpack plugins inject `DD_GIT_COMMIT_SHA` a
 bundle for Source Code Integration. Set `DD_BUNDLER_INJECT_GIT_METADATA=false` to skip that injection when you need
 stable artifact hashes across commits (for example, content-addressed Lambda deployments).
 
-<h3 id="feature-flag-sdk-diagnostics">Feature Flag SDK Diagnostics</h3>
-
-The tracer-managed provider sends SDK initialization and configuration-fetch observations using the existing
-Feature Flagging event delivery route. Set a service and environment (`DD_SERVICE` and `DD_ENV`) so these
-observations can be queried. Each event identifies the SDK as `dd-trace-js` with the tracer version.
-Diagnostics do not contain targeting keys, evaluation context, or error messages. They remain enabled when
-exposure logging and evaluation counts are disabled and do not require any flag evaluations.
-
-The provider reports one initialization outcome: `ready`, `failed` with `INIT_FAILED`, or `incomplete` with
-reason `provider_closed` if it closes while initialization is pending. A timeout uses the existing provider
-initialization timeout. Configuration received before initialization is reported as available at the start.
-
-After initialization settles, the agentless configuration source reports `provider_error` with
-`CONFIG_FETCH_FAILED` when a fetch fails after its retries, authentication fails, or the response is invalid.
-It retains the last usable configuration. Repeated failures are suppressed until a successful fetch, and
-error reports are limited to one per minute per provider. A successful fetch does not emit a recovery event.
-Remote Configuration supports initialization observations; its transport failures are not reported as agentless fetch failures.
-
-These events describe observations at a point in time. They do not establish that all processes sharing a
-service and environment are healthy, and a successful initialization does not clear other processes' errors.
-Delivery route discovery starts when provider initialization begins. Delivery is best-effort, with a bounded queue
-and a final flush on provider close or Node.js `beforeExit`. Closing while discovery is pending drops queued
-diagnostics, as it does for flag evaluations. Shutdown does not wait for discovery. Abrupt process termination
-can lose pending events.
-
 <h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
 
 Enable the context parameter before you first access `tracer.openfeature`:
