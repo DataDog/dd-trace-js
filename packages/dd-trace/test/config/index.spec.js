@@ -1313,6 +1313,7 @@ describe('Config', () => {
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT
     delete process.env.DD_AGENT_HOST
     const config = getConfig()
     // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
@@ -1320,6 +1321,19 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
+    // Profiles are an OTLP signal in development, with its own path
+    assert.strictEqual(
+      config.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT,
+      'http://127.0.0.1:4318/v1development/profiles'
+    )
+  })
+
+  it('should disable profiling with OTEL_PROFILES_EXPORTER=none unless DD_PROFILING_ENABLED is set', () => {
+    process.env.OTEL_PROFILES_EXPORTER = 'none'
+    assert.strictEqual(getConfig().profiling.DD_PROFILING_ENABLED, 'false')
+
+    process.env.DD_PROFILING_ENABLED = 'true'
+    assert.strictEqual(getConfig().profiling.DD_PROFILING_ENABLED, 'true')
   })
 
   it('should treat an empty generic OTLP endpoint as unset', () => {
@@ -6606,6 +6620,19 @@ rules:
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
     })
 
+    it('should keep profiling enabled in agentless mode when profiles are sent as OTLP', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'agentless-api-key'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'agent'
+      process.env.OTEL_PROFILES_EXPORTER = 'otlp'
+      const config = getConfig()
+
+      // The agent destination becomes the agentless OTLP profiles endpoint
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['agent'])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    })
+
     it('should preserve an explicit trace sample rate', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_SAMPLE_RATE = '0.5'
@@ -6812,6 +6839,11 @@ rules:
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/logs')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/metrics')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://otlp.datadoghq.eu/v1/traces')
+      assert.strictEqual(
+        config.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT,
+        'https://otlp.datadoghq.eu/v1development/profiles'
+      )
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROFILES_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'], 'agentless-api-key')
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'], 'agentless-api-key')
