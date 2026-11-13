@@ -56,17 +56,15 @@ class LLMObs extends NoopLLMObs {
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
-   * @param {import('./index')} llmobsModule - LLMObs module instance
-   * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {import('../config/config-base') &
+   *   Pick<ReturnType<import('../config')>, 'setProgrammaticConfig'>} config - Tracer configuration
    * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
+  constructor (tracer, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
-    /** @type {import('../config/config-base')} */
     this._config = config
 
-    this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
     this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
@@ -115,13 +113,9 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    // TODO: These configs should be passed through directly at construction time instead.
-    this._config.llmobs.DD_LLMOBS_ENABLED = true
-    this._config.llmobs.DD_LLMOBS_ML_APP = options.mlApp
-    this._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = options.agentlessEnabled
-
-    // configure writers and channel subscribers
-    this._llmobsModule.enable(this._config)
+    this._config.setProgrammaticConfig({
+      llmobs: { enabled: true, mlApp: options.mlApp, agentlessEnabled: options.agentlessEnabled },
+    })
   }
 
   disable () {
@@ -137,10 +131,7 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Disabling LLMObs')
 
-    this._config.llmobs.DD_LLMOBS_ENABLED = false
-
-    // disable writers and channel subscribers
-    this._llmobsModule.disable()
+    this._config.setProgrammaticConfig({ llmobs: { enabled: false } })
   }
 
   trace (options = {}, fn) {

@@ -141,9 +141,8 @@ class RCClientManager {
  *
  * @param {import('../remote_config')} rc - RemoteConfig instance
  * @param {Config} config - Tracer config
- * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
-function enable (rc, config, onConfigUpdated) {
+function enable (rc, config) {
   // This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
   // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
@@ -182,7 +181,5 @@ function enable (rc, config, onConfigUpdated) {
     }
 
     config.setRemoteConfig(sdkConfigManager.getMergedConfig())
-
-    onConfigUpdated()
   })
 }

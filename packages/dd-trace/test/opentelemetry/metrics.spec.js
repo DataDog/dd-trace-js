@@ -17,7 +17,7 @@ const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -1413,7 +1413,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
       // Refresh happens after the first export already established a baseline of 20.
       config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
       value = 25
 
       clock.tick(100)

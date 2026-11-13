@@ -152,9 +152,8 @@ describe('span-stats exporter', () => {
 
     exporter = new Exporter({ url })
 
-    assert.strictEqual(exporter._url.toString(), url.toString())
     sinon.assert.calledWithMatch(Writer, {
-      url: exporter._url,
+      url,
     })
   })
 })

@@ -213,19 +213,6 @@ describe('AgentlessWriter', () => {
     sinon.assert.calledTwice(exporter.sendV04)
   })
 
-  it('recreates the pipeline exporter when the intake URL changes', async () => {
-    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
-
-    await new Promise(resolve => writer.flush(resolve))
-    writer.setUrl(new URL('https://other-intake.example'))
-    await new Promise(resolve => writer.flush(resolve))
-
-    sinon.assert.calledTwice(createAgentlessExporter)
-    sinon.assert.calledOnce(exporter.close)
-    assert.strictEqual(createAgentlessExporter.secondCall.args[0].endpoint,
-      'https://other-intake.example/api/v2/spans')
-  })
-
   it('recreates the pipeline exporter when the API key changes', async () => {
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 

@@ -32,6 +32,7 @@ describe('profiler', () => {
         stopping: false,
         isStopping () { return this.stopping },
         start: sinon.stub(),
+        configure: sinon.spy(),
         stop: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),

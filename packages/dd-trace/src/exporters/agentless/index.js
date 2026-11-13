@@ -61,27 +61,6 @@ class AgentlessExporter {
   }
 
   /**
-   * Sets the intake URL.
-   * @param {string} urlString - The new intake URL
-   */
-  setUrl (urlString) {
-    try {
-      const url = new URL(urlString)
-      this._url = url
-      this._writer.setUrl(url)
-      return true
-    } catch (err) {
-      log.error(
-        'Invalid URL for agentless exporter: %s. Using previous URL: %s. Error: %s',
-        urlString,
-        this._url?.href || 'none',
-        err.message
-      )
-      return false
-    }
-  }
-
-  /**
    * Exports a trace. Traces are batched and flushed on a timer.
    * @param {object[]} spans - Array of spans (all from the same trace)
    */

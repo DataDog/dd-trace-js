@@ -40,11 +40,28 @@ class LLMObsExporter extends BufferingExporter {
     const agentlessEnabled = useAgentlessExporter ?? globalAgentlessEnabled ?? config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
 
     if (agentlessEnabled === undefined) {
-      fetchAgentInfo(config.url, (err) => {
-        this.#initialize(err != null)
-      }, { keepProcessAlive: true })
+      this.#discover()
     } else {
       this.#initialize(agentlessEnabled)
+    }
+  }
+
+  #discover () {
+    const url = this._config.url
+    fetchAgentInfo(url, (error) => {
+      if (url.href === this._config.url.href) {
+        this.#initialize(error != null)
+      } else {
+        this.#discover()
+      }
+    }, { keepProcessAlive: true })
+  }
+
+  /** @param {ReturnType<import('../../config')>} config */
+  configure (config) {
+    if (this._isInitialized && !this.#agentless) {
+      this.#exporter.configure(config)
+      this._url = this.#exporter._url
     }
   }
 
@@ -54,10 +71,8 @@ class LLMObsExporter extends BufferingExporter {
    */
   #initialize (useAgentless) {
     const Exporter = useAgentless ? AgentlessExporter : AgentExporter
-    const pendingUrl = this._url
     this.#agentless = useAgentless
     this.#exporter = new Exporter(this._config, this.#prioritySampler)
-    if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
     this._url = this.#exporter._url
 
     this._isInitialized = true
@@ -118,16 +133,6 @@ class LLMObsExporter extends BufferingExporter {
       this.#exporter.flush(done)
     } else {
       this.#pendingFlushes.push(done)
-    }
-  }
-
-  /** @param {string | URL} url */
-  setUrl (url) {
-    if (this._isInitialized) {
-      this.#exporter.setUrl?.(url)
-      this._url = this.#exporter._url
-    } else {
-      this._url = url
     }
   }
 }

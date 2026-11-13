@@ -49,6 +49,7 @@ const TYPE_LABELS = ['count', 'gauge', 'distribution', 'histogram']
  * @property {string[]} tags
  * @property {typeof import('node:dns').lookup} lookup
  * @property {URL|string} [metricsProxyUrl]
+ * @property {string} [runtimeId]
  */
 
 /**
@@ -78,7 +79,7 @@ const TYPE_LABELS = ['count', 'gauge', 'distribution', 'histogram']
  * @returns {void}
  */
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
@@ -90,6 +91,7 @@ class DogStatsDClient {
   #httpOptions
   #lookup
   #metrics = { message: '', offset: 0, queue: [] }
+  #metricsProxyUrl
   #port
   #serverlessDeliveryTracker
   #tagsPrefix
@@ -106,19 +108,6 @@ class DogStatsDClient {
    * @param {boolean} [telemetryEnabled] - Whether to collect client telemetry
    */
   constructor (options, telemetryEnabled = false) {
-    this.#lookup = options.lookup
-    if (options.metricsProxyUrl) {
-      this.#httpOptions = {
-        method: 'POST',
-        retry: false,
-        url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v2/proxy',
-      }
-    }
-
-    this.#family = isIP(options.host)
-    this.#host = options.host
-    this.#port = options.port
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
 
     if (telemetryEnabled) {
@@ -134,29 +123,32 @@ class DogStatsDClient {
       }
     }
 
-    this.#updateTagPrefixes(options.tags.length ? `|#${options.tags.join(',')}` : '')
+    this.configure(options)
 
     this.#udp4 = this._socket('udp4')
     this.#udp6 = this._socket('udp6')
   }
 
   /**
-   * Recomputes the cached tags and tag-prefix (mirrors the constructor) after a `config.tags`
-   * change, e.g. a MicroVM clone resume.
-   *
-   * Buffered lines have the old prefix baked in, and on a clone resume they were produced during
-   * the image build, so every clone holds the same bytes — flushing them would submit one identical
-   * copy per clone. Dropping is right here for that reason only: for a tag change on a live process
-   * the buffer holds unique data whose old tags are still correct, so that case wants a flush
-   * before the swap.
-   *
-   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   * @param {DogStatsDClientOptions} options
+   * @param {boolean} [reset] Whether buffered data came from a cloned process.
    */
-  updateTags (tags) {
-    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
-    if (tagsPrefix === this.#tagsPrefix) return
+  configure (options, reset = false) {
+    const url = options.metricsProxyUrl?.toString()
+    if (url && url !== this.#metricsProxyUrl) {
+      this.#metricsProxyUrl = url
+      this.#httpOptions = { method: 'POST', retry: false, url, path: '/dogstatsd/v2/proxy' }
+    }
+    this.#lookup = options.lookup
+    this.#family = isIP(options.host)
+    this.#host = options.host
+    this.#port = options.port
 
+    const { tags } = options
+    const tagsPrefix = tags.length ? `|#${tags.join(',')}` : ''
     this.#updateTagPrefixes(tagsPrefix)
+    if (!reset) return
+
     this.#metrics.queue = []
     this.#metrics.message = ''
     this.#metrics.offset = 0
@@ -340,7 +332,8 @@ class DogStatsDClient {
    */
   _sendHttp (queue, recordTelemetry, done) {
     const buffer = Buffer.concat(queue)
-    request(buffer, this.#httpOptions, (error, _result, _statusCode, _headers, dropped) => {
+    const options = this.#httpOptions
+    request(buffer, options, (error, _result, _statusCode, _headers, dropped) => {
       if (dropped) {
         if (recordTelemetry && this.telemetry) {
           this.#recordDropped(buffer.length)
@@ -348,11 +341,7 @@ class DogStatsDClient {
         done?.()
       } else if (error) {
         log.error('DogStatsDClient: HTTP error from agent: %s', error.message, error)
-        if (error.status === 404) {
-          // Inside this if-block, we have connectivity to the agent, but
-          // we're not getting a 200 from the proxy endpoint. If it's a 404,
-          // then we know we'll never have the endpoint, so just clear out the
-          // options. Either way, we can give UDP a try.
+        if (error.status === 404 && this.#httpOptions === options) {
           this.#httpOptions = undefined
         }
         this._sendUdp(queue, recordTelemetry, done)
@@ -546,6 +535,7 @@ class DogStatsDClient {
       port: config.dogstatsd.port,
       tags,
       lookup: config.lookup,
+      runtimeId: config.tags?.['runtime-id'],
     }
 
     if (config.url) {
@@ -563,32 +553,45 @@ class DogStatsDClient {
 function createMetricsAggregationClient (options) {
   const client = new DogStatsDClient(options, true)
 
-  return new MetricsAggregationClient(client)
+  return new MetricsAggregationClient(client, options)
 }
 
 class MetricsAggregationClient {
   #metricsByType
+  #runtimeId
+  #tags
 
   /** @type {DogStatsDTelemetryState|undefined} */
   #telemetry
 
   /**
    * @param {DogStatsDClient} client - DogStatsD transport client
+   * @param {DogStatsDClientOptions} options
    */
-  constructor (client) {
+  constructor (client, options) {
     this._client = client
     this.#telemetry = client.telemetry
     this.#metricsByType = this.#telemetry?.metricsByType ?? [0, 0, 0, 0]
+    this.#runtimeId = options.runtimeId
+    this.#tags = options.tags.join(',')
 
     this.reset()
   }
 
   /**
-   * Recomputes the wrapped client's cached tags (e.g. after a MicroVM clone resume).
-   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   * @param {DogStatsDClientOptions} options
    */
-  updateTags (tags) {
-    this._client.updateTags(tags)
+  configure (options) {
+    const reset = options.runtimeId !== this.#runtimeId
+    const tags = options.tags.join(',')
+    if (reset) {
+      this.reset()
+    } else if (tags !== this.#tags) {
+      this.flush()
+    }
+    this._client.configure(options, reset)
+    this.#runtimeId = options.runtimeId
+    this.#tags = tags
   }
 
   /**
@@ -796,8 +799,8 @@ class CustomMetrics {
     this.#client = createMetricsAggregationClient(clientConfig)
 
     // CustomMetrics has process-lifetime flush handlers and no stop hook, so this shares that lifetime.
-    identityRefreshChannel.subscribe(() => {
-      this.#client.updateTags(DogStatsDClient.generateClientConfig(config).tags)
+    configUpdateChannel.subscribe(() => {
+      this.#client.configure(DogStatsDClient.generateClientConfig(config))
     })
 
     const flush = this.flush.bind(this)

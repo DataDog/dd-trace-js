@@ -61,17 +61,6 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * @param {URL} url - The new intake URL.
-   */
-  setUrl (url) {
-    super.setUrl(url)
-    this.#closeExporter()
-    if (url) {
-      this.#urlMissing = false
-    }
-  }
-
-  /**
    * @param {Buffer} data - v0.4 MessagePack payload.
    * @param {number} count - Number of traces in the payload.
    * @param {() => void} done - Callback invoked after delivery completes or fails.

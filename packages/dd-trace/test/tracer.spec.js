@@ -10,6 +10,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
+const { DataStreamsProcessor } = require('../src/datastreams')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -28,25 +29,69 @@ describe('Tracer', () => {
     config = getConfig({ service: 'service' })
 
     tracer = new Tracer(config)
-    tracer._exporter.setUrl = sinon.stub()
     tracer._exporter.export = sinon.stub()
     tracer._prioritySampler.configure = sinon.stub()
   })
 
   describe('configure', () => {
+    it('preserves the destination when only sampling options change', () => {
+      const sampler = { sampleRate: 0.5 }
+      const url = tracer._exporter._url
+      tracer.configure({ env: 'updated', sampler })
+      assert.strictEqual(tracer._exporter._url, url)
+      sinon.assert.calledWith(tracer._prioritySampler.configure, 'updated', sampler)
+    })
+
     it('should pass the sampling options to the priority sampler', () => {
       const env = 'test'
       const sampler = { sampleRate: 0.5 }
-      const options = { env, sampler }
+      const options = { ...config, env, sampler }
       tracer.configure(options)
       sinon.assert.calledWith(tracer._prioritySampler.configure, env, sampler)
     })
   })
 
-  describe('setUrl', () => {
-    it('should pass the setUrl call to the exporter', () => {
-      tracer.setUrl('http://example.com')
-      sinon.assert.calledWith(tracer._exporter.setUrl, 'http://example.com')
+  describe('Agent reconfiguration', () => {
+    it('updates the Agent exporter from effective configuration', () => {
+      const url = new URL('http://example.com')
+      tracer.configure({ ...config, url })
+      assert.strictEqual(tracer._exporter._url, url)
+    })
+
+    it('preserves an independent exporter destination on Agent updates', () => {
+      const createConfig = proxyquire('../src/config', {})
+      const independentConfig = createConfig({ experimental: { exporter: 'agentless' } })
+      const independentTracer = new Tracer(independentConfig)
+      const exporter = /** @type {import('../src/exporters/agentless')} */ (independentTracer._exporter)
+      const url = exporter._url
+
+      independentConfig.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
+      independentTracer.configure(independentConfig)
+      assert.strictEqual(exporter._url, url)
+    })
+  })
+
+  describe('lazy Data Streams activation', () => {
+    it('uses each pending processor configuration', () => {
+      const first = new DataStreamsProcessor({ service: 'first' })
+      const second = new DataStreamsProcessor({ service: 'second' })
+
+      first.bucketFromTimestamp(0)
+      second.bucketFromTimestamp(0)
+
+      assert.strictEqual(first.service, 'first')
+      assert.strictEqual(second.service, 'second')
+    })
+
+    it('activates once through an observed method', () => {
+      const processor = new DataStreamsProcessor({ service: 'observed' })
+      const bucketFromTimestamp = sinon.spy(processor, 'bucketFromTimestamp')
+
+      const first = processor.bucketFromTimestamp(0)
+      const second = processor.bucketFromTimestamp(0)
+
+      assert.strictEqual(first, second)
+      sinon.assert.calledTwice(bucketFromTimestamp)
     })
   })
 
@@ -65,7 +110,6 @@ describe('Tracer', () => {
         './serverless': serverless,
       })
       tracer = new VercelTracer(config)
-      tracer._exporter.setUrl = sinon.stub()
       tracer._exporter.export = sinon.stub()
       tracer._prioritySampler.configure = sinon.stub()
       flushServerlessTelemetry = flush.flushServerlessTelemetry

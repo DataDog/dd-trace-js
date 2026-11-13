@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -19,11 +20,13 @@ describe('BaseLLMObsWriter', () => {
   let options
   let logger
 
-  function getBaseLLMObsWriter () {
+  /** @param {import('node:path')} [paths] */
+  function getBaseLLMObsWriter (paths = path) {
     const loadServerless = proxyquire.noPreserveCache()
     const serverless = loadServerless('../../../src/serverless', {})
     proxyquire.preserveCache()
     return proxyquire('../../../src/llmobs/writers/base', {
+      'node:path': paths,
       '../../exporters/common/request': request,
       '../../log': logger,
       '../../serverless': serverless,
@@ -79,6 +82,22 @@ describe('BaseLLMObsWriter', () => {
     assert.strictEqual(writer._agentless, false)
     assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/endpoint')
   })
+
+  for (const agentless of [true, false]) {
+    it(`uses HTTP path separators on Windows with agentless=${agentless}`, () => {
+      BaseLLMObsWriter = getBaseLLMObsWriter(path.win32)
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(agentless)
+      writer.append({ name: 'windows-span' })
+      writer.flush()
+
+      const requestOptions = request.firstCall.args[1]
+      assert.strictEqual(requestOptions.path, agentless ? '/endpoint' : '/evp_proxy/v2/endpoint')
+      assert.strictEqual(writer.url, agentless
+        ? 'https://intake.site.com/endpoint'
+        : 'http://localhost:8126/evp_proxy/v2/endpoint')
+    })
+  }
 
   describe('with override origin', () => {
     useEnv({

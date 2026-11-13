@@ -1,10 +1,11 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
@@ -28,6 +29,14 @@ function experimentClient () {
     postExperimentEvents: sinon.stub().resolves(),
     updateExperiment: sinon.stub().resolves(),
   }
+}
+
+function getRuntimeConfig (options) {
+  return getConfigFresh(options, {
+    'dc-polyfill': {
+      channel: name => name === 'datadog:config:update' ? { publish () {} } : channel(name),
+    },
+  })
 }
 
 describe('sdk', () => {
@@ -75,10 +84,10 @@ describe('sdk', () => {
     tracer._tracer.flushAll.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
-    LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
+    LLMObsEvalMetricsWriter.prototype.flush.reset()
 
     LLMObsSpanWriter.prototype.append.resetHistory()
-    LLMObsSpanWriter.prototype.flush.resetHistory()
+    LLMObsSpanWriter.prototype.flush.reset()
 
     removeDestroyHandler()
   })
@@ -89,16 +98,32 @@ describe('sdk', () => {
     await agent.close()
   })
 
+  it('retains the registered processor when the Agent URL changes', () => {
+    const processor = sinon.stub().returns(null)
+    llmobs.registerProcessor(processor)
+    try {
+      const before = llmobs.trace({ kind: 'workflow', name: 'before-update' }, span => span)
+      tracer.setUrl(`http://127.0.0.1:${agent.port}`)
+      const after = llmobs.trace({ kind: 'workflow', name: 'after-update' }, span => span)
+
+      assert.strictEqual(before.meta_struct?._llmobs, undefined)
+      assert.strictEqual(after.meta_struct?._llmobs, undefined)
+      sinon.assert.notCalled(LLMObsSpanWriter.prototype.append)
+      sinon.assert.calledTwice(processor)
+    } finally {
+      llmobs.deregisterProcessor()
+    }
+  })
+
   describe('enabled', () => {
     for (const [value, label] of [
       [true, 'enabled'],
       [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: value } })
+        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { llmobs: { DD_LLMOBS_ENABLED: value } })
 
         assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
-        enabledOrDisabledLLMObs.disable() // unsubscribe
       })
     }
   })
@@ -254,14 +279,10 @@ describe('sdk', () => {
 
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
-      const config = getConfigFresh({})
-      const llmobsModule = {
-        enable: sinon.stub(),
-        disable () {},
-      }
+      const config = getRuntimeConfig({})
 
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
 
       disabledLLMObs.enable({
         mlApp: 'mlApp',
@@ -271,22 +292,18 @@ describe('sdk', () => {
       assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_ML_APP, 'mlApp')
       assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
 
-      sinon.assert.called(llmobsModule.enable)
+      assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ENABLED'), 'code')
 
       disabledLLMObs.disable() // unsubscribe
     })
 
     it('recreates experiments after enabling llmobs', () => {
-      const config = getConfigFresh({})
+      const config = getRuntimeConfig({})
       config.DD_API_KEY = 'api-key'
       config.DD_APP_KEY = 'app-key'
       config.service = 'service'
-      const llmobsModule = {
-        enable: sinon.stub(),
-        disable () {},
-      }
 
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
 
       assert.strictEqual(disabledLLMObs.experiments.createDataset('d').name(), 'd')
 
@@ -300,22 +317,19 @@ describe('sdk', () => {
     })
 
     it('does not enable llmobs if it is already enabled', () => {
-      sinon.spy(llmobs._llmobsModule, 'enable')
+      sinon.spy(llmobs._config, 'setProgrammaticConfig')
       llmobs.enable({})
 
       assert.strictEqual(llmobs.enabled, true)
-      sinon.assert.notCalled(llmobs._llmobsModule.enable)
-      llmobs._llmobsModule.enable.restore()
+      sinon.assert.notCalled(llmobs._config.setProgrammaticConfig)
+      llmobs._config.setProgrammaticConfig.restore()
     })
 
     it('does not enable llmobs if env var conflicts', () => {
-      const config = getConfigFresh({})
-      const llmobsModule = {
-        enable: sinon.stub(),
-      }
+      const config = getRuntimeConfig({})
 
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
       process.env.DD_LLMOBS_ENABLED = 'false'
 
       disabledLLMObs.enable({})
@@ -328,31 +342,23 @@ describe('sdk', () => {
 
   describe('disable', () => {
     it('disables llmobs if it is enabled', () => {
-      const llmobsModule = {
-        disable: sinon.stub(),
-      }
-
-      const config = getConfigFresh({
+      const config = getRuntimeConfig({
         llmobs: {
           agentlessEnabled: false,
         },
       })
 
-      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, config)
 
       assert.strictEqual(enabledLLMObs.enabled, true)
       enabledLLMObs.disable()
 
       assert.strictEqual(enabledLLMObs.enabled, false)
-      sinon.assert.called(llmobsModule.disable)
+      assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ENABLED'), 'code')
     })
 
     it('recreates experiments after disabling llmobs', () => {
-      const llmobsModule = {
-        disable: sinon.stub(),
-      }
-
-      const config = getConfigFresh({
+      const config = getRuntimeConfig({
         llmobs: {
           agentlessEnabled: false,
           mlApp: 'mlApp',
@@ -362,25 +368,25 @@ describe('sdk', () => {
       config.DD_APP_KEY = 'app-key'
       config.service = 'service'
 
-      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, config)
 
       assert.strictEqual(typeof enabledLLMObs.experiments.createDataset('d').addRecord, 'function')
 
       enabledLLMObs.disable()
 
       assert.strictEqual(enabledLLMObs.experiments.createDataset('d').name(), 'd')
-      sinon.assert.called(llmobsModule.disable)
+      assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ENABLED'), 'code')
     })
 
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: false } })
-      sinon.spy(disabledLLMObs._llmobsModule, 'disable')
+      const disabledLLMObs = new LLMObsSDK(null, { llmobs: { DD_LLMOBS_ENABLED: false } })
+      disabledLLMObs._config.setProgrammaticConfig = sinon.spy()
 
       disabledLLMObs.disable()
 
       assert.strictEqual(disabledLLMObs.enabled, false)
-      sinon.assert.notCalled(disabledLLMObs._llmobsModule.disable)
+      sinon.assert.notCalled(disabledLLMObs._config.setProgrammaticConfig)
     })
   })
 
@@ -2738,7 +2744,7 @@ describe('sdk', () => {
         const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
         config.llmobs.DD_LLMOBS_ENABLED = true
-        otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+        otelLLMObs = new LLMObsSDK(tracer._tracer, config)
       })
 
       it('adds source:otel tag', () => {

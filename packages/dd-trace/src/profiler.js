@@ -127,6 +127,7 @@ function applyDeferredConfig () {
  */
 function applyConfig (config) {
   const enabled = config.profiling.DD_PROFILING_ENABLED
+  if (isStarted()) getProfilingModule().profiler.configure(config)
   if (enabled === 'true') {
     // A non-auto value means the SSI heuristics no longer get a say; disable them so a trigger that
     // fires after this publish can't start the profiler behind this decision's back.

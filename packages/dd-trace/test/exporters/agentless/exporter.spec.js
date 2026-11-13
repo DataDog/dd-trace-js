@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('node:url')
-const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -279,53 +278,6 @@ describe('AgentlessExporter', () => {
 
     it('should call callback when done', (done) => {
       exporter.flush(done)
-    })
-  })
-
-  describe('setUrl', () => {
-    let log
-
-    beforeEach(() => {
-      log = {
-        error: sinon.spy(),
-        warn: sinon.spy(),
-      }
-
-      Exporter = proxyquire('../../../src/exporters/agentless', {
-        './writer': function () { return writer },
-        '../../log': log,
-      })
-
-      exporter = new Exporter({})
-    })
-
-    it('should update URL on exporter and writer', () => {
-      const newUrl = 'https://new-intake.example.com'
-      const result = exporter.setUrl(newUrl)
-
-      assert.strictEqual(result, true)
-      sinon.assert.called(writer.setUrl)
-    })
-
-    it('should update exporter._url property', () => {
-      const newUrl = 'https://new-intake.example.com'
-      exporter.setUrl(newUrl)
-
-      sinon.assert.match(exporter._url.href, newUrl)
-    })
-
-    it('should return false and log error when URL is invalid', () => {
-      const originalUrl = exporter._url.href
-      const result = exporter.setUrl('not-a-valid-url')
-
-      assert.strictEqual(result, false)
-      sinon.assert.calledOnce(log.error)
-      const call = log.error.getCall(0)
-      assert.ok(call.args[0].includes('Invalid URL'), `Got: ${inspect(call.args[0])}`)
-      // Invalid URL is passed as second argument (printf-style)
-      assert.strictEqual(call.args[1], 'not-a-valid-url')
-      sinon.assert.notCalled(writer.setUrl)
-      sinon.assert.match(exporter._url.href, originalUrl)
     })
   })
 })

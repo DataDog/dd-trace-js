@@ -18,7 +18,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 function getVercelBatchLogRecordProcessor () {
   process.env.VERCEL = '1'
@@ -956,7 +956,7 @@ describe('OpenTelemetry Logs', () => {
       const { config, logs } = setupLogs()
 
       config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
       logs.getLogger('test-logger').emit({ body: 'test' })
 
       validator()

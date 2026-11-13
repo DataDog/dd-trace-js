@@ -15,7 +15,7 @@ const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
 const processTags = require('../../../src/process-tags')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
@@ -149,7 +149,7 @@ describe('createOtlpSpanStatsExporter', () => {
     const exporter = createOtlpSpanStatsExporter(config)
 
     config.tags['runtime-id'] = 'refreshed-id'
-    identityRefreshChannel.publish(config)
+    configUpdateChannel.publish(config)
     exporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS)
 
     const request = httpStub.firstCall.returnValue

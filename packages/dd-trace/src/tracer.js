@@ -25,9 +25,14 @@ const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
+/** @typedef {Partial<Pick<import('./exporters/agent'), 'configure'>>} ConfigurableExporter */
+
 class DatadogTracer extends Tracer {
+  #url
+
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
+    this.#url = config.url
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
@@ -52,6 +57,11 @@ class DatadogTracer extends Tracer {
   configure (config) {
     const { env, sampler } = config
     this._prioritySampler.configure(env, sampler, config)
+    if (config.url !== undefined && this.#url !== config.url) {
+      const exporter = /** @type {typeof this._exporter & ConfigurableExporter} */ (this._exporter)
+      exporter.configure?.(config)
+      this.#url = config.url
+    }
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
@@ -140,11 +150,6 @@ class DatadogTracer extends Tracer {
       }
       return tracer.trace(name, optionsObj, () => original.apply(this, args))
     })
-  }
-
-  setUrl (url) {
-    this._exporter.setUrl(url)
-    this._dataStreamsProcessor.setUrl(url)
   }
 
   /**

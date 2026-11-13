@@ -16,7 +16,7 @@ describeNotWindows('crashtracker', () => {
   let crashtracker
   let binding
   let config
-  let identityRefreshChannel
+  let configUpdateChannel
   let libdatadogExtras
   let log
   let getAgentlessTelemetryUrl
@@ -41,9 +41,7 @@ describeNotWindows('crashtracker', () => {
     log = {
       error: sinon.stub(),
     }
-    identityRefreshChannel = {
-      subscribe: sinon.stub(),
-    }
+    configUpdateChannel = { subscribe: sinon.stub() }
     getAgentlessTelemetryUrl = sinon.stub().callsFake(actualGetAgentlessTelemetryUrl)
 
     sinon.stub(binding, 'init')
@@ -52,7 +50,9 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
-      'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
+      'dc-polyfill': {
+        channel: () => configUpdateChannel,
+      },
       '../log': log,
       '../telemetry/agentless-url': getAgentlessTelemetryUrl,
     })
@@ -67,6 +67,18 @@ describeNotWindows('crashtracker', () => {
   })
 
   describe('start', () => {
+    it('updates the native endpoint when runtime configuration changes', () => {
+      crashtracker.start(config)
+      config.url = new URL('unix:///tmp/updated-agent.socket')
+      configUpdateChannel.subscribe.yield(config)
+
+      sinon.assert.calledOnce(binding.init)
+      sinon.assert.calledOnce(binding.updateConfig)
+      const endpoint = binding.updateConfig.firstCall.args[0].endpoint
+      assert.strictEqual(endpoint.url.scheme, 'unix')
+      assert.strictEqual(endpoint.url.authority, Buffer.from(config.url.pathname).toString('hex'))
+    })
+
     it('should initialize the binding', () => {
       crashtracker.start(config)
 
@@ -257,12 +269,12 @@ describeNotWindows('crashtracker', () => {
     })
   })
 
-  describe('identity refresh', () => {
+  describe('configuration updates', () => {
     it('should reconfigure the binding with refreshed tags when the identity-refresh channel fires', () => {
       crashtracker.start(config)
 
       const refreshedConfig = { ...config, tags: { foo: 'baz' } }
-      identityRefreshChannel.subscribe.firstCall.args[0](refreshedConfig)
+      configUpdateChannel.subscribe.firstCall.args[0](refreshedConfig)
 
       sinon.assert.called(binding.updateMetadata)
       const metadata = binding.updateMetadata.lastCall.args[0]
@@ -274,7 +286,7 @@ describeNotWindows('crashtracker', () => {
 
       crashtracker.start(config)
 
-      sinon.assert.notCalled(identityRefreshChannel.subscribe)
+      sinon.assert.notCalled(configUpdateChannel.subscribe)
     })
   })
 

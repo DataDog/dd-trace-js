@@ -686,10 +686,12 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    const getExistingConfig = require('../../src/config')
     const tracerConfigJson = JSON.stringify(tracerConfig)
     if (
       !loaded ||
       global._ddtrace === undefined ||
+      usesOtlpTraceExporter(getExistingConfig()) ||
       envChangedSince(envSnapshot) ||
       lastTracerConfigJson !== tracerConfigJson
     ) {
@@ -803,18 +805,28 @@ module.exports = {
       listener = server.listen(0, '127.0.0.1', () => {
         const port = this.port = listener.address().port
 
-        tracer.init({
-          service: 'test',
-          env: 'tester',
-          port,
-          flushInterval: 0,
-          plugins: false,
-          ...tracerConfig,
-        })
+        const url = `http://127.0.0.1:${port}`
+        const endpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = `${url}/v1/traces`
+        try {
+          tracer.init({
+            service: 'test',
+            env: 'tester',
+            url,
+            port,
+            flushInterval: 0,
+            plugins: false,
+            ...tracerConfig,
+          })
+        } finally {
+          if (endpoint === undefined) {
+            delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+          } else {
+            process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = endpoint
+          }
+        }
 
-        const createConfig = require('../../src/config')
-        const path = usesOtlpTraceExporter(createConfig()) ? '/v1/traces' : ''
-        tracer.setUrl(`http://127.0.0.1:${port}${path}`)
+        tracer.setUrl(url)
 
         for (const [name, pluginConfig] of loadedPlugins) {
           tracer.use(name, pluginConfig)

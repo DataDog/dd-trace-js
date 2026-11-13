@@ -2375,6 +2375,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "toURL",
         "configurationNames": [
           "url"
         ],
