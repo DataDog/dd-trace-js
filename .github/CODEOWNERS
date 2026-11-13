@@ -103,13 +103,14 @@
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/turbopack/ @DataDog/apm-idm-js
-/integration-tests/vite/ @DataDog/apm-idm-js
+/integration-tests/vite/ @DataDog/lang-platform-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild/ @DataDog/apm-idm-js
 /packages/datadog-turbopack/ @DataDog/apm-idm-js
+/packages/datadog-vite/ @DataDog/lang-platform-js
 /packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
