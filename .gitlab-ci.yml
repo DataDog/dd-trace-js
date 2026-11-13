@@ -117,5 +117,5 @@ requirements_json_test:
 
 generate-supported-versions:
   before_script:
-    # The packaging image has no yarn; lifecycle scripts must run to build the vendored bundle instrumentations load.
-    - npx --yes yarn@1 install --frozen-lockfile --non-interactive
+    # Keep lifecycle scripts enabled to build the vendored bundle used by the generator.
+    - npm exec --yes --package=bun -- bun install --frozen-lockfile

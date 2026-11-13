@@ -8,6 +8,8 @@ runs:
       with:
         node-version: '20'
 
+    # The repository's Node setup installs Bun through npm, so this also works in
+    # container jobs without `unzip`.
     - uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       with:
         max_attempts: 3
@@ -15,7 +17,7 @@ runs:
         retry_wait_seconds: 30
         command: |
           cd ${{ github.workspace }}/.github/actions/datadog-ci
-          yarn install --frozen-lockfile
+          bun --config="${{ github.workspace }}/bunfig.toml" install --frozen-lockfile --ignore-scripts
 
     - shell: bash
       run: echo "${{ github.workspace }}/.github/actions/datadog-ci/node_modules/.bin" >> $GITHUB_PATH

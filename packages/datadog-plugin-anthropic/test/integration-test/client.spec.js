@@ -14,7 +14,6 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { resolutions } = require('../../../dd-trace/test/plugins/versions/package.json')
 
 describe('esm', () => {
   let agent
@@ -23,7 +22,6 @@ describe('esm', () => {
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
     useSandbox([
       `@anthropic-ai/sdk@${version}`,
-      `standardwebhooks@${resolutions.standardwebhooks}`,
     ], false, [
       './packages/datadog-plugin-anthropic/test/integration-test/*',
     ])

@@ -268,6 +268,35 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
+  // Match Google GAX's gRPC range so credential instanceof checks see one class. Keep while tests load gRPC directly.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      from: 'google-gax',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // Tests load the HTTP handler from each client workspace. Keep its range aligned with the client
+  // so older SDKs do not load a newer handler with an incompatible @smithy/core.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      // Keep while the HTTP handler is loaded directly by the tests.
+      name: '@smithy/node-http-handler',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The GoogleAuth prototype stub must resolve to the same module instance as the SDK.
+  '@google-cloud/vertexai': [
+    {
+      // Keep while tests stub GoogleAuth through the workspace rather than through the SDK's public auth options.
+      name: 'google-auth-library',
+      version: '^9.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',
@@ -359,8 +388,8 @@ module.exports = {
   ],
   '@apollo/server': [
     {
-      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
-      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
+      // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
       name: 'graphql',
       dep: true,
@@ -400,9 +429,7 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
     },
@@ -453,6 +480,13 @@ module.exports = {
       name: '@langchain/core',
       versions: ['>=0.1'],
       dep: true,
+    },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape. Remove when they cover newer request formats.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
     },
   ],
   langgraph: [
@@ -673,6 +707,8 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      // libpq builds the native addon; keep while pg-native delegates its build to this transitive package.
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',

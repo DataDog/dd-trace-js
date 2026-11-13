@@ -66,11 +66,13 @@ updates:
   # Dependabot bumps deps in package.json; the electron variant is always regenerated
   # fresh on the next npm install / npm pack.
 
-  # Regular npm packages that fall into our supported ranges besides OTEL
-  - package-ecosystem: "npm"
+  # Packages installed by Bun
+  - package-ecosystem: "bun"
     directories:
       - "/"
       - "/docs"
+      - "/.github/all-green"
+      - "/.github/workflow-job-names"
       - "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"
@@ -145,7 +147,7 @@ updates:
           - "*"
 
   # Vendored dependencies
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directories:
       - "/vendor"
     schedule:
@@ -390,11 +392,13 @@ updates:
           - "*"
 
   # Esbuild integration test dependencies
+  # Webpack fixtures use the same update policy.
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
       - "/integration-tests/appsec/iast-esbuild-esm"
       - "/integration-tests/appsec/iast-esbuild-cjs"
+      - "/integration-tests/webpack"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
@@ -428,4 +432,21 @@ updates:
     labels:
       - dependabot
       - dependencies
+      - semver-patch
+
+  # Keep startup benchmark inputs fixed until their frozen lock is updated together.
+  - package-ecosystem: "npm"
+    directory: "/benchmark/sirun/startup/everything-fixture"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    groups:
+      startup-benchmark:
+        patterns:
+          - "*"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
       - semver-patch
