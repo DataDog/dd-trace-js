@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { tmpdir } = require('node:os')
-const { join } = require('node:path')
+const { extname, join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { createContext, runInContext } = require('node:vm')
 
@@ -397,6 +397,26 @@ describe('Cypress config', () => {
       fs.rmSync(project, { recursive: true, force: true })
     }
   })
+})
+
+describe('Cypress support preprocessors', () => {
+  for (const extension of ['js', 'mjs', 'ts', 'tsx']) {
+    it(`keeps generated support on the ${extension} preprocessor`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-language-'))
+      const supportFile = join(project, `support.${extension}`)
+      const source = "import 'dd-trace/ci/cypress/support'\n"
+      fs.writeFileSync(supportFile, source)
+      try {
+        const files = installSupportFile({ projectRoot: project, supportFile })
+        const expected = extension.startsWith('ts') ? `.${extension}` : '.mjs'
+        assert.deepStrictEqual(files.map(file => extname(file)), [expected, expected])
+        assert.ok(fs.readFileSync(files[1], 'utf8').includes(`import "./support.${extension}"`))
+        assert.strictEqual(fs.readFileSync(supportFile, 'utf8'), source)
+      } finally {
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
 })
 
 describe('Cypress support initialization ownership', () => {

@@ -307,8 +307,10 @@ function createSupportWrapper (
   directory, originalSupportFile, browserHooksSource, deferLifecycle, lifecycleOwnerSource
 ) {
   const suffix = `${process.pid}-${randomUUID()}`
-  const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
-  const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
+  // Stay on the project's TypeScript preprocessor instead of loading Babel for an injected .mjs entry.
+  const extension = /\.tsx?$/.test(originalSupportFile) ? path.extname(originalSupportFile) : '.mjs'
+  const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}${extension}`)
+  const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}${extension}`)
   const wrapperImports = [
     `import ${JSON.stringify(getRelativeImportPath(directory, browserHooksFile))}`,
   ]
