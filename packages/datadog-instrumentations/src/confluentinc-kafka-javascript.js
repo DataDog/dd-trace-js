@@ -43,6 +43,17 @@ const EMPTY_NATIVE_HEADERS = []
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
+// librdkafka: the client is not connected (yet), so the lookup may succeed later.
+const ERR__STATE = -172
+
+/**
+ * Cluster id per producer or consumer client; `null` while the lookup is in flight or when the
+ * client has none to report.
+ *
+ * @type {WeakMap<object, string | null>}
+ */
+const clusterIds = new WeakMap()
+
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
   instrumentBaseModule(module)
@@ -61,6 +72,7 @@ function instrumentBaseModule (module) {
     return shimmer.wrap(module, className, function wrapProducer (Original) {
       return function wrappedProducer (...args) {
         const producer = new Original(...args)
+        lookUpNativeClusterIdWhenReady(producer, channels.producerStart)
 
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
@@ -71,6 +83,7 @@ function instrumentBaseModule (module) {
               }
 
               const brokers = this.globalConfig?.['bootstrap.servers']
+              lookUpNativeClusterId(producer)
               const nativeHeaders = Array.isArray(headers) ? headers : EMPTY_NATIVE_HEADERS
 
               let carrier
@@ -100,6 +113,7 @@ function instrumentBaseModule (module) {
                   headers: carrier,
                 }],
                 bootstrapServers: brokers,
+                clusterId: clusterIds.get(producer) ?? undefined,
               }
 
               return channels.producerStart.runStores(ctx, () => {
@@ -139,6 +153,7 @@ function instrumentBaseModule (module) {
       return function wrappedConsumer (...args) {
         const consumer = new Original(...args)
         const groupId = this.groupId || (args[0]?.['group.id'])
+        lookUpNativeClusterIdWhenReady(consumer, channels.consumerStart)
 
         // Wrap the consume method
         if (typeof consumer?.consume === 'function') {
@@ -152,8 +167,11 @@ function instrumentBaseModule (module) {
                 callback = numMessages
               }
 
+              lookUpNativeClusterId(consumer)
               const ctx = {
                 groupId,
+                clusterId: clusterIds.get(consumer) ?? undefined,
+                bootstrapServers: this.globalConfig?.['bootstrap.servers'],
               }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
@@ -166,7 +184,7 @@ function instrumentBaseModule (module) {
 
                       // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
-                      updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
+                      updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId, ctx.clusterId)
                     }
                   }
 
@@ -245,6 +263,10 @@ function instrumentKafkaJS (kafkaJS) {
                 kafka._ddBrokers = args[0]['bootstrap.servers']
               }
 
+              if (typeof producer?.connect === 'function') {
+                shimmer.wrap(producer, 'connect', connect => wrapConnect(connect, producer))
+              }
+
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
                 shimmer.wrap(producer, 'send', function wrapSend (send) {
@@ -254,6 +276,7 @@ function instrumentKafkaJS (kafkaJS) {
                     }
 
                     const disableHeaderInjection = disabledHeaderWeakSet.has(producer)
+                    lookUpKafkaJsClusterId(producer)
 
                     // Hand the underlying client a shallow clone so neither
                     // injection nor the client's auto-fields (it sets
@@ -273,6 +296,7 @@ function instrumentKafkaJS (kafkaJS) {
                       topic: outgoingPayload?.topic,
                       messages: outgoingPayload?.messages || [],
                       bootstrapServers: kafka._ddBrokers,
+                      clusterId: clusterIds.get(producer) ?? undefined,
                       disableHeaderInjection,
                     }
 
@@ -326,6 +350,12 @@ function instrumentKafkaJS (kafkaJS) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
+              // Like producers: the brokers of the client, else those of the consumer configuration.
+              const bootstrapServers = kafka._ddBrokers || config?.['bootstrap.servers']
+
+              if (typeof consumer?.connect === 'function') {
+                shimmer.wrap(consumer, 'connect', connect => wrapConnect(connect, consumer))
+              }
 
               // Wrap the run method for handling message consumption
               if (typeof consumer?.run === 'function') {
@@ -335,6 +365,7 @@ function instrumentKafkaJS (kafkaJS) {
                       return run.apply(this, arguments)
                     }
 
+                    lookUpKafkaJsClusterId(consumer)
                     const eachMessage = options?.eachMessage
                     const eachBatch = options?.eachBatch
                     if (eachMessage) {
@@ -353,6 +384,8 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: payload?.message?.offset,
                             message: payload?.message,
                             groupId,
+                            clusterId: clusterIds.get(consumer) ?? undefined,
+                            bootstrapServers,
                           }
                         })
                     } else if (eachBatch) {
@@ -372,6 +405,8 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: batch?.messages[batch?.messages?.length - 1]?.offset,
                             messages: batch?.messages,
                             groupId,
+                            clusterId: clusterIds.get(consumer) ?? undefined,
+                            bootstrapServers,
                           }
                         }
                       )
@@ -420,7 +455,13 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     }
 
     return startCh.runStores(ctx, () => {
-      updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
+      updateLatestOffset(
+        commitPayload?.topic,
+        commitPayload?.partition,
+        commitPayload?.offset,
+        commitPayload?.groupId,
+        commitPayload?.clusterId
+      )
 
       try {
         const result = callback.apply(this, arguments)
@@ -459,14 +500,100 @@ function getGroupId (config) {
   return ''
 }
 
-function updateLatestOffset (topic, partition, offset, groupId) {
+function updateLatestOffset (topic, partition, offset, groupId, clusterId) {
   const key = `${topic}:${partition}`
   latestConsumerOffsets.set(key, {
     topic,
     partition,
     offset,
     groupId,
+    clusterId,
   })
+}
+
+/**
+ * Delay the resolution of a KafkaJS-compatible `connect()` until the cluster id lookup settled, so
+ * the first send or message already reports it. The lookup only reads the librdkafka metadata cache.
+ *
+ * @param {Function} connect
+ * @param {object} client KafkaJS-compatible producer or consumer.
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapConnect (connect, client) {
+  return function wrappedConnect (...args) {
+    const result = connect.apply(this, args)
+    if (
+      (!channels.producerStart.hasSubscribers && !channels.consumerStart.hasSubscribers) ||
+      typeof result?.then !== 'function'
+    ) {
+      return result
+    }
+    return result.then((value) => {
+      const lookup = lookUpKafkaJsClusterId(client)
+      return lookup ? lookup.then(() => value) : value
+    })
+  }
+}
+
+/**
+ * Start reading the cluster id of a connected KafkaJS-compatible client, once. `clusterId()`
+ * (>=1.11.0) with a zero timeout answers from the librdkafka metadata cache, which connecting has
+ * filled, and never contacts a broker. Only a lookup made before connecting is retried.
+ *
+ * @param {{ clusterId?: (options: { timeout: number }) => Promise<string> }} client KafkaJS-compatible
+ *   producer or consumer.
+ * @returns {Promise<void> | undefined} The lookup, when this call started it.
+ */
+function lookUpKafkaJsClusterId (client) {
+  if (clusterIds.has(client)) return
+  clusterIds.set(client, null)
+  if (typeof client.clusterId !== 'function') return
+  // An async method: failures arrive as rejections.
+  return client.clusterId({ timeout: 0 }).then((clusterId) => {
+    if (clusterId) clusterIds.set(client, clusterId)
+  }, (error) => {
+    if (error?.code === ERR__STATE) clusterIds.delete(client)
+  })
+}
+
+/**
+ * Start the cluster id lookup of a node-rdkafka client as soon as `connect()` fetched metadata, so produce and
+ * consume calls following the `ready` event soon enough are the only ones without it.
+ *
+ * @param {{ once?: Function }} client node-rdkafka producer or consumer.
+ * @param {import('dc-polyfill').Channel} startCh Channel whose subscribers want the id.
+ */
+function lookUpNativeClusterIdWhenReady (client, startCh) {
+  if (typeof client?.once !== 'function') return
+  client.once('ready', () => {
+    if (startCh.hasSubscribers) lookUpNativeClusterId(client)
+  })
+}
+
+/**
+ * Start reading the cluster id of a connected node-rdkafka client, once. See
+ * `lookUpKafkaJsClusterId`; `connect()` reports the client connected before it fetched metadata,
+ * so the lookup waits until connecting finished.
+ *
+ * @param {object} client node-rdkafka producer or consumer.
+ */
+function lookUpNativeClusterId (client) {
+  if (
+    clusterIds.has(client) ||
+    typeof client.clusterId !== 'function' ||
+    !client.isConnected?.() ||
+    client._isConnecting
+  ) {
+    return
+  }
+  clusterIds.set(client, null)
+  try {
+    client.clusterId(0, (error, clusterId) => {
+      if (!error && clusterId) clusterIds.set(client, clusterId)
+    })
+  } catch {
+    // Keep the id unavailable for this client.
+  }
 }
 
 function getLatestOffsets () {

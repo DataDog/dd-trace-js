@@ -8,7 +8,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static operation = 'consume-batch'
 
   bindStart (ctx) {
-    const { topic, partition, messages, groupId, clusterId } = ctx.extractedArgs || ctx
+    const { topic, partition, messages, groupId, clusterId, bootstrapServers } = ctx.extractedArgs || ctx
 
     const span = this.startSpan({
       resource: topic,
@@ -19,6 +19,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
         'kafka.cluster_id': clusterId,
         'messaging.destination.name': topic,
         'messaging.system': 'kafka',
+        'messaging.kafka.bootstrap.servers': bootstrapServers,
       },
       metrics: {
         'kafka.partition': partition,
