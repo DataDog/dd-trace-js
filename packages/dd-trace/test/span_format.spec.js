@@ -5,6 +5,7 @@ const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
@@ -96,6 +97,136 @@ describe('spanFormat', () => {
     }
 
     spanFormat = require('../src/span_format')
+  })
+
+  describe('tag string conversion warnings', () => {
+    let warn
+
+    beforeEach(() => {
+      warn = sinon.spy()
+      const stringifyTagValue = proxyquire('../src/tag-value', { './log': { warn } })
+      spanFormat = proxyquire('../src/span_format', { './tag-value': stringifyTagValue })
+    })
+
+    it('warns once across repeated spans and different text tag keys', () => {
+      spanContext._tags[ERROR_MESSAGE] = { code: 'failed' }
+      spanContext._tags[ERROR_STACK] = [{}]
+      spanContext._tags['http.status_code'] = {}
+
+      trace = spanFormat(span)
+      spanFormat(span)
+      spanContext2._tags = { [ERROR_TYPE]: {} }
+      span.context.returns(spanContext2)
+      spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(warn.firstCall.args[1], ERROR_MESSAGE)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta[ERROR_STACK], '[object Object]')
+      assert.strictEqual(trace.meta['http.status_code'], '[object Object]')
+    })
+
+    it('preserves useful conversions without warning', () => {
+      const values = [
+        [42, '42'],
+        [true, 'true'],
+        [1n, '1'],
+        [Symbol('value'), 'Symbol(value)'],
+        [new Error('failed'), 'Error: failed'],
+        [Buffer.from('failed'), 'failed'],
+        [new URL('https://example.com'), 'https://example.com/'],
+        [[null, 'first', 42], ',first,42'],
+        [{ toString: () => 'custom' }, 'custom'],
+        [{ [Symbol.toPrimitive]: () => 'custom' }, 'custom'],
+        [{ toString: () => ({}), valueOf: () => 42 }, '42'],
+        [{ toString: null, valueOf: () => 42 }, '42'],
+        [{ [Symbol.toPrimitive]: undefined, toString: () => 'custom' }, 'custom'],
+      ]
+      for (const [value, expected] of values) {
+        spanContext._tags[ERROR_MESSAGE] = value
+        spanContext._tags['http.status_code'] = value
+        trace = spanFormat(span)
+        assert.strictEqual(trace.meta[ERROR_MESSAGE], expected)
+        assert.strictEqual(trace.meta['http.status_code'], expected)
+      }
+      sinon.assert.notCalled(warn)
+    })
+
+    it('does not warn about intentional literal placeholder strings', () => {
+      spanContext._tags[ERROR_MESSAGE] = '[object Object]'
+      spanContext._tags['http.status_code'] = '[object Object]'
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta['http.status_code'], '[object Object]')
+    })
+
+    it('invokes a user conversion hook and its getter only once', () => {
+      const convert = sinon.stub().returns('[object Object]')
+      const getConvert = sinon.stub().returns(convert)
+      const value = Object.defineProperty({}, Symbol.toPrimitive, { get: getConvert })
+      spanContext._tags[ERROR_MESSAGE] = value
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(getConvert)
+      sinon.assert.calledOnceWithExactly(convert, 'string')
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+    })
+
+    it('warns for an extracted Error-like message', () => {
+      spanContext._tags.error = { message: { code: 'failed' }, name: 'Failure' }
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta[ERROR_TYPE], 'Failure')
+    })
+
+    it('preserves a failed conversion without warning', () => {
+      spanContext._tags[ERROR_MESSAGE] = Object.create(null)
+      assert.throws(() => spanFormat(span), { name: 'TypeError' })
+
+      sinon.assert.notCalled(warn)
+      spanContext._tags[ERROR_MESSAGE] = 'failed'
+      assert.strictEqual(spanFormat(span).meta[ERROR_MESSAGE], 'failed')
+    })
+
+    it('sets the warning flag before a logger can re-enter formatting', () => {
+      spanContext._tags[ERROR_MESSAGE] = {}
+      warn = sinon.spy(() => spanFormat(span))
+      const stringifyTagValue = proxyquire('../src/tag-value', { './log': { warn } })
+      spanFormat = proxyquire('../src/span_format', { './tag-value': stringifyTagValue })
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+    })
+
+    it('does not warn when fs.operation metadata is skipped', () => {
+      spanContext._name = 'fs.operation'
+      spanContext._tags[ERROR_MESSAGE] = {}
+      spanContext._tags.error = { message: {} }
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_MESSAGE))
+      assert.strictEqual(trace.name, 'fs.operation')
+    })
+
+    it('does not warn when nullish metadata and a falsy status are skipped', () => {
+      spanContext._tags[ERROR_MESSAGE] = null
+      spanContext._tags[ERROR_STACK] = undefined
+      spanContext._tags['http.status_code'] = 0
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_MESSAGE))
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_STACK))
+      assert.ok(!Object.hasOwn(trace.meta, 'http.status_code'))
+      assert.strictEqual(trace.name, 'operation')
+    })
   })
 
   describe('spanFormat', () => {
@@ -215,14 +346,11 @@ describe('spanFormat', () => {
       span.context()._tags[acceptedMetricKey] = 11
 
       // First-rejected lengths (limit + 1) get sliced and gain a `...` suffix.
-      // Cover all four typed branches in `addMixedTag`: string / number /
-      // boolean / Buffer (the URL branch shares the boolean/buffer truncation
-      // line).
       const overlongMetaKey = `${'c'.repeat(MAX_META_KEY_LENGTH)}X`
       const overlongMetaValue = `${'d'.repeat(MAX_META_VALUE_LENGTH)}Y`
       const overlongMetricKey = `${'e'.repeat(MAX_METRIC_KEY_LENGTH)}Z`
       const overlongBoolKey = `${'f'.repeat(MAX_METRIC_KEY_LENGTH)}Q`
-      const overlongBufferKey = `${'g'.repeat(MAX_METRIC_KEY_LENGTH)}R`
+      const overlongBufferKey = `${'g'.repeat(MAX_META_KEY_LENGTH)}R`
       span.context()._tags[overlongMetaKey] = overlongMetaValue
       span.context()._tags[overlongMetricKey] = 42
       span.context()._tags[overlongBoolKey] = true
@@ -239,14 +367,15 @@ describe('spanFormat', () => {
       const truncatedMetaValue = `${overlongMetaValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       const truncatedMetricKey = `${overlongMetricKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBoolKey = `${overlongBoolKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-      const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_META_KEY_LENGTH)}...`
       const truncatedServiceValue = `${overlongServiceValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       assert.strictEqual(trace.meta[acceptedMetaKey], acceptedMetaValue)
       assert.strictEqual(trace.meta[truncatedMetaKey], truncatedMetaValue)
       assert.strictEqual(trace.metrics[acceptedMetricKey], 11)
       assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
       assert.strictEqual(trace.metrics[truncatedBoolKey], 1)
-      assert.strictEqual(trace.metrics[truncatedBufferKey], 'payload')
+      assert.ok(!Object.hasOwn(trace.metrics, truncatedBufferKey))
+      assert.strictEqual(trace.meta[truncatedBufferKey], 'payload')
       assert.strictEqual(trace.service, truncatedServiceValue)
     })
 
@@ -647,26 +776,54 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.metrics.metric, 50)
     })
 
-    it('should extract buffer tags as stringified metrics', () => {
+    it('should extract buffer tags as string metadata', () => {
       spanContext._tags.payload = Buffer.from('hello')
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.metrics.payload, 'hello')
+      assert.ok(!Object.hasOwn(trace.metrics, 'payload'))
+      assert.strictEqual(trace.meta.payload, 'hello')
     })
 
-    it('should extract URL tags as stringified metrics', () => {
-      // `addMixedTag`'s default branch routes both `Buffer` and `URL` to
-      // metrics as `value.toString()`. The Buffer half is covered above;
-      // pin the URL half so a future tightening that drops `isUrl` from
-      // the helper surfaces here.
+    it('should extract URL tags as string metadata', () => {
       const url = new URL('https://example.com/foo?bar=1')
       spanContext._tags.endpoint = url
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.metrics.endpoint, url.toString())
+      assert.ok(!Object.hasOwn(trace.metrics, 'endpoint'))
+      assert.strictEqual(trace.meta.endpoint, url.toString())
     })
+
+    for (const nested of [false, true]) {
+      for (const kind of ['Buffer', 'URL']) {
+        it(`should apply metadata limits to ${nested ? 'nested' : 'top-level'} ${kind} tags`, () => {
+          const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+          const prefix = nested ? 'nested.' : ''
+          const acceptedKey = 'a'.repeat(MAX_META_KEY_LENGTH - prefix.length)
+          const rejectedKey = 'b'.repeat(MAX_META_KEY_LENGTH - prefix.length + 1)
+          const valuePrefix = kind === 'URL' ? 'https://example.com/' : ''
+          const acceptedValue = valuePrefix + 'v'.repeat(MAX_META_VALUE_LENGTH - valuePrefix.length)
+          const rejectedValue = `${acceptedValue}X`
+          const tags = {
+            [acceptedKey]: kind === 'Buffer' ? Buffer.from(acceptedValue) : new URL(acceptedValue),
+            [rejectedKey]: kind === 'Buffer' ? Buffer.from(rejectedValue) : new URL(rejectedValue),
+            empty: kind === 'Buffer' ? Buffer.alloc(0) : new URL('https://example.com/'),
+          }
+          spanContext._tags = nested ? { nested: tags } : tags
+
+          trace = spanFormat(span)
+
+          const truncatedKey = `${`${prefix}${rejectedKey}`.slice(0, MAX_META_KEY_LENGTH)}...`
+          assert.ok(!Object.hasOwn(trace.metrics, `${prefix}${acceptedKey}`))
+          assert.ok(!Object.hasOwn(trace.metrics, truncatedKey))
+          assert.ok(!Object.hasOwn(trace.metrics, `${prefix}empty`))
+          assert.strictEqual(trace.meta[`${prefix}${acceptedKey}`], acceptedValue)
+          assert.strictEqual(trace.meta[truncatedKey], `${acceptedValue}...`)
+          assert.strictEqual(trace.meta[`${prefix}empty`], kind === 'Buffer' ? '' : 'https://example.com/')
+        })
+      }
+    }
 
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }

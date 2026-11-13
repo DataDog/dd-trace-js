@@ -109,6 +109,7 @@ describe('Tracer', () => {
       use: sinon.spy(),
       toggle: sinon.spy(),
       error: sinon.spy(),
+      warn: sinon.spy(),
     }
 
     exporter = sinon.stub().returns(AgentExporter)
@@ -123,6 +124,7 @@ describe('Tracer', () => {
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,
       '../log': log,
+      '../tag-value': proxyquire('../../src/tag-value', { './log': log }),
       '../exporter': exporter,
       '../opentelemetry/trace': { createOtlpTraceExporter },
       '../opentelemetry/metrics': { createOtlpSpanStatsExporter },
@@ -413,6 +415,26 @@ describe('Tracer', () => {
       sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'service')
       assert.strictEqual(fields.tags.version, '1.2.3')
       assert.strictEqual(testSpan, span)
+    })
+
+    it('warns once for a service alias that converts to an object placeholder', () => {
+      tracer = new Tracer(config)
+      tracer.startSpan('name', { tags: { service: {} } })
+      tracer.startSpan('name', { tags: { service: { nested: {} } } })
+
+      sinon.assert.calledOnce(log.warn)
+      assert.strictEqual(log.warn.firstCall.args[1], 'service')
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', '[object Object]')
+    })
+
+    it('preserves an intentional service alias conversion without warning', () => {
+      tracer = new Tracer(config)
+      const convert = sinon.stub().returns('custom-service')
+      tracer.startSpan('name', { tags: { service: { toString: convert } } })
+
+      sinon.assert.notCalled(log.warn)
+      sinon.assert.calledOnce(convert)
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'custom-service')
     })
 
     it('If span is granted a service name that differs from the global service name' +

@@ -610,6 +610,22 @@ async function handle () {
 
 Any error from the awaited handler will automatically be added to the span.
 
+<h3 id="span-tags">Span tags</h3>
+
+Tag values may be strings, numbers, booleans, `Buffer` or `URL` instances, or flat objects containing those
+values. Flat objects are expanded by one level, so `{ tags: { request: { method: 'GET' } } }` produces the
+`request.method` tag. Numeric typed arrays are expanded into indexed tags, such as `payload.0`.
+`Buffer` and `URL` values are converted to string tags.
+Objects, class instances, and functions contribute their own enumerable properties.
+
+For ordinary tags, arrays, symbols, bigint values, nullish values, and object fields beyond the first level are omitted.
+`service.name`, `resource.name`, and `span.type` accept strings. Error metadata tags and `http.status_code` also accept
+primitive values, `Buffer`, and `URL` instances for text conversion; nullish metadata and falsy status values are omitted.
+The `error` tag accepts flags, `Error` instances, and error-shaped values.
+
+Manual sampling tags request a decision for any own value except `false`. Analytics event tags accept flags,
+including numeric values. `sampling.priority` accepts numbers and numeric strings.
+
 <h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
 
 Use `span.recordException()` to add a handled exception as an event without marking the span as failed.

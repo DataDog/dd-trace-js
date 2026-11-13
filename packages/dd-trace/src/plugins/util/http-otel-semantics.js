@@ -177,7 +177,7 @@ function defaultPortForUrl (url) {
 /**
  * @typedef {object} FormattedHttpSpan
  * @property {Record<string, string>} meta
- * @property {Record<string, number>} metrics
+ * @property {import('../../span_format').FormattedSpan['metrics']} metrics
  * @property {number} error
  */
 

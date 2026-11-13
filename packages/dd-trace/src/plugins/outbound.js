@@ -33,7 +33,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ parentStore?: { span: import('../../../..').Span } }} ctx
+   * @param {{ parentStore?: { span: import('../opentracing/span') } }} ctx
    */
   bindFinish (ctx) {
     return ctx.parentStore
@@ -51,7 +51,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {Record<string, string>} tags
+   * @param {Record<string, unknown>} tags
    */
   getPeerService (tags) {
     /**
@@ -86,7 +86,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {Record<string, string>} peerData
+   * @param {Record<string, unknown>} peerData
    */
   getPeerServiceRemap (peerData) {
     /**
@@ -94,7 +94,7 @@ class OutboundPlugin extends TracingPlugin {
      * peer service and add the value we overrode.
      */
     const peerService = peerData[PEER_SERVICE_KEY]
-    const mappedService = this._tracerConfig.peerServiceMapping?.[peerService]
+    const mappedService = this._tracerConfig.peerServiceMapping?.[/** @type {string} */ (peerService)]
     if (peerService && mappedService) {
       return {
         ...peerData,
@@ -106,7 +106,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   * @param {{ currentStore?: { span: import('../opentracing/span') } }} ctx
    */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
@@ -121,7 +121,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {import('../../../..').Span} span
+   * @param {import('../opentracing/span')} span
    */
   tagPeerService (span) {
     if (this._tracerConfig.spanComputePeerService) {
@@ -143,7 +143,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ hostname: string, port: number, currentStore?: { span: import('../../../..').Span } }} ctx
+   * @param {{ hostname: string, port: number, currentStore?: { span: import('../opentracing/span') } }} ctx
    */
   addHost (ctx) {
     const { hostname, port } = ctx

@@ -457,6 +457,7 @@
 /* @DataDog/lang-platform-js
 /AGENTS.md @DataDog/lang-platform-js
 /openfeature.d.ts @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/span-tags.d.ts @DataDog/lang-platform-js
 /openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /openfeature/ @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
@@ -538,6 +539,7 @@
 /packages/dd-trace/src/span_processor.js @DataDog/lang-platform-js
 /packages/dd-trace/src/span_stats.js @DataDog/lang-platform-js
 /packages/dd-trace/src/spanleak.js @DataDog/lang-platform-js
+/packages/dd-trace/src/tag-value.js @DataDog/lang-platform-js
 /packages/dd-trace/src/tagger.js @DataDog/lang-platform-js
 /packages/dd-trace/src/tracer.js @DataDog/lang-platform-js
 /packages/dd-trace/src/util.js @DataDog/lang-platform-js
@@ -593,6 +595,7 @@
 /docs/ @DataDog/apm-idm-js @DataDog/lang-platform-js
 /docs/API.md @DataDog/apm-idm-js
 /docs/test.ts @DataDog/apm-idm-js
+/docs/span-tags.ts @DataDog/apm-idm-js
 /index.d.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /index.d.v*.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
