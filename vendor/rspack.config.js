@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: Stop depending on `@opentelemetry/api` and instead intercept the user
-//       version with an instrumentation.
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
@@ -66,7 +64,7 @@ module.exports = {
   },
   // This is shared between dd-trace and users, so it needs to be external.
   externals: {
-    '@opentelemetry/api': '@opentelemetry/api',
+    '@opentelemetry/api': '../../../../packages/dd-trace/src/opentelemetry/api',
   },
   plugins: [
     new LicenseWebpackPlugin({

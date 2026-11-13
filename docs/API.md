@@ -768,6 +768,16 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
+When bundling the application, leave `dd-trace` and `@opentelemetry/api` external.
+The tracer uses the registered global API version when a matching copy is available.
+Otherwise, it prefers the application's API. Without an application API, it uses the newest supported loaded copy.
+If another API version rejects a provider registration, the tracer retries through a matching copy when the signal slot is empty.
+Newer API consumers can still reject an older global API version.
+
+Set `otelApiPath` in `tracer.init()` or `DD_TRACE_OTEL_API_PATH` before initialization to select another API module.
+Use an absolute module path, such as the value returned by `require.resolve('@opentelemetry/api')` from the intended package.
+An existing global API version takes precedence over this setting. Invalid paths fail when OpenTelemetry support loads.
+
 The following attributes are available to override Datadog-specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.

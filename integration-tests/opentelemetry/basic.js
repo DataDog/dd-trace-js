@@ -2,15 +2,28 @@
 
 const TIMEOUT = Number(process.env.TIMEOUT || 0)
 
+let ot = process.argv[2] === 'cached-api-first' ? require('@opentelemetry/api') : undefined
 const tracer = require('dd-trace').init()
 const assert = require('node:assert/strict')
+
+if (process.argv[2] === 'dependency-api-first') {
+  const dependencyRequire = require('node:module').createRequire(process.argv[3])
+  dependencyRequire('@opentelemetry/api')
+}
+
+if (process.argv[2] === 'api-first' || process.argv[2] === 'diag-first') {
+  ot = require('@opentelemetry/api')
+  if (process.argv[2] === 'diag-first') {
+    ot.diag.setLogger({ error () {}, warn () {}, info () {}, debug () {}, verbose () {} })
+  }
+}
 
 const { TracerProvider } = tracer
 
 const provider = new TracerProvider()
 provider.register()
 
-const ot = require('@opentelemetry/api')
+ot ??= require('@opentelemetry/api')
 
 const otelTracer = ot.trace.getTracer(
   'my-service-tracer'
@@ -24,6 +37,9 @@ otelTracer.startActiveSpan('otel-sub', {
   },
   startTime,
 }, /** @param {import('@opentelemetry/api').Span} otelSpan */ otelSpan => {
+  assert.ok(otelSpan.isRecording())
+  assert.ok(ot.trace.isSpanContextValid(otelSpan.spanContext()))
+  assert.strictEqual(ot.trace.getActiveSpan(), otelSpan)
   const carrier = /** @type {Record<string, string>} */ ({})
   ot.propagation.inject(ot.context.active(), carrier)
 

@@ -1181,7 +1181,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
 
   const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
   const otlpMetrics = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
-    '@opentelemetry/api': {
+    '../opentelemetry/api': {
       metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
     },
     '../log': { debug () {}, error () {} },
@@ -1496,7 +1496,7 @@ describe('otlp_runtime_metrics', () => {
     const errorLog = sinon.spy()
     const loadOtlpRuntimeMetrics = proxyquire.noCallThru()
     const otlpMetricsFailing = loadOtlpRuntimeMetrics('../src/runtime_metrics/otlp_runtime_metrics', {
-      '@opentelemetry/api': {
+      '../opentelemetry/api': {
         metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
       },
       '../log': { debug () {}, error: errorLog },

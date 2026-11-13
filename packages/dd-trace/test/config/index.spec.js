@@ -142,6 +142,20 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    it('leaves the OpenTelemetry API path unset by default', () => {
+      assert.strictEqual(getConfig().otelApiPath, undefined)
+    })
+
+    it('reads the OpenTelemetry API path from the environment', () => {
+      process.env.DD_TRACE_OTEL_API_PATH = '/application/node_modules/@opentelemetry/api/index.js'
+      assert.strictEqual(getConfig().otelApiPath, process.env.DD_TRACE_OTEL_API_PATH)
+    })
+
+    it('prefers the programmatic OpenTelemetry API path', () => {
+      process.env.DD_TRACE_OTEL_API_PATH = '/environment/api.js'
+      assert.strictEqual(getConfig({ otelApiPath: '/application/api.js' }).otelApiPath, '/application/api.js')
+    })
+
     it('enables tRPC tracing by default', () => {
       assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
     })

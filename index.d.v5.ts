@@ -1087,6 +1087,13 @@ declare namespace tracer {
     logLevel?: 'debug' | 'info' | 'warn' | 'error'
 
     /**
+     * Path to the OpenTelemetry API module to use before a global API version is registered.
+     * An existing global API version takes precedence.
+     * @env DD_TRACE_OTEL_API_PATH
+     */
+    otelApiPath?: string
+
+    /**
      * Enables DBM to APM link using tag injection.
      *
      * - `disabled`: No SQL comment is injected (default).

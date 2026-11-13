@@ -23,18 +23,18 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
-      ? require('./otlp_runtime_metrics')
-      : require('./runtime_metrics')
-
-    Object.setPrototypeOf(module.exports, runtimeMetrics)
-
     try {
+      runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
+        ? require('./otlp_runtime_metrics')
+        : require('./runtime_metrics')
+
+      Object.setPrototypeOf(module.exports, runtimeMetrics)
+
       runtimeMetrics.start(config)
-    } catch (err) {
+    } catch (error) {
       // Unwind whatever managed to register so a partial init doesn't leak into the next start().
       runtimeMetrics.stop()
-      log.error('Failed to start runtime metrics', err)
+      log.error('Failed to start runtime metrics', error)
     }
   },
 

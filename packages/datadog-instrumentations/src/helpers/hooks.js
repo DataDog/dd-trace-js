@@ -49,6 +49,7 @@ module.exports = {
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
+  '@opentelemetry/api': () => require('../otel-api'),
   '@opentelemetry/sdk-trace': { esmFirst: true, fn: () => require('../otel-sdk-trace') },
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@prisma/client': { esmFirst: true, fn: () => require('../prisma') },

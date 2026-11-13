@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+const { dirname, resolve } = require('node:path')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
@@ -127,7 +128,9 @@ class DatadogWebpackPlugin {
           throw e
         }
 
-        if (isESMFile(normalizedResource, pkgJson, packageJson)) {
+        const moduleEntry = typeof packageJson.module === 'string' &&
+          resource === resolve(dirname(pkgJson), packageJson.module)
+        if (moduleEntry || isESMFile(normalizedResource, pkgJson, packageJson)) {
           log.warn('Skipping ESM module (ESM support is not available in the webpack plugin): %s', resource)
           return
         }
