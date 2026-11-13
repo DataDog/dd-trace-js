@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('node:crypto')
+const { types } = require('node:util')
 
 const { channel, tracingChannel } = require('dc-polyfill')
 
@@ -29,6 +30,16 @@ const GENERATED_NAME_PREFIXES = ['stdio: ', 'sse: ', 'streamable-http: ']
 const JSON_TRANSPORTS = new Set(['stdio', 'sse', 'streamable_http', 'websocket'])
 const CYCLE = '[Circular]'
 const UNREADABLE = '[Unreadable]'
+const TRUNCATED = '[Truncated]'
+// The JSON text that the check gets has at most this many entries. The cap bounds the check, not
+// the call: model output is far smaller, and only a large value of the application goes past it.
+const MAX_JSON_ENTRIES = 1_000_000
+// The structured clone of the arguments cannot be the value that the server gets.
+const NO_CLONE = Symbol('dd-trace.aiguard.noClone')
+// The operations of the stack of safeJson. Each task has two slots: the operation and its value.
+const WRITE_TEXT = 1
+const WRITE_VALUE = 2
+const LEAVE = 3
 
 /** @typedef {import('../mcp').McpServer} McpServer */
 /** @typedef {import('../mcp').TransportInfo} TransportInfo */
@@ -47,6 +58,20 @@ const UNREADABLE = '[Unreadable]'
  * @property {string} args The JSON arguments to evaluate.
  * @property {object|undefined} params The copy of the params that the SDK sends. Without a copy, the
  *   SDK sends the params of the application.
+ */
+
+/**
+ * @typedef {object} Budget
+ * @property {number} entries The number of entries that the text can still have.
+ * @property {boolean} truncated Whether the text left out entries.
+ */
+
+/**
+ * @typedef {object} SafeJsonState
+ * @property {number} entries The number of entries that the text can still have.
+ * @property {string[]} parts
+ * @property {unknown[]} stack
+ * @property {Set<object>} ancestors
  */
 
 /** @type {WeakMap<object, Map<string|undefined, McpServer|undefined>>} */
@@ -231,8 +256,8 @@ function evaluateToolCall (ctx) {
  * first, and the evaluation reads the copy.
  *
  * A JSON transport sends the JSON form of the arguments, so the copy gets that same form. Other
- * transports can give the server the objects themselves. Then the copy keeps the values and their
- * types, and the evaluation gets a JSON form that never fails.
+ * transports can give the server the objects themselves. Then the copy is a structured clone that
+ * keeps the data and its types, and the evaluation gets the content of the clone.
  *
  * @param {{ name?: unknown, arguments?: unknown }} params
  * @param {unknown} toolName The tool name that the check read.
@@ -242,17 +267,8 @@ function evaluateToolCall (ctx) {
 function prepareCall (params, toolName, info) {
   const callArguments = params.arguments
   if (!JSON_TRANSPORTS.has(/** @type {string} */ (info?.type))) {
-    let copy
-    try {
-      copy = copyValue(callArguments, new Map())
-    } catch {
-      // The value is too deep to copy. The SDK sends the params of the application.
-      return { args: safeJson(callArguments) ?? '{}', params: undefined }
-    }
-    return {
-      args: copy === undefined ? '{}' : (safeJson(copy) ?? '{}'),
-      params: copyParams(params, toolName, copy),
-    }
+    const checked = checkArguments(callArguments)
+    return { args: checked.text ?? '{}', params: copyParams(params, toolName, checked.value) }
   }
 
   let json
@@ -279,6 +295,8 @@ function prepareCall (params, toolName, info) {
  * @returns {object|undefined}
  */
 function copyParams (params, toolName, args) {
+  // Only the name and the arguments are snapshots. The check does not read the other keys, for
+  // example _meta, so they stay shallow copies.
   const source = /** @type {Record<string, unknown>} */ (params)
   /** @type {Record<string, unknown>} */
   const copy = {}
@@ -303,58 +321,6 @@ function copyParams (params, toolName, args) {
 }
 
 /**
- * Returns a copy of the plain objects and the plain arrays in a value. Other values stay as they
- * are, for example a Date, a Buffer, a Map or a class instance. Values that the original shares, and
- * cycles, are shared in the copy too. An object with a value that it cannot read stays as it is.
- *
- * @param {unknown} value
- * @param {Map<object, unknown>} copies The copy of each object that the copy already contains.
- * @returns {unknown}
- */
-function copyValue (value, copies) {
-  if (value === null || typeof value !== 'object') return value
-  if (copies.has(value)) return copies.get(value)
-
-  let prototype
-  let isArray
-  let keys
-  const values = []
-  try {
-    prototype = Object.getPrototypeOf(value)
-    isArray = Array.isArray(value) && prototype === Array.prototype
-    if (!isArray && prototype !== Object.prototype && prototype !== null) return value
-
-    // The copy reads all values of the object before it copies them. Then no copy refers to an
-    // object that has only some of its values.
-    if (isArray) {
-      const { length } = /** @type {unknown[]} */ (value)
-      for (let i = 0; i < length; i++) values.push(/** @type {unknown[]} */ (value)[i])
-    } else {
-      keys = Object.keys(value)
-      for (const key of keys) values.push(/** @type {Record<string, unknown>} */ (value)[key])
-    }
-  } catch {
-    // A getter or a proxy trap throws. The object stays as it is.
-    copies.set(value, value)
-    return value
-  }
-
-  if (isArray) {
-    const copy = []
-    copies.set(value, copy)
-    for (const item of values) copy.push(copyValue(item, copies))
-    return copy
-  }
-
-  const copy = prototype === null ? Object.create(null) : {}
-  copies.set(value, copy)
-  for (let i = 0; i < values.length; i++) {
-    setValue(copy, /** @type {string[]} */ (keys)[i], copyValue(values[i], copies))
-  }
-  return copy
-}
-
-/**
  * Sets an own value. A __proto__ key stays an own key, as JSON.parse makes it.
  *
  * @param {Record<string, unknown>} target
@@ -370,83 +336,347 @@ function setValue (target, key, value) {
 }
 
 /**
- * Returns the JSON form of values that an in-process server can get as they are. A value that JSON
- * cannot represent gets a readable form: a BigInt becomes its decimal string, and a cycle or a
- * value that throws becomes a placeholder.
+ * Returns the arguments that a transport without JSON gives the server, and their JSON text for the
+ * check. A structured clone keeps the types of the data, and a change of the application cannot
+ * reach it. Without a clone, the server gets the JSON form of the arguments, as on the wire.
+ *
+ * @param {unknown} callArguments
+ * @returns {{ text: string|undefined, value: unknown }}
+ */
+function checkArguments (callArguments) {
+  /** @type {unknown} */
+  let clone = NO_CLONE
+  try {
+    clone = structuredClone(callArguments)
+  } catch {
+    // A proxy, a function, a symbol, a toJSON method or a very deep value has no structured clone.
+  }
+  const text = clone === NO_CLONE ? NO_CLONE : cloneJson(clone)
+  if (text !== NO_CLONE) return { text, value: clone }
+
+  // This second read of the arguments can run a getter again after a failed clone. The server gets
+  // the text, so a huge value without a clone arrives truncated, which is very rare.
+  const json = safeJson(callArguments)
+  return { text: json, value: json === undefined ? undefined : JSON.parse(json) }
+}
+
+/**
+ * Returns the JSON text of a structured clone for the check. A Map, a Set, a RegExp, an Error and
+ * binary values get their content, a BigInt gets its decimal string, and a cycle gets a placeholder.
+ * The text has at most MAX_JSON_ENTRIES entries, but the server gets the full clone.
+ *
+ * @param {unknown} clone
+ * @returns {string|undefined|typeof NO_CLONE} NO_CLONE when the clone cannot be the sent value: a
+ *   SharedArrayBuffer shares its memory with the application, the check cannot see the content of
+ *   other objects, for example a Blob, and JSON.stringify cannot write a value that is too deep.
+ */
+function cloneJson (clone) {
+  /** @type {Budget} */
+  const budget = { entries: MAX_JSON_ENTRIES, truncated: false }
+  let fallback = false
+  // The objects that JSON.stringify writes now, each with the clone value that it comes from.
+  /** @type {Array<[object, object]>} */
+  const holders = []
+  /** @type {Set<object>} */
+  const ancestors = new Set()
+
+  /**
+   * JSON.stringify calls the replacer with the object that holds the value as this.
+   *
+   * @this {object}
+   * @param {string} key
+   * @param {unknown} value
+   */
+  function replacer (key, value) {
+    if (fallback) return
+    // The objects above the holder are complete.
+    while (holders.length > 0 && holders.at(-1)?.[0] !== this) {
+      ancestors.delete(/** @type {[object, object]} */ (holders.pop())[1])
+    }
+    // JSON.stringify calls toJSON before the replacer, so the check reads the raw value too.
+    const raw = /** @type {Record<string, unknown>} */ (this)[key]
+    if (raw !== null && typeof raw === 'object' && !isKnownObject(raw)) {
+      fallback = true
+      return
+    }
+    if (typeof value === 'bigint') return value.toString()
+    if (value === null || typeof value !== 'object') return value
+    if (ancestors.has(value)) return CYCLE
+
+    const content = cloneContent(value, budget)
+    if (content === NO_CLONE) {
+      fallback = true
+      return
+    }
+    if (content !== null && typeof content === 'object') {
+      holders.push([content, value])
+      ancestors.add(value)
+    }
+    return content
+  }
+
+  let text
+  try {
+    text = JSON.stringify(clone, replacer)
+  } catch {
+    // The clone is too deep.
+    return NO_CLONE
+  }
+  // The replacer sees no value past the budget, so a scan looks for these objects there.
+  if (fallback || (budget.truncated && hasUnsafeObject(clone))) return NO_CLONE
+  return text
+}
+
+/**
+ * Returns whether the check writes the content of an object of a structured clone. Other objects,
+ * for example a Blob or a BlockList, belong to the platform: the check cannot see their content, and
+ * the clone of some of them shares a native handle with the application.
+ *
+ * @param {object} value
+ */
+function isKnownObject (value) {
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null || prototype === Array.prototype ||
+    types.isDate(value) || types.isMap(value) || types.isSet(value) || types.isRegExp(value) ||
+    ArrayBuffer.isView(value) || types.isAnyArrayBuffer(value) || types.isNativeError(value) ||
+    types.isBoxedPrimitive(value)
+}
+
+/**
+ * Returns whether a structured clone contains an object that the server cannot get as a clone: a
+ * SharedArrayBuffer, also as the buffer of a view, or an object of the platform. The clone is plain
+ * data, so the scan has no side effects. Own keys keep the scan of a sparse array cheap.
+ *
+ * @param {unknown} clone
+ */
+function hasUnsafeObject (clone) {
+  const stack = [clone]
+  /** @type {Set<object>} */
+  const seen = new Set()
+  while (stack.length > 0) {
+    const value = stack.pop()
+    if (value === null || typeof value !== 'object' || seen.has(value)) continue
+    seen.add(value)
+    if (types.isSharedArrayBuffer(value) || !isKnownObject(value)) return true
+    if (ArrayBuffer.isView(value)) {
+      if (types.isSharedArrayBuffer(value.buffer)) return true
+    } else if (types.isMap(value)) {
+      for (const entry of /** @type {Map<unknown, unknown>} */ (value)) stack.push(entry[0], entry[1])
+    } else if (types.isSet(value)) {
+      for (const item of /** @type {Set<unknown>} */ (value)) stack.push(item)
+    } else {
+      const object = /** @type {Record<string, unknown>} */ (value)
+      for (const key of Object.keys(object)) stack.push(object[key])
+      if (types.isNativeError(value)) stack.push(/** @type {Error} */ (value).cause)
+    }
+  }
+  return false
+}
+
+/**
+ * Returns what the check writes for an object of a structured clone. As in safeJson, an object or a
+ * list counts its entries when the check starts it, and the entries past the budget become one
+ * placeholder.
+ *
+ * @param {object} value An object that isKnownObject accepts.
+ * @param {Budget} budget
+ * @returns {unknown} NO_CLONE for a SharedArrayBuffer, which shares its memory with the application.
+ */
+function cloneContent (value, budget) {
+  if (types.isSharedArrayBuffer(value)) return NO_CLONE
+  if (ArrayBuffer.isView(value)) {
+    if (types.isSharedArrayBuffer(value.buffer)) return NO_CLONE
+    const items = types.isDataView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+      : /** @type {ArrayLike<number|bigint>} */ (/** @type {unknown} */ (value))
+    return takeItems(budget, items.length, index => {
+      const item = items[index]
+      return typeof item === 'bigint' ? item.toString() : item
+    })
+  }
+  if (types.isArrayBuffer(value)) {
+    const bytes = new Uint8Array(value)
+    return takeItems(budget, bytes.length, index => bytes[index])
+  }
+  if (types.isMap(value) || types.isSet(value)) {
+    const collection = /** @type {Map<unknown, unknown>|Set<unknown>} */ (value)
+    const iterator = collection[Symbol.iterator]()
+    return takeItems(budget, collection.size, () => iterator.next().value)
+  }
+  if (types.isRegExp(value)) return String(value)
+  // JSON.stringify unwraps a Number, String or Boolean object, but not a BigInt object.
+  if (types.isBoxedPrimitive(value)) {
+    const primitive = value.valueOf()
+    return typeof primitive === 'bigint' ? primitive.toString() : primitive
+  }
+  // The cause can contain other values, so the replacer gets it as a member too.
+  const object = types.isNativeError(value)
+    ? { ...value, name: value.name, message: value.message, stack: value.stack, cause: value.cause }
+    : value
+  if (Array.isArray(object)) {
+    if (object.length <= budget.entries) {
+      budget.entries -= object.length
+      return object
+    }
+    // A slice reads only the first entries, also of a sparse array with a huge length.
+    const items = object.slice(0, budget.entries)
+    items.push(TRUNCATED)
+    budget.entries = 0
+    budget.truncated = true
+    return items
+  }
+
+  const keys = Object.keys(object)
+  if (keys.length <= budget.entries) {
+    budget.entries -= keys.length
+    return object
+  }
+  /** @type {Record<string, unknown>} */
+  const members = {}
+  for (let i = 0; i < budget.entries; i++) {
+    setValue(members, keys[i], /** @type {Record<string, unknown>} */ (object)[keys[i]])
+  }
+  members[TRUNCATED] = TRUNCATED
+  budget.entries = 0
+  budget.truncated = true
+  return members
+}
+
+/**
+ * Returns the first items of a list that the budget allows, and a placeholder for the rest.
+ *
+ * @param {Budget} budget
+ * @param {number} length
+ * @param {(index: number) => unknown} read
+ * @returns {unknown[]}
+ */
+function takeItems (budget, length, read) {
+  const count = Math.min(length, budget.entries)
+  budget.entries -= count
+  const items = []
+  for (let i = 0; i < count; i++) items.push(read(i))
+  if (count < length) {
+    items.push(TRUNCATED)
+    budget.truncated = true
+  }
+  return items
+}
+
+/**
+ * Returns the JSON text of a value with the rules of JSON.stringify, but it never throws: a BigInt
+ * gets its decimal string, a cycle or a value that throws gets a placeholder, and the entries past
+ * MAX_JSON_ENTRIES get one placeholder. A stack replaces recursion, so a very deep value cannot
+ * overflow the call stack.
  *
  * @param {unknown} value
  * @returns {string|undefined} undefined for a value that JSON leaves out, for example a function.
  */
 function safeJson (value) {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    // The value has a BigInt, a cycle, or a part that throws.
+  const root = toJsonValue(value, '')
+  if (isLeftOut(root)) return
+  /** @type {SafeJsonState} */
+  const state = { entries: MAX_JSON_ENTRIES, parts: [], stack: [], ancestors: new Set() }
+  writeSafeValue(state, root)
+  const { parts, stack, ancestors } = state
+  while (stack.length > 0) {
+    const item = stack.pop()
+    const operation = stack.pop()
+    if (operation === WRITE_TEXT) {
+      parts.push(/** @type {string} */ (item))
+    } else if (operation === LEAVE) {
+      ancestors.delete(/** @type {object} */ (item))
+    } else {
+      writeSafeValue(state, item)
+    }
   }
-  try {
-    return JSON.stringify(toJsonValue(value, '', []))
-  } catch {
-    return JSON.stringify(UNREADABLE)
-  }
+  return parts.join('')
 }
 
 /**
- * Returns a value that JSON.stringify can always write.
+ * Returns the value that JSON writes for a value: the result of its toJSON method, or the primitive
+ * value of a Number, String, Boolean or BigInt object. A toJSON method that throws gives a placeholder.
  *
  * @param {unknown} value
- * @param {string} key The key of the value in its parent, for toJSON.
- * @param {object[]} ancestors The objects that contain the value.
+ * @param {string} key The key of the value, for toJSON.
  * @returns {unknown}
  */
-function toJsonValue (value, key, ancestors) {
-  if (value !== null && (typeof value === 'object' || typeof value === 'bigint')) {
+function toJsonValue (value, key) {
+  if (typeof value === 'bigint' || typeof value === 'function' || (typeof value === 'object' && value !== null)) {
     try {
-      const toJSON = /** @type {{ toJSON?: unknown }} */ (value).toJSON
+      const { toJSON } = /** @type {{ toJSON?: unknown }} */ (value)
       if (typeof toJSON === 'function') value = toJSON.call(value, key)
     } catch {
       return UNREADABLE
     }
   }
-  if (typeof value === 'bigint') return value.toString()
-  if (value === null || typeof value !== 'object') return value
-  if (ancestors.includes(value)) return CYCLE
+  // JSON writes a Symbol object as an empty object.
+  if (typeof value === 'object' && value !== null && types.isBoxedPrimitive(value) && !types.isSymbolObject(value)) {
+    return value.valueOf()
+  }
+  return value
+}
 
-  ancestors.push(value)
+/**
+ * Writes one value that toJsonValue returned. For an object, it adds the tasks that write its entries.
+ *
+ * @param {SafeJsonState} state
+ * @param {unknown} value
+ */
+function writeSafeValue (state, value) {
+  const { parts, stack, ancestors } = state
+  if (value === null || typeof value !== 'object') {
+    // An object leaves out the values that JSON leaves out, so here such a value is an array item.
+    parts.push(isLeftOut(value) ? 'null' : JSON.stringify(typeof value === 'bigint' ? value.toString() : value))
+    return
+  }
+  if (ancestors.has(value)) {
+    parts.push(JSON.stringify(CYCLE))
+    return
+  }
+
+  const object = /** @type {Record<string, unknown>} */ (value)
+  let keys
+  let length
   try {
-    if (Array.isArray(value)) {
-      const items = []
-      for (let i = 0; i < value.length; i++) {
-        items.push(readJsonValue(value, i, ancestors))
-      }
-      return items
-    }
-
-    // A null prototype keeps a __proto__ key as an own property.
-    const result = Object.create(null)
-    for (const name of Object.keys(value)) {
-      result[name] = readJsonValue(value, name, ancestors)
-    }
-    return result
+    keys = Array.isArray(object) ? undefined : Object.keys(object)
+    const { length: items } = object
+    length = keys ? keys.length : (typeof items === 'number' && items > 0 ? items : 0)
   } catch {
-    return UNREADABLE
-  } finally {
-    ancestors.pop()
+    // A proxy trap throws.
+    parts.push(JSON.stringify(UNREADABLE))
+    return
+  }
+
+  // Each entry has two slots: the key text, which is empty in an array, and the value.
+  const count = Math.min(length, state.entries)
+  state.entries -= count
+  const entries = []
+  for (let i = 0; i < count; i++) {
+    const key = keys ? keys[i] : String(i)
+    let item
+    try {
+      item = object[key]
+    } catch {
+      item = UNREADABLE
+    }
+    item = toJsonValue(item, key)
+    if (!keys || !isLeftOut(item)) entries.push(keys ? `${JSON.stringify(key)}:` : '', item)
+  }
+  if (count < length) entries.push(keys ? `${JSON.stringify(TRUNCATED)}:` : '', TRUNCATED)
+
+  ancestors.add(object)
+  parts.push(keys ? '{' : '[')
+  stack.push(LEAVE, object, WRITE_TEXT, keys ? '}' : ']')
+  for (let i = entries.length - 2; i >= 0; i -= 2) {
+    stack.push(WRITE_VALUE, entries[i + 1], WRITE_TEXT, `${i > 0 ? ',' : ''}${entries[i]}`)
   }
 }
 
 /**
- * @param {object} holder
- * @param {string|number} key
- * @param {object[]} ancestors
+ * @param {unknown} value
  */
-function readJsonValue (holder, key, ancestors) {
-  let value
-  try {
-    value = /** @type {Record<string|number, unknown>} */ (holder)[key]
-  } catch {
-    return UNREADABLE
-  }
-  return toJsonValue(value, String(key), ancestors)
+function isLeftOut (value) {
+  return value === undefined || typeof value === 'function' || typeof value === 'symbol'
 }
 
 module.exports = { enable, disable }

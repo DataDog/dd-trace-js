@@ -54,6 +54,8 @@ const log = require('../log')
 const MCP_SERVERS = Symbol('dd-trace.aiguard.mcpServers')
 
 const DEFAULT_PORTS = { 'http:': '80', 'https:': '443', 'ws:': '80', 'wss:': '443' }
+// A host label that starts with xn-- is the punycode form of an IDN label.
+const IDN_LABEL = /(?:^|\.)xn--/
 const TRANSPORTS = new Set(['streamable_http', 'sse', 'stdio', 'in_process'])
 
 // Package runners run the package of their first argument that is not a flag.
@@ -85,8 +87,13 @@ let lastClientId = 0
  * default port of the scheme. It never keeps userinfo, path, parameters, query or fragment.
  * URL.prototype.origin is not used: it returns "null" for other schemes and keeps their host case.
  *
+ * The MCP SDK gets URL objects that the platform already normalized, so the original spelling of
+ * the host is gone. The tracers agree on this rule: an IP literal keeps its canonical form, and a
+ * host with an IDN label gets no origin.
+ *
  * @param {unknown} url
- * @returns {string|undefined} undefined when the URL is not valid, is relative or has no host.
+ * @returns {string|undefined} undefined when the URL is not valid, is relative, has no host, or has
+ *   an IDN host.
  */
 function urlOrigin (url) {
   if (typeof url !== 'string' || url === '') return
@@ -103,6 +110,8 @@ function urlOrigin (url) {
 
   // The parser lowercases the scheme, and the host of special schemes only.
   const host = hostname.toLowerCase()
+  // The parser converts a Unicode host to punycode, so each IDN label starts with xn--.
+  if (IDN_LABEL.test(host)) return
   return port === '' || DEFAULT_PORTS[protocol] === port ? `${protocol}//${host}` : `${protocol}//${host}:${port}`
 }
 

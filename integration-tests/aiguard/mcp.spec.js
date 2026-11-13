@@ -1,8 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { createHash } = require('node:crypto')
 const fs = require('node:fs')
+const { BlockList } = require('node:net')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { after, before, beforeEach, describe, it } = require('mocha')
@@ -11,6 +14,15 @@ const { spawnProcAndExpectExit } = require('../helpers')
 const { LOCAL_ORIGIN, expectedServer, itChecksAgentsMcpToolCalls, serverId, useMcpApp } = require('./mcp-helpers')
 
 const SDKS = ['v1', 'v2']
+
+/**
+ * The BlockList of the blocklist kind of mcp-app.js, as the check reads it.
+ */
+function checkedBlockList () {
+  const list = new BlockList()
+  list.addAddress('10.0.0.1')
+  return list
+}
 
 /**
  * @param {object} evaluation
@@ -238,6 +250,87 @@ describe('AIGuard MCP client tool calls', () => {
         assert.deepStrictEqual((await state()).stdio, [])
         const evaluated = mcpEvaluations().map(toolArguments)
         assert.deepStrictEqual(evaluated, ['{"value":"7"}', '{"text":"bad [deny]","value":"7"}'])
+      })
+
+      it(`sends the checked snapshot when the application changes a value in the check (${sdk})`, async () => {
+        for (const [kind, checked, evaluated] of [
+          ['date', inspect(new Date(0)), '"1970-01-01T00:00:00.000Z"'],
+          // The structured clone of a Buffer is a Uint8Array with the same bytes.
+          ['buffer', inspect(new Uint8Array([97, 98, 99])), '[97,98,99]'],
+          ['uint8array', inspect(new Uint8Array([1, 2, 3])), '[1,2,3]'],
+          ['arraybuffer', inspect(new Uint8Array([4, 5]).buffer), '[4,5]'],
+          ['map', inspect(new Map([['a', 1], ['b', 2]])), '[["a",1],["b",2]]'],
+          ['set', inspect(new Set([1])), '[1]'],
+          ['nested', inspect({ inner: { list: [1] } }), '{"inner":{"list":[1]}}'],
+          ['regexp', inspect(/a+/g), '"/a+/g"'],
+          ['error', 'TypeError: boom', '{"name":"TypeError","message":"boom","stack":"TypeError: boom"}'],
+          ['bigint', inspect({ count: 7n }), '{"count":"7"}'],
+          // A class instance is a plain object, and a subclass is its built-in object.
+          ['instance', inspect({ x: 1 }), '{"x":1}'],
+          ['datesub', inspect(new Date(0)), '"1970-01-01T00:00:00.000Z"'],
+          ['mapsub', inspect(new Map([['a', 1]])), '[["a",1]]'],
+          // These values have no structured clone that the server can get, so the server gets the
+          // JSON form, as on the wire.
+          ['shared', inspect({ 0: 1, 1: 0 }), '{"0":1,"1":0}'],
+          ['blob', inspect({}), '{}'],
+          ['blocklist', inspect(JSON.parse(JSON.stringify(checkedBlockList()))), JSON.stringify(checkedBlockList())],
+          ['proxy', inspect({ a: 1 }), '{"a":1}'],
+          ['function', inspect({ a: 1 }), '{"a":1}'],
+        ]) {
+          const response = await get(`/mcp/change?sdk=${sdk}&kind=${kind}`)
+
+          assert.strictEqual(response.status, 200, kind)
+          // The server shows the type and the content that it got.
+          assert.strictEqual(response.body.result, checked, kind)
+          assert.strictEqual(toolArguments(attributes().at(-1)), `{"value":${evaluated}}`, kind)
+        }
+      })
+
+      for (const marker of ['cause', 'stack']) {
+        it(`blocks an Error with a deny in its ${marker} (${sdk})`, async () => {
+          const response = await get(`/mcp/error?sdk=${sdk}&marker=${marker}`)
+
+          assert.strictEqual(response.status, 403)
+          assert.match(toolArguments(attributes().at(-1)), /\[deny\]/)
+        })
+      }
+
+      it(`sends all the bytes of a 5 MB Uint8Array, and bounds its evaluation (${sdk})`, async () => {
+        const bytes = new Uint8Array(5 * 1024 * 1024)
+        for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251
+        // The trace with the AI Guard span is large, so the test waits for it before the app stops.
+        const trace = harness.agent.assertMessageReceived(({ payload }) => {
+          assert.ok(payload.flat().some(span => span.name === 'ai_guard'))
+        }, 20_000)
+
+        const response = await get(`/mcp/large?sdk=${sdk}`)
+        await trace
+
+        assert.strictEqual(response.status, 200)
+        // The server shows the type, the length and the digest of the bytes that it got.
+        assert.strictEqual(
+          response.body.result,
+          `Uint8Array:${bytes.length}:${createHash('sha256').update(bytes).digest('hex')}`
+        )
+        const evaluated = toolArguments(attributes().at(-1))
+        assert.match(evaluated, /^\{"value":\[0,1,2,/)
+        assert.match(evaluated, /,"\[Truncated\]"\]\}$/)
+        assert.ok(evaluated.length < 4_000_000)
+      })
+
+      it(`sends no URL for a transport with a Unicode host (${sdk})`, async () => {
+        const response = await get(`/mcp/idn?sdk=${sdk}`)
+
+        assert.strictEqual(response.status, 200)
+        assert.strictEqual(response.body.result, 'wrote idn')
+        assert.deepStrictEqual((await state()).inProcess, ['streamable_http:idn'])
+        // No key identifies the server, so the call gets the evaluation of an ordinary tool call.
+        const evaluations = attributes()
+        assert.strictEqual(evaluations.length, 1)
+        assert.ok(!Object.hasOwn(evaluations[0], 'mcp_servers'))
+        assert.deepStrictEqual(Object.keys(evaluations[0].messages[0].tool_calls[0]), ['id', 'function'])
+        const sent = JSON.stringify(harness.requests())
+        assert.ok(!sent.includes('xn--') && !sent.includes('bücher'))
       })
 
       for (const transport of ['in_memory', 'stdio']) {

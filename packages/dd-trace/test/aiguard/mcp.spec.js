@@ -115,6 +115,24 @@ describe('AI Guard MCP helpers', () => {
       // Other schemes keep their port, and their host is lowercased too.
       ['custom://User@MCP.Example.com:7000/path', 'custom://mcp.example.com:7000'],
       ['file:///tmp/server.sock', undefined],
+      // An IPv4 literal keeps the canonical dotted-quad form of the parser.
+      ['http://2130706433/mcp', 'http://127.0.0.1'],
+      ['http://0x7f.1/mcp', 'http://127.0.0.1'],
+      ['http://127.1/mcp', 'http://127.0.0.1'],
+      ['http://127.0.0.1:8080/mcp', 'http://127.0.0.1:8080'],
+      // An IPv6 literal keeps the canonical compressed form in brackets.
+      ['http://[0:0::1]:9000/mcp', 'http://[::1]:9000'],
+      // A host with an IDN label gets no origin, also in Unicode or percent-encoded form.
+      ['http://bücher.example/mcp', undefined],
+      ['http://xn--bcher-kva.example/mcp', undefined],
+      ['http://MCP.XN--BCHER-KVA.example/mcp', undefined],
+      ['http://b%C3%BCcher.example/mcp', undefined],
+      ['http://mcp.example.xn--p1ai/mcp', undefined],
+      // Only a label that starts with xn-- is an IDN label.
+      ['http://axn--b.example/mcp', 'http://axn--b.example'],
+      // The parser decodes percent-encoded ASCII in a host.
+      ['http://%65xample.com/mcp', 'http://example.com'],
+      ['http://my_server.example/mcp', 'http://my_server.example'],
     ]) {
       it(`keeps ${expected} of ${JSON.stringify(url)}`, () => {
         const server = createClientServer({ type: 'streamable_http', url })
@@ -138,6 +156,21 @@ describe('AI Guard MCP helpers', () => {
       assert.strictEqual(server?.url, 'https://mcp.example.com')
     })
 
+    it('reads no origin from a URL object with a Unicode host, and uses the next key', () => {
+      const url = new URL('http://bücher.example/mcp')
+
+      assert.strictEqual(createClientServer({ type: 'streamable_http', url }), undefined)
+      assert.deepStrictEqual(createClientServer({ type: 'streamable_http', url }, 'atlassian'), {
+        id: 'mcp_4b1df2a2d821278c',
+        managed_by: 'client',
+        name: 'atlassian',
+        transport: 'streamable_http',
+      })
+      // A stdio transport uses its command, and never a URL.
+      const stdio = /** @type {TransportInfo} */ ({ type: 'stdio', command: 'uvx', args: ['mcp-example'], url })
+      assert.strictEqual(createClientServer(stdio)?.id, 'mcp_0f2f11f8cafdbcc5')
+    })
+
     it('reports a WebSocket server as an unknown transport with its URL origin', () => {
       const server = createClientServer({ type: 'websocket', url: 'wss://mcp.example.com/ws?token=abc' })
 
@@ -158,6 +191,20 @@ describe('AI Guard MCP helpers', () => {
         'mcp_0f2f11f8cafdbcc5'
       )
       assert.strictEqual(createClientServer({ type: 'in_process' }, 'atlassian')?.id, 'mcp_4b1df2a2d821278c')
+    })
+
+    it('matches the cross-tracer vectors of IP literals and decoded hosts', () => {
+      for (const [url, id] of [
+        ['http://2130706433/mcp', 'mcp_bb3842ff8c77d25d'],
+        ['http://0x7f.1/mcp', 'mcp_bb3842ff8c77d25d'],
+        ['http://127.1/mcp', 'mcp_bb3842ff8c77d25d'],
+        ['http://127.0.0.1:8080/mcp', 'mcp_b339e608ea2ddcc1'],
+        ['http://[0:0::1]:9000/mcp', 'mcp_cc35033de8004f7e'],
+        ['http://%65xample.com/mcp', 'mcp_35da95b0ebe35a00'],
+        ['http://my_server.example/mcp', 'mcp_2607363cabc2eebc'],
+      ]) {
+        assert.strictEqual(createClientServer({ type: 'streamable_http', url })?.id, id, url)
+      }
     })
 
     it('uses the first key that applies', () => {

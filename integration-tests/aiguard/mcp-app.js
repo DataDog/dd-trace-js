@@ -2,8 +2,11 @@
 
 require('dd-trace').init({ flushInterval: 0 })
 
+const { createHash } = require('node:crypto')
 const fs = require('node:fs')
+const { BlockList } = require('node:net')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const v2 = require('@modelcontextprotocol/client')
 const { StdioClientTransport: StdioClientTransportV2 } = require('@modelcontextprotocol/client/stdio')
@@ -69,6 +72,25 @@ function recordValue (label, value) {
 }
 
 /**
+ * Shows the type and the content of a value that a tool gets. An Error shows its type and message,
+ * because its stack differs between processes.
+ *
+ * @param {unknown} value
+ */
+function inspectValue (value) {
+  const text = value instanceof Error ? `${value.constructor.name}: ${value.message}` : inspect(value)
+  return { content: [{ type: 'text', text }] }
+}
+
+/**
+ * @param {Uint8Array} value
+ */
+function digestBytes (value) {
+  const text = `${value.constructor.name}:${value.length}:${createHash('sha256').update(value).digest('hex')}`
+  return { content: [{ type: 'text', text }] }
+}
+
+/**
  * @param {string} label
  */
 function createMcpServer (label) {
@@ -81,6 +103,14 @@ function createMcpServer (label) {
     description: 'Records the type of a value',
     inputSchema: { value: z.any(), text: z.string().optional() },
   }, ({ value }) => recordValue(label, value))
+  server.registerTool('inspect_value', {
+    description: 'Shows the type and the content of a value',
+    inputSchema: { value: z.any() },
+  }, ({ value }) => inspectValue(value))
+  server.registerTool('digest_bytes', {
+    description: 'Shows the type, the length and the SHA-256 digest of binary data',
+    inputSchema: { value: z.any() },
+  }, ({ value }) => digestBytes(value))
   return server
 }
 
@@ -99,6 +129,14 @@ function createMcpServerV2 (label) {
     description: 'Records the type of a value',
     inputSchema: z.object({ value: z.any(), text: z.string().optional() }),
   }, ({ value }) => recordValue(label, value))
+  server.registerTool('inspect_value', {
+    description: 'Shows the type and the content of a value',
+    inputSchema: z.object({ value: z.any() }),
+  }, ({ value }) => inspectValue(value))
+  server.registerTool('digest_bytes', {
+    description: 'Shows the type, the length and the SHA-256 digest of binary data',
+    inputSchema: z.object({ value: z.any() }),
+  }, ({ value }) => digestBytes(value))
   return server
 }
 
@@ -297,6 +335,154 @@ app.get('/mcp/value', async (req, res) => {
     const args = createArguments(String(req.query.value), req.query.text)
     const result = await client.callTool({ name: 'record_value', arguments: args })
     res.json({ blocked: false, isError: result.isError === true, result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
+class Point {
+  x = 1
+}
+class Stamp extends Date {}
+class Registry extends Map {}
+
+// Each value, and the change that the application makes to it while the call waits for its check.
+const CHANGES = {
+  date: () => {
+    const value = new Date(0)
+    return [value, () => value.setTime(1000)]
+  },
+  buffer: () => {
+    const value = Buffer.from('abc')
+    return [value, () => value.fill(0)]
+  },
+  uint8array: () => {
+    const value = new Uint8Array([1, 2, 3])
+    return [value, () => value.fill(0)]
+  },
+  arraybuffer: () => {
+    const value = new Uint8Array([4, 5]).buffer
+    return [value, () => new Uint8Array(value).fill(9)]
+  },
+  map: () => {
+    const value = new Map([['a', 1], ['b', 2]])
+    return [value, () => {
+      value.set('a', 9)
+      value.delete('b')
+    }]
+  },
+  set: () => {
+    const value = new Set([1])
+    return [value, () => value.add(2)]
+  },
+  nested: () => {
+    const value = { inner: { list: [1] } }
+    return [value, () => value.inner.list.push(2)]
+  },
+  instance: () => {
+    const value = new Point()
+    return [value, () => { value.x = 2 }]
+  },
+  datesub: () => {
+    const value = new Stamp(0)
+    return [value, () => value.setTime(1000)]
+  },
+  mapsub: () => {
+    const value = new Registry([['a', 1]])
+    return [value, () => value.set('a', 9)]
+  },
+  regexp: () => {
+    const value = /a+/g
+    return [value, () => { value.lastIndex = 5 }]
+  },
+  error: () => {
+    // The check writes the stack, so the stack is fixed.
+    const value = Object.assign(new TypeError('boom'), { stack: 'TypeError: boom' })
+    return [value, () => { value.message = 'changed' }]
+  },
+  blob: () => {
+    const value = new Blob(['rm -rf / [deny]'])
+    return [value, () => {}]
+  },
+  // The clone of a BlockList shares its native handle with the application.
+  blocklist: () => {
+    const value = new BlockList()
+    value.addAddress('10.0.0.1')
+    return [value, () => value.addAddress('10.9.9.9')]
+  },
+  bigint: () => {
+    const value = { count: 7n }
+    return [value, () => { value.count = 8n }]
+  },
+  shared: () => {
+    const value = new Uint8Array(new SharedArrayBuffer(2))
+    value[0] = 1
+    return [value, () => { value[0] = 9 }]
+  },
+  proxy: () => {
+    const value = new Proxy({ a: 1 }, {})
+    return [value, () => { value.a = 2 }]
+  },
+  function: () => {
+    const value = { a: 1, run () {} }
+    return [value, () => { value.a = 2 }]
+  },
+}
+
+// The application changes the value after callTool returns, while the call waits for its check.
+app.get('/mcp/change', async (req, res) => {
+  try {
+    const client = await connect('in_memory', sdkOf(req))
+    const [value, change] = CHANGES[String(req.query.kind)]()
+    const call = client.callTool({ name: 'inspect_value', arguments: { value } })
+    change()
+    const result = await call
+    res.json({ result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
+// The tool gets an Error with a deny in its cause or in its stack.
+app.get('/mcp/error', async (req, res) => {
+  try {
+    const client = await connect('in_memory', sdkOf(req))
+    const value = new Error('boom', { cause: req.query.marker === 'cause' ? { reason: 'bad [deny]' } : undefined })
+    value.stack = req.query.marker === 'stack' ? 'Error: boom [deny]' : 'Error: boom'
+    const result = await client.callTool({ name: 'inspect_value', arguments: { value } })
+    res.json({ result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
+// The tool gets 5 MB of binary data, more than the entries of the evaluation text.
+app.get('/mcp/large', async (req, res) => {
+  try {
+    const client = await connect('in_memory', sdkOf(req))
+    const value = new Uint8Array(5 * 1024 * 1024)
+    for (let i = 0; i < value.length; i++) value[i] = i % 251
+    const result = await client.callTool({ name: 'digest_bytes', arguments: { value } })
+    res.json({ result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
+// The URL object of the transport has a Unicode host. The fetch of the transport sends the requests
+// to the local server.
+app.get('/mcp/idn', async (req, res) => {
+  try {
+    const sdk = SDKS[sdkOf(req)]
+    const local = streamableHttpUrl()
+    const transport = new sdk.StreamableHTTPClientTransport(new URL('http://bücher.example/mcp/idn'), {
+      fetch: (url, init) => fetch(local, init),
+    })
+    const client = new sdk.Client({ name: `app-client-${SECRET}`, version: '1.0.0' })
+    await client.connect(transport)
+    const result = await client.callTool({ name: 'write_file', arguments: { text: 'idn' } })
+    await client.close()
+    res.json({ result: result.content[0].text })
   } catch (error) {
     sendError(res, error)
   }

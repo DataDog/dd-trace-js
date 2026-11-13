@@ -9,7 +9,8 @@ function startApiMock () {
       // The bodies of the evaluate requests, in order, so specs can assert on the exact payloads.
       const requests = []
       const app = express()
-      app.use(express.json())
+      // The evaluation of a large in-process argument can have a few megabytes.
+      app.use(express.json({ limit: '64mb' }))
       app.post('/evaluate', (req, res) => {
         const body = req.body
         requests.push(body)
