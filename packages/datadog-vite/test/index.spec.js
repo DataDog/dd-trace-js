@@ -13,7 +13,7 @@ const sinon = require('sinon')
 const { datadogVite } = require('../../../vite')
 
 const ROLLDOWN = { meta: { rolldownVersion: '1.0.0', viteVersion: '8.0.0' } }
-const ROLLUP = { meta: { rollupVersion: '4.0.0', viteVersion: '7.0.0' } }
+const ROLLUP = { meta: { rollupVersion: '4.53.1', viteVersion: '7.0.0' } }
 const OPTIONAL_DEPENDENCIES = Object.keys(require('../../../package.json').optionalDependencies)
 // Installed in this repository, so they are bundled.
 const BUNDLED_OPTIONAL_DEPENDENCIES = ['@opentelemetry/api', '@opentelemetry/api-logs']
@@ -249,6 +249,21 @@ describe('datadogVite', () => {
       const code = await intro({ isEntry: true })
       assert.match(code, /^import \{ createRequire as \$dd_createRequire \} from 'node:module';\n.+\nconst userIntro = true;$/s)
       sinon.assert.calledOnceWithExactly(userIntro, { isEntry: true })
+    })
+
+    it('refuses ESM output with Rollup versions that do not reserve the names', () => {
+      const plugin = datadogVite()
+      const rollup = rollupVersion => ({ meta: { rollupVersion, viteVersion: '6.0.0' } })
+
+      for (const version of ['4.23.0', '4.52.5', '4.53.0']) {
+        assert.throws(() => plugin.outputOptions.call(rollup(version), { format: 'es' }), {
+          message: 'dd-trace/vite requires Rollup 4.53.1 or newer for ESM output. Refusing to bundle.',
+        }, version)
+      }
+      for (const version of ['4.53.1', '4.54.0', '5.0.0']) {
+        assert.match(plugin.outputOptions.call(rollup(version), {}).intro, /^import /, version)
+      }
+      assert.equal(plugin.outputOptions.call(rollup('4.23.0'), { format: 'cjs' }), undefined)
     })
 
     it('leaves CommonJS output and Rolldown untouched', () => {
