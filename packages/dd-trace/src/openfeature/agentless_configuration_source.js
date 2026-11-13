@@ -65,13 +65,20 @@ class AgentlessConfigurationSource {
 
   #malformedPayloadLogged = false
 
+  #onFetchResult
+  #onFetchStart
+
   /**
    * @param {AgentlessSourceConfig} config
    * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
+   * @param {(success: boolean) => void} [onFetchResult]
+   * @param {() => void} [onFetchStart]
    */
-  constructor (config, applyConfiguration) {
+  constructor (config, applyConfiguration, onFetchResult, onFetchStart) {
     this.#config = config
     this.#applyConfiguration = applyConfiguration
+    this.#onFetchResult = onFetchResult
+    this.#onFetchStart = onFetchStart
   }
 
   start () {
@@ -118,6 +125,9 @@ class AgentlessConfigurationSource {
    * @returns {Promise<void>}
    */
   async #pollOnce (abortController) {
+    try {
+      this.#onFetchStart?.()
+    } catch { /* Diagnostic observers must not stop polling. */ }
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       log.debug('Feature Flags: agentless configuration poll attempt %d/%d', attempt, MAX_ATTEMPTS)
       const response = await this.#request(abortController.signal)
@@ -145,6 +155,7 @@ class AgentlessConfigurationSource {
       if (attempt === MAX_ATTEMPTS) {
         this.#warnFailure(response.statusCode, response.error, attempt)
         this.#logPollFailure('retries exhausted')
+        this.#reportFetchResult(false)
         return
       }
 
@@ -207,6 +218,7 @@ class AgentlessConfigurationSource {
       // until a configuration has been applied.
       if (this.#appliedCreatedAt === undefined) {
         this.#logPollFailure('HTTP 304 received before any configuration was applied')
+        this.#reportFetchResult(false)
       } else {
         this.#logPollRecovery()
       }
@@ -216,11 +228,13 @@ class AgentlessConfigurationSource {
     if (statusCode === 401 || statusCode === 403) {
       this.#warnFailure(statusCode, undefined, 1)
       this.#logPollFailure('authentication failed, not retried')
+      this.#reportFetchResult(false)
       return
     }
 
     if (statusCode !== 200) {
       this.#logPollFailure('HTTP status is not retryable')
+      this.#reportFetchResult(false)
       return
     }
 
@@ -236,6 +250,7 @@ class AgentlessConfigurationSource {
       log.debug('Feature Flags: agentless configuration payload rejected: %s',
         error instanceof SyntaxError ? 'response body is not valid JSON' : error.message)
       this.#logPollFailure('malformed UFC payload')
+      this.#reportFetchResult(false)
       return
     }
 
@@ -284,7 +299,15 @@ class AgentlessConfigurationSource {
     }
   }
 
+  /** @param {boolean} success */
+  #reportFetchResult (success) {
+    try {
+      this.#onFetchResult?.(success)
+    } catch { /* Diagnostic observers must not stop polling. */ }
+  }
+
   #logPollRecovery () {
+    this.#reportFetchResult(true)
     if (this.#failedPolls === 0) return
 
     log.debug('Feature Flags: agentless configuration poll succeeded after %d failed poll(s)', this.#failedPolls)

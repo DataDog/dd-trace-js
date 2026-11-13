@@ -121,7 +121,7 @@ To stop sending exposures to Datadog while the hook keeps working, see
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
 `DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
-flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+flag evaluation, exposure events, SDK diagnostics, span enrichment, or OpenTelemetry evaluation metrics.
 
 Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
 

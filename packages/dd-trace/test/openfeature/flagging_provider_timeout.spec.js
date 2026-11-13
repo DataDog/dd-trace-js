@@ -110,16 +110,13 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise.catch(() => {})
   })
 
-  it('returns the upstream initialization promise without adding a settlement handler', async () => {
-    const promise = Promise.resolve()
-    const then = sinon.spy(promise, 'then')
-    const initialize = sinon.stub(DatadogNodeServerProvider.prototype, 'initialize').returns(promise)
+  it('preserves the upstream initialization rejection', async () => {
+    const error = new Error('initialization failed')
+    const initialize = sinon.stub(DatadogNodeServerProvider.prototype, 'initialize').rejects(error)
     try {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-
-      assert.strictEqual(provider.initialize(), promise)
-      sinon.assert.notCalled(then)
-      await promise
+      await assert.rejects(provider.initialize(), actual => actual === error)
+      provider.onClose()
     } finally {
       initialize.restore()
     }

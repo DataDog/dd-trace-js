@@ -12,6 +12,7 @@ const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const EvaluationTelemetryOptOutHook = require('./evaluation-telemetry-opt-out-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+const SDKTelemetry = require('./sdk-telemetry')
 const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 
 const RAW_EVALUATION_DATA_WARNING = 'Feature Flags: debug logging is enabled, so feature flag logs include raw ' +
@@ -24,7 +25,7 @@ const SOURCE_UNAVAILABLE_CONSEQUENCE = 'Provider initialization fails and flag e
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
-  // Track this wrapper's logging lifecycle without reading the upstream provider's private state.
+  // Track this wrapper's configuration wait without reading the upstream provider's private state.
   #waitingForConfiguration = false
 
   /** @type {SpanEnrichmentHook | undefined} */
@@ -42,15 +43,21 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {number} */
   #initializationTimeoutMs
 
+  #sdkTelemetry
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
+    const sdkTelemetry = SDKTelemetry.create(config)
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
+      onDiagnostic: sdkTelemetry && (observation => sdkTelemetry.emit(observation)),
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
+
+    this.#sdkTelemetry = sdkTelemetry
 
     const enableOptOut =
       config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED === true
@@ -88,7 +95,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     try {
-      this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+      this.#configurationSource = configurationSource.create(
+        config, this.setConfiguration.bind(this),
+        sdkTelemetry && this.reportConfigurationFetchResult.bind(this),
+        sdkTelemetry && this.reportConfigurationFetchStart.bind(this)
+      )
     } catch (error) {
       this.#configurationSourceError = error
       log.error('Unable to configure Feature Flagging configuration source', error)
@@ -108,6 +119,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     const hasConfiguration = this.getConfiguration() !== undefined
 
+    this.#sdkTelemetry?.start()
     this.#waitingForConfiguration = !hasConfiguration
     const promise = super.initialize(context)
 
@@ -179,6 +191,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
+    const closing = super.onClose()
     this.#configurationSource?.stop()
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
@@ -186,6 +199,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#flagEvalEVPHook?.destroy()
     this.#flagEvalEVPHook = undefined
     log.debug('Feature Flags: provider closed')
+    return closing.finally(() => this.#sdkTelemetry?.close())
   }
 }
 
