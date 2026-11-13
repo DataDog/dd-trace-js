@@ -2008,6 +2008,7 @@ describe('getPullRequestBaseBranch', () => {
         './git': {
           getGitRemoteName: () => 'origin',
           getSourceBranch: () => 'feature-branch',
+          hasLocalGitObject: () => true,
           getMergeBase: getMergeBaseStub,
           checkAndFetchBranch: checkAndFetchBranchStub,
           getLocalBranches: getLocalBranchesStub,
@@ -2106,7 +2107,7 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'repository_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
+      { type: 'repository_discrepancy', expectedProvider: 'git_client', discrepantProvider: 'ci_provider' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
@@ -2148,7 +2149,7 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'commit_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
+      { type: 'commit_discrepancy', expectedProvider: 'git_client', discrepantProvider: 'ci_provider' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
