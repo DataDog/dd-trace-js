@@ -78,12 +78,12 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
     return store
   }
 
-  // The resolve plugin traces every field from GraphQL's resolve channel. Only AppSec, to stop a resolver before it
-  // runs, and the execute hook, to get the context and root value, need a wrapper around the schema's resolvers.
+  // The schema wrapper traces the fields with their own resolver, as on other versions. The execute channel does not
+  // expose a `fieldResolver` to wrap, so the resolve plugin traces the fields left to GraphQL's default resolver.
   wrapExecutionResolvers (ctx, args) {
     ctx.ddArgs = args
     const { schema } = args
-    if (schema && (resolverStartCh.hasSubscribers || this.config.hooks.execute)) {
+    if (schema) {
       wrapFields(schema.getQueryType(), schema)
       wrapFields(schema.getMutationType(), schema)
       wrapFields(schema.getSubscriptionType(), schema)
@@ -120,20 +120,23 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
 }
 
 /**
- * GraphQL 17 publishes every field resolution on its resolve channel. The context carries the field name, parent
- * type, return type, arguments and dotted path, but not the resolve info, so the field node comes from the
- * operation and the parent field from the path.
+ * GraphQL 17 publishes every field resolution on its resolve channel. This plugin traces the fields that use the
+ * default resolver, which the schema wrapper cannot reach. The context carries the field name, parent type, return
+ * type, arguments and dotted path, but not the resolve info, so the field node comes from the operation and the
+ * parent field from the path. Binding a store to the channel would run for every field, so the plugin enters the
+ * field's store only around the fields it traces, for a resolver function on the root value or source object.
  */
 class GraphQLNativeResolvePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'resolve'
   static prefix = 'tracing:graphql:resolve'
 
-  bindStart (ctx) {
-    return startField(ctx)
+  start (ctx) {
+    startField(ctx)
   }
 
   end (ctx) {
+    if (ctx.ddParentStore !== undefined) legacyStorage.enterWith(ctx.ddParentStore)
     if (isSettled(ctx)) finishField(ctx)
   }
 
@@ -141,27 +144,37 @@ class GraphQLNativeResolvePlugin extends TracingPlugin {
     finishField(ctx)
   }
 
+  // The rewriter's locatedError() hook is absent here, so this records the errors of collapsed fields the resolver
+  // of an earlier list item already traced, including those the schema wrapper traced.
   error (ctx) {
     ctx.ddFailed = true
-    if (typeof ctx.error === 'object' && ctx.error !== null) resolveErrors.add(ctx.error)
+    const error = ctx.error
+    if (ctx.ddField !== undefined) {
+      markRecorded(error)
+      return
+    }
     // Like locatedError(), an error that already carries a path belongs to that path.
-    if (ctx.ddReusedField && !Array.isArray(ctx.error?.path)) recordResolveError(ctx.ddReusedField, ctx.error)
+    if (Array.isArray(error?.path)) return
+    const field = ctx.ddReusedField ?? findTracedField(ctx)
+    if (field?.span) {
+      recordResolveError(field, error)
+      markRecorded(error)
+    }
   }
 }
 
 /**
  * @param {object} ctx `graphql:resolve` context
- * @returns {object | undefined} The store the resolver runs in.
  */
 function startField (ctx) {
+  if (!ctx.isDefaultResolver) return
   const store = legacyStorage.getStore()
   const rootCtx = store?.graphqlRootCtx
-  if (!rootCtx?.native) return store
+  if (!rootCtx?.native) return
 
   const hasIastSub = iastResolveCh.hasSubscribers
-  // The schema wrapper publishes the fields that have their own resolver.
-  const hasResolverSub = rootCtx.hasResolverSub && ctx.isDefaultResolver
-  if (rootCtx.depthDisabled && !hasIastSub && !hasResolverSub) return store
+  const hasResolverSub = rootCtx.hasResolverSub
+  if (rootCtx.depthDisabled && !hasIastSub && !hasResolverSub) return
 
   const config = rootCtx.config
   const segments = ctx.fieldPath.split('.')
@@ -183,7 +196,7 @@ function startField (ctx) {
     })
   }
 
-  if (rootCtx.depthDisabled || !shouldInstrumentSegments(config, segments)) return store
+  if (rootCtx.depthDisabled || !shouldInstrumentSegments(config, segments)) return
 
   const pathString = toPathString(segments, segments.length, config.collapse)
   const collapsedField = rootCtx.fields.get(pathString)
@@ -192,7 +205,8 @@ function startField (ctx) {
     field.endTime = REUSED_FIELD_END_TIME
     rootCtx.lastFields?.set(pathString, field)
     ctx.ddReusedField = field
-    return field.currentStore
+    enterFieldStore(ctx, store, field)
+    return
   }
 
   const fieldType = ctx.fieldType
@@ -224,7 +238,41 @@ function startField (ctx) {
     findParentField(rootCtx, segments))
   ctx.ddField = field
   ctx.ddRootCtx = rootCtx
-  return field.currentStore
+  enterFieldStore(ctx, store, field)
+}
+
+/**
+ * @param {unknown} error
+ */
+function markRecorded (error) {
+  if (typeof error === 'object' && error !== null) resolveErrors.add(error)
+}
+
+/**
+ * @param {object} ctx `graphql:resolve` context of a field with its own resolver
+ * @returns {object | undefined} The field the schema wrapper traced for the path and parent type.
+ */
+function findTracedField (ctx) {
+  const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+  if (!rootCtx?.native || rootCtx.depthDisabled) return
+
+  const config = rootCtx.config
+  const segments = ctx.fieldPath.split('.')
+  if (!shouldInstrumentSegments(config, segments)) return
+  const field = rootCtx.fields.get(toPathString(segments, segments.length, config.collapse))
+  return findCollapsedField(rootCtx, field, ctx.parentType)
+}
+
+/**
+ * GraphQL publishes `end` synchronously once the resolver returns, which restores the parent store.
+ *
+ * @param {object} ctx `graphql:resolve` context
+ * @param {object} parentStore
+ * @param {object} field
+ */
+function enterFieldStore (ctx, parentStore, field) {
+  ctx.ddParentStore = parentStore
+  legacyStorage.enterWith(field.currentStore)
 }
 
 /**

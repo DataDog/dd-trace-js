@@ -570,20 +570,12 @@ function wrapResolve (resolve, isJit = false) {
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
 
-    // GraphQL 17 traces fields from its resolve channel. Its schema is wrapped only so AppSec can stop a resolver
-    // and the execute hook gets the context and root value its execute channel leaves out.
-    if (rootCtx.native) {
-      const hookArgs = rootCtx.hookArgs
-      if (hookArgs !== undefined) {
-        rootCtx.hookArgs = undefined
-        hookArgs.rootValue = info.rootValue
-        hookArgs.contextValue = contextValue
-      }
-      if (rootCtx.hasResolverSub) {
-        resolverStartCh.publish({ abortController: rootCtx.abortController, createResolverInfo, info, args })
-        if (rootCtx.abortController.signal.aborted) throw new AbortError()
-      }
-      return invokeResolver(resolve, this, arguments, false)
+    // GraphQL 17's execute channel leaves out the root value and context the execute hook receives.
+    const hookArgs = rootCtx.hookArgs
+    if (hookArgs !== undefined) {
+      rootCtx.hookArgs = undefined
+      hookArgs.rootValue = info.rootValue
+      hookArgs.contextValue = contextValue
     }
 
     const infoPath = info?.path
@@ -627,7 +619,8 @@ function wrapResolve (resolve, isJit = false) {
     // Compilations performed while tracing is disabled have no static JIT
     // descriptor. Their resolver-info path nodes are recreated for each
     // resolver, so use the stable path string to preserve span parenting.
-    const useStringKey = config.collapse || isJit
+    // GraphQL 17's resolve channel keys the default-resolver fields by their path string.
+    const useStringKey = config.collapse || isJit || rootCtx.native
     const fieldKey = useStringKey ? pathString : infoPath
     const parentTypeName = info.parentType.name
     const collapsedField = rootCtx.fields.get(fieldKey)
@@ -1357,7 +1350,9 @@ function shouldInstrumentNode (config, path) {
 
 function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-    const fieldKey = rootCtx.config.collapse || field.jitPathKey ? rootCtx.pathCache.get(curr) : curr
+    const fieldKey = rootCtx.config.collapse || field.jitPathKey || rootCtx.native
+      ? rootCtx.pathCache.get(curr)
+      : curr
     const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) {
       if (curr.typename === undefined) {
