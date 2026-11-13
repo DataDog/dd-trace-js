@@ -61,6 +61,14 @@ describe('Remote config product composition', () => {
   }
 
   for (const product of ['APM_TRACING', 'APM_PROFILING']) {
+    it(`keeps local settings when removing ${product} before any product arrives`, () => {
+      update(product, null)
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'code')
+      assert.strictEqual(config.sampleRate, 0.25)
+    })
+
     it(`replaces and removes ${product} as the only product`, () => {
       const files = {
         APM_TRACING: [
@@ -157,5 +165,23 @@ describe('Remote config product composition', () => {
     assert.strictEqual(config.DD_PROFILING_WALLTIME_ENABLED, false)
     assert.strictEqual(config.getOrigin('DD_PROFILING_WALLTIME_ENABLED'), 'remote_config')
     assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, true)
+  })
+
+  it('resolves aliases when products overlap again after a single-product update', () => {
+    update('APM_TRACING', { sdk_config: { config: { DD_EXPERIMENTAL_PROFILING_ENABLED: 'false' } } })
+    update('APM_PROFILING', { profilers: { wallTime: true } })
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+
+    update('APM_PROFILING', null)
+    update('APM_TRACING', { sdk_config: { config: { DD_EXPERIMENTAL_PROFILING_ENABLED: 'true' } } })
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+
+    update('APM_PROFILING', {
+      profilers: { wallTime: false, cpuTime: false, heapSize: false, heapObjects: false, allocations: false },
+    })
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+
+    update('APM_PROFILING', null)
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
   })
 })

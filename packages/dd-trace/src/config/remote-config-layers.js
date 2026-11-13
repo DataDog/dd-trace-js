@@ -8,7 +8,7 @@ const { getEnvironmentVariables } = require('./helper')
  * @typedef {Partial<Record<import('./helper').SupportedEnvKey, string>>} Settings
  */
 
-/** @type {WeakMap<Config, Map<Product, Settings>>} */
+/** @type {WeakMap<Config, Record<Product, Settings | null>>} */
 const layersByConfig = new WeakMap()
 
 /**
@@ -19,28 +19,26 @@ const layersByConfig = new WeakMap()
  * @param {Settings | null} settings
  */
 module.exports = function applyRemoteConfig (config, product, settings) {
-  let layers = layersByConfig.get(config)
+  const layers = layersByConfig.get(config)
   if (layers === undefined) {
-    layers = new Map()
-    layersByConfig.set(config, layers)
-  }
-
-  layers.delete(product)
-  if (settings !== null) {
-    // Resolve aliases before merging so each setting has one key across products.
-    layers.set(product, getEnvironmentVariables(settings, true))
-  }
-
-  if (layers.size === 1) {
-    config.setRemoteConfig(layers.values().next().value)
+    if (settings !== null) {
+      layersByConfig.set(config, { APM_TRACING: null, APM_PROFILING: null, [product]: settings })
+    }
+    config.setRemoteConfig(settings)
     return
   }
 
-  /** @type {Settings | null} */
-  let merged = null
-  for (const layer of layers.values()) {
-    merged ??= {}
-    Object.assign(merged, layer)
+  const previous = layers[product]
+  const otherProduct = product === 'APM_TRACING' ? 'APM_PROFILING' : 'APM_TRACING'
+  const other = layers[otherProduct]
+  layers[product] = settings
+
+  if (settings !== null && other !== null) {
+    // Normalize both layers on their first overlap, then reuse the other layer's canonical keys.
+    const base = previous === null ? getEnvironmentVariables(other, true) : other
+    layers[otherProduct] = base
+    layers[product] = getEnvironmentVariables(settings, true)
+    settings = { ...base, ...layers[product] }
   }
-  config.setRemoteConfig(merged)
+  config.setRemoteConfig(settings ?? other)
 }
