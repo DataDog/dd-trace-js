@@ -17,6 +17,7 @@ class JSONBuffer {
   #partialJson
   #partialBytes = 0
   #inFlightBytes = 0
+  #onDrain
 
   /**
    * @param {object} options
@@ -45,7 +46,30 @@ class JSONBuffer {
       if (released) return
       released = true
       this.#inFlightBytes -= bytes
+      this.#checkDrained()
     })
+  }
+
+  /**
+   * Flush the final batch after the producer has stopped, and wait for all uploads.
+   *
+   * @returns {Promise<void>}
+   */
+  drain () {
+    return new Promise(resolve => {
+      this.#onDrain = resolve
+      clearTimeout(this.#timer)
+      this.#timer = undefined
+      if (this.#partialJson !== undefined) this.#flush()
+      this.#checkDrained()
+    })
+  }
+
+  #checkDrained () {
+    if (this.#partialJson !== undefined || this.#inFlightBytes !== 0) return
+    const done = this.#onDrain
+    this.#onDrain = undefined
+    done?.()
   }
 
   /**
