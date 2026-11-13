@@ -35,6 +35,7 @@ const registry = [
     activate: { setup: () => require('../../elevenlabs') },
     instrumentations: require('./instrumentations/elevenlabs'),
   },
+  { instrumentations: require('./instrumentations/dataloader') },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { instrumentations: require('./instrumentations/jest') },

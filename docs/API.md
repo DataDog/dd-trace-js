@@ -293,6 +293,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
 <h5 id="cypress"></h5>
+<h5 id="dataloader"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
 <h5 id="electron"></h5>
@@ -443,6 +444,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [couchbase](./interfaces/plugins.couchbase.html)
 * [cucumber](./interfaces/plugins.cucumber.html)
 * [cypress](./interfaces/plugins.cypress.html)
+* [dataloader](./interfaces/plugins.dataloader.html)
 * [dns](./interfaces/plugins.dns.html)
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [electron](./interfaces/plugins.electron.html)

@@ -69,6 +69,7 @@ const plugins = {
   get couchbase () { return require('../../../datadog-plugin-couchbase/src') },
   get cypress () { return require('../../../datadog-plugin-cypress/src') },
   get dns () { return require('../../../datadog-plugin-dns/src') },
+  get dataloader () { return require('../../../datadog-plugin-dataloader/src') },
   get 'dd-trace-api' () { return require('../../../datadog-plugin-dd-trace-api/src') },
   get elasticsearch () { return require('../../../datadog-plugin-elasticsearch/src') },
   get electron () { return require('../../../datadog-plugin-electron/src') },

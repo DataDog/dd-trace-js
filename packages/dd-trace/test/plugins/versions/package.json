@@ -140,6 +140,7 @@
     "couchbase": "4.7.2",
     "cypress": "16.2.1",
     "cypress-fail-fast": "8.2.0",
+    "dataloader": "2.2.3",
     "dd-trace-api": "1.0.1",
     "durable-functions": "3.6.0",
     "ejs": "7.0.2",
