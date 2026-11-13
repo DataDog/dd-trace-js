@@ -1,7 +1,6 @@
 'use strict'
 
 // Ported from datadog-lambda-js at da9fc3c0c9dca00893f70c9a1bd5ac1254af3b01.
-// See test/fixtures/README.md for source mapping and compatibility boundaries.
 
 const { gunzipSync } = require('node:zlib')
 
