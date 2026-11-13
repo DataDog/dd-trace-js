@@ -22,7 +22,7 @@ function enable (_config) {
   downstream.enable(_config)
 
   httpClientRequestStart.subscribe(analyzeSsrf)
-  httpClientResponseStart.subscribe(handleResponseStart)
+  httpClientResponseStart.subscribe(planResponseBodyCollection)
   httpClientResponseFinish.subscribe(handleResponseFinish)
 }
 
@@ -30,7 +30,7 @@ function disable () {
   downstream.disable()
 
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
-  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(handleResponseStart)
+  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
 }
 
@@ -60,7 +60,7 @@ function analyzeSsrf (ctx) {
  * Evaluates redirects before the next hop, or plans response body capture.
  * @param {{ ctx: object, res: import('http').IncomingMessage }} payload channel payload.
  */
-function handleResponseStart ({ ctx, res }) {
+function planResponseBodyCollection ({ ctx, res }) {
   const originatingRequest = waf.getRequest(ctx)
   if (!originatingRequest || !res) return
 
