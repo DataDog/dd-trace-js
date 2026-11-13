@@ -184,21 +184,83 @@ describe('bundler transform', () => {
   })
 
   it('inserts a relative path to the tracer diagnostic-channel module', () => {
-    const projectDir = createProject()
+    const projectDir = fs.realpathSync(createProject())
     const packageDir = createPackage(projectDir, 'relative-package', { main: 'index.js', version: '1.0.0' })
     const source = 'module.exports = true\n'
     const resourcePath = write(packageDir, 'index.js', source)
     const instrumentations = {}
     const hooks = { 'relative-package': () => { instrumentations['relative-package'] = [{}] } }
     const { instrument } = loadHelper({ hooks, instrumentations })
-    const expected = path.relative(path.dirname(fs.realpathSync(resourcePath)), require.resolve('dc-polyfill'))
-      .replaceAll('\\', '/')
-    const specifier = expected.startsWith('../') ? expected : `./${expected}`
 
     const result = instrument({ source, resourcePath })
     assert.ok(result)
-    assert.ok(result.code.includes(`require(${JSON.stringify(specifier)})`))
-    assert.ok(specifier.startsWith('./') || specifier.startsWith('../'))
+    assertResolvesToDcPolyfill(resourcePath, getDcSpecifier(result.code))
+  })
+
+  describe('with a symlinked package path at a different depth than its target', () => {
+    // Projects share the node_modules that holds dc-polyfill, as with pnpm. Without a shared ancestor
+    // below the root, extra `../` segments are clamped at the root and the wrong base goes unnoticed.
+    const dcPolyfillModules = path.dirname(path.dirname(require.resolve('dc-polyfill')))
+
+    it('resolves the CommonJS publication import from the symlink path', () => {
+      const projectDir = createProject(dcPolyfillModules)
+      const linkDir = createLinkedPackage(projectDir, 'linked-package', { main: 'index.js', version: '1.0.0' })
+      const source = 'module.exports = true\n'
+      write(linkDir, 'index.js', source)
+      const resourcePath = path.join(linkDir, 'index.js')
+      const instrumentations = {}
+      const hooks = { 'linked-package': () => { instrumentations['linked-package'] = [{}] } }
+      const { instrument } = loadHelper({ hooks, instrumentations })
+
+      const result = instrument({ source, resourcePath })
+
+      assert.ok(result)
+      assert.match(result.code, /channel\.publish\(payload0\)/)
+      assertResolvesToDcPolyfill(resourcePath, getDcSpecifier(result.code))
+    })
+
+    it('resolves the CommonJS activation and rewriter imports from the symlink path', () => {
+      const projectDir = createProject(dcPolyfillModules)
+      const linkDir = createLinkedPackage(projectDir, 'linked-package', { version: '1.0.0' })
+      const source = 'module.exports = true\n'
+      write(linkDir, 'lib/index.js', source)
+      const resourcePath = path.join(linkDir, 'lib', 'index.js')
+      const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
+      const { instrument, rewriteFactory } = loadHelper({
+        hooks: { 'linked-package': sinon.stub() },
+        instrumentations: {},
+        rewrite,
+        rewriteTarget: () => ({ filePath: 'lib/index.js', moduleName: 'linked-package' }),
+      })
+
+      const result = instrument({ source, resourcePath })
+
+      assert.ok(result)
+      assert.match(result.code, /"activate":true,"package":"linked-package"/)
+      assertResolvesToDcPolyfill(resourcePath, getDcSpecifier(result.code))
+      assertResolvesToDcPolyfill(resourcePath, rewriteFactory.firstCall.args[0])
+    })
+
+    it('resolves the ESM activation import from the symlink path', () => {
+      const projectDir = createProject(dcPolyfillModules)
+      const linkDir = createLinkedPackage(projectDir, 'linked-package', { type: 'module', version: '1.0.0' })
+      const source = 'export default true\n'
+      write(linkDir, 'index.js', source)
+      const resourcePath = path.join(linkDir, 'index.js')
+      const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
+      const { instrument } = loadHelper({
+        hooks: { 'linked-package': sinon.stub() },
+        instrumentations: {},
+        rewrite,
+        rewriteTarget: () => ({ filePath: 'index.js', moduleName: 'linked-package' }),
+      })
+
+      const result = instrument({ source, resourcePath })
+
+      assert.ok(result)
+      assert.match(result.code, /import ddTraceBundlerDc from /)
+      assertResolvesToDcPolyfill(resourcePath, getDcSpecifier(result.code))
+    })
   })
 
   it('prefixes dot-directory imports and rejects paths on a different drive', () => {
@@ -489,7 +551,7 @@ describe('bundler transform', () => {
   })
 
   it('rewrites an ESM target and appends subscriber-gated activation', async () => {
-    const projectDir = createProject()
+    const projectDir = fs.realpathSync(createProject())
     const packageDir = createPackage(projectDir, 'rewrite-package', {
       type: 'module',
       version: '4.0.0',
@@ -754,8 +816,11 @@ describe('bundler transform', () => {
   })
 })
 
-function createProject () {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-transform-'))
+/**
+ * @param {string} [parent]
+ */
+function createProject (parent = os.tmpdir()) {
+  const directory = fs.mkdtempSync(path.join(parent, 'dd-trace-bundler-transform-'))
   directories.push(directory)
   return directory
 }
@@ -773,6 +838,38 @@ function createPackage (projectDir, name, packageJson, pnpm = false) {
   fs.mkdirSync(directory, { recursive: true })
   fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name, ...packageJson }))
   return directory
+}
+
+/**
+ * Creates a pnpm-style package and links it from `node_modules/<name>`, three levels above its target.
+ *
+ * @param {string} projectDir
+ * @param {string} name
+ * @param {object} packageJson
+ */
+function createLinkedPackage (projectDir, name, packageJson) {
+  const target = createPackage(projectDir, name, packageJson, true)
+  const link = path.join(projectDir, 'node_modules', name)
+  fs.symlinkSync(target, link, 'junction')
+  return link
+}
+
+/**
+ * @param {string} code
+ */
+function getDcSpecifier (code) {
+  const specifier = code.match(/(?:require\(|import ddTraceBundlerDc from )"([^"]+)"/)?.[1]
+  assert.ok(specifier, 'missing diagnostic-channel import')
+  return specifier
+}
+
+/**
+ * @param {string} resourcePath
+ * @param {string} specifier
+ */
+function assertResolvesToDcPolyfill (resourcePath, specifier) {
+  assert.match(specifier, /^\.\.?\//)
+  assert.equal(path.resolve(path.dirname(resourcePath), specifier), require.resolve('dc-polyfill'))
 }
 
 /**
@@ -871,7 +968,7 @@ function executeCommonJs (code, publish, hasSubscribers = true, context = {}) {
  * }} options
  */
 async function runRealRewrite ({ channel, esm, file, main, name, run, source, version }) {
-  const projectDir = createProject()
+  const projectDir = fs.realpathSync(createProject())
   const packageDir = createPackage(projectDir, name, { main, type: esm ? 'module' : 'commonjs', version })
   const resourcePath = write(packageDir, file, source)
   const warn = sinon.spy()
@@ -904,7 +1001,7 @@ async function runRealRewrite ({ channel, esm, file, main, name, run, source, ve
  * @param {{ disabled?: boolean, esm: boolean, version: string }} options
  */
 function runRealHooklessPipeline ({ disabled = false, esm, version }) {
-  const projectDir = createProject()
+  const projectDir = fs.realpathSync(createProject())
   const packageDir = createPackage(projectDir, 'bullmq', { type: esm ? 'module' : 'commonjs', version })
   const relativePath = `dist/${esm ? 'esm' : 'cjs'}/classes/queue.js`
   const resourcePath = write(packageDir, relativePath, esm

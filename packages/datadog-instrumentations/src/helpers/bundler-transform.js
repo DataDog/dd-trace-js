@@ -89,7 +89,10 @@ function instrument ({ source, resourcePath, inputSourceMap, warn }) {
     const target = getTarget(resourcePath, false)
     if (!target || target.kind === 'none') return undefined
 
-    const { nativeResourcePath, packageInfo, publications, rewriteTarget } = target
+    // Bundlers resolve the injected import from the module ID they passed in, which may be a symlink
+    // (for example with preserveSymlinks) whose realpath sits at a different directory depth.
+    const importerPath = resourcePath
+    const { packageInfo, publications, rewriteTarget } = target
     resourcePath = target.resourcePath
     const esm = packageInfo.esm
     if (publications.length > 0 && hasUnsafeCommonJsBindings(source)) {
@@ -97,7 +100,7 @@ function instrument ({ source, resourcePath, inputSourceMap, warn }) {
       return undefined
     }
 
-    const dcModule = getDcModule(nativeResourcePath)
+    const dcModule = getDcModule(importerPath)
     let code = source
     let sourceMap = inputSourceMap
     let rewritten = false
@@ -559,12 +562,12 @@ function escapeRegExp (value) {
 }
 
 /**
- * @param {string} nativeResourcePath
+ * @param {string} importerPath
  */
-function getDcModule (nativeResourcePath) {
-  let value = path.relative(path.dirname(nativeResourcePath), require.resolve('dc-polyfill')).replaceAll('\\', '/')
+function getDcModule (importerPath) {
+  let value = path.relative(path.dirname(importerPath), require.resolve('dc-polyfill')).replaceAll('\\', '/')
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) {
-    throw new Error(`Cannot create a relative diagnostic-channel import from ${nativeResourcePath}`)
+    throw new Error(`Cannot create a relative diagnostic-channel import from ${importerPath}`)
   }
   if (!value.startsWith('./') && !value.startsWith('../')) value = `./${value}`
   return value
