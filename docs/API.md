@@ -1039,7 +1039,6 @@ Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
 settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
 which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
 Cucumber's normal tag selection and dry runs still apply.
-The legacy `@datadog:prevent_failure_suppression` and `@datadog:no_auto_retry` tags remain supported.
 The annotation and assigned Test Management span tags follow the callback API below.
 
 ## Playwright test automation exclusions
