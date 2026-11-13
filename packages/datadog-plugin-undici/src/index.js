@@ -2,6 +2,7 @@
 
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 const { storage } = require('../../datadog-core')
+const { readDsmBase64 } = require('../../dd-trace/src/carrier')
 const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -246,6 +247,12 @@ class UndiciPlugin extends HttpClientPlugin {
       if (!req.headers.has(name)) {
         req.headers.set(name, options.headers[name])
       }
+    }
+
+    // A pathway header the caller forwards describes an upstream hop, so this request's own one replaces it.
+    const pathway = readDsmBase64(options.headers)
+    if (pathway !== undefined) {
+      req.headers.set(DSM_HEADER, pathway)
     }
 
     return store
