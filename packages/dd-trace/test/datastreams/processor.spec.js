@@ -473,6 +473,55 @@ describe('DataStreamsProcessor', () => {
       assert.ok(sketch.getValueAtQuantile(0.5) >= 0, `${name} p50 is ${sketch.getValueAtQuantile(0.5)}s`)
     }
   })
+
+  it('reports each consumer group of a topic as its own stats point under one pathway hash', () => {
+    const group1 = processor.setCheckpoint(['direction:in', 'group:g1', 'topic:t', 'type:kafka'], null, null)
+    const group2 = processor.setCheckpoint(['direction:in', 'group:g2', 'topic:t', 'type:kafka'], null, null)
+
+    assert.strictEqual(group1.hash.toString('hex'), group2.hash.toString('hex'))
+    const points = [...processor.buckets.values()].flatMap(bucket => [...bucket.checkpoints.values()])
+    assert.deepStrictEqual(points.map(point => point.edgeTags), [
+      ['direction:in', 'group:g1', 'topic:t', 'type:kafka'],
+      ['direction:in', 'group:g2', 'topic:t', 'type:kafka'],
+    ])
+  })
+
+  describe('process tags', () => {
+    const serializedProcessTags = 'entrypoint.basedir:src,entrypoint.name:server,entrypoint.type:script,' +
+      'entrypoint.workdir:orders,package.json.name:orders-api,svc.user:true'
+
+    /**
+     * @param {boolean} enabled
+     */
+    function processorWithProcessTags (enabled) {
+      const processTags = { serialized: serializedProcessTags }
+      const ownPropagationHash = proxyquire('../../src/propagation-hash', { '../process-tags': processTags })
+      ownPropagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: enabled })
+      ownPropagationHash.updateContainerTagsHash('c0ffee1234567890')
+      const { DataStreamsProcessor: Processor } = proxyquire('../../src/datastreams/processor', {
+        './writer': { DataStreamsWriter },
+        '../process-tags': processTags,
+        '../propagation-hash': ownPropagationHash,
+      })
+      const withProcessTags = new Processor({ ...config, service: 'service-b', env: 'test' })
+      clearTimeout(withProcessTags.timer)
+      return withProcessTags
+    }
+
+    it('folds process tags and the container tags hash into the pathway hash when enabled', () => {
+      const ctx = processorWithProcessTags(true).setCheckpoint(['direction:in', 'type:http'], null, null)
+
+      // Expected hash comes from dd-trace-java's FNV64Hash, BaseHash and DataStreamsTags with these process tags.
+      assert.strictEqual(ctx.hash.readBigUInt64LE(), 14083664075716441722n)
+    })
+
+    it('leaves process tags and the container tags hash out when disabled', () => {
+      const ctx = processorWithProcessTags(false).setCheckpoint(['direction:in', 'type:http'], null, null)
+
+      // Expected hash comes from dd-trace-java's FNV64Hash with process tags off.
+      assert.strictEqual(ctx.hash.readBigUInt64LE(), 11375375775841093325n)
+    })
+  })
 })
 
 describe('DataStreamsProcessor#setCheckpoint payload size', () => {
