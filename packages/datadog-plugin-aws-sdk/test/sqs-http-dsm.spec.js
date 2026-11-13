@@ -50,6 +50,8 @@ describe('Plugin', () => {
 
       after(async () => {
         delete process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
+        // SDK v3 keeps its connection open, and before Node.js 19 server.close() waits for it.
+        server.closeAllConnections()
         await Promise.all([agent.close(), new Promise(resolve => server.close(resolve))])
       })
 

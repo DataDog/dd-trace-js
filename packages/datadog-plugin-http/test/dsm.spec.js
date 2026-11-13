@@ -115,6 +115,8 @@ describe('Plugin', () => {
       afterEach(async () => {
         recordCheckpoint?.restore()
         recordCheckpoint = undefined
+        // Clients keep connections alive, and before Node.js 19 server.close() waits for them.
+        for (const server of servers) server.closeAllConnections?.()
         await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve))))
         await agent.close()
         delete process.env.DD_DATA_STREAMS_ENABLED
