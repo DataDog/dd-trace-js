@@ -1,10 +1,21 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const { wrapProtocolRequest } = require('./modelcontextprotocol-sdk')
+const { channel, tracingChannel } = require('dc-polyfill')
 
-// SDK 2.x clients bundle Protocol into a chunk with a hashed name. The package entry re-exports it, so hook the entry.
-addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
-  wrapProtocolRequest(exports.Protocol)
-  return exports
+const { addTraceContextToRequest } = require('./modelcontextprotocol-sdk')
+
+const requestCh = tracingChannel('orchestrion:@modelcontextprotocol/client:Protocol_request')
+const clientRequestInjectCh = channel('apm:mcp:client:request:inject')
+
+const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
+
+// Replacing the request argument before Protocol.request runs puts the trace context in `_meta`, so out-of-process MCP
+// servers can parent their spans to the client span.
+requestCh.start.subscribe(ctx => {
+  const request = ctx.arguments?.[0]
+  if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) return
+
+  const injectCtx = {}
+  clientRequestInjectCh.publish(injectCtx)
+  if (injectCtx.traceContext) ctx.arguments[0] = addTraceContextToRequest(request, injectCtx.traceContext)
 })

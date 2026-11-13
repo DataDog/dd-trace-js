@@ -118,9 +118,9 @@ function wrapAbortControllers (protocol) {
   })
 }
 
-// Inject trace context into MCP request metadata so out-of-process MCP servers
-// can parent server spans to the client operation span.
-function wrapProtocolRequest (Protocol) {
+function wrapProtocol (Protocol) {
+  // Inject trace context into MCP request metadata so out-of-process MCP servers
+  // can parent server spans to the client operation span.
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
       if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
@@ -137,10 +137,6 @@ function wrapProtocolRequest (Protocol) {
       return original.call(this, addTraceContextToRequest(request, ctx.traceContext), resultSchema, options)
     }
   })
-}
-
-function wrapProtocol (Protocol) {
-  wrapProtocolRequest(Protocol)
 
   // Start spans in _onrequest — this runs inside the express POST /mcp handler's
   // async context, so ALS correctly parents server spans under the HTTP span.
@@ -261,4 +257,4 @@ addHook({
   return exports
 })
 
-module.exports = { wrapProtocolRequest }
+module.exports = { addTraceContextToRequest }

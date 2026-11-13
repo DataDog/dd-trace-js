@@ -10,6 +10,11 @@
     "flags": ""
   },
   {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/src-[\\w-]+\\.[cm]js$",
+    "flags": ""
+  },
+  {
     "name": "@modelcontextprotocol/server",
     "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
     "flags": ""
