@@ -568,6 +568,7 @@ export interface GeneratedConfig {
   startupLogs: boolean;
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
+    DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: number;
   };
   tags: Record<string, string>;
   telemetry: {
@@ -1171,6 +1172,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_STARTUP_LOGS: boolean;
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
+  DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: number;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
   DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;

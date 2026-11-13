@@ -51,6 +51,7 @@ describe('span-stats-encode', () => {
       srv_src: 'kafka',
       SpanKind: 'server',
       GRPCStatusCode: '0',
+      PeerTags: ['peer.service:billing', 'out.host:db.local'],
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -231,5 +232,25 @@ describe('span-stats-encode', () => {
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.SpanKind, '')
     assert.strictEqual(decodedStat.GRPCStatusCode, '')
+  })
+
+  it('should encode PeerTags', () => {
+    encoder.encode(stats)
+
+    const decodedStat = msgpack.decode(encoder.makePayload()).Stats[0].Stats[0]
+
+    assert.deepStrictEqual(decodedStat.PeerTags, ['peer.service:billing', 'out.host:db.local'])
+  })
+
+  it('should encode PeerTags as an empty array when not present', () => {
+    const statsWithout = {
+      ...stats,
+      Stats: [{ ...bucket, Stats: [{ ...stat, PeerTags: undefined }] }],
+    }
+    encoder.encode(statsWithout)
+
+    const decodedStat = msgpack.decode(encoder.makePayload()).Stats[0].Stats[0]
+
+    assert.deepStrictEqual(decodedStat.PeerTags, [])
   })
 })

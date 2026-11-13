@@ -12,12 +12,33 @@ const {
   HTTP_METHOD,
   SPAN_KIND,
   GRPC_STATUS_CODE,
+  BASE_SERVICE,
 } = require('../../../ext/tags')
+const { fetchAgentInfo } = require('./agent/info')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
 const log = require('./log')
+const { quantizePeerIpAddresses } = require('./quantize-peer-ip-addresses')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
+/** @type {string[]} */
+const NO_PEER_TAGS = []
+const BASE_SERVICE_PEER_TAG_KEYS = [BASE_SERVICE]
+// What the Agent's span concentrator collapses over-limit peer tags to on the tracer side.
+const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
+// Span kinds the Agent computes stats for even when a span is neither top-level nor measured.
+const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
+
+/**
+ * Whether stats are computed for spans of this kind even when they are neither top-level nor measured. Most spans
+ * that get here carry no or an already lowercase kind, so only others pay for lowercasing.
+ *
+ * @param {string | undefined} spanKind
+ */
+function isStatsSpanKind (spanKind) {
+  if (spanKind === undefined) return false
+  return STATS_SPAN_KINDS.has(spanKind) || STATS_SPAN_KINDS.has(spanKind.toLowerCase())
+}
 const ZERO_ID = id('0')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
@@ -57,7 +78,7 @@ class SpanAggStats {
   toJSON () {
     const {
       name, service, resource, type, statusCode, synthetics, method, endpoint, srvSrc,
-      spanKind, rpcStatusCode,
+      spanKind, rpcStatusCode, peerTags,
     } = this.aggKey
     const base = {
       Name: name,
@@ -71,6 +92,7 @@ class SpanAggStats {
       srv_src: srvSrc,
       SpanKind: spanKind,
       GRPCStatusCode: rpcStatusCode,
+      PeerTags: peerTags,
     }
     const rows = []
     if (this.topLevelHits > 0) {
@@ -126,8 +148,46 @@ function httpStatusCode (span) {
   return toStatusCode(span.metrics?.['http.response.status_code']) ?? 0
 }
 
+/**
+ * The `key:value` peer tags a span is aggregated on, sorted, mirroring the Agent's own stats computation: the
+ * configured keys for client, producer and consumer spans, and only the base service for internal spans of a
+ * service override.
+ *
+ * @param {import('./span_format').FormattedSpan} span
+ * @param {string[]} peerTagKeys Keys the Agent advertises in `peer_tags`.
+ * @returns {string[]}
+ */
+function getPeerTags (span, peerTagKeys) {
+  if (peerTagKeys.length === 0) return NO_PEER_TAGS
+
+  const { meta } = span
+  const spanKind = meta[SPAN_KIND]?.toLowerCase() ?? ''
+  let keys
+  if ((spanKind === '' || spanKind === 'internal') && meta[BASE_SERVICE]) {
+    keys = BASE_SERVICE_PEER_TAG_KEYS
+  } else if (spanKind === 'client' || spanKind === 'producer' || spanKind === 'consumer') {
+    keys = peerTagKeys
+  } else {
+    return NO_PEER_TAGS
+  }
+
+  let peerTags
+  for (const key of keys) {
+    const value = meta[key]
+    if (value) {
+      peerTags ??= []
+      peerTags.push(`${key}:${quantizePeerIpAddresses(value)}`)
+    }
+  }
+  return peerTags?.sort() ?? NO_PEER_TAGS
+}
+
 class SpanAggKey {
-  constructor (span) {
+  /**
+   * @param {import('./span_format').FormattedSpan} span
+   * @param {string[]} [peerTagKeys]
+   */
+  constructor (span, peerTagKeys = NO_PEER_TAGS) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
@@ -159,27 +219,41 @@ class SpanAggKey {
     } else {
       this.rpcStatusCode = ''
     }
+    this.peerTags = getPeerTags(span, peerTagKeys)
   }
 
   toString () {
-    return `${this.name},${this.service},${this.resource},${this.type},${this.statusCode},${this.synthetics},` +
+    const key = `${this.name},${this.service},${this.resource},${this.type},${this.statusCode},${this.synthetics},` +
       `${this.method},${this.endpoint},${this.srvSrc},${this.spanKind},${this.rpcStatusCode}`
+    // Peer tag values may hold comma-separated host lists, so join them on a character tags cannot contain.
+    return this.peerTags.length === 0 ? key : `${key},${this.peerTags.join('\0')}`
   }
 }
 
 class SpanBuckets extends Map {
   #includeTraceRoot
+  #peerTagsCardinalityLimit
+  /** @type {Set<string>} */
+  #peerTagCombinations = new Set()
+  #peerTagsLimitReached = false
 
   /**
    * @param {boolean} [includeTraceRoot]
+   * @param {number} [peerTagsCardinalityLimit] Distinct peer tag combinations kept; 0 keeps all.
    */
-  constructor (includeTraceRoot = false) {
+  constructor (includeTraceRoot = false, peerTagsCardinalityLimit = 0) {
     super()
     this.#includeTraceRoot = includeTraceRoot
+    this.#peerTagsCardinalityLimit = peerTagsCardinalityLimit
   }
 
-  forSpan (span) {
-    const aggKey = new SpanAggKey(span)
+  /**
+   * @param {import('./span_format').FormattedSpan} span
+   * @param {string[]} [peerTagKeys]
+   */
+  forSpan (span, peerTagKeys) {
+    const aggKey = new SpanAggKey(span, peerTagKeys)
+    this.#limitPeerTagsCardinality(aggKey)
     const baseKey = aggKey.toString()
     const parentId = span.parent_id
     if (this.#includeTraceRoot && parentId !== undefined && parentId !== null) {
@@ -193,22 +267,48 @@ class SpanBuckets extends Map {
 
     return this.get(key)
   }
+
+  /**
+   * Collapse the peer tags of a span onto `tracer_blocked_value` once the bucket holds the maximum number of distinct
+   * combinations, like the Agent's span concentrator that dd-trace-go uses. The collapsed entry takes no slot.
+   *
+   * @param {SpanAggKey} aggKey
+   */
+  #limitPeerTagsCardinality (aggKey) {
+    if (this.#peerTagsCardinalityLimit <= 0 || aggKey.peerTags.length === 0) return
+
+    const combination = aggKey.peerTags.join('\0')
+    if (this.#peerTagCombinations.has(combination)) return
+
+    if (this.#peerTagCombinations.size < this.#peerTagsCardinalityLimit) {
+      this.#peerTagCombinations.add(combination)
+      return
+    }
+
+    if (!this.#peerTagsLimitReached) {
+      this.#peerTagsLimitReached = true
+      log.debug('Stats peer tags cardinality limit (%d) reached for this bucket', this.#peerTagsCardinalityLimit)
+    }
+    aggKey.peerTags = BLOCKED_PEER_TAGS
+  }
 }
 
 class TimeBuckets extends Map {
-  #includeTraceRoot
+  /** @type {() => SpanBuckets} */
+  #createSpanBuckets
 
   /**
    * @param {boolean} [includeTraceRoot]
+   * @param {number} [peerTagsCardinalityLimit] See `SpanBuckets`.
    */
-  constructor (includeTraceRoot = false) {
+  constructor (includeTraceRoot = false, peerTagsCardinalityLimit = 0) {
     super()
-    this.#includeTraceRoot = includeTraceRoot
+    this.#createSpanBuckets = () => new SpanBuckets(includeTraceRoot, peerTagsCardinalityLimit)
   }
 
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets(this.#includeTraceRoot))
+      this.set(time, this.#createSpanBuckets())
     }
 
     return this.get(time)
@@ -217,6 +317,9 @@ class TimeBuckets extends Map {
 
 class SpanStatsProcessor {
   #config
+  /** @type {string[]} Peer tag keys from the Agent's `/info`; none until it answered. */
+  #peerTagKeys = NO_PEER_TAGS
+  #fetchingAgentInfo = false
 
   /**
    * @param {import('./config/config-base')} config
@@ -226,6 +329,7 @@ class SpanStatsProcessor {
     const {
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
+        DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: peerTagsCardinalityLimit,
         interval = 10,
       } = {},
       hostname,
@@ -243,7 +347,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets(Boolean(otlpExporter))
+    this.buckets = new TimeBuckets(Boolean(otlpExporter), peerTagsCardinalityLimit)
     // A non-empty client hostname takes precedence over the agent's own hostname for the resulting
     // metrics, so only send it when explicitly requested.
     this.hostname = reportHostname ? os.hostname() : ''
@@ -258,10 +362,34 @@ class SpanStatsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
     }
+
+    this.#refreshPeerTagKeys()
   }
 
   onInterval () {
+    this.#refreshPeerTagKeys()
     this.#flush()
+  }
+
+  /**
+   * Read the peer tag keys the Agent aggregates on from its `/info`, which the Agent information client caches.
+   * Stats computed before the first answer, or while the Agent does not answer, carry no peer tags.
+   */
+  #refreshPeerTagKeys () {
+    const { url } = this.#config
+    // Without an Agent URL, as in partial configurations built by benchmarks, there is no `/info` to read.
+    if (!this.enabled || this.otlpExporter || this.#fetchingAgentInfo || !url) return
+
+    this.#fetchingAgentInfo = true
+    fetchAgentInfo(/** @type {URL} */ (url), (error, agentInfo) => {
+      this.#fetchingAgentInfo = false
+      if (error) {
+        log.debug('Could not read the peer tags from the Agent /info: %s', error.message)
+        return
+      }
+      const peerTags = agentInfo?.peer_tags
+      this.#peerTagKeys = Array.isArray(peerTags) ? peerTags.filter(key => typeof key === 'string') : NO_PEER_TAGS
+    }, { retry: false })
   }
 
   /**
@@ -318,13 +446,13 @@ class SpanStatsProcessor {
 
   onSpanFinished (span) {
     if (!this.enabled && !this.otlpExporter) return
-    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
+    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED] && !isStatsSpanKind(span.meta[SPAN_KIND])) return
 
     const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
-      .forSpan(span)
+      .forSpan(span, this.#peerTagKeys)
       .record(span)
   }
 

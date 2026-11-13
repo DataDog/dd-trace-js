@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { hostname } = require('os')
 
 const { channel } = require('dc-polyfill')
-const { describe, it } = require('mocha')
+const { beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -94,6 +94,8 @@ const otlpExporter = {
   flush: sinon.stub(),
 }
 
+const fetchAgentInfo = sinon.stub()
+
 const {
   SpanAggStats,
   SpanAggKey,
@@ -101,6 +103,7 @@ const {
   TimeBuckets,
   SpanStatsProcessor,
 } = proxyquire('../src/span_stats', {
+  './agent/info': { fetchAgentInfo },
   './exporters/span-stats': {
     SpanStatsExporter,
   },
@@ -331,6 +334,85 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(key.rpcStatusCode, '3')
   })
+
+  describe('peer tags', () => {
+    const peerTagKeys = ['db.instance', 'out.host', 'peer.service']
+
+    /**
+     * @param {Record<string, string>} meta
+     */
+    function spanWith (meta) {
+      return { ...basicSpan, meta: { ...basicSpan.meta, ...meta } }
+    }
+
+    for (const spanKind of ['client', 'producer', 'consumer', 'CLIENT']) {
+      it(`should aggregate ${spanKind} spans on the sorted configured peer tags`, () => {
+        const key = new SpanAggKey(spanWith({
+          [SPAN_KIND]: spanKind,
+          'peer.service': 'billing',
+          'out.host': 'db.local',
+          'db.system': 'postgres',
+        }), peerTagKeys)
+
+        assert.deepStrictEqual(key.peerTags, ['out.host:db.local', 'peer.service:billing'])
+        assert.strictEqual(
+          key.toString(),
+          `basic-span,service-name,resource-name,span-type,200,false,,,integration,${spanKind},,` +
+            'out.host:db.local\0peer.service:billing'
+        )
+      })
+    }
+
+    it('should split aggregations by peer tag values', () => {
+      const first = new SpanAggKey(spanWith({ [SPAN_KIND]: 'client', 'out.host': 'a' }), peerTagKeys)
+      const second = new SpanAggKey(spanWith({ [SPAN_KIND]: 'client', 'out.host': 'b' }), peerTagKeys)
+
+      assert.notStrictEqual(first.toString(), second.toString())
+    })
+
+    it('should quantize IP addresses in peer tag values', () => {
+      const key = new SpanAggKey(spanWith({
+        [SPAN_KIND]: 'client',
+        'out.host': '10.0.0.1:5432,10.0.0.2:5432,db.local',
+      }), peerTagKeys)
+
+      assert.deepStrictEqual(key.peerTags, ['out.host:blocked-ip-address:5432,db.local'])
+    })
+
+    it('should skip empty peer tag values', () => {
+      const key = new SpanAggKey(spanWith({ [SPAN_KIND]: 'client', 'out.host': '' }), peerTagKeys)
+
+      assert.deepStrictEqual(key.peerTags, [])
+    })
+
+    it('should not aggregate server spans on peer tags', () => {
+      const key = new SpanAggKey(spanWith({ [SPAN_KIND]: 'server', 'out.host': 'db.local' }), peerTagKeys)
+
+      assert.deepStrictEqual(key.peerTags, [])
+      assert.strictEqual(
+        key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
+    })
+
+    for (const spanKind of [undefined, 'internal']) {
+      it(`should only aggregate ${spanKind ?? 'kindless'} spans of a service override on the base service`, () => {
+        const meta = { '_dd.base_service': 'web', 'out.host': 'db.local' }
+        if (spanKind) meta[SPAN_KIND] = spanKind
+
+        assert.deepStrictEqual(new SpanAggKey(spanWith(meta), peerTagKeys).peerTags, ['_dd.base_service:web'])
+        assert.deepStrictEqual(new SpanAggKey(spanWith({ ...meta, '_dd.base_service': '' }), peerTagKeys).peerTags, [])
+      })
+    }
+
+    it('should not aggregate on peer tags without configured keys', () => {
+      const key = new SpanAggKey(spanWith({ [SPAN_KIND]: 'client', 'out.host': 'db.local' }))
+
+      assert.deepStrictEqual(key.peerTags, [])
+      assert.deepStrictEqual(
+        new SpanAggKey(spanWith({ '_dd.base_service': 'web' })).peerTags,
+        []
+      )
+    })
+  })
 })
 
 describe('SpanAggStats', () => {
@@ -356,6 +438,7 @@ describe('SpanAggStats', () => {
       SpanKind: aggKey.spanKind,
 
       GRPCStatusCode: aggKey.rpcStatusCode,
+      PeerTags: aggKey.peerTags,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
@@ -387,6 +470,7 @@ describe('SpanAggStats', () => {
       SpanKind: aggKey.spanKind,
 
       GRPCStatusCode: aggKey.rpcStatusCode,
+      PeerTags: aggKey.peerTags,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
@@ -418,6 +502,7 @@ describe('SpanAggStats', () => {
       SpanKind: aggKey.spanKind,
 
       GRPCStatusCode: aggKey.rpcStatusCode,
+      PeerTags: aggKey.peerTags,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
@@ -502,6 +587,73 @@ describe('SpanBuckets', () => {
 
       assert.strictEqual(otlpBuckets.values().next().value.aggKey.isTraceRoot, undefined)
     }
+  })
+})
+
+describe('SpanBuckets peer tags cardinality limit', () => {
+  const peerTagKeys = ['peer.service']
+
+  /**
+   * @param {string} [peerService]
+   */
+  function clientSpan (peerService) {
+    const meta = { ...basicSpan.meta, [SPAN_KIND]: 'client' }
+    if (peerService !== undefined) meta['peer.service'] = peerService
+    return { ...basicSpan, meta }
+  }
+
+  /**
+   * @param {SpanBuckets} buckets
+   */
+  function peerTagsOf (buckets) {
+    return [...buckets.values()].map(stats => stats.aggKey.peerTags)
+  }
+
+  it('should keep the first combinations up to the limit and collapse the rest', () => {
+    const buckets = new SpanBuckets(false, 2)
+
+    for (const peerService of ['a', 'b', 'c', 'a', 'd', 'b']) {
+      buckets.forSpan(clientSpan(peerService), peerTagKeys).record(clientSpan(peerService))
+    }
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [
+      ['peer.service:a'],
+      ['peer.service:b'],
+      ['tracer_blocked_value'],
+    ])
+    const hits = [...buckets.values()].map(stats => stats.hits)
+    assert.deepStrictEqual(hits, [2, 2, 2])
+  })
+
+  it('should not count spans without peer tags', () => {
+    const buckets = new SpanBuckets(false, 1)
+
+    buckets.forSpan(clientSpan(), peerTagKeys)
+    buckets.forSpan({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }, peerTagKeys)
+    buckets.forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [[], [], ['peer.service:a'], ['tracer_blocked_value']])
+  })
+
+  it('should keep every combination without a limit', () => {
+    const buckets = new SpanBuckets()
+
+    buckets.forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets), [['peer.service:a'], ['peer.service:b']])
+  })
+
+  it('should apply the limit per time bucket', () => {
+    const buckets = new TimeBuckets(false, 1)
+
+    buckets.forTime(0).forSpan(clientSpan('a'), peerTagKeys)
+    buckets.forTime(0).forSpan(clientSpan('b'), peerTagKeys)
+    buckets.forTime(1).forSpan(clientSpan('b'), peerTagKeys)
+
+    assert.deepStrictEqual(peerTagsOf(buckets.forTime(0)), [['peer.service:a'], ['tracer_blocked_value']])
+    assert.deepStrictEqual(peerTagsOf(buckets.forTime(1)), [['peer.service:b']])
   })
 })
 
@@ -593,6 +745,7 @@ describe('SpanStatsProcessor', () => {
       srv_src: 'integration',
       SpanKind: '',
       GRPCStatusCode: '',
+      PeerTags: [],
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
@@ -651,6 +804,7 @@ describe('SpanStatsProcessor', () => {
           srv_src: 'integration',
           SpanKind: '',
           GRPCStatusCode: '',
+          PeerTags: [],
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
@@ -893,5 +1047,139 @@ describe('SpanStatsProcessor', () => {
 
     p.onSpanFinished(topLevelSpan)
     assert.strictEqual(p.buckets.size, 1)
+  })
+
+  for (const spanKind of ['server', 'client', 'producer', 'consumer', 'Client']) {
+    it(`should record ${spanKind} spans that are neither top-level nor measured`, () => {
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+
+      p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: spanKind } })
+
+      assert.strictEqual(p.buckets.size, 1)
+    })
+  }
+
+  it('should not record internal spans that are neither top-level nor measured', () => {
+    const p = new SpanStatsProcessor(config)
+    clearTimeout(p.timer)
+
+    p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'internal' } })
+    p.onSpanFinished(basicSpan)
+
+    assert.strictEqual(p.buckets.size, 0)
+  })
+
+  describe('peer tags', () => {
+    const clientSpan = {
+      ...basicSpan,
+      meta: { ...basicSpan.meta, [SPAN_KIND]: 'client', 'peer.service': 'billing' },
+    }
+
+    beforeEach(() => {
+      fetchAgentInfo.reset()
+    })
+
+    /**
+     * @param {SpanStatsProcessor} p
+     */
+    function exportedPeerTags (p) {
+      p.onInterval()
+      return exporter.export.lastCall.args[0].Stats[0].Stats.map(stat => stat.PeerTags)
+    }
+
+    it('should read the peer tag keys from the Agent /info', () => {
+      fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
+
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { retry: false })
+
+      p.onSpanFinished(clientSpan)
+      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
+    })
+
+    it('should aggregate without peer tags until the Agent /info answered', () => {
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+      fetchAgentInfo.lastCall.args[1](null, { peer_tags: ['peer.service'] })
+      p.onSpanFinished(clientSpan)
+
+      assert.deepStrictEqual(exportedPeerTags(p), [[], ['peer.service:billing']])
+    })
+
+    it('should start one /info request at a time', () => {
+      fetchAgentInfo.callsFake(() => {})
+
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onInterval()
+      p.onInterval()
+
+      sinon.assert.calledOnce(fetchAgentInfo)
+    })
+
+    it('should retry reading /info on the next interval after a failure', () => {
+      fetchAgentInfo.onFirstCall().callsFake((url, callback) => callback(new Error('unreachable')))
+      fetchAgentInfo.onSecondCall().callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
+
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+
+      assert.deepStrictEqual(exportedPeerTags(p), [[]])
+      sinon.assert.calledTwice(fetchAgentInfo)
+
+      p.onSpanFinished(clientSpan)
+      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
+    })
+
+    it('should ignore a malformed peer_tags field', () => {
+      fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: 'peer.service' }))
+
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+
+      assert.deepStrictEqual(exportedPeerTags(p), [[]])
+    })
+
+    it('should apply DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT', () => {
+      fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
+
+      const p = new SpanStatsProcessor({
+        ...config,
+        stats: { ...config.stats, DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: 1 },
+      })
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+      p.onSpanFinished({ ...clientSpan, meta: { ...clientSpan.meta, 'peer.service': 'payments' } })
+
+      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing'], ['tracer_blocked_value']])
+    })
+
+    it('should not read /info without an Agent URL', () => {
+      const p = new SpanStatsProcessor({ ...config, url: undefined })
+      clearTimeout(p.timer)
+      p.onInterval()
+      p.onSpanFinished(clientSpan)
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      assert.deepStrictEqual(exportedPeerTags(p), [[]])
+    })
+
+    it('should not read /info when agent stats are disabled', () => {
+      const disabled = new SpanStatsProcessor({
+        ...config,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 },
+      })
+      const otlp = new SpanStatsProcessor(config, otlpExporter)
+      clearTimeout(otlp.timer)
+      otlp.onInterval()
+
+      assert.strictEqual(disabled.timer, undefined)
+      sinon.assert.notCalled(fetchAgentInfo)
+    })
   })
 })

@@ -11,6 +11,9 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('./tags-processors')
 
+/** @type {string[]} */
+const NO_PEER_TAGS = []
+
 function truncate (value, maxLength, suffix = '') {
   if (!value) {
     return value
@@ -31,7 +34,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    bytes.writeMapPrefix(17)
+    bytes.writeMapPrefix(18)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
@@ -85,6 +88,13 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'GRPCStatusCode')
     this._encodeString(bytes, stat.GRPCStatusCode || '')
+
+    this._encodeString(bytes, 'PeerTags')
+    const peerTags = stat.PeerTags ?? NO_PEER_TAGS
+    bytes.writeArrayPrefix(peerTags)
+    for (const peerTag of peerTags) {
+      this._encodeString(bytes, peerTag)
+    }
   }
 
   _encodeBucket (bytes, bucket) {
