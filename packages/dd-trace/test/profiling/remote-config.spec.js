@@ -730,6 +730,12 @@ describe('Profiling Remote Config', () => {
       }
     })
 
+    it('ranks tag names without values', () => {
+      assert.strictEqual(outranks([{ tags: ['POD_NAME'] }], [{ tags: ['kube_deployment:x'] }]), true)
+      assert.strictEqual(outranks([{ tags: ['container_id'] }], [{ tags: ['pod_name:x'] }]), true)
+      assert.strictEqual(outranks([{ tags: ['team'] }], [{ env: 'prod' }]), false)
+    })
+
     it('lets a pod-specific config override a service-wide one, as in the payload merging ADR', () => {
       update({
         toApply: [
