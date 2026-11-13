@@ -4,6 +4,7 @@ const { execSync } = require('node:child_process')
 const path = require('node:path')
 
 const { FakeAgent, sandboxCwd, useSandbox } = require('../helpers')
+const { YARN, withBun } = require('../helpers/bun')
 
 // This should switch to our withVersion helper. The order here currently matters.
 const { ESBUILD_VERSION } = process.env
@@ -21,9 +22,7 @@ esbuildVersions.forEach((version) => {
       // TODO add this in createSandbox if it's need in more places
       execSync(`rm -rf ${path.join(cwd, 'node_modules')}`, { cwd })
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
-      execSync('npm install -g yarn', { cwd })
-
-      execSync('yarn --ignore-engines', { cwd })
+      execSync(`${YARN} --ignore-engines`, { cwd, env: withBun() })
     })
 
     beforeEach(async () => {
