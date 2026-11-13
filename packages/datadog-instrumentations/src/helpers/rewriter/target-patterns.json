@@ -1,12 +1,12 @@
 [
   {
-    "name": "next",
-    "source": "^dist\\/compiled\\/next-server\\/pages-api[\\w-]*\\.runtime\\.(?:dev|prod)\\.js$",
+    "name": "@modelcontextprotocol/server",
+    "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
     "flags": ""
   },
   {
-    "name": "@modelcontextprotocol/server",
-    "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
+    "name": "next",
+    "source": "^dist\\/compiled\\/next-server\\/pages-api[\\w-]*\\.runtime\\.(?:dev|prod)\\.js$",
     "flags": ""
   },
   {
