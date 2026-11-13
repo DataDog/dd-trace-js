@@ -35,6 +35,13 @@ describe('dependency updater coverage', () => {
     assert.strictEqual(result.status, 0, result.stderr)
   })
 
+  it('rejects npm-only Renovate coverage for Bun projects', () => {
+    renovate.enabledManagers = ['npm']
+    const result = verify()
+    assert.notStrictEqual(result.status, 0)
+    assert.match(result.stderr, /Renovate does not enable bun/)
+  })
+
   it('rejects an uncovered manifest', () => {
     dependabot.updates = []
     const result = verify()
