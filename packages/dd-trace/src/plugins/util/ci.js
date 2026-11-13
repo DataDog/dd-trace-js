@@ -23,6 +23,7 @@ const {
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_JOB_URL,
   CI_JOB_NAME,
   CI_STAGE_NAME,
@@ -78,7 +79,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|refs\/tags\/|tags\//g, '')
 }
 
 function resolveTilde (filePath) {
@@ -373,6 +374,7 @@ module.exports = {
         CI_MERGE_REQUEST_IID,
         CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
         CI_MERGE_REQUEST_DIFF_BASE_SHA,
+        CI_MERGE_REQUEST_EVENT_TYPE,
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -407,6 +409,10 @@ module.exports = {
         [CI_JOB_ID]: GITLAB_CI_JOB_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_DIFF_BASE_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
+      }
+      if (CI_MERGE_REQUEST_IID &&
+        (CI_MERGE_REQUEST_EVENT_TYPE === 'merged_result' || CI_MERGE_REQUEST_EVENT_TYPE === 'merge_train')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = CI_COMMIT_SHA
       }
     }
 
@@ -504,6 +510,9 @@ module.exports = {
         }),
         [CI_JOB_ID]: GITHUB_JOB_ID ?? GITHUB_JOB,
       }
+      if (/^refs\/pull\/\d+\/merge$/.test(GITHUB_REF || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = GITHUB_SHA
+      }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
         try {
@@ -583,6 +592,7 @@ module.exports = {
         SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI,
         BUILD_REPOSITORY_URI,
         BUILD_SOURCEVERSION,
+        BUILD_REASON,
         BUILD_REQUESTEDFORID,
         BUILD_REQUESTEDFOREMAIL,
         BUILD_SOURCEVERSIONMESSAGE,
@@ -613,6 +623,9 @@ module.exports = {
         [PR_NUMBER]: SYSTEM_PULLREQUEST_PULLREQUESTNUMBER,
         [GIT_PULL_REQUEST_BASE_BRANCH]: SYSTEM_PULLREQUEST_TARGETBRANCH,
         [CI_JOB_ID]: SYSTEM_JOBID,
+      }
+      if (BUILD_REASON === 'PullRequest' && /^refs\/pull\/\d+\/merge$/.test(BUILD_SOURCEBRANCH || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = BUILD_SOURCEVERSION
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {
@@ -772,6 +785,7 @@ module.exports = {
         TRAVIS_COMMIT_MESSAGE,
         TRAVIS_PULL_REQUEST,
         TRAVIS_PULL_REQUEST_SHA,
+        TRAVIS_EVENT_TYPE,
       } = env
 
       tags = {
@@ -790,6 +804,9 @@ module.exports = {
         [GIT_COMMIT_HEAD_SHA]: TRAVIS_PULL_REQUEST_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH]: TRAVIS_BRANCH,
         [PR_NUMBER]: TRAVIS_PULL_REQUEST,
+      }
+      if (TRAVIS_EVENT_TYPE === 'pull_request' && /^\d+$/.test(TRAVIS_PULL_REQUEST || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = TRAVIS_COMMIT
       }
     }
 

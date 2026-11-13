@@ -4,5 +4,55 @@
     "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
     "flags": "",
     "sourceMatch": "function derive("
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/initTRPC-[A-Za-z0-9_-]+\\.cjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/initTRPC-[A-Za-z0-9_-]+\\.mjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.js$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.mjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/node-http-[A-Za-z0-9_-]+\\.cjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/node-http-[A-Za-z0-9_-]+\\.mjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.js$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.mjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/resolveResponse-[A-Za-z0-9_-]+\\.cjs$",
+    "flags": ""
+  },
+  {
+    "name": "@trpc/server",
+    "source": "^dist\\/resolveResponse-[A-Za-z0-9_-]+\\.mjs$",
+    "flags": ""
   }
 ]

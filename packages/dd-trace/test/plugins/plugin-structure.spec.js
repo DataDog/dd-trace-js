@@ -59,6 +59,7 @@ const missingInstrumentationHooks = [
   'postgres',
   'react-router',
   'supabase',
+  'trpc',
   'typesafe',
 ]
 
@@ -71,6 +72,7 @@ const hooklessOrchestrionPlugins = new Set([
   'postgres',
   'react-router',
   'supabase',
+  'trpc',
   'typesafe',
 ])
 
@@ -218,6 +220,7 @@ describe('Plugin Structure Validation', () => {
       '@supabase/postgrest-js',
       '@supabase/realtime-js',
       '@supabase/storage-js',
+      '@trpc/server',
       '@wdio/cli',
       '@wdio/jasmine-framework',
       '@wdio/local-runner',

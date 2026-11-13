@@ -15,6 +15,7 @@ const plugins = {
   get '@supabase/postgrest-js' () { return require('../../../datadog-plugin-supabase/src') },
   get '@supabase/realtime-js' () { return require('../../../datadog-plugin-supabase/src') },
   get '@supabase/storage-js' () { return require('../../../datadog-plugin-supabase/src') },
+  get '@trpc/server' () { return require('../../../datadog-plugin-trpc/src') },
   get 'durable-functions' () { return require('../../../datadog-plugin-azure-durable-functions/src') },
   get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
