@@ -37,7 +37,16 @@ try {
   assert.strictEqual(Number(rows[0].direct_query), 5)
   assert.strictEqual(command.sql, 'SELECT 5 AS direct_query')
   assert.match(logged[0].argument.toString(), /^\/\*dddb='db',.*\*\/ SELECT 5 AS direct_query$/)
-  await connection.execute('SELECT 6 AS direct_execute')
+  const executeCommand = Object.freeze({ sql: 'SELECT ? AS direct_execute' })
+  const executed = await connection.execute(executeCommand, [6])
+  const prepared = await connection.query(
+    'SELECT argument FROM mysql.general_log WHERE thread_id = CONNECTION_ID() ' +
+    "AND command_type = 'Execute' AND argument LIKE '%SELECT 6 AS direct_execute' " +
+    'ORDER BY event_time DESC LIMIT 1'
+  )
+  assert.strictEqual(Number(executed[0].direct_execute), 6)
+  assert.strictEqual(executeCommand.sql, 'SELECT ? AS direct_execute')
+  assert.match(prepared[0].argument.toString(), /^\/\*dddb='db',.*\*\/ SELECT 6 AS direct_execute$/)
 } finally {
   await connection.query("SET GLOBAL general_log = 'OFF'")
   await connection.end()
