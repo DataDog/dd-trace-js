@@ -1000,3 +1000,111 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
     })
   })
 })
+
+describe('with OpenTelemetry HTTP semantics', () => {
+  const otelTestSetup = new TestSetup()
+  let originalEnv
+
+  before(() => {
+    originalEnv = process.env
+    process.env = {
+      ...originalEnv,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+      DD_TRACE_SAMPLING_RULES: JSON.stringify([
+        { resource: 'GET', sample_rate: 1 },
+        { resource: 'POST', sample_rate: 1 },
+        { resource: 'HTTP', sample_rate: 1 },
+        { sample_rate: 0 },
+      ]),
+    }
+  })
+
+  after(() => {
+    process.env = originalEnv
+  })
+
+  createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
+    category: 'cloud-provider',
+  }, (meta) => {
+    before(async () => {
+      await otelTestSetup.setup(meta.mod)
+    })
+
+    after(async () => {
+      await otelTestSetup.teardown()
+    })
+
+    for (const { queryStringObfuscation, query } of [
+      { queryStringObfuscation: 'width=[^&]*', query: '?<redacted>&height=200' },
+      { queryStringObfuscation: '', query: '?width=100&height=200' },
+      { queryStringObfuscation: '.*', query: '' },
+    ]) {
+      it(`applies Storage query obfuscation ${JSON.stringify(queryStringObfuscation)} to url.full`, async () => {
+        meta.tracer.use('supabase', { queryStringObfuscation })
+        const assertion = meta.agent.assertFirstTraceSpan({
+          name: 'GET',
+          meta: {
+            'url.full': 'https://project.supabase.co/storage/v1/render/image/authenticated/files/avatar.png' + query,
+          },
+        })
+
+        try {
+          const [, result] = await Promise.all([assertion, otelTestSetup.storageFileDownloadWithTransform()])
+          assert.ifError(result.error)
+        } finally {
+          meta.tracer.use('supabase')
+        }
+      })
+    }
+
+    for (const { operationName, resource, method, url, run } of [
+      {
+        operationName: 'supabase.storage.request',
+        resource: 'POST',
+        method: 'POST',
+        url: 'https://project.supabase.co/storage/v1/object/list/files',
+        run: () => otelTestSetup.storageFileList(),
+      },
+      {
+        operationName: 'supabase.http.getuser',
+        resource: 'GET',
+        method: 'GET',
+        url: 'https://project.supabase.co/auth/v1/user',
+        run: () => otelTestSetup.goTrueClientGetUser(),
+      },
+      {
+        operationName: 'supabase.http.invoke',
+        resource: 'POST',
+        method: 'POST',
+        url: 'https://project.supabase.co/functions/v1/hello',
+        run: () => otelTestSetup.functionsClientInvoke(),
+      },
+      {
+        operationName: 'supabase.http.invoke',
+        resource: 'HTTP',
+        method: '_OTHER',
+        url: 'https://project.supabase.co/functions/v1/hello',
+        run: () => otelTestSetup.functionsClientInvokeUnknownMethod(),
+      },
+    ]) {
+      it(`uses the OTel ${resource} resource before sampling ${operationName}`, async () => {
+        const assertion = meta.agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(Object.hasOwn(span.meta, 'http.method'), false)
+          assert.strictEqual(Object.hasOwn(span.meta, '_dd.otel.instrumentation_http_resource'), false)
+          assertObjectContains(span, {
+            name: resource,
+            resource,
+            meta: { 'http.request.method': method, 'url.full': url },
+            metrics: { _sampling_priority_v1: 2, '_dd.rule_psr': 1 },
+          })
+          if (method === '_OTHER') {
+            assert.strictEqual(span.meta['http.request.method_original'], 'PROPFIND')
+          }
+        })
+
+        const [, result] = await Promise.all([assertion, run()])
+        assert.ifError(result.error)
+      })
+    }
+  })
+})
