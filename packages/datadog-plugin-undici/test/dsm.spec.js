@@ -181,6 +181,24 @@ describe('Plugin', () => {
             })
           }
 
+          it('replaces a pathway header the caller forwards for undici.fetch', async () => {
+            await load('service-a')
+            const port = await listen((req, res) => {
+              downstreamHeaders = req.headers
+              res.end()
+            })
+            const now = Date.now() * 1e6
+
+            await undici.fetch(`http://localhost:${port}`, {
+              headers: { [DSM_HEADER]: headerFor(JAVA.serviceBHttpInRoot, now, now) },
+            }).then(consume)
+
+            const [out] = checkpoints('out', 1)
+            assert.strictEqual(hashOf(out.parentHash), '0')
+            assert.doesNotMatch(downstreamHeaders[DSM_HEADER], /,/)
+            assert.strictEqual(hashOf(decodedHeader(downstreamHeaders).hash), JAVA.serviceAHttpOutRoot)
+          })
+
           describe('in a server handler', () => {
             beforeEach(function () {
               if (!hasNativeDiagnostics) this.skip()
