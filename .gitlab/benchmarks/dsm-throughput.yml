@@ -1,0 +1,48 @@
+# DSM overhead benchmark: runs benchmark/kafka_dsm via the benchmarking-platform
+# branch js/data-streams-monitoring, against this pipeline's checkout.
+stages:
+  - benchmarks
+
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
+variables:
+  # Built by the platform branch's build-benchmark-ci-images job; repin after a rebuild.
+  DSM_THROUGHPUT_CI_IMAGE: registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-dsm@sha256:3b9b4df1abf76941ef97122d2fdf2a0a69aec5fa4bb8f779a2ed3527c4e18a21
+  DSM_BENCHMARKING_BRANCH: js/data-streams-monitoring
+
+dsm_throughput:
+  stage: benchmarks
+  # Report-only benchmark: allow_failure jobs post no GitHub status, so it never blocks PRs.
+  allow_failure: true
+  needs: []
+  tags: ["runner:apm-k8s-same-cpu"]
+  image: $DSM_THROUGHPUT_CI_IMAGE
+  timeout: 1h
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - data_integrity_failure
+      - runner_system_failure
+      - scheduler_failure
+      - api_failure
+  script:
+    - git clone --branch "${DSM_BENCHMARKING_BRANCH}" https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
+    - bp-runner bp-runner.yml --debug
+  artifacts:
+    name: "artifacts"
+    when: always
+    paths:
+      - platform/artifacts/
+    expire_in: 3 months
+  variables:
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: benchmarking-platform
+    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
+    # Tracer and workload come from this pipeline's checkout: no clone.
+    DD_TRACE_JS_SRC_DIR: "${CI_PROJECT_DIR}"

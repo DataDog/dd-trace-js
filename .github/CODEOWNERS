@@ -295,6 +295,7 @@
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
 
 # Data Streams Monitoring
+/benchmark/kafka_dsm/ @DataDog/data-streams-monitoring
 /benchmark/sirun/datastreams/ @DataDog/data-streams-monitoring
 /packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
 /packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring

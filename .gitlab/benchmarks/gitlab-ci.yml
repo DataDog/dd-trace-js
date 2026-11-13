@@ -202,3 +202,19 @@ benchmark-serverless-pr-performance:
         $CI_PIPELINE_SOURCE == "push" &&
         $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
     - when: never
+
+# DSM overhead (baseline / apm-only / apm+dsm) on benchmark/kafka_dsm. Report only.
+dsm-throughput:
+  stage: benchmarks
+  needs: []
+  trigger:
+    include: .gitlab/benchmarks/dsm-throughput.yml
+  variables:
+    DD_DISABLE_VPA: true
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: on_success
+    - when: manual
