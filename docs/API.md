@@ -1032,8 +1032,8 @@ preserved in serial and parallel workers. Native Mocha retries remain available 
 
 ## Cucumber test automation exclusions
 
-Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
-`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+Use the native Gherkin tags `@datadog_prevent_failure_suppression` and
+`@datadog_no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
 to every example. These are tracer declaration annotations, resolved before
 Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
 settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
