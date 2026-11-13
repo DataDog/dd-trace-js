@@ -50,6 +50,7 @@ describe('profilers/native/wall', () => {
       time: {
         start: sinon.stub(),
         stop: sinon.stub().returns(profile0),
+        stopAndVisit: sinon.stub().returns({ hasMissingMapFiles: false }),
         setContext: sinon.stub(),
         getContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
@@ -228,6 +229,42 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     assert.strictEqual(profiler.isStarted(), false)
     sinon.assert.calledTwice(pprof.time.stop)
+  })
+
+  it('should pass profiles to a visitor, with timestamps as sample timestamps instead of labels', () => {
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true })
+    profiler.start()
+    const visitor = {}
+
+    const result = profiler.visit(true, visitor)
+
+    assert.deepStrictEqual(result, { hasMissingMapFiles: false })
+    sinon.assert.notCalled(pprof.time.stop)
+    sinon.assert.calledOnceWithExactly(pprof.time.stopAndVisit, true, visitor, sinon.match({ samplePerContext: true }))
+    assert.strictEqual(profiler.isStarted(), true)
+    const { generateLabels } = pprof.time.stopAndVisit.firstCall.args[2]
+    // Only semantic-convention attributes, and no end_timestamp_ns: the time is the sample's timestamp
+    const threadLabels = { 'thread.name': 'Main Event Loop', 'thread.id': 0 }
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
+      'thread.name': 'Non-JS threads',
+    })
+    // A span's IDs, for the sample's link
+    const ref = { spanId: 42n, rootSpanId: 41n, traceId: 9n, endpoint: 'GET /' }
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref } } }), {
+      ...threadLabels,
+      'span id': 42n,
+      'trace id': 9n,
+    })
+    // Without a trace ID there is no link to make
+    const refWithoutTrace = { spanId: 42n, rootSpanId: 41n }
+    assert.deepStrictEqual(
+      generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref: refWithoutTrace } } }),
+      threadLabels
+    )
+
+    profiler.visit(false, visitor)
+    assert.strictEqual(profiler.isStarted(), false)
   })
 
   it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {

@@ -5,12 +5,13 @@ const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
-const { encodeProfileAsync, getThreadLabels } = require('./shared')
+const { encodeProfileAsync, getOtelThreadLabels, getThreadLabels } = require('./shared')
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 /**
  * @typedef {import('../exporters/agent').AgentExporter
- *   | import('../exporters/file').FileExporter} ProfilingExporter
+ *   | import('../exporters/file').FileExporter
+ *   | import('../exporters/otlp').OtlpProfilesExporter} ProfilingExporter
  */
 
 const STACK_DEPTH = 64
@@ -85,6 +86,24 @@ class NativeSpaceProfiler {
       this.stop()
     }
     return profile
+  }
+
+  /**
+   * Passes the profile to the visitor instead of returning it as pprof, e.g. to an OTLP profiles
+   * builder.
+   *
+   * @param {boolean} restart
+   * @param {import('@datadog/pprof').ProfileVisitor} visitor
+   */
+  visit (restart, visitor) {
+    const result = this.#pprof.heap.visitProfile(visitor, {
+      sourceMapper: this.#mapper,
+      generateLabels: getOtelThreadLabels,
+    })
+    if (!restart) {
+      this.stop()
+    }
+    return result
   }
 
   getInfo () {}

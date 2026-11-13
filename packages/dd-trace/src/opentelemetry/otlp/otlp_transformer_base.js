@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { transformAnyValue, transformAttributes } = require('./attributes')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -92,10 +93,7 @@ class OtlpTransformerBase {
    * @protected
    */
   transformAttributes (attributes) {
-    return Object.entries(attributes).map(([key, value]) => ({
-      key,
-      value: this.transformAnyValue(value),
-    }))
+    return transformAttributes(attributes)
   }
 
   /**
@@ -122,24 +120,7 @@ class OtlpTransformerBase {
    * @protected
    */
   transformAnyValue (value) {
-    if (typeof value === 'string') {
-      return { stringValue: value }
-    } else if (typeof value === 'number') {
-      if (Number.isInteger(value)) {
-        return { intValue: value }
-      }
-      return { doubleValue: value }
-    } else if (typeof value === 'boolean') {
-      return { boolValue: value }
-    } else if (Array.isArray(value)) {
-      return {
-        arrayValue: {
-          values: value.map(v => this.transformAnyValue(v)),
-        },
-      }
-    }
-    // Fallback for any unexpected types
-    return { stringValue: String(value) }
+    return transformAnyValue(value)
   }
 
   /**

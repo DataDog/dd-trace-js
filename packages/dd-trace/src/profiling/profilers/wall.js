@@ -19,7 +19,10 @@ const {
   END_TIMESTAMP_LABEL,
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
+  TRACE_ID_LABEL,
   getNonJSThreadsLabels,
+  getNonJSThreadsOtelLabels,
+  getOtelThreadLabels,
   getThreadLabels,
   encodeProfileAsync,
 } = require('./shared')
@@ -32,6 +35,18 @@ const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
+
+/**
+ * The profiling context of a span, as samples carry it.
+ *
+ * @typedef {{
+ *   spanId?: unknown,
+ *   rootSpanId?: unknown,
+ *   traceId?: bigint,
+ *   webTags?: Record<string, unknown>,
+ *   endpoint?: string,
+ * }} ProfilingContext
+ */
 
 function toBigInt (spanId) {
   return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
@@ -63,6 +78,7 @@ class NativeWallProfiler {
   #asyncContextFrameEnabled = false
   #captureSpanData = false
   #codeHotspotsEnabled = false
+  #otlp = false
   #contextCountGaugeUpdater
   #cpuProfilingEnabled = false
   #currentContext
@@ -86,6 +102,7 @@ class NativeWallProfiler {
   #boundSpanFinished = this.#spanFinished.bind(this)
   #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
+  #boundGenerateOtelLabels = ({ node, context }) => this.#generateOtelLabels(node, context)
 
   get type () { return 'wall' }
 
@@ -96,6 +113,7 @@ class NativeWallProfiler {
   constructor (config, { asyncContextFrameEnabled, flushInterval }) {
     this.#asyncContextFrameEnabled = asyncContextFrameEnabled
     this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.#otlp = config.OTEL_PROFILES_EXPORTER === 'otlp'
     this.#cpuProfilingEnabled = config.DD_PROFILING_CPU_ENABLED
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
@@ -251,10 +269,15 @@ class NativeWallProfiler {
 
       let spanId
       let rootSpanId
+      let traceId
       if (this.#codeHotspotsEnabled) {
         const startedSpans = getStartedSpans(context)
         spanId = context._spanId
         rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
+        if (this.#otlp) {
+          // OTLP samples link to their span by trace ID and span ID
+          traceId = BigInt(`0x${context.toTraceId(true)}`)
+        }
       }
 
       // webTags is snapshotted into the sample context at getProfilingContext
@@ -263,7 +286,7 @@ class NativeWallProfiler {
       // cache (see web-tags-cache.js).
       const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
-      profilingContext = { spanId, rootSpanId, webTags }
+      profilingContext = { spanId, rootSpanId, traceId, webTags }
       span[ProfilingContext] = profilingContext
     }
     return profilingContext
@@ -304,7 +327,12 @@ class NativeWallProfiler {
     profilerTelemetryMetrics.count(metric, [tag]).inc()
   }
 
-  #stop (restart) {
+  /**
+   * @param {boolean} restart
+   * @param {import('@datadog/pprof').ProfileVisitor} [visitor] - Receives the profile instead of it
+   *   being returned as pprof.
+   */
+  #stop (restart, visitor) {
     if (!this.#started) return
 
     if (this.#captureSpanData && !this.#asyncContextFrameEnabled) {
@@ -313,18 +341,27 @@ class NativeWallProfiler {
       this.#lastSampleCount = 0
     }
 
-    // Mark thread labels and trace endpoint label as good deduplication candidates
-    const lowCardinalityLabels = Object.keys(getThreadLabels())
-    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
+    let profile
+    if (visitor === undefined) {
+      // Mark thread labels and trace endpoint label as good deduplication candidates
+      const lowCardinalityLabels = Object.keys(getThreadLabels())
+      lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
 
-    // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
-    if (this.#customLabelKeys) {
-      for (const key of this.#customLabelKeys) {
-        lowCardinalityLabels.push(key)
+      // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
+      if (this.#customLabelKeys) {
+        for (const key of this.#customLabelKeys) {
+          lowCardinalityLabels.push(key)
+        }
       }
-    }
 
-    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+      profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+    } else {
+      // Every sample with a context is a timestamped observation, as the timeline needs
+      profile = this.#pprof.time.stopAndVisit(restart, visitor, {
+        generateLabels: this.#boundGenerateOtelLabels,
+        samplePerContext: true,
+      })
+    }
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -353,6 +390,51 @@ class NativeWallProfiler {
   }
 
   _generateLabels ({ node, context }) {
+    return this.#generateLabels(node, context, this.#timelineEnabled)
+  }
+
+  /**
+   * Returns a sample context's profiling context (the span's, if any) and custom labels.
+   *
+   * @param {{ context?: unknown }} context
+   * @returns {[ProfilingContext | undefined, Record<string, string | number> | undefined]}
+   */
+  #unwrapContext (context) {
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken. Note that with ACF, we don't
+    // use the "ref" indirection.
+    const cctx = context.context
+    if (this.#asyncContextFrameEnabled) {
+      // When custom labels are active with ACF, context.context is a 2-element array:
+      // [profilingContext, customLabels]. Otherwise it's a plain object.
+      return Array.isArray(cctx)
+        ? [cctx[0], cctx[1]]
+        : [(cctx), undefined]
+    }
+    return [(cctx)?.ref, undefined]
+  }
+
+  /**
+   * The labels of an OTLP sample: only those with a semantic convention, the thread's, and the span's trace and
+   * span IDs, which the profiles builder turns into the sample's link. Its time is a sample timestamp, not a label.
+   *
+   * @param {{ name: string }} node
+   * @param {{ context?: unknown } | undefined} context
+   */
+  #generateOtelLabels (node, context) {
+    if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
+      return getNonJSThreadsOtelLabels()
+    }
+    const ref = context == null ? undefined : this.#unwrapContext(context)[0]
+    const spanId = ref?.spanId
+    const traceId = ref?.traceId
+    if (spanId === undefined || traceId === undefined) {
+      return getOtelThreadLabels()
+    }
+    return { ...getOtelThreadLabels(), [SPAN_ID_LABEL]: toBigInt(spanId), [TRACE_ID_LABEL]: traceId }
+  }
+
+  #generateLabels (node, context, withEndTimestamp) {
     // check for special node that represents CPU time all non-JS threads.
     // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
     if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
@@ -365,23 +447,7 @@ class NativeWallProfiler {
       return getThreadLabels()
     }
 
-    // Native profiler doesn't set context.context for some samples, such as idle samples or when
-    // the context was otherwise unavailable when the sample was taken. Note that with ACF, we don't
-    // use the "ref" indirection.
-    let ref
-    let customLabels
-    const cctx = context.context
-    if (this.#asyncContextFrameEnabled) {
-      // When custom labels are active with ACF, context.context is a 2-element array:
-      // [profilingContext, customLabels]. Otherwise it's a plain object.
-      if (Array.isArray(cctx)) {
-        [ref, customLabels] = cctx
-      } else {
-        ref = cctx
-      }
-    } else {
-      ref = cctx?.ref
-    }
+    const [ref, customLabels] = this.#unwrapContext(context)
 
     // Custom labels are spread first so that internal labels always take
     // precedence and overwrite them.
@@ -389,7 +455,7 @@ class NativeWallProfiler {
       ? { ...getThreadLabels() }
       : { ...customLabels, ...getThreadLabels() }
 
-    if (this.#timelineEnabled) {
+    if (withEndTimestamp) {
       // Incoming timestamps are in microseconds, we emit nanos.
       labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
@@ -462,6 +528,17 @@ class NativeWallProfiler {
 
   profile (restart) {
     return this.#stop(restart)
+  }
+
+  /**
+   * Passes the profile to the visitor instead of returning it as pprof, e.g. to an OTLP profiles
+   * builder.
+   *
+   * @param {boolean} restart
+   * @param {import('@datadog/pprof').ProfileVisitor} visitor
+   */
+  visit (restart, visitor) {
+    return this.#stop(restart, visitor)
   }
 
   getInfo () {
