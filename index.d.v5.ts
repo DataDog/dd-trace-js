@@ -636,6 +636,17 @@ declare namespace tracer {
     startupLogs?: boolean,
 
     /**
+     * Output stream for startup configuration and integration summaries with the default logger.
+     * Custom loggers receive these summaries through warn() for stderr or info() for stdout.
+     * stderr-json writes JSON with status: 'info' to stderr, or calls info() on a custom logger.
+     * Diagnostics retain warning output. The startupLogs option controls whether these logs are enabled.
+     * @default 'stderr-json'
+     * @env DD_TRACE_STARTUP_LOGS_OUTPUT
+     * Programmatic configuration takes precedence over the environment variable listed above.
+     */
+    startupLogsOutput?: 'stderr' | 'stdout' | 'stderr-json',
+
+    /**
      * The service name to be used for this program. If not set, the service name
      * will attempted to be inferred from package.json
      * @env DD_SERVICE, OTEL_SERVICE_NAME
