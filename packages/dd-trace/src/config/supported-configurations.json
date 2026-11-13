@@ -894,6 +894,13 @@
         ]
       }
     ],
+    "DD_DATA_STREAMS_HTTP_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_DBM_INJECT_SQL_BASEHASH": [
       {
         "implementation": "A",

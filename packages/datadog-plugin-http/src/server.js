@@ -64,7 +64,7 @@ class HttpServerPlugin extends ServerPlugin {
     }
 
     // A reused context (HTTP/2 stream, serverless re-entry) is not a new inbound hop.
-    const dsmCheckpoint = spanCreated && this.config.dsmEnabled
+    const dsmCheckpoint = spanCreated && this.config.dsmEnabled && this.config.DD_DATA_STREAMS_HTTP_ENABLED
     if (dsmCheckpoint) {
       const dataStreamsContext = setHttpServerCheckpoint(this.tracer, span, req.headers)
       store = { ...store, dataStreamsContext }

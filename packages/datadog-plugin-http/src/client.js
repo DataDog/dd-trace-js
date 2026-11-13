@@ -97,6 +97,7 @@ class HttpClientPlugin extends ClientPlugin {
 
       if (
         this.config.dsmEnabled &&
+        this.config.DD_DATA_STREAMS_HTTP_ENABLED &&
         allowed &&
         !isAwsSdkRequest(store?.span, options.headers['amz-sdk-invocation-id'])
       ) {
