@@ -557,4 +557,26 @@ async function processModuleWithResolver (
   return setters
 }
 
-module.exports = { createEsmResolver, driveGetExportsGenerator, processModule }
+/**
+ * Generates the IITM registration wrapper used by bundlers. Export bindings come from processModule; IITM owns the
+ * export proxy and hook semantics, just as it does for modules wrapped by its Node.js loader.
+ *
+ * @param {{ path: string, internal?: boolean, specifier?: string, setters: Iterable<string> }} options
+ */
+function createEsmWrapper ({ path, internal, specifier, setters }) {
+  const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+  const toRegister = internal ? path : pathToFileURL(path)
+  return `
+import { register } from ${JSON.stringify(iitmPath)};
+import * as namespace from ${JSON.stringify(path)};
+const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
+const set = {};
+const get = {};
+
+${[...setters].join(';\n')};
+
+register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(specifier)});
+`
+}
+
+module.exports = { createEsmResolver, createEsmWrapper, driveGetExportsGenerator, processModule }

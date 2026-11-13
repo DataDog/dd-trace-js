@@ -143,7 +143,7 @@ file does not automatically include the worker; the Datadog esbuild plugin does 
 external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
 are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
 
-By default, the Datadog esbuild, Vite and webpack plugins inject `DD_GIT_COMMIT_SHA` and `DD_GIT_REPOSITORY_URL` into
+By default, the Datadog esbuild, [Vite](#vite) and webpack plugins inject `DD_GIT_COMMIT_SHA` and `DD_GIT_REPOSITORY_URL` into
 the bundle for Source Code Integration. Set `DD_BUNDLER_INJECT_GIT_METADATA=false` to skip that injection when you need
 stable artifact hashes across commits (for example, content-addressed Lambda deployments).
 The tracer reads these variables when it initializes, so it only sees them when it is bundled and initialized by an
@@ -542,6 +542,42 @@ at the interruption ID, the tracer assigns its audio to that response and reject
 also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
 
 Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
+
+<h2 id="vite">Vite</h2>
+
+Use the Datadog Vite plugin to instrument CommonJS and ES module dependencies bundled into Node.js SSR or library
+builds with Vite 6 or newer:
+
+```javascript
+// vite.config.mjs
+import { defineConfig } from 'vite'
+import { datadogVite } from 'dd-trace/vite.js'
+
+export default defineConfig({
+  plugins: [datadogVite()],
+  build: { ssr: 'src/server.js' }
+})
+```
+
+The plugin does not load the tracer. Import a module that initializes `dd-trace` with `tracer.init()` before other
+application modules.
+
+SSR dependencies stay external by default (`ssr.noExternal` controls bundling). To instrument external packages,
+preload `--import dd-trace/initialize.mjs` for ESM or `--require dd-trace/init` for CommonJS. External packages may
+load before a bundled tracer starts and miss instrumentation.
+
+<h3 id="vite-limitations">Limitations</h3>
+
+* Only Node.js builds are instrumented, not client builds or the development server (`vite dev`).
+* Optional native dependencies stay external; deploy them separately when needed. Features using worker threads
+  require an external tracer with its installed package available.
+* Intercepted ES modules retain their unused exports. Their wrappers and the tracer must share one
+  `import-in-the-middle` runtime, and their `package.json` files must remain accessible at their build-time paths.
+* Packages outside `node_modules`, such as linked workspace packages, and Yarn Plug'n'Play installations are not
+  instrumented.
+* Node.js builds using a client environment, such as library mode, should produce CommonJS output.
+* Vite 6.0.0 cannot bundle Node.js built-ins with `ssr.noExternal: true` unless they are listed in
+  `build.rollupOptions.external`.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 

@@ -4,12 +4,28 @@ const fs = require('node:fs')
 const { createRequire } = require('node:module')
 const path = require('node:path')
 
-const { instrument, packagePathPattern } = require('../datadog-instrumentations/src/helpers/bundler-transform')
+const {
+  createEsmResolver,
+  createEsmWrapper,
+  processModule,
+} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const {
+  classify,
+  instrument,
+  packagePathPattern,
+} = require('../datadog-instrumentations/src/helpers/bundler-transform')
 const { getGitMetadataBanner } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'datadog-vite'
+// Ids starting with `\0dd-trace-vite:` are reserved for the wrappers this plugin generates to intercept the exports
+// of ES modules, followed by the id of the wrapped module.
+const GENERATED_ID_PREFIX = '\0dd-trace-vite:'
+const LOAD_ID_PATTERN = /^\0dd-trace-vite:/
+// Relative, absolute and package `imports` specifiers may resolve to an instrumented file, bare specifiers only when
+// they name an instrumented package.
+const RESOLVE_ID_PATTERN = new RegExp(String.raw`^(?:[./#]|[A-Za-z]:[/\\])|${packagePathPattern.source}`)
 const NODE_MODULES = '/node_modules/'
 const TRACER_DIRECTORY = `${fs.realpathSync(path.join(__dirname, '..', '..')).replaceAll('\\', '/')}/`
 // Optional dependencies of the tracer, required lazily. They must stay out of the bundle: some are native addons and
@@ -55,6 +71,13 @@ const mergedFunctions = new WeakSet()
  * @typedef {{ meta?: { rolldownVersion?: string } } | undefined} HookContext
  * @typedef {{ warn: (message: string) => void }} TransformContext
  * @typedef {{ name: string, config: { build: BuildOptions, consumer: string } }} Environment
+ * @typedef {{ external?: boolean | string, id: string }} ResolvedId
+ * @typedef {{ isEntry?: boolean, skipSelf?: boolean }} ResolveOptions
+ * @typedef {{
+ *   environment?: object,
+ *   resolve: (source: string, importer: string | undefined, options: ResolveOptions) => Promise<ResolvedId | null>,
+ *   warn: (message: string) => void,
+ * }} ResolveContext
  */
 
 /**
@@ -63,10 +86,26 @@ const mergedFunctions = new WeakSet()
 function datadogVite () {
   const injectGitMetadata = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
   const installed = getInstalledDependencies()
+  /** @type {WeakMap<object, EsmInterception>} */
+  const interceptions = new WeakMap()
+  const defaultEnvironment = {}
   /** @type {string|undefined} */
   let gitIntro
 
   if (!injectGitMetadata) log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
+
+  /**
+   * @param {{ environment?: object }} context
+   */
+  function getInterception (context) {
+    const environment = context.environment ?? defaultEnvironment
+    let interception = interceptions.get(environment)
+    if (!interception) {
+      interception = new EsmInterception()
+      interceptions.set(environment, interception)
+    }
+    return interception
+  }
 
   return {
     name: PLUGIN_NAME,
@@ -114,6 +153,37 @@ function datadogVite () {
       return isNodeBuild(consumer, build)
     },
 
+    resolveId: {
+      filter: { id: RESOLVE_ID_PATTERN },
+      /**
+       * @this {ResolveContext}
+       * @param {string} source
+       * @param {string} [importer]
+       * @param {ResolveOptions} [options]
+       */
+      handler (source, importer, options) {
+        return getInterception(this).resolveId(this, source, importer, options)
+      },
+    },
+
+    load: {
+      filter: { id: LOAD_ID_PATTERN },
+      /**
+       * @this {ResolveContext}
+       * @param {string} id
+       */
+      handler (id) {
+        return isWrapperId(id) ? getInterception(this).load(this, id.slice(GENERATED_ID_PREFIX.length)) : undefined
+      },
+    },
+
+    /**
+     * @this {{ environment?: object }}
+     */
+    buildEnd () {
+      return interceptions.get(this.environment ?? defaultEnvironment)?.buildEnd()
+    },
+
     transform: {
       // Vite versions without hook filters call the handler for every module, which checks the id again.
       filter: { id: packagePathPattern },
@@ -150,6 +220,139 @@ function datadogVite () {
 function isInstrumentable (id) {
   return id.charCodeAt(0) !== 0 && !id.includes('?') && id.includes(NODE_MODULES) &&
     !id.startsWith(TRACER_DIRECTORY) && packagePathPattern.test(id)
+}
+
+/**
+ * @param {string} id
+ */
+function isWrapperId (id) {
+  return id.startsWith(GENERATED_ID_PREFIX)
+}
+
+/**
+ * ES module namespaces are read-only, so hooks cannot replace the exports of ES modules. Importers of ES modules that
+ * hooks instrument are redirected to a wrapper module re-exporting them through bindings the hooks can replace.
+ * Orchestrion targets are rewritten in place instead. State is kept per environment.
+ */
+class EsmInterception {
+  /**
+   * Kept across watch mode rebuilds, which load cached modules without resolving their imports again.
+   *
+   * @type {Map<string, string>}
+   */
+  #specifiers = new Map()
+  /** @type {Map<string, Promise<string[] | undefined>>} */
+  #exports = new Map()
+  /** @type {Map<string, string>} */
+  #moduleSources = new Map()
+  /** @type {ReturnType<typeof createEsmResolver> | undefined} */
+  #resolver
+
+  /**
+   * @param {ResolveContext} context
+   * @param {string} source
+   * @param {string | undefined} importer
+   * @param {ResolveOptions | undefined} options
+   */
+  resolveId (context, source, importer, options) {
+    if (importer === undefined || options?.isEntry) return
+    if (isWrapperId(importer)) {
+      // Imports from generated modules resolve relative to the original. The wrapper must reach that module unwrapped.
+      return context.resolve(source, importer.slice(GENERATED_ID_PREFIX.length), { ...options, skipSelf: true })
+    }
+    if (!mayResolveToTarget(source, importer)) return
+    return context.resolve(source, importer, { ...options, skipSelf: true })
+      .then(resolved => this.#redirect(context, source, importer, resolved))
+  }
+
+  /**
+   * @param {ResolveContext} context
+   * @param {string} id The id of the wrapped module.
+   */
+  load (context, id) {
+    return this.#getExports(context, id).then(setters => {
+      if (!setters) throw new Error(`Could not analyze the exports of ${id}`)
+      return createEsmWrapper({
+        path: id,
+        specifier: this.#specifiers.get(id),
+        setters,
+      })
+    })
+  }
+
+  buildEnd () {
+    const resolver = this.#resolver
+    this.#exports.clear()
+    this.#moduleSources.clear()
+    this.#resolver = undefined
+    return resolver?.close().catch(error => {
+      log.debug('The ESM resolver failed: %s', error instanceof Error ? error.message : String(error))
+    })
+  }
+
+  /**
+   * @param {ResolveContext} context
+   * @param {string} source
+   * @param {string} importer
+   * @param {ResolvedId | null} resolved
+   */
+  #redirect (context, source, importer, resolved) {
+    // A module importing itself must not reach its wrapper, which would import it in turn.
+    if (!resolved || resolved.external || resolved.id === importer || !isInstrumentable(resolved.id)) return resolved
+    const { id } = resolved
+    const kind = classify({
+      resourcePath: id,
+      // Package root hooks only apply to imports of the package name.
+      request: isBareSpecifier(source) ? source : undefined,
+      warn: warning => context.warn(warning.message),
+    })
+    if (kind !== 'esm-intercept') return resolved
+    this.#specifiers.set(id, source)
+    return this.#getExports(context, id).then(setters => {
+      if (!setters) return resolved
+      // IITM registration must run even when importers only re-export the module.
+      return { id: GENERATED_ID_PREFIX + id, moduleSideEffects: true }
+    })
+  }
+
+  /**
+   * @param {ResolveContext} context
+   * @param {string} id
+   * @returns {Promise<string[] | undefined>}
+   */
+  #getExports (context, id) {
+    const cached = this.#exports.get(id)
+    if (cached) return cached
+    this.#resolver ??= createEsmResolver()
+    const exports = /** @type {Promise<string[] | undefined>} */ (processModule({
+      path: id,
+      context: { format: 'module' },
+      moduleSources: this.#moduleSources,
+      resolver: this.#resolver,
+    }).then(setters => [...setters.values()], error => {
+      context.warn(`Skipped intercepting the exports of ${id}: ${error instanceof Error ? error.message : error}`)
+    }))
+    this.#exports.set(id, exports)
+    return exports
+  }
+}
+
+/**
+ * Relative specifiers can only resolve to an instrumented file when imported from an instrumented package.
+ *
+ * @param {string} source
+ * @param {string} importer
+ */
+function mayResolveToTarget (source, importer) {
+  if (source.charCodeAt(0) === 0 || source.includes('?')) return false
+  return source[0] === '.' || source[0] === '#' ? isInstrumentable(importer) : packagePathPattern.test(source)
+}
+
+/**
+ * @param {string} source
+ */
+function isBareSpecifier (source) {
+  return source[0] !== '.' && source[0] !== '/' && source[0] !== '#' && !/^[A-Za-z]:[/\\]/.test(source)
 }
 
 /**
