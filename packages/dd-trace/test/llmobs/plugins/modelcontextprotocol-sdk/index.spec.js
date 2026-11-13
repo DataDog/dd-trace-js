@@ -89,6 +89,54 @@ describe('integrations', () => {
         if (server) await server.close()
       })
 
+      describe('server request context', () => {
+        it('restores the LLM Obs context after the server starts handling a request', async () => {
+          const tracer = require('../../../../../..')
+          const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+          const { Client } = versionModule.get('@modelcontextprotocol/sdk/client')
+          const { McpServer } = versionModule.get('@modelcontextprotocol/sdk/server/mcp.js')
+          const { InMemoryTransport } = versionModule.get('@modelcontextprotocol/sdk/inMemory.js')
+
+          const contextServer = new McpServer({ name: 'context-server', version: '1.0.0' })
+          contextServer.registerTool('context-tool', { description: 'A tool', inputSchema: {} }, async () => ({
+            content: [{ type: 'text', text: 'ok' }],
+          }))
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          await contextServer.connect(serverTransport)
+
+          // Code that runs after the transport hands a request to the server must not inherit the server span.
+          const onmessage = serverTransport.onmessage
+          serverTransport.onmessage = function (message) {
+            const result = onmessage.apply(this, arguments)
+            if (message?.method === 'tools/call') {
+              tracer.llmobs.trace({ kind: 'task', name: 'after-onrequest' }, () => {})
+            }
+            return result
+          }
+
+          const contextClient = new Client({ name: 'context-client', version: '1.0.0' })
+          await contextClient.connect(clientTransport)
+
+          try {
+            await contextClient.callTool({ name: 'context-tool', arguments: {} })
+
+            const { llmobsSpans } = await getEvents()
+            const clientSpan = llmobsSpans.find(span => span.name === 'MCP Client Tool Call: context-tool')
+            const serverSpan = llmobsSpans.find(span => span.name === 'context-tool')
+            const afterSpan = llmobsSpans.find(span => span.name === 'after-onrequest')
+
+            assert.ok(clientSpan)
+            assert.ok(serverSpan)
+            assert.ok(afterSpan)
+            assert.equal(serverSpan.parent_id, clientSpan.span_id)
+            assert.equal(afterSpan.parent_id, clientSpan.span_id)
+          } finally {
+            await contextClient.close()
+            await contextServer.close()
+          }
+        })
+      })
+
       describe('Client.callTool', () => {
         it('creates a tool span for a basic tool call', async () => {
           const result = await client.callTool({ name: 'test-tool', arguments: {} })
@@ -113,6 +161,39 @@ describe('integrations', () => {
               mcp_tool_kind: 'client',
               mcp_server_name: 'test-server',
               mcp_server_version: '1.0.0',
+            },
+          })
+        })
+
+        it('creates a server tool span under the client tool span', async () => {
+          await client.callTool({ name: 'test-tool', arguments: {} })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const serverApmSpan = apmSpans.find(span => span.meta['span.kind'] === 'server')
+          // The suite shares one client, so the JSON-RPC id depends on the test order.
+          const requestId = JSON.parse(llmobsSpans[1].meta.input.value).id
+          assert.equal(typeof requestId, 'number')
+
+          assertLlmObsSpanEvent(llmobsSpans[1], {
+            span: serverApmSpan,
+            parentId: llmobsSpans[0].span_id,
+            spanKind: 'tool',
+            name: 'test-tool',
+            inputValue: JSON.stringify({
+              method: 'tools/call',
+              params: { name: 'test-tool', arguments: {} },
+              jsonrpc: '2.0',
+              id: requestId,
+            }),
+            outputValue: JSON.stringify({ content: [{ type: 'text', text: 'Result from test-tool' }] }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_method: 'tools/call',
+              mcp_tool: 'test-tool',
+              mcp_tool_kind: 'server',
+              mcp_client_name: 'test-client',
+              mcp_client_version: '1.0.0',
             },
           })
         })
