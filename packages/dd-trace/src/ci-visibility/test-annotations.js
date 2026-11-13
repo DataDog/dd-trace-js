@@ -7,7 +7,7 @@ const emptyAnnotations = Object.freeze({ mustFail: false, noAutoRetry: false })
 
 /** @param {Function|undefined} fn */
 function getTestAnnotations (fn) {
-  return (fn && fn[annotationsKey]) || emptyAnnotations
+  return fn?.[annotationsKey] || emptyAnnotations
 }
 
 /**
@@ -15,7 +15,7 @@ function getTestAnnotations (fn) {
  * @param {Function} target
  */
 function copyTestAnnotations (source, target) {
-  const annotations = source && source[annotationsKey]
+  const annotations = source?.[annotationsKey]
   if (annotations && target[annotationsKey] !== annotations) {
     Object.defineProperty(target, annotationsKey, { value: annotations, configurable: true })
   }

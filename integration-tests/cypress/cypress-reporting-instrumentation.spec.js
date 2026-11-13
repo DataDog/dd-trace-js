@@ -1,17 +1,20 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
-const { createServer } = require('node:http')
+const os = require('node:os')
 const path = require('node:path')
+const { format } = require('node:util')
+const { runInNewContext } = require('node:vm')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
 const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig,
   assertObjectContains,
   stopCiVisTestEnv,
   warmCypressBinary,
@@ -20,7 +23,14 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
+  TEST_IS_RETRY,
+  TEST_RETRY_REASON,
+  TEST_RETRY_REASON_TYPES,
+  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_FRAMEWORK,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_UPLOADED,
@@ -28,6 +38,7 @@ const {
   TEST_FAILURE_VIDEO_SCOPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const {
+  VIDEO_UPLOAD_RESULT_UPLOADED,
   VIDEO_UPLOAD_SCOPE_TEST_SUITE,
 } = require('../../packages/dd-trace/src/ci-visibility/test-video')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1020,562 +1031,1781 @@ moduleTypes.forEach(({
   })
 })
 
-// Keep browser coverage at real Cypress boundaries; config permutations run in the quick helper job.
+// These plugin lifecycle and filesystem tests do not depend on a Cypress version. Run them in one existing
+// integration matrix cell instead of repeating them for every supported version and module type.
 {
-  const { readFileSync, rmSync, writeFileSync } = fs
-  const { join } = path
-
-  const version = process.env.CYPRESS_VERSION || '14.5.4'
-  const moduleType = process.env.CYPRESS_MODULE_TYPE || 'commonJS'
-  const [cypressMajor, cypressMinor] = version.split('.').map(Number)
-  const supportsExperimental = version === 'latest' || cypressMajor > 13 ||
-    (cypressMajor === 13 && cypressMinor >= 4)
-  // These exclusion scenarios require Cypress 12's test isolation, which makes Datadog retries available.
-  // Cypress 6 is only exercised on v5/Node 16 and does not provide that capability.
-  const isSupported = version !== '6.7.0' && NODE_MAJOR > 16 &&
-    (NODE_MAJOR > 18 || version === '12.0.0' || version === '14.5.4')
-  const describeSupported = isSupported ? describe : describe.skip
-  const protection = 'test.test_management.prevent_failure_suppression'
-  const exclusion = 'test.test_management.no_auto_retry'
-  const suite = 'cypress/e2e/test-exclusions.js'
-
-  describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation exclusions`, function () {
-    this.timeout(120000)
-    const dependencies = getCypressDependencies(version)
-    if (process.env.CYPRESS_TEST_BROWSER === 'webkit') dependencies.push('playwright-webkit@1.56.1')
-    useSandbox(dependencies, true)
-    let cwd, receiver, childProcess, webApp
-
-    before(async function () {
-      this.timeout(240000)
-      cwd = sandboxCwd()
-      await warmCypressBinary(cwd)
-      webApp = await startWebAppServer()
-    })
-    beforeEach(async () => { receiver = await new FakeCiVisIntake().start() })
-    afterEach(async () => {
-      await stopCiVisTestEnv({ childProcess, receiver })
-      childProcess = undefined
-    })
-    after(async () => { if (webApp) await stopWebAppServer(webApp.server) })
-
-    const properties = assignments => {
-      receiver.setTestManagementTests({ cypress: { suites: { [suite]: { tests: assignments } } } })
-    }
-    const cypressEnvironment = () => {
-      const env = getCiVisEvpProxyConfig(receiver.port)
-      // This is the matrix selector, not Cypress configuration. Forwarding "latest"
-      // overwrites Cypress.version and breaks native version-dependent fixture APIs.
-      delete env.CYPRESS_VERSION
-      return env
-    }
-    const run = async (mode, expectedExit, check, env = {}, command) => {
-      childProcess = exec(command || (moduleType === 'esm'
-        ? 'node ./cypress-esm-config.mjs'
-        : `./node_modules/.bin/cypress run --spec ${suite}`), {
-        cwd,
-        env: {
-          ...cypressEnvironment(),
-          SPEC_PATTERN: suite,
-          CYPRESS_BASE_URL: webApp.baseUrl,
-          CYPRESS_EXCLUSIONS_MODE: mode,
-          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
-          ...env,
-        },
-      })
-      let output = ''
-      childProcess.stdout.on('data', chunk => { output += chunk })
-      childProcess.stderr.on('data', chunk => { output += chunk })
-      const exitPromise = once(childProcess, 'exit')
-      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) => url.endsWith('/api/v2/citestcycle'),
-        payloads => {
-          const tests = payloads.flatMap(({ payload }) => payload.events)
-            .filter(event => event.type === 'test').map(event => event.content)
-          assert.ok(tests.length, output)
-          check(tests)
-        },
-        { hardTimeout: 90000 }
-      )
-      const [[exitCode]] = await Promise.all([exitPromise, eventsPromise]).catch(error => {
-        error.message += `\nCypress output:\n${output}`
-        throw error
-      })
-      assert.strictEqual(exitCode, expectedExit, output)
-      return output
-    }
-    const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
-
-    it('protects failures and preserves independent disabled, quarantined, passing and skipped policies', async () => {
-      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
-      const protectedNames = ['protected disabled', 'protected quarantine', 'protected both 1', 'protected both 2']
-      const assignments = Object.fromEntries(protectedNames.map(name => [name, {
-        properties: {
-          disabled: true, quarantined: true, ...(name.startsWith('protected both') ? { attempt_to_fix: true } : {}),
-        },
-      }]))
-      assignments['protected passing'] = { properties: { disabled: true, quarantined: true } }
-      assignments['ordinary disabled'] = { properties: { disabled: true, attempt_to_fix: true } }
-      assignments['ordinary quarantine'] = { properties: { quarantined: true } }
-      assignments['excluded quarantine'] = { properties: { quarantined: true, attempt_to_fix: true } }
-      properties(assignments)
-      await run('policy', 4, tests => {
-        assert.strictEqual(tests.length, 10)
-        for (const name of protectedNames) {
-          const [test] = named(tests, name)
-          assert.strictEqual(test.meta['test.status'], 'fail', name)
-          assert.strictEqual(test.meta['test.final_status'], 'fail', name)
-          assert.strictEqual(test.meta[protection], 'true', name)
-          assert.strictEqual(test.meta[exclusion], name.startsWith('protected both') ? 'true' : undefined, name)
-          assert.strictEqual(test.meta['test.test_management.is_test_disabled'], 'true', name)
-          assert.strictEqual(test.meta['test.test_management.is_quarantined'], 'true', name)
-          assert.strictEqual(test.meta['test.is_retry'], undefined, name)
-          if (name.startsWith('protected both')) {
-            assert.strictEqual(test.meta['test.test_management.is_attempt_to_fix'], 'true', name)
-            assert.strictEqual(test.meta['test.test_management.attempt_to_fix_passed'], undefined, name)
-          }
-        }
-        const [disabled] = named(tests, 'ordinary disabled')
-        assert.strictEqual(disabled.meta['test.status'], 'skip')
-        assert.strictEqual(disabled.meta[exclusion], 'true')
-        assert.strictEqual(disabled.meta['test.test_management.is_attempt_to_fix'], 'true')
-        for (const name of ['ordinary quarantine', 'excluded quarantine']) {
-          const attempts = named(tests, name)
-          assert.strictEqual(attempts.length, 1, name)
-          assert.strictEqual(attempts[0].meta['test.status'], 'fail', name)
-          assert.strictEqual(attempts[0].meta['test.final_status'], 'skip', name)
-          assert.strictEqual(attempts[0].meta[protection], undefined, name)
-          assert.strictEqual(attempts[0].meta[exclusion], name.startsWith('excluded') ? 'true' : undefined, name)
-        }
-        assert.strictEqual(named(tests, 'protected passing')[0].meta['test.status'], 'pass')
-        assert.strictEqual(named(tests, 'ordinary passing')[0].meta[protection], undefined)
-        assert.strictEqual(named(tests, 'ordinary passing')[0].meta[exclusion], undefined)
-        const [skipped] = named(tests, 'developer skipped')
-        assert.strictEqual(skipped.meta['test.status'], 'skip')
-        assert.strictEqual(skipped.meta[protection], 'true')
-        assert.strictEqual(skipped.meta[exclusion], 'true')
-        const executed = Object.fromEntries([...protectedNames, 'ordinary quarantine', 'excluded quarantine',
-          'protected passing', 'ordinary passing'].map(name => [name, 1]))
-        assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'exclusion-executions.json'), 'utf8')), executed)
-      })
-    })
-
-    it('blocks ATR without preventing protected retries or changing unannotated controls', async () => {
-      receiver.setSettings({ flaky_test_retries_enabled: true })
-      await run('atr', 2, tests => {
-        assert.strictEqual(tests.length, 6)
-        const [excluded] = named(tests, 'excluded')
-        assert.strictEqual(named(tests, 'excluded').length, 1)
-        assert.strictEqual(excluded.meta[exclusion], 'true')
-        assert.strictEqual(excluded.meta['test.is_retry'], undefined)
-        assert.strictEqual(named(tests, 'control').length, 3)
-        assert.strictEqual(named(tests, 'protected retry').length, 2)
-        assert.strictEqual(named(tests, 'protected retry').at(-1).meta['test.status'], 'pass')
-      })
-    })
-
-    for (const feature of ['efd', 'atf']) {
-      it(`blocks ${feature} while preserving discovery and assigned properties`, async () => {
-        receiver.setSettings({
-          flaky_test_retries_enabled: false,
-          known_tests_enabled: feature === 'efd',
-          early_flake_detection: {
-            enabled: feature === 'efd', slow_test_retries: { '5s': 2 }, faulty_session_threshold: 100,
-          },
-          test_management: { enabled: feature === 'atf', attempt_to_fix_retries: 2 },
-        })
-        receiver.setKnownTests({ cypress: { 'cypress/e2e/known.js': ['known'] } })
-        properties({
-          excluded: { properties: { attempt_to_fix: true } },
-          control: { properties: { attempt_to_fix: true } },
-        })
-        await run(feature, 0, tests => {
-          assert.strictEqual(tests.length, 4)
-          const [excluded] = named(tests, 'excluded')
-          assert.strictEqual(named(tests, 'excluded').length, 1)
-          assert.strictEqual(named(tests, 'control').length, 3)
-          assert.strictEqual(excluded.meta[exclusion], 'true')
-          assert.strictEqual(excluded.meta['test.is_retry'], undefined)
-          assert.strictEqual(excluded.meta['test.test_management.attempt_to_fix_passed'], undefined)
-          if (feature === 'efd') assert.strictEqual(excluded.meta['test.is_new'], 'true')
-          if (feature === 'atf') assert.strictEqual(excluded.meta['test.test_management.is_attempt_to_fix'], 'true')
-        })
-      })
+  const matrixSuite = requestedVersion === 'latest' &&
+    (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')
+    ? describe
+    : describe.skip
+  matrixSuite('Cypress plugin run lifecycle', () => {
+    const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
+    const originalState = {
+      cypressConfig: cypressPlugin.cypressConfig,
+      isInit: cypressPlugin._isInit,
+      libraryConfigurationPromise: cypressPlugin.libraryConfigurationPromise,
+      hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
+      originalCypressRetries: cypressPlugin.originalCypressRetries,
+      tracer: cypressPlugin.tracer,
+      finishedTestsByFile: cypressPlugin.finishedTestsByFile,
+      hasTestsReported: cypressPlugin.hasTestsReported,
+      testSuiteStatuses: cypressPlugin.testSuiteStatuses,
+      testsToSkip: cypressPlugin.testsToSkip,
+      testSessionSpan: cypressPlugin.testSessionSpan,
+      testModuleSpan: cypressPlugin.testModuleSpan,
+      testSuiteSpan: cypressPlugin.testSuiteSpan,
+      pendingScreenshotUploads: cypressPlugin.pendingScreenshotUploads,
+      pendingVideoUploads: cypressPlugin.pendingVideoUploads,
+      uploadedVideoPaths: cypressPlugin.uploadedVideoPaths,
+      screenshotUploadAbortControllers: cypressPlugin.screenshotUploadAbortControllers,
     }
 
-    it('preserves global, suite and test native retries, including explicit zero, with ATR enabled', async () => {
-      receiver.setSettings({ flaky_test_retries_enabled: true })
-      await run('native', 1, tests => {
-        for (const [name, count] of [['global native', 3], ['suite native suite retry', 2], ['test native', 2],
-          ['native zero', 1]]) {
-          const attempts = named(tests, name)
-          assert.strictEqual(attempts.length, count, name)
-          assert.strictEqual(attempts.at(-1).meta['test.status'], name === 'native zero' ? 'fail' : 'pass', name)
-          for (const test of attempts) assert.strictEqual(test.meta[exclusion], 'true', name)
-          for (const test of attempts.slice(1)) assert.strictEqual(test.meta['test.retry_reason'], 'external', name)
-        }
-        assert.strictEqual(tests.length, 8)
-      }, { CYPRESS_RETRIES: '2' })
+    afterEach(() => {
+      cypressPlugin.cypressConfig = originalState.cypressConfig
+      cypressPlugin._isInit = originalState.isInit
+      cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
+      cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
+      cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
+      cypressPlugin.tracer = originalState.tracer
+      cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
+      cypressPlugin.hasTestsReported = originalState.hasTestsReported
+      cypressPlugin.testSuiteStatuses = originalState.testSuiteStatuses
+      cypressPlugin.testsToSkip = originalState.testsToSkip
+      cypressPlugin.testSessionSpan = originalState.testSessionSpan
+      cypressPlugin.testModuleSpan = originalState.testModuleSpan
+      cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
+      cypressPlugin.pendingScreenshotUploads = originalState.pendingScreenshotUploads
+      cypressPlugin.pendingVideoUploads = originalState.pendingVideoUploads
+      cypressPlugin.uploadedVideoPaths = originalState.uploadedVideoPaths
+      cypressPlugin.screenshotUploadAbortControllers = originalState.screenshotUploadAbortControllers
+      sinon.restore()
     })
 
-    // Detailed config permutations run in config-lifecycle.spec.js without starting Cypress.
-    // Keep real IPC, manual support ordering and cross-spec reuse at the browser boundary.
-    for (const lateMode of ['indirect-returned-support', 'browser-equal-before-support-reuse-preloaded']) {
-      it(`preserves native retries through ${lateMode}`, async () => {
-        const command = './node_modules/.bin/cypress run ' +
-          '--config-file ci-visibility/cypress-late-native-retries/config.js'
-        const ledger = join(cwd, 'late-native-retry-executions.json')
-        const expected = {
-          'late native excluded': 3,
-          'late native control': 3,
-          'explicit local excluded': 2,
-          ...(lateMode.includes('-reuse') && { 'support reuse smoke': 1 }),
-        }
-        childProcess = exec(command, {
-          cwd,
-          env: {
-            ...cypressEnvironment(),
-            NODE_OPTIONS: '',
-            DD_TRACE_ENABLED: 'false',
-            CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
-          },
-        })
-        let output = ''
-        childProcess.stdout.on('data', chunk => { output += chunk })
-        childProcess.stderr.on('data', chunk => { output += chunk })
-        const [nativeExit] = await once(childProcess, 'exit')
-        assert.strictEqual(nativeExit, 0, output)
-        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
-        rmSync(ledger)
-        receiver.setSettings({ flaky_test_retries_enabled: true })
-        await run('late-native', 0, tests => {
-          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
-          assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
-          for (const [name, count] of Object.entries(expected)) {
-            const attempts = named(tests, name)
-            assert.strictEqual(attempts.length, count, name)
-            assert.strictEqual(attempts.at(-1).meta['test.status'], 'pass', name)
-            assert.strictEqual(attempts[0].meta[exclusion], name === 'late native control' ? undefined : 'true', name)
-            if (lateMode.includes('indirect')) {
-              for (const attempt of attempts) assert.strictEqual(attempt.meta['manual.early_teardown'], 'preserved')
-            }
-            for (const retry of attempts.slice(1)) {
-              assert.strictEqual(retry.meta['test.retry_reason'],
-                name === 'late native control' ? 'auto_test_retry' : 'external', name)
-            }
-          }
-        }, {
-          ...(lateMode.endsWith('-preloaded') ? {} : { NODE_OPTIONS: '' }),
-          CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
-        }, command)
-      })
-    }
-
-    for (const mode of ['browser-field-accessor', 'experimental-native-field-accessor', 'browser-saved-local']) {
-      const experimentalMode = mode === 'experimental-native-field-accessor'
-      const fieldAccessor = mode !== 'browser-saved-local'
-      // Cypress <15.17 retains the restoration callback across tests without overrides.
-      const legacySavedLocal = !fieldAccessor && version !== 'latest' &&
-        (cypressMajor < 15 || (cypressMajor === 15 && cypressMinor < 17))
-      const boundaryTest = experimentalMode && !supportsExperimental ? it.skip : it
-      boundaryTest(`preserves ${mode} native retry executions`, async () => {
-        const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
-        const ledger = join(cwd, 'native-retry-executions.json')
-        const expected = {
-          ...(!fieldAccessor && {
-            'initial local control': 1, 'captures local retries': 1, 'restores local retries': 1,
+    function prepareRunFinalization () {
+      const createSpan = () => {
+        const tags = {}
+        return {
+          tags,
+          context: () => ({
+            _trace: { started: [] },
+            toTraceId: () => '123',
+            toSpanId: () => '456',
+            getTag: name => tags[name],
+            getTags: () => tags,
           }),
-          'excluded recovery': legacySavedLocal ? 1 : experimentalMode ? 4 : 3,
-          'excluded persistent': legacySavedLocal ? 1 : fieldAccessor ? 4 : 3,
-          'excluded explicit zero': 1,
-          'ordinary control': legacySavedLocal ? 1 : experimentalMode ? 4 : 3,
+          finish: sinon.stub(),
+          setTag: sinon.stub().callsFake((name, value) => { tags[name] = value }),
         }
-        const env = experimentalMode ? { CYPRESS_EXPERIMENTAL_RETRIES: 'true' } : {}
-        const command = `./node_modules/.bin/cypress run --spec ${boundarySuite}`
-        childProcess = exec(`${command} --config supportFile=false`, {
-          cwd,
-          env: {
-            ...cypressEnvironment(),
-            NODE_OPTIONS: '',
-            DD_TRACE_ENABLED: 'false',
-            SPEC_PATTERN: boundarySuite,
-            CYPRESS_EXCLUSIONS_MODE: mode,
-            CYPRESS_MATCHED_NATIVE_HOOKS: fieldAccessor ? 'true' : undefined,
-            ...env,
+      }
+      const testSessionSpan = createSpan()
+      const testModuleSpan = createSpan()
+
+      cypressPlugin.resetRunState()
+      cypressPlugin._isInit = true
+      cypressPlugin.testSessionSpan = testSessionSpan
+      cypressPlugin.testModuleSpan = testModuleSpan
+      cypressPlugin.tracer = {
+        startSpan: sinon.stub().callsFake(createSpan),
+        _tracer: {
+          _exporter: {
+            flush: callback => callback(),
           },
+        },
+      }
+      sinon.stub(cypressPlugin, 'applySkippedCoverageToTestSessionCoverage').returns(false)
+      sinon.stub(cypressPlugin, 'getTestCodeCoverageLinesTotal').returns(undefined)
+      sinon.stub(cypressPlugin, 'reportTestSessionCoverage')
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+
+      return { testModuleSpan, testSessionSpan, createSpan }
+    }
+
+    for (const uploadFails of [false, true]) {
+      it(`waits for recovered screenshot-only spans before closing the run (uploadFails=${uploadFails})`, async () => {
+        const { testSessionSpan, createSpan } = prepareRunFinalization()
+        const testSpan = createSpan()
+        testSpan.finish.callsFake(() => { testSpan._duration = 0 })
+        const context = testSessionSpan.context()
+        context._trace.started.push(testSpan)
+        sinon.stub(testSessionSpan, 'context').returns(context)
+        const spec = { relative: 'cypress/e2e/failure.cy.js' }
+        cypressPlugin.getTestSuiteSpan({ testSuite: spec.relative })
+        cypressPlugin.finishedTestsByFile[spec.relative] = [{
+          testName: 'fails', testStatus: 'fail', testSpan, finishTime: 900,
+        }]
+        let completeUpload
+        const exporter = cypressPlugin.tracer._tracer._exporter
+        exporter.canUploadTestScreenshots = () => true
+        exporter.uploadTestScreenshot = sinon.stub().callsFake((options, callback) => { completeUpload = callback })
+        const flush = sinon.spy(exporter, 'flush')
+        const afterRunPromise = cypressPlugin.afterRun({
+          totalFailed: 1,
+          totalTests: 1,
+          runs: [{
+            spec,
+            stats: { failures: 1, tests: 1, endedAt: new Date(1000).toISOString() },
+            tests: [{
+              title: ['fails'],
+              state: 'failed',
+              attempts: [{ state: 'failed', screenshots: [{ path: '/tmp/failure.png', testFailure: true }] }],
+            }],
+          }],
         })
-        let output = ''
-        childProcess.stdout.on('data', chunk => { output += chunk })
-        childProcess.stderr.on('data', chunk => { output += chunk })
-        const [nativeExit] = await once(childProcess, 'exit')
-        const accessorReads = fieldAccessor
-          ? JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
-          : undefined
-        assert.strictEqual(nativeExit, legacySavedLocal || experimentalMode ? 4 : 2, output)
-        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
-        rmSync(ledger)
-        receiver.setSettings({ flaky_test_retries_enabled: true })
-        if (legacySavedLocal) expected['ordinary control'] = 3
-        await run(mode, legacySavedLocal ? 3 : experimentalMode ? 4 : 2, tests => {
-          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
-          if (accessorReads) {
-            assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8')),
-              accessorReads)
-          }
-          assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
-          for (const [name, count] of Object.entries(expected)) {
-            const attempts = named(tests, `native retry boundaries ${name}`)
-            assert.strictEqual(attempts.length, count, name)
-            const annotated = name.startsWith('excluded')
-            const failed = name === 'excluded persistent' || name === 'excluded explicit zero' ||
-              (legacySavedLocal && name === 'excluded recovery')
-            assert.strictEqual(attempts.at(-1).meta['test.status'], failed ? 'fail' : 'pass', name)
-            if (experimentalMode) assert.strictEqual(attempts.at(-1).meta['test.final_status'], 'fail', name)
-            for (const test of attempts) assert.strictEqual(test.meta[exclusion], annotated ? 'true' : undefined, name)
-            for (const retry of attempts.slice(1)) {
-              assert.strictEqual(retry.meta['test.retry_reason'], annotated ? 'external' : 'auto_test_retry', name)
-            }
-          }
-        }, { SPEC_PATTERN: boundarySuite, ...env, DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }, command)
+        try {
+          sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+          sinon.assert.notCalled(testSpan.finish)
+          sinon.assert.notCalled(testSessionSpan.finish)
+          sinon.assert.notCalled(flush)
+        } finally {
+          completeUpload(uploadFails ? new Error('synthetic upload failure') : undefined)
+          await afterRunPromise
+        }
+        sinon.assert.calledOnceWithExactly(testSpan.finish, 900)
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadFails ? undefined : 'true')
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadFails ? 'true' : undefined)
+        sinon.assert.calledOnce(testSessionSpan.finish)
+        assert.strictEqual(testSessionSpan.tags[TEST_STATUS], 'fail')
       })
     }
 
-    it('keeps a sole protected failure blocking', async () => {
-      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
-      properties({ sole: { properties: { disabled: true, quarantined: true, attempt_to_fix: true } } })
-      await run('sole', 1, tests => {
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.status'], 'fail')
-        assert.strictEqual(tests[0].meta['test.final_status'], 'fail')
-        assert.strictEqual(tests[0].meta[protection], 'true')
-        assert.strictEqual(tests[0].meta[exclusion], 'true')
+    it('waits for the existing initialization before the first run', async () => {
+      const initializationError = new Error('stop after existing initialization')
+      cypressPlugin._isInit = true
+      cypressPlugin.libraryConfigurationPromise = Promise.reject(initializationError)
+      const init = sinon.stub(cypressPlugin, 'init')
+
+      await assert.rejects(cypressPlugin.beforeRun({}), error => {
+        assert.strictEqual(error, initializationError)
+        return true
       })
+
+      sinon.assert.notCalled(init)
     })
 
-    it('preserves Test Impact Analysis selection on an annotated test', async () => {
-      receiver.setSettings({ itr_enabled: true, tests_skipping: true })
-      receiver.setSuitesToSkip([{ type: 'test', attributes: { suite, name: 'sole' } }])
-      await run('sole', 0, tests => {
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.status'], 'skip')
-        assert.strictEqual(tests[0].meta['test.skipped_by_itr'], 'true')
-        assert.strictEqual(tests[0].meta[protection], 'true')
-        assert.strictEqual(tests[0].meta[exclusion], 'true')
+    it('reinitializes before a subsequent interactive run', async () => {
+      const initializationError = new Error('stop after reinitialization')
+      const tracer = {}
+      const cypressConfig = {}
+      cypressPlugin._isInit = false
+      cypressPlugin.tracer = tracer
+      cypressPlugin.cypressConfig = cypressConfig
+      const init = sinon.stub(cypressPlugin, 'init').rejects(initializationError)
+
+      await assert.rejects(cypressPlugin.beforeRun({}), error => {
+        assert.strictEqual(error, initializationError)
+        return true
       })
+
+      sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
-    it('reports protected and ordinary ATF assignments when every declaration is explicitly skipped', async () => {
-      receiver.setSettings({ test_management: { enabled: true } })
-      properties(Object.fromEntries(['protected skipped atf', 'ordinary skipped atf'].map(name => [name, {
-        properties: { disabled: true, quarantined: true, attempt_to_fix: true },
-      }])))
-      const output = await run('all-skipped', 0, tests => {
-        assert.strictEqual(tests.length, 3)
-        const [both] = named(tests, 'annotated skip')
-        assert.strictEqual(both.meta[protection], 'true')
-        assert.strictEqual(both.meta[exclusion], 'true')
-        for (const name of ['protected skipped atf', 'ordinary skipped atf']) {
-          const [test] = named(tests, name)
-          assert.strictEqual(test.meta['test.status'], 'skip', name)
-          assert.strictEqual(test.meta['test.final_status'], 'skip', name)
-          assert.strictEqual(test.meta[protection], name.startsWith('protected') ? 'true' : undefined, name)
-          for (const flag of ['is_test_disabled', 'is_quarantined', 'is_attempt_to_fix']) {
-            assert.strictEqual(test.meta[`test.test_management.${flag}`], 'true', name)
-          }
+    for (const [summary, status, reason] of [
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 2, totalSkipped: 0 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 1, totalSkipped: 1 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 1, totalFailed: 0, totalPending: 1, totalSkipped: 0 },
+        'pass', undefined],
+      [{ totalTests: 0, totalPassed: 0, totalFailed: 0, totalPending: 0, totalSkipped: 0 },
+        'skip', 'zero_tests'],
+    ]) {
+      it(`reports zero-execution sessions from Cypress statistics: ${JSON.stringify(summary)}`, async () => {
+        const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+        await cypressPlugin.afterRun(summary)
+        for (const span of [testSessionSpan, testModuleSpan]) {
+          assert.strictEqual(span.tags[TEST_STATUS], status)
+          assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], reason)
+          assert.strictEqual(span.tags[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+            ? 'All tests were skipped'
+            : reason === 'zero_tests' ? 'No tests were detected' : undefined)
         }
-      }, { DD_TEST_MANAGEMENT_REPORT_ENABLED: 'true' })
-      assert.match(output, /Attempt to fix passed/)
-      for (const flag of ['disabled', 'quarantined']) assert.ok(output.includes(`marked as ${flag}`))
+      })
+    }
+
+    it('preserves a failed Cypress run that reports zero tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ totalFailed: 1, totalSkipped: 0, totalTests: 0 })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
     })
 
-    // Experimental strategy configuration was added in Cypress13.4.
-    const experimental = supportsExperimental ? it : it.skip
-    experimental('preserves experimental budgets, zero overrides and aggregate failure',
-      async () => {
-        receiver.setSettings({ flaky_test_retries_enabled: false })
-        await run('experimental', 4, tests => {
-          assert.strictEqual(tests.length, 10)
-          for (const name of [
-            'native experimental excluded', 'native experimental control', 'native experimental recovery',
-          ]) {
-            const attempts = named(tests, name)
-            assert.strictEqual(attempts.length, 3, name)
-            for (const test of attempts) {
-              assert.strictEqual(test.meta[exclusion], name.endsWith('control') ? undefined : 'true', name)
-            }
-            for (const retry of attempts.slice(1)) assert.strictEqual(retry.meta['test.retry_reason'], 'external', name)
-            assert.strictEqual(attempts.at(-1).meta['test.status'], name.endsWith('recovery') ? 'pass' : 'fail', name)
-            assert.strictEqual(attempts.at(-1).meta['test.final_status'], 'fail', name)
-          }
-          const zero = named(tests, 'native experimental zero')
-          assert.strictEqual(zero.length, 1)
-          assert.strictEqual(zero[0].meta[exclusion], 'true')
-        }, { CYPRESS_EXPERIMENTAL_RETRIES: 'true' })
+    it('preserves a Cypress failed-run result that reports no tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ status: 'failed', failures: 1, message: 'Cypress failed to run' })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('marks an interactive Cypress run with no statistics or tests as empty', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were detected')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+      }
+    })
+
+    it('does not mark an interactive Cypress run as empty after receiving a test', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.testsToSkip = [{ name: 'test name', suite: 'test suite' }]
+
+      cypressPlugin.getTasks()['dd:beforeEach']({
+        testId: 'test-id',
+        testName: 'test name',
+        testSuite: 'test suite',
+      })
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'pass')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a failed interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.testSuiteStatuses.add('fail')
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves an all-skipped interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/skipped-test.js' },
+        { stats: { tests: 1, pending: 1 } }
+      )
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'All tests were skipped')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
+      }
+    })
+
+    it('preserves a Cypress result error without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      const resultError = new Error('Cypress failed to load the spec')
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/load-error.js' },
+        { error: resultError }
+      )
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    for (const [description, cypressConfig] of [
+      ['finishes completed suites without an after:run boundary', {
+        isTextTerminal: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }],
+      ['finishes completed suites in terminal runs', {
+        isTextTerminal: true,
+        // Cypress 12 can leave this true during `cypress run`.
+        isInteractive: true,
+        experimentalInteractiveRunEvents: false,
+      }],
+      ['finishes completed suites when interactive run events are enabled', {
+        isTextTerminal: false,
+        isInteractive: true,
+        experimentalInteractiveRunEvents: true,
+      }],
+    ]) {
+      it(description, () => {
+        const testSuiteSpan = {
+          finish: sinon.stub(),
+          setTag: sinon.stub(),
+        }
+        cypressPlugin.cypressConfig = cypressConfig
+        cypressPlugin.finishedTestsByFile = {}
+        cypressPlugin.testsToSkip = []
+        cypressPlugin.testSuiteSpan = testSuiteSpan
+        cypressPlugin.tracer = { _tracer: { _exporter: {} } }
+        sinon.stub(cypressPlugin, 'ciVisEvent')
+
+        cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
+
+        sinon.assert.calledOnce(testSuiteSpan.finish)
+      })
+    }
+
+    it('starts a suite video upload from after:run after Cypress video processing', async () => {
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.pendingVideoUploads = []
+      cypressPlugin._isInit = true
+      sinon.stub(cypressPlugin, '_now').returns(789)
+      cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      const flush = sinon.stub().callsFake(callback => callback())
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            flush,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      let finishUpload
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').returns(new Promise(resolve => {
+        finishUpload = resolve
+      }))
+
+      const result = cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { failures: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' }
+      )
+
+      assert.strictEqual(result, undefined)
+      sinon.assert.notCalled(upload)
+      sinon.assert.notCalled(testSuiteSpan.finish)
+
+      const afterRunPromise = cypressPlugin.afterRun({})
+
+      sinon.assert.calledOnceWithExactly(upload, {
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+      sinon.assert.calledOnce(flush)
+      sinon.assert.notCalled(testSuiteSpan.finish)
+
+      finishUpload(VIDEO_UPLOAD_RESULT_UPLOADED)
+      await afterRunPromise
+
+      sinon.assert.calledTwice(flush)
+      sinon.assert.calledOnceWithExactly(testSuiteSpan.finish, 789)
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+    })
+
+    it('finalizes a failed suite video when a user after:spec handler prevents after:run', async () => {
+      const userError = new Error('user after:spec failed')
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.pendingVideoUploads = []
+      cypressPlugin._isInit = true
+      cypressPlugin.testSessionSpan = {
+        context: () => ({
+          toTraceId: () => '123',
+          _trace: { started: [testSuiteSpan] },
+        }),
+      }
+      cypressPlugin.testModuleSpan = null
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').resolves(VIDEO_UPLOAD_RESULT_UPLOADED)
+
+      await cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { passes: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' },
+        userError
+      )
+
+      sinon.assert.notCalled(upload)
+      assert.deepStrictEqual(cypressPlugin.pendingVideoUploads, [])
+      sinon.assert.calledOnce(testSuiteSpan.finish)
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOAD_ERROR, 'true')
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+    })
+
+    it('keeps suite video uploads out of screenshot cancellation', async () => {
+      const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback())
+      cypressPlugin.uploadedVideoPaths = new Set()
+      cypressPlugin.screenshotUploadAbortControllers = new Set()
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo,
+          },
+        },
+      }
+
+      const result = cypressPlugin.uploadTestSuiteVideo({
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
       })
 
-    it('preserves declarations, duplicate order, source locations and pending callbacks',
-      async () => {
-        const pendingSuite = 'cypress/e2e/annotation-declarations.js'
-        const pendingLedger = join(cwd, 'pending-suite-executions.json')
-        const collector = createServer((request, response) => {
-          response.setHeader('Access-Control-Allow-Origin', '*')
-          if (request.url !== '/pending-counter' || request.method !== 'POST') {
-            response.writeHead(404).end()
-            return
+      assert.strictEqual(await result, VIDEO_UPLOAD_RESULT_UPLOADED)
+      sinon.assert.calledOnce(uploadTestSuiteVideo)
+      assert.strictEqual(uploadTestSuiteVideo.firstCall.args[0].signal, undefined)
+      assert.strictEqual(typeof uploadTestSuiteVideo.firstCall.args[1], 'function')
+      const screenshotController = new AbortController()
+      cypressPlugin.screenshotUploadAbortControllers.add(screenshotController)
+      const laterSpecError = new Error('later spec failed')
+
+      cypressPlugin.abortPendingScreenshotUploads(laterSpecError)
+
+      assert.strictEqual(screenshotController.signal.reason, laterSpecError)
+      assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 0)
+    })
+
+    for (const [description, uploadError, expectedTag, unexpectedTag] of [
+      [
+        'tags every test and the suite when a suite video is uploaded',
+        undefined,
+        TEST_FAILURE_VIDEO_UPLOADED,
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+      ],
+      [
+        'tags every test and the suite when a suite video upload fails',
+        new Error('upload failed'),
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+        TEST_FAILURE_VIDEO_UPLOADED,
+      ],
+    ]) {
+      it(description, async () => {
+        const makeSpan = () => ({
+          finish: sinon.stub(),
+          setTag: sinon.stub(),
+        })
+        const firstTestSpan = makeSpan()
+        const secondTestSpan = makeSpan()
+        const testSuiteSpan = makeSpan()
+        const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback(uploadError))
+        cypressPlugin.uploadedVideoPaths = new Set()
+        cypressPlugin.pendingVideoUploads = [{
+          filePath: '/tmp/basic-fail.mp4',
+          testSessionId: '123',
+          testSuiteId: '456',
+          testSpanFinishes: [{ testSpan: firstTestSpan }, { testSpan: secondTestSpan }],
+          testSuiteSpan,
+        }]
+        cypressPlugin.tracer = {
+          _tracer: {
+            _exporter: {
+              canUploadTestVideos: () => true,
+              uploadTestSuiteVideo,
+            },
+          },
+        }
+        sinon.stub(cypressPlugin, 'ciVisEvent')
+
+        await cypressPlugin.uploadPendingTestSuiteVideos()
+
+        for (const span of [firstTestSpan, secondTestSpan, testSuiteSpan]) {
+          sinon.assert.calledWith(span.setTag, expectedTag, 'true')
+          sinon.assert.calledWith(span.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+          sinon.assert.neverCalledWith(span.setTag, unexpectedTag, 'true')
+          sinon.assert.calledOnce(span.finish)
+        }
+      })
+    }
+
+    it('does not add video tags when no suite video upload is configured', () => {
+      const testSpan = {
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+
+      cypressPlugin.finishTestSpans([{ testSpan }])
+
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOAD_ERROR, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+      sinon.assert.calledOnce(testSpan.finish)
+    })
+
+    for (const [isTextTerminal, pluginMode] of [[false, false], [true, true], [false], [true]]) {
+      for (const retries of [0, 2]) {
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, retries=${retries}`
+        it(`only applies dynamic ATR in terminal mode (${configDescription})`, async () => {
+          prepareRunFinalization()
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
+          const tasks = cypressPlugin.getTasks()
+          const hooks = {}
+          const events = {}
+          const currentTest = {
+            id: 'test-1',
+            title: 'fails',
+            fullTitle: () => 'fails',
+            state: 'failed',
+            duration: 1,
+            _retries: retries,
           }
-          let body = ''
-          request.setEncoding('utf8')
-          request.on('data', chunk => { body += chunk })
-          request.on('end', () => {
-            writeFileSync(pendingLedger, body)
-            response.writeHead(200).end('recorded')
+          const runner = { runTests () {}, suite: { ctx: { currentTest } } }
+          const task = sinon.stub().callsFake((name, args) => {
+            const result = name === 'dd:testSuiteStart'
+              ? tasks[name](args)
+              : name === 'dd:afterEach' ? { dynamicAtrRetryCount: 3 } : {}
+            return Promise.resolve(result)
           })
+
+          runInNewContext(fs.readFileSync(
+            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+          ), {
+            Cypress: {
+              config: name => {
+                assert.strictEqual(name, 'isTextTerminal')
+                return isTextTerminal
+              },
+              on: (name, callback) => { events[name] = callback },
+              mocha: {
+                getRunner: () => runner,
+                getRootSuite: () => ({ file: 'test.cy.js', eachTest: callback => callback(currentTest) }),
+              },
+            },
+            cy: { task, on () {} },
+            before: callback => { hooks.before = callback },
+            beforeEach: callback => { hooks.beforeEach = callback },
+            afterEach: callback => { hooks.afterEach = callback },
+            after: callback => { hooks.after = callback },
+          })
+
+          await hooks.before()
+          assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
+          const entryPoints = [
+            () => events['test:before:run']({}, currentTest),
+            () => events['test:before:run:async']({}, currentTest),
+            () => hooks.beforeEach.call({ currentTest }),
+          ]
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
+          }
+
+          await hooks.afterEach()
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? 3 : retries)
+          }
+          await hooks.after()
         })
-        await new Promise((resolve, reject) => {
-          collector.once('error', reject)
-          collector.listen(0, '127.0.0.1', resolve)
+      }
+
+      for (const isDynamicAtrEnabled of [false, true]) {
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, dynamic=${isDynamicAtrEnabled}`
+        it(`only accounts for ATR in terminal mode (${configDescription})`, () => {
+          const { createSpan } = prepareRunFinalization()
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
+          sinon.stub(cypressPlugin, 'isFlakyTestRetriesEnabled').value(true)
+          sinon.stub(cypressPlugin, 'flakyTestRetriesCount').value(1)
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(isDynamicAtrEnabled)
+          sinon.stub(cypressPlugin, 'dynamicAtrBuckets').value([1, 1, 1, 1, 1])
+          sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+          sinon.stub(cypressPlugin, '_now').returns(123)
+
+          const testSuite = 'cypress/e2e/retries.js'
+          const tasks = cypressPlugin.getTasks()
+          tasks['dd:testSuiteStart']({ testSuite, isTextTerminal })
+          const records = []
+          const tests = []
+          for (const state of ['failed', 'passed']) {
+            const attempts = [{ state: 'failed' }, { state }]
+            tests.push({ title: [state], state, attempts })
+            for (const [attemptIndex, attempt] of attempts.entries()) {
+              const test = { testSuite, testId: state, testName: state, state: attempt.state, duration: 1 }
+              tasks['dd:beforeEach'](test)
+              const span = cypressPlugin.activeTestSpan
+              const result = tasks['dd:afterEach']({ test })
+              records.push({ span, result, attemptIndex, state: attempt.state, tagsAfterEach: { ...span.tags } })
+            }
+          }
+
+          cypressPlugin.afterSpec({ relative: testSuite }, { tests, stats: { tests: 2, failures: 1, passes: 1 } })
+
+          for (const { span, result, attemptIndex, state, tagsAfterEach } of records) {
+            const isRetry = attemptIndex > 0
+            const hasFailedAllRetries = isTextTerminal && isRetry && state === 'failed' ? 'true' : undefined
+            assert.strictEqual(span.tags[TEST_IS_RETRY], isRetry ? 'true' : undefined)
+            assert.strictEqual(span.tags[TEST_RETRY_REASON], isRetry
+              ? TEST_RETRY_REASON_TYPES[isTextTerminal ? 'atr' : 'ext']
+              : undefined)
+            assert.strictEqual(tagsAfterEach[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            assert.strictEqual(span.tags[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            const finalStatus = state === 'passed' ? 'pass' : 'fail'
+            assert.strictEqual(span.tags[TEST_FINAL_STATUS], isRetry ? finalStatus : undefined)
+            assert.deepStrictEqual(result, isTextTerminal && isDynamicAtrEnabled ? { dynamicAtrRetryCount: 1 } : null)
+            sinon.assert.calledOnce(span.finish)
+          }
         })
-        const address = /** @type {import('node:net').AddressInfo} */ (collector.address())
-        const ledgerUrl = `http://127.0.0.1:${address.port}/pending-counter`
-        try {
-          const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
-          const webkit = process.env.CYPRESS_TEST_BROWSER === 'webkit'
-          const nativeConfig = webkit ? 'supportFile=false,experimentalWebKitSupport=true' : 'supportFile=false'
-          const tracingConfig = webkit ? ' --config experimentalWebKitSupport=true' : ''
-          const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
-          ` --config ${nativeConfig}${browserOption}`
-          childProcess = exec(nativeCommand, {
-            cwd,
-            env: {
-              ...cypressEnvironment(),
-              NODE_OPTIONS: '',
-              DD_TRACE_ENABLED: 'false',
-              SPEC_PATTERN: pendingSuite,
-              CYPRESS_EXCLUSIONS_MODE: 'pending-suite',
-              CYPRESS_PENDING_LEDGER_URL: ledgerUrl,
+      }
+    }
+
+    for (const screenshot of [undefined, false, true]) {
+      for (const video of [undefined, false, true]) {
+        for (const captureEnabled of [false, true]) {
+          const description = `screenshots=${screenshot}, videos=${video}, capture=${captureEnabled}`
+          it(`only enables failure media capture for explicit flags (${description})`, async () => {
+            const env = { ...process.env }
+            delete env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+            delete env.DD_TEST_FAILURE_VIDEOS_ENABLED
+            if (screenshot !== undefined) env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = String(screenshot)
+            if (video !== undefined) env.DD_TEST_FAILURE_VIDEOS_ENABLED = String(video)
+            sinon.stub(process, 'env').value(env)
+            const config = {
+              screenshotOnRunFailure: captureEnabled,
+              video: captureEnabled,
+              retries: { openMode: 0, runMode: 0 },
+              version: '12.0.0',
+            }
+            const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+
+            const result = await cypressPlugin.init(tracer, config)
+
+            assert.strictEqual(result.screenshotOnRunFailure, screenshot === true || captureEnabled)
+            assert.strictEqual(result.video, video === true || captureEnabled)
+          })
+        }
+      }
+    }
+
+    it('restores user retries before requesting configuration for a subsequent run', async () => {
+      const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
+      cypressPlugin.cypressConfig = cypressConfig
+      cypressPlugin.hasOriginalCypressRetries = true
+      cypressPlugin.originalCypressRetries = { openMode: 1, runMode: 2 }
+      cypressConfig.retries.runMode = 5
+
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+        },
+      }
+
+      const result = await cypressPlugin.init(tracer, cypressConfig)
+
+      assert.strictEqual(result.retries.openMode, 1)
+      assert.strictEqual(result.retries.runMode, 2)
+    })
+  })
+
+  matrixSuite('cypress config instrumentation', () => {
+    const temporaryDirectories = []
+    let errors
+
+    beforeEach(() => {
+      errors = []
+      sinon.stub(console, 'error').callsFake((...args) => errors.push(format(...args)))
+    })
+
+    afterEach(() => {
+      sinon.restore()
+      for (const directory of temporaryDirectories.splice(0)) {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
+    })
+
+    /**
+     * @param {string} code filesystem error code
+     * @param {string} filePath affected path
+     * @param {string} [syscall] failed system call
+     * @returns {Error & { code: string, path: string, syscall: string }} filesystem error
+     */
+    function createFileError (code, filePath, syscall = 'open') {
+      return Object.assign(new Error(`${code}: ${syscall} ${filePath}`), {
+        code,
+        path: filePath,
+        syscall,
+      })
+    }
+
+    function createProjectRoot () {
+      const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
+      temporaryDirectories.push(projectRoot)
+      return projectRoot
+    }
+
+    /**
+     * @param {object} [fsStub] filesystem overrides
+     * @param {() => string} [randomUUID] UUID generator
+     * @param {object} [setupNodeEventsChannel] setup-node-events diagnostic channel
+     * @returns {{
+     *   cypressConfig: object,
+     *   errors: string[],
+     *   manualPluginOwner: object,
+     *   warnings: string[]
+     * }} loaded instrumentation and logs
+     */
+    function loadCypressConfig (fsStub, randomUUID, setupNodeEventsChannel) {
+      const warnings = []
+      let uuid = 0
+      const log = {
+        error: (...args) => errors.push(format(...args)),
+        warn: (...args) => warnings.push(format(...args)),
+      }
+      const finalization = proxyquire('../../packages/datadog-plugin-cypress/src/finalization', {
+        '../../dd-trace/src/log': log,
+      })
+      const stubs = {
+        crypto: {
+          randomUUID: randomUUID || (() => `uuid-${++uuid}`),
+        },
+        '../../datadog-plugin-cypress/src/finalization': finalization,
+        '../../dd-trace/src/log': log,
+        './helpers/instrument': {
+          channel: () => setupNodeEventsChannel || { hasSubscribers: false, publish: () => {} },
+        },
+      }
+
+      if (fsStub) stubs.fs = fsStub
+
+      return {
+        cypressConfig: proxyquire('../../packages/datadog-instrumentations/src/cypress-config', stubs),
+        errors,
+        manualPluginOwner: finalization.manualPluginOwner,
+        warnings,
+      }
+    }
+
+    /**
+     * @param {object} cypressConfig Cypress config instrumentation
+     * @param {object} resolvedConfig resolved Cypress config
+     * @returns {{ handlers: Record<string, Function>, result: object }} registered handlers and returned config
+     */
+    function injectSupportFile (cypressConfig, resolvedConfig) {
+      const configFile = { e2e: {} }
+      const handlers = {}
+      cypressConfig.wrapConfig(configFile)
+
+      const result = configFile.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, resolvedConfig)
+
+      return { handlers, result }
+    }
+
+    /**
+     * @param {string} directory directory to inspect
+     * @returns {string[]} generated Cypress files
+     */
+    function getGeneratedFiles (directory) {
+      return fs.readdirSync(directory)
+        .filter(file => file.startsWith('dd-cypress-support-') || file.startsWith('.dd-cypress-config-'))
+    }
+
+    /**
+     * @param {string} code error code raised after a partial write
+     * @param {(writeNumber: number) => boolean} [shouldFail] selects the write that fails
+     * @returns {object} filesystem stub
+     */
+    function createPartialWriteFailure (code, shouldFail = () => true) {
+      const pathsByDescriptor = new Map()
+      let writeNumber = 0
+
+      return {
+        openSync (filePath, flags) {
+          const descriptor = fs.openSync(filePath, flags)
+          pathsByDescriptor.set(descriptor, filePath)
+          return descriptor
+        },
+        writeFileSync (file, content, ...args) {
+          if (typeof file === 'number' && pathsByDescriptor.has(file)) {
+            writeNumber++
+            if (!shouldFail(writeNumber)) return fs.writeFileSync(file, content, ...args)
+
+            const filePath = pathsByDescriptor.get(file)
+            fs.writeFileSync(file, 'partial')
+            throw createFileError(code, filePath, 'write')
+          }
+          return fs.writeFileSync(file, content, ...args)
+        },
+        closeSync (descriptor) {
+          pathsByDescriptor.delete(descriptor)
+          return fs.closeSync(descriptor)
+        },
+      }
+    }
+
+    describe('support wrapper', () => {
+      it('does not enable interactive run events when Test Optimization does not register', () => {
+        const projectRoot = createProjectRoot()
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+        assert.deepStrictEqual(warnings, [])
+      })
+
+      it('enables interactive run events after Test Optimization registers', () => {
+        const projectRoot = createProjectRoot()
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish (payload) {
+            payload.registered = true
+          },
+        }
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
+      })
+
+      it('falls back to the project root when the support directory is not writable', async () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === supportDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        const { handlers } = injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(path.dirname(resolvedConfig.supportFile), projectRoot)
+        assert.deepStrictEqual(warnings, [])
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+
+        await handlers['after:run']({})
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes generated support files when the config process exits without after:run', () => {
+        const projectRoot = createProjectRoot()
+        const generatedCountFile = path.join(projectRoot, 'generated-count')
+        const cypressConfigPath = require.resolve('../../packages/datadog-instrumentations/src/cypress-config')
+        const script = [
+          'const fs = require("node:fs")',
+          `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
+          `const projectRoot = ${JSON.stringify(projectRoot)}`,
+          'const config = { e2e: {} }',
+          'cypressConfig.wrapConfig(config)',
+          'config.e2e.setupNodeEvents(() => {}, { projectRoot, supportFile: false })',
+          'const generatedCount = fs.readdirSync(projectRoot)',
+          '  .filter(file => file.startsWith("dd-cypress-support-")).length',
+          `fs.writeFileSync(${JSON.stringify(generatedCountFile)}, String(generatedCount))`,
+          'process.exit(0)',
+        ].join('\n')
+
+        execFileSync(process.execPath, ['-e', script], {
+          env: { ...process.env, NODE_OPTIONS: '' },
+        })
+
+        assert.strictEqual(fs.readFileSync(generatedCountFile, 'utf8'), '2')
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('logs an error with every failed location when no directory is writable', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          openSync (filePath) {
+            throw createFileError('EROFS', filePath)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, supportFile)
+        assert.strictEqual(errors.length, 1)
+        assert.deepStrictEqual(warnings, [])
+        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+        assert.strictEqual(errors[0].match(/EROFS during open/g).length, 2)
+        assert.match(errors[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        assert.match(errors[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      })
+
+      it('logs an error when the original support file cannot be read', () => {
+        const projectRoot = createProjectRoot()
+        const supportFile = path.join(projectRoot, 'e2e.js')
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          readFileSync (filePath, ...args) {
+            if (filePath === supportFile) throw createFileError('EACCES', filePath, 'read')
+            return fs.readFileSync(filePath, ...args)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, supportFile)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not read the Cypress support file/)
+        assert.match(errors[0], /EACCES during read/)
+      })
+
+      it('logs an error when the Datadog browser hooks cannot be read', () => {
+        const projectRoot = createProjectRoot()
+        const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          readFileSync (filePath, ...args) {
+            if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
+            return fs.readFileSync(filePath, ...args)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile: false }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, false)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not read its Cypress browser support hooks/)
+        assert.match(errors[0], /EACCES during read/)
+      })
+
+      it('logs an error when no project directory is available for the support wrapper', () => {
+        const { cypressConfig, errors } = loadCypressConfig()
+        const resolvedConfig = { supportFile: false }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, false)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+        assert.match(errors[0], /no project directory was available/)
+      })
+
+      it('removes partial support files when the filesystem runs out of space', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /ENOSPC during write/)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes the browser hooks when writing the support wrapper fails', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const failWrapperWrites = writeNumber => writeNumber % 2 === 0
+        const { cypressConfig, errors } = loadCypressConfig(
+          createPartialWriteFailure('ENOSPC', failWrapperWrites)
+        )
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(errors[0].match(/ENOSPC during write/g).length, 2)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes partial support files when closing them fails', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        const pathsByDescriptor = new Map()
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          openSync (filePath, flags) {
+            const descriptor = fs.openSync(filePath, flags)
+            pathsByDescriptor.set(descriptor, filePath)
+            return descriptor
+          },
+          closeSync (descriptor) {
+            const filePath = pathsByDescriptor.get(descriptor)
+            pathsByDescriptor.delete(descriptor)
+            fs.closeSync(descriptor)
+            throw createFileError('EIO', filePath, 'close')
+          },
+        })
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(errors[0].match(/EIO during close/g).length, 2)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('warns when generated support files cannot be removed', async () => {
+        const projectRoot = createProjectRoot()
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          unlinkSync (filePath) {
+            throw createFileError('EACCES', filePath, 'unlink')
+          },
+        })
+        const { handlers } = injectSupportFile(cypressConfig, { projectRoot, supportFile: false })
+
+        await handlers['after:run']({})
+
+        assert.deepStrictEqual(errors, [])
+        assert.strictEqual(warnings.length, 2)
+        assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
+        assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+      })
+    })
+
+    describe('manual plugin', () => {
+      it('keeps interactive run events enabled when setupNodeEvents returns a partial config', async () => {
+        const projectRoot = createProjectRoot()
+        const datadogAfterSpecHandler = sinon.stub()
+        datadogAfterSpecHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+        const datadogAfterRunHandler = sinon.stub()
+        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const { cypressConfig, manualPluginOwner, warnings } = loadCypressConfig(
+          undefined,
+          undefined,
+          setupNodeEventsChannel
+        )
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+        }
+        const config = {
+          e2e: {
+            setupNodeEvents (on) {
+              on('after:spec', datadogAfterSpecHandler)
+              on('after:run', datadogAfterRunHandler)
+              on('task', taskHandler)
+              return { env: { returned: true } }
+            },
+          },
+        }
+        const handlers = {}
+        const initialConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        const returnedConfig = config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, initialConfig)
+
+        assert.notStrictEqual(returnedConfig, initialConfig)
+        assert.deepStrictEqual(returnedConfig.env, { returned: true })
+        assert.strictEqual(returnedConfig.experimentalInteractiveRunEvents, true)
+        assert.strictEqual(initialConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
+        await handlers['after:run']({})
+      })
+
+      it('removes a pre-screenshot manual before:run handler when current instrumentation takes ownership', () => {
+        const projectRoot = createProjectRoot()
+        const legacyBeforeRunHandler = sinon.stub()
+        const currentBeforeRunHandler = sinon.stub()
+        const registrations = []
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub().callsFake((payload) => {
+            if (!payload.on) return
+            payload.on('before:run', currentBeforeRunHandler)
+            payload.registered = true
+            payload.cleanupWrapper()
+          }),
+        }
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             */
+            setupNodeEvents (on) {
+              on('before:run', legacyBeforeRunHandler)
+              on('after:spec', sinon.stub())
+              on('after:run', sinon.stub())
+              on('task', taskHandler)
+            },
+          },
+        }
+        const { cypressConfig } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          registrations.push([event, handler])
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        assert.deepStrictEqual(
+          registrations.filter(([event]) => event === 'before:run'),
+          [['before:run', currentBeforeRunHandler]]
+        )
+      })
+
+      it('retains current manual handlers and tasks when an adapter strips lifecycle markers', async () => {
+        const projectRoot = createProjectRoot()
+        const userError = new Error('user after:spec failed')
+        const userHandler = sinon.stub().rejects(userError)
+        const datadogAfterSpecHandler = sinon.stub()
+        const datadogAfterRunHandler = sinon.stub()
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const { cypressConfig, manualPluginOwner } = loadCypressConfig(
+          undefined,
+          undefined,
+          setupNodeEventsChannel
+        )
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.task.handler')]: manualPluginOwner,
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             */
+            setupNodeEvents (on) {
+              on('before:run', sinon.stub())
+              on('after:screenshot', sinon.stub())
+              on('after:spec', (...args) => datadogAfterSpecHandler(...args))
+              on('after:run', (...args) => datadogAfterRunHandler(...args))
+              on('task', taskHandler)
+              on('after:spec', userHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const spec = { relative: 'cypress/e2e/basic-pass.js' }
+        const results = { stats: { passes: 1 } }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        await assert.rejects(handlers['after:spec'](spec, results), error => error === userError)
+        sinon.assert.calledOnceWithExactly(datadogAfterSpecHandler, spec, results, userError)
+        assert.strictEqual(handlers.task, taskHandler)
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
+        await handlers['after:run']({ totalPassed: 1 })
+      })
+
+      it('preserves user handlers when a no-op manual plugin only registers tasks', async () => {
+        const projectRoot = createProjectRoot()
+        const userBeforeRunHandler = sinon.stub()
+        const userAfterSpecHandler = sinon.stub()
+        const userAfterRunHandler = sinon.stub()
+        const userAfterScreenshotHandler = sinon.stub().returns({ path: 'renamed.png' })
+        const noopTaskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+          [Symbol.for('dd-trace.cypress.noop-task.handler')]: true,
+        }
+        const setupNodeEventsChannel = {
+          hasSubscribers: true,
+          publish: sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             */
+            setupNodeEvents (on) {
+              on('after:screenshot', userAfterScreenshotHandler)
+              on('before:run', userBeforeRunHandler)
+              on('after:spec', userAfterSpecHandler)
+              on('after:run', userAfterRunHandler)
+              on('task', noopTaskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, undefined, setupNodeEventsChannel)
+        const spec = { relative: 'cypress/e2e/basic-pass.js' }
+        const results = { stats: { passes: 1 } }
+        const screenshot = { path: 'original.png' }
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+        setupNodeEventsChannel.publish.resetHistory()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, resolvedConfig)
+
+        await handlers['before:run']({})
+        await handlers['after:spec'](spec, results)
+        assert.deepStrictEqual(await handlers['after:screenshot'](screenshot), { path: 'renamed.png' })
+        await handlers['after:run']({ totalPassed: 1 })
+
+        sinon.assert.calledOnce(userBeforeRunHandler)
+        sinon.assert.calledOnceWithExactly(userAfterSpecHandler, spec, results)
+        sinon.assert.calledOnceWithExactly(userAfterScreenshotHandler, screenshot)
+        sinon.assert.calledOnce(userAfterRunHandler)
+        sinon.assert.notCalled(setupNodeEventsChannel.publish)
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, false)
+        assert.deepStrictEqual(warnings, [])
+      })
+
+      for (const event of ['after:run', 'after:spec']) {
+        for (const position of ['before', 'after']) {
+          it(`supports an older manual ${event} handler registered ${position} the user handler`, async () => {
+            const projectRoot = createProjectRoot()
+            const userError = new Error(`user ${event} failed`)
+            const userHandler = sinon.stub().rejects(userError)
+            const datadogAfterSpecHandler = sinon.stub()
+            const datadogAfterRunHandler = sinon.stub()
+            const taskHandler = {
+              'dd:testSuiteStart': sinon.stub(),
+              'dd:beforeEach': sinon.stub(),
+              'dd:afterEach': sinon.stub(),
+              'dd:addTags': sinon.stub(),
+            }
+            const config = {
+              e2e: {
+                /**
+                 * @param {Function} on Cypress event registration function
+                 */
+                setupNodeEvents (on) {
+                  if (position === 'before') on(event, userHandler)
+                  on('before:run', sinon.stub())
+                  on('after:screenshot', sinon.stub())
+                  on('after:spec', datadogAfterSpecHandler)
+                  on('after:run', datadogAfterRunHandler)
+                  on('task', taskHandler)
+                  if (position === 'after') on(event, userHandler)
+                },
+              },
+            }
+            const handlers = {}
+            const { cypressConfig } = loadCypressConfig()
+            const eventArguments = event === 'after:run'
+              ? [{ totalPassed: 1 }]
+              : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
+
+            cypressConfig.wrapConfig(config)
+            config.e2e.setupNodeEvents((registeredEvent, handler) => {
+              handlers[registeredEvent] = handler
+            }, { projectRoot, supportFile: false, isInteractive: false })
+
+            assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+            await assert.rejects(handlers[event](...eventArguments), error => error === userError)
+            sinon.assert.callOrder(userHandler, event === 'after:run'
+              ? datadogAfterRunHandler
+              : datadogAfterSpecHandler)
+            const finalizer = event === 'after:run' ? datadogAfterRunHandler : datadogAfterSpecHandler
+            const finalizerError = finalizer.lastCall.args.at(-1)
+            assert.ok(finalizerError instanceof Error)
+            assert.strictEqual(finalizerError.message, userError.message)
+            assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+          })
+        }
+      }
+
+      it('cleans generated support files when an older manual after:spec finalizer rejects', async () => {
+        const projectRoot = createProjectRoot()
+        const finalizationError = new Error('older manual after:spec failed')
+        const datadogAfterSpecHandler = sinon.stub().rejects(finalizationError)
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             */
+            setupNodeEvents (on) {
+              on('before:run', sinon.stub())
+              on('after:screenshot', sinon.stub())
+              on('after:spec', datadogAfterSpecHandler)
+              on('after:run', sinon.stub())
+              on('task', taskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig } = loadCypressConfig()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents((event, handler) => {
+          handlers[event] = handler
+        }, { projectRoot, supportFile: false, isInteractive: false })
+
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+        await assert.rejects(handlers['after:spec']({}, {}), finalizationError)
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      for (const event of ['after:run', 'after:spec']) {
+        it(`defers a wrapped legacy ${event} helper to the manual plugin finalizer`, async () => {
+          const projectRoot = createProjectRoot()
+          const legacyFinalizer = sinon.stub()
+          const legacyHelper = proxyquire(`../../packages/datadog-plugin-cypress/src/${event.replace(':', '-')}`, {
+            './cypress-plugin': {
+              [event === 'after:run' ? 'afterRun' : 'afterSpec']: legacyFinalizer,
             },
           })
-          let output = ''
-          childProcess.stdout.on('data', chunk => { output += chunk })
-          childProcess.stderr.on('data', chunk => { output += chunk })
-          const [exitCode] = await once(childProcess, 'exit')
-          assert.strictEqual(exitCode, 0, output)
-          assert.match(output, /6 passing/)
-          assert.match(output, /35 pending/)
-          assert.doesNotMatch(output, /skipped callback executed/)
-          assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), { skipped: 0, executed: 1 })
-          rmSync(pendingLedger)
+          const datadogHandler = sinon.stub()
+          datadogHandler[Symbol.for(`dd-trace.cypress.${event.replace(':', '-')}.handler`)] = true
+          const rejection = `${event} string rejection`
+          const userHandler = sinon.stub().callsFake(() => Promise.reject(rejection))
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               */
+              setupNodeEvents (on) {
+                on(event, (...args) => legacyHelper(...args))
+                on(event, datadogHandler)
+                on(event, userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig } = loadCypressConfig()
+          const eventArguments = event === 'after:run'
+            ? [{ totalPassed: 1 }]
+            : [{ relative: 'cypress/e2e/basic-pass.js' }, { stats: { passes: 1 } }]
 
-          await run('pending-suite', 0, tests => {
-            assert.strictEqual(tests.length, 41)
-            const skipped = tests.filter(test => test.meta['test.status'] === 'skip' &&
-            !test.meta['test.name'].includes('duplicate declaration'))
-            assert.strictEqual(skipped.length, 28)
-            assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), { skipped: 0, executed: 1 })
-            for (const test of skipped) {
-              const name = test.meta['test.name']
-              const both = name.endsWith('both flags') || name.endsWith('nested skip flags')
-              assert.strictEqual(test.meta[protection],
-                both || name.endsWith('protected flag') ? 'true' : undefined, name)
-              assert.strictEqual(test.meta[exclusion], both || name.endsWith('retry flag') ? 'true' : undefined, name)
-            }
-            for (const mode of ['duplicate-skipped', 'duplicate-mixed', 'duplicate-skipped-first']) {
-              const duplicate = named(tests, `${mode} duplicate declaration`)
-              assert.strictEqual(duplicate.length, 3, mode)
-              const actual = duplicate.map(test => JSON.stringify([
-                test.meta['test.status'], test.meta[protection], test.meta[exclusion],
-              ])).sort()
-              const expected = [
-                [mode === 'duplicate-skipped' ? 'skip' : 'pass', 'true', undefined],
-                ['skip', undefined, 'true'], ['skip', undefined, undefined],
-              ].map(test => JSON.stringify(test)).sort()
-              assert.deepStrictEqual(actual, expected, mode)
-            }
-            for (const name of ['ordinary declaration source', 'annotated declaration source', 'mode selected']) {
-              const [test] = named(tests, name)
-              assert.strictEqual(test.meta['test.status'], 'pass', name)
-              assert.strictEqual(test.meta[exclusion], name.startsWith('ordinary') ? undefined : 'true', name)
-            }
-            const [executed] = named(tests, 'execution after pending declarations')
-            assert.strictEqual(executed.meta['test.status'], 'pass')
-          }, { SPEC_PATTERN: pendingSuite, CYPRESS_PENDING_LEDGER_URL: ledgerUrl },
-        `./node_modules/.bin/cypress run --spec ${pendingSuite}${tracingConfig}${browserOption}`)
-        } finally {
-          await new Promise(resolve => collector.close(resolve))
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((registeredEvent, handler) => {
+            handlers[registeredEvent] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          await assert.rejects(handlers[event](...eventArguments), error => error === rejection)
+          sinon.assert.notCalled(legacyFinalizer)
+          sinon.assert.calledOnce(userHandler)
+          sinon.assert.calledOnce(datadogHandler)
+          const finalizerError = datadogHandler.lastCall.args.at(-1)
+          assert.ok(finalizerError instanceof Error)
+          assert.strictEqual(finalizerError.message, rejection)
+
+          if (event === 'after:spec') await handlers['after:run']({})
+        })
+      }
+
+      for (const { position, finalization } of [
+        { position: 'before', finalization: 'rejects' },
+        { position: 'before', finalization: 'throws' },
+        { position: 'after' },
+      ]) {
+        const finalizationDescription = finalization ? ` when finalization ${finalization}` : ''
+        const testName =
+          `finalizes with the original error from a handler registered ${position} Datadog${finalizationDescription}`
+        it(testName, async () => {
+          const projectRoot = createProjectRoot()
+          const userError = new Error(`user handler ${position} Datadog failed`)
+          const userHandler = sinon.stub().rejects(userError)
+          const finalizationError = new Error('Datadog finalization failed')
+          const datadogHandler = finalization
+            ? sinon.stub()[finalization](finalizationError)
+            : sinon.stub()
+          datadogHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               */
+              setupNodeEvents (on) {
+                if (position === 'before') on('after:run', userHandler)
+                on('after:run', datadogHandler)
+                if (position === 'after') on('after:run', userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig, errors } = loadCypressConfig()
+          const results = { totalPassed: 1 }
+
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((event, handler) => {
+            handlers[event] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          await assert.rejects(handlers['after:run'](results), error => {
+            assert.strictEqual(error, userError)
+            return true
+          })
+          sinon.assert.calledOnceWithExactly(userHandler, results)
+          sinon.assert.calledOnceWithExactly(datadogHandler, results, userError)
+          if (finalization) {
+            assert.strictEqual(errors.length, 1)
+            assert.match(errors[0], /Datadog finalization failed/)
+          } else {
+            assert.deepStrictEqual(errors, [])
+          }
+        })
+      }
+
+      for (const position of ['before', 'after']) {
+        it(`runs manual Datadog after:spec finalization after a user handler registered ${position}`, async () => {
+          const projectRoot = createProjectRoot()
+          const userError = new Error(`user handler ${position} Datadog failed`)
+          const userHandler = sinon.stub().rejects(userError)
+          const datadogHandler = sinon.stub()
+          datadogHandler[Symbol.for('dd-trace.cypress.after-spec.handler')] = true
+          const taskHandler = {
+            'dd:testSuiteStart': sinon.stub(),
+            'dd:beforeEach': sinon.stub(),
+            'dd:afterEach': sinon.stub(),
+            'dd:addTags': sinon.stub(),
+          }
+          const config = {
+            e2e: {
+              /**
+               * @param {Function} on Cypress event registration function
+               */
+              setupNodeEvents (on) {
+                if (position === 'before') on('after:spec', userHandler)
+                on('after:spec', datadogHandler)
+                if (position === 'after') on('after:spec', userHandler)
+                on('task', taskHandler)
+              },
+            },
+          }
+          const handlers = {}
+          const { cypressConfig } = loadCypressConfig()
+          const spec = { relative: 'cypress/e2e/basic-pass.js' }
+          const results = { stats: { passes: 1 } }
+
+          cypressConfig.wrapConfig(config)
+          config.e2e.setupNodeEvents((event, handler) => {
+            handlers[event] = handler
+          }, { projectRoot, supportFile: false, isInteractive: false })
+
+          try {
+            await assert.rejects(handlers['after:spec'](spec, results), error => {
+              assert.strictEqual(error, userError)
+              return true
+            })
+            sinon.assert.callOrder(userHandler, datadogHandler)
+            sinon.assert.calledOnceWithExactly(userHandler, spec, results)
+            sinon.assert.calledOnceWithExactly(datadogHandler, spec, results, userError)
+          } finally {
+            await handlers['after:run']({})
+          }
+        })
+      }
+
+      it('runs the latest after:screenshot handler after user handlers', async () => {
+        const projectRoot = createProjectRoot()
+        const userHandler = sinon.stub().returns({ path: 'updated.png' })
+        const datadogHandler = sinon.stub()
+        const datadogAfterRunHandler = sinon.stub()
+        datadogAfterRunHandler[Symbol.for('dd-trace.cypress.after-run.handler')] = true
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
         }
-      })
-
-    it('keeps manually loaded support harmless when tracing is disabled', async () => {
-      childProcess = exec(
-        './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js', {
-          cwd,
-          env: {
-            ...cypressEnvironment(),
-            NODE_OPTIONS: '',
-            DD_TRACE_ENABLED: 'false',
-            CYPRESS_ROOT_SETUP_MODE: 'skip',
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             */
+            setupNodeEvents (on) {
+              on('after:screenshot', userHandler)
+              on('after:screenshot', datadogHandler)
+              on('after:run', datadogAfterRunHandler)
+              on('task', taskHandler)
+            },
           },
         }
-      )
-      let output = ''
-      childProcess.stdout.on('data', chunk => { output += chunk })
-      childProcess.stderr.on('data', chunk => { output += chunk })
-      const [exitCode] = await once(childProcess, 'exit')
-      assert.strictEqual(exitCode, 0, output)
-      assert.doesNotMatch(output, /task.*was not handled/)
+        const handlers = {}
+        const { cypressConfig, warnings } = loadCypressConfig()
+        const resolvedConfig = {
+          projectRoot,
+          supportFile: false,
+          isInteractive: true,
+          experimentalInteractiveRunEvents: false,
+        }
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents(
+          /**
+           * @param {string} event Cypress event name
+           * @param {Function} handler Cypress event handler
+           */
+          (event, handler) => {
+            handlers[event] = handler
+          },
+          resolvedConfig
+        )
+
+        assert.strictEqual(resolvedConfig.experimentalInteractiveRunEvents, true)
+        assert.deepStrictEqual(warnings, [
+          'Datadog enabled Cypress experimentalInteractiveRunEvents so Test Optimization can finish the test session.',
+        ])
+
+        const details = { path: 'original.png' }
+        await handlers['after:screenshot'](details)
+        await handlers['after:run']({})
+
+        assert.strictEqual(userHandler.calledOnceWithExactly(details), true)
+        assert.strictEqual(datadogHandler.calledOnceWithExactly({ path: 'updated.png' }), true)
+        sinon.assert.calledOnceWithExactly(datadogAfterRunHandler, {})
+      })
     })
 
-    for (const mode of ['fail', 'skip']) {
-      it(`reports annotations when an earlier root setup hook must ${mode}`, async () => {
-        await run(mode, mode === 'fail' ? 1 : 0, tests => {
-          assert.strictEqual(tests.length, 2)
-          const [annotated] = named(tests, 'annotated setup skip')
-          const [control] = named(tests, 'ordinary setup skip')
-          assert.strictEqual(annotated.meta['test.status'], 'skip')
-          assert.strictEqual(annotated.meta[protection], 'true')
-          assert.strictEqual(annotated.meta[exclusion], 'true')
-          assert.strictEqual(control.meta['test.status'], 'skip')
-          assert.strictEqual(control.meta[protection], undefined)
-          assert.strictEqual(control.meta[exclusion], undefined)
-        }, { NODE_OPTIONS: '', CYPRESS_ROOT_SETUP_MODE: mode },
-        './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js')
+    describe('configuration wrapper', () => {
+      it('falls back to the project root when the config directory is not writable', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.js')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.deepStrictEqual(warnings, [])
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 1)
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
       })
-    }
-    it('restores native partial JSON retry counts without an extra attempt', async () => {
-      const command = './node_modules/.bin/cypress run ' +
-        '--config-file ci-visibility/cypress-late-native-retries/config.js'
-      const ledger = join(cwd, 'late-native-retry-executions.json')
-      const reads = join(cwd, 'returned-retry-json-reads.json')
-      const expected = { 'late native excluded': 5, 'late native control': 5, 'explicit local excluded': 2 }
-      childProcess = exec(command, {
-        cwd,
-        env: {
-          ...cypressEnvironment(),
-          NODE_OPTIONS: '',
-          DD_TRACE_ENABLED: 'false',
-          CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json',
-        },
+
+      it('uses .cts when a CommonJS TypeScript config falls back into an ESM scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.cts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /module\.exports/)
+        assert.deepStrictEqual(warnings, [])
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
       })
-      let output = ''
-      childProcess.stdout.on('data', chunk => { output += chunk })
-      childProcess.stderr.on('data', chunk => { output += chunk })
-      const [exitCode] = await once(childProcess, 'exit')
-      assert.strictEqual(exitCode, 3, output)
-      assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
-      assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
-      rmSync(ledger)
-      receiver.setSettings({ flaky_test_retries_enabled: true })
-      await run('returned-json', 3, tests => {
-        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
-        assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
-        assert.strictEqual(tests.length, 12)
-        for (const test of tests) {
-          assert.strictEqual(test.meta['test.status'], 'fail')
-          assert.strictEqual(test.meta[exclusion],
-            test.meta['test.name'] === 'late native control' ? undefined : 'true')
-        }
-      }, { CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json', DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }, command)
+
+      it('uses .mts when an ESM TypeScript config falls back into a CommonJS scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(configFile, 'export default {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.mts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /export default/)
+        assert.deepStrictEqual(warnings, [])
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('warns with every failed location when no directory is writable', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.js')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          openSync (filePath) {
+            throw createFileError('EROFS', filePath)
+          },
+        })
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.deepStrictEqual(errors, [])
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /could not create the Cypress configuration wrapper/)
+        assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
+        assert.match(warnings[0], new RegExp(configDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        assert.match(warnings[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      })
+
+      it('does not overwrite an existing configuration wrapper', () => {
+        const projectRoot = createProjectRoot()
+        const configFile = path.join(projectRoot, 'cypress.config.js')
+        const existingWrapper = path.join(projectRoot, `.dd-cypress-config-${process.pid}-collision.cjs`)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+        fs.writeFileSync(existingWrapper, 'existing content\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, () => 'collision')
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.strictEqual(fs.readFileSync(existingWrapper, 'utf8'), 'existing content\n')
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /EEXIST during open/)
+      })
+
+      it('removes a partial configuration wrapper when the filesystem runs out of space', () => {
+        const projectRoot = createProjectRoot()
+        const configFile = path.join(projectRoot, 'cypress.config.js')
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /ENOSPC during write/)
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
     })
   })
 }

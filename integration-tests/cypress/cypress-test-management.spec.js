@@ -955,9 +955,8 @@ moduleTypes.forEach(({
             assert.equal(attemptToFixTests.length, 1)
 
             attemptToFixTests.forEach(test => {
-              // Assignment remains visible while test isolation disables execution of Attempt to Fix.
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-              assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+              // No retries should occur
+              assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
               assert.ok(!(TEST_IS_RETRY in test.meta))
               assert.ok(!(TEST_RETRY_REASON in test.meta))
             })
