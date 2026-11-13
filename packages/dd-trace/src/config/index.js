@@ -10,7 +10,7 @@ const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
 const { warn } = require('../log/writer')
 const pkg = require('../pkg')
@@ -30,7 +30,6 @@ const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
-const { allocationProfilingAvailable, cpuProfilingAvailable } = require('../profiling/runtime-capabilities')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -90,7 +89,6 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * | 'local_stable_config'
  * | 'fleet_stable_config'} TelemetrySource
  * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
- * @typedef {'tracing' | 'profiling'} RemoteConfigLayer
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {import('./config-types').ConfigKey} ConfigKey
  * @typedef {import('./config-types').ConfigPath} ConfigPath
@@ -125,44 +123,17 @@ const changeTracker = {
   calculated: new Set(),
 }
 
-// Each RC layer reverts only the paths it set. The profiling layer accepts only profiling settings
-// (see isProfilingSetting), but the tracing layer still accepts them too: for a setting both layers
-// set, the later update wins, and reverting either layer restores the local value even while the
-// other one still sets it.
-/** @type {Map<RemoteConfigLayer, Set<ConfigPath>>} */
-const remoteConfigPathsByLayer = new Map()
-
 /**
- * Only calculated values are reverted together; RC values are reverted per layer.
- *
  * @param {Config} config
- */
-function undoCalculated (config) {
-  revert(config, changeTracker.calculated, 'calculated')
-}
-
-/**
- * Reverts the given paths to their base values, skipping paths whose value no longer comes from
- * `source` because another source has set them since.
- *
- * @param {Config} config
- * @param {Iterable<ConfigPath>} names
  * @param {RevertibleTelemetrySource} source
  */
-function revert (config, names, source) {
-  for (const name of names) {
+function undo (config, source) {
+  for (const name of changeTracker[source]) {
     if (trackedConfigOrigins.get(name) !== source) continue
 
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
-}
-
-/**
- * @param {string} name - Canonical environment variable name
- */
-function isProfilingSetting (name) {
-  return name.startsWith('DD_PROFILING_') || name.startsWith('DD_INTERNAL_PROFILING_')
 }
 
 function get (object, path) {
@@ -203,7 +174,6 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     if (source === 'calculated' && value === get(config, name)) {
       return
     }
-    // Only setRemoteConfig may write remote_config values: it supplies the current layer's path set.
     changeTracker[source].add(name)
   } else {
     // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
@@ -377,39 +347,23 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Replace one RC layer, restoring omitted settings to their local values.
+   * Set the configuration with SDK_CONFIGURATION remote config settings.
+   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
    *
    * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
-   *   settings, or null to reset the layer
-   * @param {RemoteConfigLayer} [layer] - 'profiling' accepts only profiling settings; 'tracing' (APM_TRACING)
-   *   accepts all settings.
+   *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
-  setRemoteConfig (options, layer = 'tracing') {
+  setRemoteConfig (options) {
+    // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
-    const previousPaths = remoteConfigPathsByLayer.get(layer)
-    if (previousPaths !== undefined) {
-      revert(this, previousPaths, 'remote_config')
-    }
+    undo(this, 'remote_config')
 
-    // Collect paths for the next update's rollback.
-    const paths = new Set()
-    changeTracker.remote_config = paths
-
-    // Null resets the layer without applying new settings.
+    // Special case: if options is null, nothing to apply
+    // This happens when all remote configs are removed
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      const envs = getEnvironmentVariables(options, true)
-      if (layer === 'profiling') {
-        for (const name of Object.keys(envs)) {
-          if (!isProfilingSetting(name)) {
-            log.debug('Ignoring %s from the profiling remote config layer', name)
-            delete envs[name]
-          }
-        }
-      }
-      this.#applyEnvs(envs, 'remote_config')
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
-    remoteConfigPathsByLayer.set(layer, paths)
 
     this.#applyCalculated()
     configUpdateChannel.publish(this)
@@ -424,7 +378,7 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
-    undoCalculated(this)
+    undo(this, 'calculated')
 
     if (this.isCiVisibility) {
       setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
@@ -492,9 +446,8 @@ class Config extends ConfigBase {
         Math.floor(this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
     }
 
-    if (!allocationProfilingAvailable) {
-      setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', false)
-    }
+    // Allocation profiling needs a sampling hook only available on Node.js 26+.
+    setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
     if (this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL',
         Math.floor(this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL * 1000))
@@ -874,11 +827,9 @@ class Config extends ConfigBase {
       // depending on those (code hotspots and endpoint collection) need to be disabled on Windows.
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CODEHOTSPOTS_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED')
+      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
-    }
-    if (!cpuProfilingAvailable) {
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
     }
 
     const unsupportedRuntime = getUnsupportedRuntime()

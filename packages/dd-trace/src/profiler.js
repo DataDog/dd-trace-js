@@ -3,9 +3,17 @@
 const dc = require('dc-polyfill')
 
 const log = require('./log')
-const { REMOTELY_CONFIGURABLE_SETTINGS } = require('./profiling/remote-config')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
+
+// The profiler reads these settings at startup, regardless of which RC product supplies them.
+const RESTART_SETTINGS = /** @type {const} */ ([
+  'DD_PROFILING_CPU_ENABLED',
+  'DD_PROFILING_WALLTIME_ENABLED',
+  'DD_PROFILING_HEAP_ENABLED',
+  'DD_PROFILING_ALLOCATION_ENABLED',
+  'DD_PROFILING_UPLOAD_PERIOD',
+])
 
 /**
  * Snapshot of restart-sensitive settings for the current run.
@@ -141,7 +149,7 @@ function runWithLabels (labels, fn) {
  * @param {import('./config/config-base')} config - Tracer configuration
  */
 function getRemotelyConfigurableSettings (config) {
-  return REMOTELY_CONFIGURABLE_SETTINGS.map(name => config[name])
+  return RESTART_SETTINGS.map(name => config[name])
 }
 
 /**

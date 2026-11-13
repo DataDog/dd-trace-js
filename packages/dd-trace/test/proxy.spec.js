@@ -788,8 +788,7 @@ describe('TracerProxy', () => {
             DD_PROFILING_CPU_ENABLED: cpuProfilingAvailable ? 'false' : undefined,
             DD_PROFILING_HEAP_ENABLED: 'true',
             DD_PROFILING_ENABLED: 'true',
-          }),
-          'profiling'
+          })
         )
       })
 

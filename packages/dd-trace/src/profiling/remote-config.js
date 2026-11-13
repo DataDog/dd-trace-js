@@ -1,20 +1,11 @@
 'use strict'
 
 const { normalizeService } = require('../config/normalize-service')
+const applyRemoteConfig = require('../config/remote-config-layers')
 const log = require('../log')
 const { allocationProfilingAvailable, cpuProfilingAvailable } = require('./runtime-capabilities')
 
 const PRODUCT = 'APM_PROFILING'
-
-// Changes to these settings by remote config require a profiler restart. Profiling payloads don't
-// set the upload period, but APM_TRACING does, e.g. to get profiles sooner during a short capture.
-const REMOTELY_CONFIGURABLE_SETTINGS = /** @type {const} */ ([
-  'DD_PROFILING_CPU_ENABLED',
-  'DD_PROFILING_WALLTIME_ENABLED',
-  'DD_PROFILING_HEAP_ENABLED',
-  'DD_PROFILING_ALLOCATION_ENABLED',
-  'DD_PROFILING_UPLOAD_PERIOD',
-])
 
 /** @typedef {'cpuTime' | 'wallTime' | 'heapSize' | 'heapObjects' | 'allocations'} ProfileType */
 
@@ -130,7 +121,7 @@ function enable (rc, config, getRunningProfileTypes) {
     if (serialized === lastSettings) return
     lastSettings = serialized
 
-    config.setRemoteConfig(settings, 'profiling')
+    applyRemoteConfig(config, PRODUCT, settings)
   })
 }
 
@@ -370,5 +361,4 @@ function isObject (value) {
 module.exports = {
   enable,
   PRODUCT,
-  REMOTELY_CONFIGURABLE_SETTINGS,
 }
