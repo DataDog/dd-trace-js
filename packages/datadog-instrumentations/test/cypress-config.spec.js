@@ -406,12 +406,12 @@ describe('Cypress support initialization ownership', () => {
         const project = fs.mkdtempSync(join(local ? __dirname : tmpdir(), 'dd-cypress-support-owner-'))
         const originalSupport = join(project, 'support.js')
         const manualSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
-        const browserSupport = require.resolve('../../datadog-plugin-cypress/src/support')
+        const browserSupport = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
         const originalRead = fs.readFileSync
         fs.writeFileSync(originalSupport, "require('dd-trace/ci/cypress/support')\n")
         const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
           return filename === browserSupport
-            ? 'module.exports = () => { globalThis.installations++ }'
+            ? 'function initializeBrowserSupport () { globalThis.installations++ }'
             : originalRead(filename, ...args)
         })
         try {
@@ -436,7 +436,7 @@ describe('Cypress support initialization ownership', () => {
             initializeBrowserSupport: () => { context.installations++ },
             require: name => {
               if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
-              return () => { context.installations++ }
+              return { default: () => { context.installations++ } }
             },
           })
           const automatic = () => runInContext(`(function () {${generatedSource}\n})()`, context)
@@ -606,7 +606,7 @@ describe('Cypress observer and lifecycle phases', () => {
         ? '// user support\n'
         : `${mode === 'conditional' ? 'if (false) ' : ''}require('dd-trace/ci/cypress/support')\n`)
       const publicSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
-      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
       const raw = `globalThis.calls.push('observer')
 let active = false
 const root = Cypress.mocha.getRootSuite()
@@ -619,7 +619,9 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
 `
       const originalRead = fs.readFileSync
       const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-        return filename === hooksPath ? `module.exports = function () { ${raw} }` : originalRead(filename, ...args)
+        return filename === hooksPath
+          ? `function initializeBrowserSupport () { ${raw} }`
+          : originalRead(filename, ...args)
       })
       try {
         const config = { projectRoot: project, supportFile: support }
@@ -1204,7 +1206,7 @@ describe('Cypress legacy manual lifecycle ownership', () => {
         const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-legacy-owner-'))
         const support = join(project, 'support.js')
         fs.writeFileSync(support, "require('dd-trace/ci/cypress/support')\n")
-        const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+        const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
         const raw = `const root = Cypress.mocha.getRootSuite()
 let active = false
 root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
@@ -1225,7 +1227,9 @@ Cypress.on('test:before:run', () => { root.executions *= 3 })
 `
         const originalRead = fs.readFileSync
         const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-          return filename === hooksPath ? `module.exports = function () { ${raw} }` : originalRead(filename, ...args)
+          return filename === hooksPath
+            ? `function initializeBrowserSupport () { ${raw} }`
+            : originalRead(filename, ...args)
         })
         try {
           const files = installSupportFile({ projectRoot: project, supportFile: support })
@@ -1294,7 +1298,7 @@ describe('Cypress deferred automatic lifecycle positions', () => {
       const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-fallback-position-'))
       const support = join(project, 'support.js')
       fs.writeFileSync(support, '// user support without a direct SDK import\n')
-      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
       const raw = `const root = Cypress.mocha.getRootSuite()
 let active = false
 root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
@@ -1309,7 +1313,9 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
 `
       const originalRead = fs.readFileSync
       const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-        return filename === hooksPath ? `module.exports = function () { ${raw} }` : originalRead(filename, ...args)
+        return filename === hooksPath
+          ? `function initializeBrowserSupport () { ${raw} }`
+          : originalRead(filename, ...args)
       })
       try {
         const files = installSupportFile({ projectRoot: project, supportFile: support }, true)

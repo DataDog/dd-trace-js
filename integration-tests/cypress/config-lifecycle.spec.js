@@ -32,11 +32,15 @@ const {
   VIDEO_UPLOAD_SCOPE_TEST_SUITE,
 } = require('../../packages/dd-trace/src/ci-visibility/test-video')
 
-function browserSupportSource () {
+function browserSupportModuleSource () {
   const source = fs.readFileSync(
-    path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+    path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.mjs'), 'utf8'
   )
-  return `(function () { const module = { exports: {} }; ${source}\nmodule.exports() })()`
+  return source.replace('export default function', 'module.exports = function')
+}
+
+function browserSupportSource () {
+  return `(function () { const module = { exports: {} }; ${browserSupportModuleSource()}\nmodule.exports() })()`
 }
 
 describe('Cypress plugin run lifecycle', () => {
@@ -814,9 +818,7 @@ describe('Cypress plugin run lifecycle', () => {
       afterEach () {},
       after () {},
     }
-    runInNewContext(fs.readFileSync(
-      path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-    ), context)
+    runInNewContext(browserSupportModuleSource(), context)
     const initializeBrowserSupport = context.module.exports
     const installers = []
     const observed = []
@@ -2592,7 +2594,7 @@ describe('cypress config instrumentation', () => {
 
     it('logs an error when the Datadog browser hooks cannot be read', () => {
       const projectRoot = createProjectRoot()
-      const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support')
+      const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support.mjs')
 
       const { cypressConfig, errors } = loadCypressConfig({
         readFileSync (filePath, ...args) {

@@ -8,7 +8,7 @@ const installed = Symbol.for('dd-trace.cypress.support-installed')
 
 if (!hasCypressLifecycle(root)) {
   if (!root[installed]) {
-    const initializeBrowserSupport = require('../../packages/datadog-plugin-cypress/src/support')
+    const { default: initializeBrowserSupport } = require('../../packages/datadog-plugin-cypress/dist/support.mjs')
     initializeBrowserSupport()
     root[installed] = true
   }

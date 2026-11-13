@@ -180,6 +180,7 @@
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
+    "packages/datadog-plugin-cypress/dist/**/*",
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
     "register.js",

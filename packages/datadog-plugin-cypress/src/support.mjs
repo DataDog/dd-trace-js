@@ -1,7 +1,5 @@
-'use strict'
-
 // Each Mocha root owns its observer state, including when the bundler reuses this module.
-module.exports = function initializeBrowserSupport () {
+export default function initializeBrowserSupport () {
   // No optional chaining or nullish coalescing in this file: Cypress 12 bundles it with webpack 4,
   // whose parser predates both, and its babel-loader skips node_modules.
 

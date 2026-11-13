@@ -27,7 +27,7 @@ const exclude = new Set([
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
-module.exports = {
+const vendorConfig = {
   entry: Object.fromEntries(difference.entries()),
   target: 'node',
   mode: 'production',
@@ -110,3 +110,24 @@ module.exports = {
     clean: true,
   },
 }
+
+// Cypress preprocessors parse this module for every fresh browser bundle. Build
+// it once with the SDK, keeping its names for stack traces and ES2018 for webpack 4.
+module.exports = [vendorConfig, {
+  entry: join(__dirname, '../packages/datadog-plugin-cypress/src/support.mjs'),
+  target: ['web', 'es2018'],
+  mode: 'production',
+  devtool: 'hidden-source-map',
+  experiments: { outputModule: true },
+  optimization: {
+    minimizer: [new SwcJsMinimizerRspackPlugin({
+      minimizerOptions: { mangle: { keepClassNames: true, keepFnNames: true } },
+    })],
+  },
+  output: {
+    filename: 'support.mjs',
+    library: { type: 'module' },
+    path: join(__dirname, '../packages/datadog-plugin-cypress/dist'),
+    clean: true,
+  },
+}]

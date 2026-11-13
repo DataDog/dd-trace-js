@@ -322,11 +322,7 @@ function createSupportWrapper (
   try {
     const initializer = localBrowserHooks
       ? `import initializeBrowserSupport from ${JSON.stringify(getRelativeImportPath(directory, localBrowserHooks))}\n`
-      : `const initializeBrowserSupport = (() => {
-const module = { exports: {} }
-${browserHooksSource}
-return module.exports
-})()\n`
+      : `${browserHooksSource}\n`
     const guardedSource = `${initializer}const ddSupportRoot = Cypress.mocha.getRootSuite()
 const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
 const ddHasLifecycle = (() => {
@@ -417,9 +413,11 @@ function injectSupportFile (config, manualLifecycle = false) {
   let browserHooksSource
   let browserHooksPath
   let lifecycleOwnerSource
+  let bundledBrowserHooksPath
   try {
-    browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+    browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
     browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
+    bundledBrowserHooksPath = require.resolve('../../datadog-plugin-cypress/dist/support.mjs')
     lifecycleOwnerSource = fs.readFileSync(require.resolve('../../datadog-plugin-cypress/src/lifecycle-owner'), 'utf8')
   } catch (error) {
     logBrowserInstrumentationError(
@@ -433,7 +431,9 @@ function injectSupportFile (config, manualLifecycle = false) {
   const projectRoot = config.projectRoot
   // Local imports share one bundled module with manual support. External action
   // preloads still need a project-local copy for Vite's filesystem boundary.
-  const localBrowserHooks = projectRoot && isPathInside(projectRoot, browserHooksPath) ? browserHooksPath : undefined
+  const localBrowserHooks = projectRoot && isPathInside(projectRoot, bundledBrowserHooksPath)
+    ? bundledBrowserHooksPath
+    : undefined
   const candidateDirectories = []
   if (originalSupportFile) candidateDirectories.push(path.dirname(originalSupportFile))
   if (projectRoot) candidateDirectories.push(projectRoot)
