@@ -53,7 +53,7 @@ const { programmaticTypeCoercions, transformers } = require('./parsers')
 const rfdc = createRfdc({
   proto: false,
   circles: false,
-  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+  constructorHandlers: [[RegExp, transformers.toCamelCase], [URL, transformers.toURL]],
 })
 
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
@@ -90,7 +90,7 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * | 'fleet_stable_config'} TelemetrySource
  * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
- * @typedef {Pick<TracerOptions, 'url'> & {
+ * @typedef {{
  *   llmobs?: { enabled?: boolean } & Pick<NonNullable<TracerOptions['llmobs']>, 'mlApp' | 'agentlessEnabled'>
  * }} ProgrammaticConfig
  * @typedef {import('./config-types').ConfigKey} ConfigKey
@@ -201,7 +201,6 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
-  #runtimeUrlSet = false
   /** @type {((config: Config) => void) | undefined} */
   #updateHandler
 
@@ -379,17 +378,6 @@ class Config extends ConfigBase {
    * @param {ProgrammaticConfig} options
    */
   setProgrammaticConfig (options) {
-    if (Object.hasOwn(options, 'url')) {
-      const url = typeof options.url === 'string' && transformers.toURL(options.url)
-      if (!url) {
-        warnInvalidValue(options.url, 'url', 'code', 'Invalid URL')
-        return
-      }
-    }
-    if (options.url !== undefined) {
-      this.#applyOptions({ url: options.url })
-      this.#runtimeUrlSet = true
-    }
     if (options.llmobs !== undefined) {
       const { enabled, ...values } = options.llmobs
       this.#applyOptions(values, 'llmobs', true)
@@ -414,10 +402,6 @@ class Config extends ConfigBase {
    */
   getOrigin (name) {
     return trackedConfigOrigins.get(name) ?? 'default'
-  }
-
-  hasRuntimeUrlOverride () {
-    return this.#runtimeUrlSet && this.getOrigin('url') === 'code'
   }
 
   // Handles values calculated from a mixture of options and env vars
@@ -456,15 +440,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
     }
 
-    if (this.url) {
-      // Normalization must retain the explicit writer and its reset value.
-      if (typeof this.url === 'string') this.url = new URL(this.url)
-    } else if (os.type() !== 'Windows_NT' &&
+    if (!this.url && os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&
         !trackedConfigOrigins.has('port') &&
         fs.existsSync('/var/run/datadog/apm.socket')) {
       setAndTrack(this, 'url', new URL('unix:///var/run/datadog/apm.socket'))
-    } else {
+    } else if (!this.url) {
       setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 

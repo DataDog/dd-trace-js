@@ -59,10 +59,9 @@ class LLMObsExporter extends BufferingExporter {
 
   /** @param {ReturnType<import('../../config')>} config */
   configure (config) {
-    if (config.hasRuntimeUrlOverride() || this._isInitialized && !this.#agentless) {
-      this.setUrl(config.url)
-    } else if (!this._isInitialized) {
-      this._url = undefined
+    if (this._isInitialized && !this.#agentless) {
+      this.#exporter.configure(config)
+      this._url = this.#exporter._url
     }
   }
 
@@ -72,10 +71,8 @@ class LLMObsExporter extends BufferingExporter {
    */
   #initialize (useAgentless) {
     const Exporter = useAgentless ? AgentlessExporter : AgentExporter
-    const pendingUrl = this._url
     this.#agentless = useAgentless
     this.#exporter = new Exporter(this._config, this.#prioritySampler)
-    if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
     this._url = this.#exporter._url
 
     this._isInitialized = true
@@ -136,16 +133,6 @@ class LLMObsExporter extends BufferingExporter {
       this.#exporter.flush(done)
     } else {
       this.#pendingFlushes.push(done)
-    }
-  }
-
-  /** @param {string | URL} url */
-  setUrl (url) {
-    if (this._isInitialized) {
-      this.#exporter.setUrl?.(url)
-      this._url = this.#exporter._url
-    } else {
-      this._url = url
     }
   }
 }

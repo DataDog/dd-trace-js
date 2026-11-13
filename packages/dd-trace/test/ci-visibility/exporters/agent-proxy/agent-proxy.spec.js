@@ -520,37 +520,6 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
   })
 
-  describe('setUrl', () => {
-    it('should set the URL on self and writers', async () => {
-      const mockWriter = {
-        setUrl: sinon.spy(),
-      }
-      const mockCoverageWriter = {
-        setUrl: sinon.spy(),
-      }
-      nock(url)
-        .get('/info')
-        .reply(200, JSON.stringify({
-          endpoints: ['/evp_proxy/v2/'],
-        }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
-      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
-      agentProxyCiVisibilityExporter._writer = mockWriter
-      agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
-
-      const newUrl = 'http://example2.com'
-      const newCoverageUrl = 'http://example3.com'
-      agentProxyCiVisibilityExporter.setUrl(newUrl, newCoverageUrl)
-      const urlObj = new URL(newUrl)
-      const coverageUrlObj = new URL(newCoverageUrl)
-
-      assert.deepStrictEqual(agentProxyCiVisibilityExporter._url, urlObj)
-      assert.deepStrictEqual(agentProxyCiVisibilityExporter._coverageUrl, coverageUrlObj)
-      sinon.assert.calledWith(mockWriter.setUrl, urlObj)
-      sinon.assert.calledWith(mockCoverageWriter.setUrl, coverageUrlObj)
-    })
-  })
-
   describe('_isGzipCompatible', () => {
     it('should set _isGzipCompatible to true if the newest version is v4 or newer', async () => {
       const scope = nock(url)

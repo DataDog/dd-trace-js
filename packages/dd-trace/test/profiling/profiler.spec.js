@@ -164,7 +164,7 @@ describe('profiler', function () {
     })
 
     it('updates Agent exporters and the OOM command without restarting samplers', () => {
-      const config = makeStartOptions()
+      const config = makeStartOptions({ tags: {} })
       config.url = new URL('http://original:8126')
       let destination = config.url
       exporter.getExportUrl = () => destination
@@ -173,6 +173,7 @@ describe('profiler', function () {
       profiler.start(config)
       config.url = new URL('unix:///tmp/updated-agent.socket')
       profiler.configure(config)
+      config.tags['runtime-id'] = 'resumed-runtime'
       profiler.configure(config)
 
       sinon.assert.calledOnce(wallProfiler.start)
@@ -180,8 +181,15 @@ describe('profiler', function () {
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
       sinon.assert.calledOnce(exporter.configure)
-      sinon.assert.calledOnce(spaceProfiler.refreshExportConfiguration)
+      sinon.assert.calledTwice(spaceProfiler.refreshExportConfiguration)
       assert.strictEqual(destination, config.url)
+    })
+
+    it('keeps a stopped profiler inactive on configuration updates', () => {
+      profiler.configure(makeStartOptions())
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
     })
 
     it('should start the internal time profilers', async () => {

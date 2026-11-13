@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
@@ -14,7 +13,6 @@ const { AgentExporter } = require('../../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../../src/profiling/exporters/file')
 
 // Map the legacy flat test options onto the production constructor shape.
-const identityRefreshChannel = channel('datadog:identity:refresh')
 const activeProfilers = []
 
 function makeSpace (Cls, {
@@ -281,7 +279,7 @@ describe('profilers/native/space', () => {
 
     profiler.start()
     tags['runtime-id'] = 'refreshed-id'
-    identityRefreshChannel.publish()
+    profiler.refreshExportConfiguration()
 
     sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
     const exportCommand = pprof.heap.monitorOutOfMemory.secondCall.args[3]
@@ -295,7 +293,7 @@ describe('profilers/native/space', () => {
 
     profiler.stop()
     tags['runtime-id'] = 'another-id'
-    identityRefreshChannel.publish()
+    profiler.refreshExportConfiguration()
 
     sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
   })
@@ -310,7 +308,7 @@ describe('profilers/native/space', () => {
     profiler.start()
     pprof.heap.monitorOutOfMemory.onSecondCall().throws(error)
 
-    identityRefreshChannel.publish()
+    profiler.refreshExportConfiguration()
     sinon.assert.calledOnceWithExactly(logger.error, error)
   })
 })

@@ -359,7 +359,7 @@ class Tracer extends NoopProxy {
             log.warn('Could not store tracer configuration for service discovery')
           }
         }
-        channel('datadog:identity:refresh').publish(config)
+        configUpdateChannel.publish(config)
       }
     }
 
@@ -534,12 +534,6 @@ class Tracer extends NoopProxy {
    */
   use () {
     this._pluginManager.configurePlugin(...arguments)
-    return this
-  }
-
-  /** @param {string} url */
-  setUrl (url) {
-    if (this.#configPublished) getConfig().setProgrammaticConfig({ url })
     return this
   }
 

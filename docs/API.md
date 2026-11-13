@@ -6,15 +6,6 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/Tracer.html) class.
 
-<h2 id="runtime-agent-url">Runtime Agent URL</h2>
-
-Call `tracer.setUrl(url)` after `init()` to change the Agent destination for subsequent exports and remote configuration polls.
-Active profiling keeps its collected samples and uses the new destination for later uploads.
-Calls before initialization have no effect. Invalid URLs preserve the previous destination.
-
-Programmatic and remote updates apply in arrival order. A later remote update can replace the programmatic URL.
-Unrelated configuration updates preserve product-specific destinations.
-
 <h2 id="agentless-mode">Agentless mode</h2>
 
 Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.

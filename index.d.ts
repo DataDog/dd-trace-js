@@ -115,12 +115,6 @@ interface Tracer extends opentracing.Tracer {
   init (options?: tracer.TracerOptions): this;
 
   /**
-   * Sets the Agent URL after initialization, including active Agent-backed products.
-   * Later remote configuration can replace this value. Invalid URLs preserve the previous destination.
-   */
-  setUrl (url: string): this;
-
-  /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.

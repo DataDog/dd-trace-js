@@ -13,7 +13,6 @@ const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
 const INHERITED_RECEIVER_ENVIRONMENT_VARIABLES = [
   'HTTP_PROXY',
   'HTTPS_PROXY',
@@ -88,7 +87,6 @@ class Crashtracker {
       this.#started = true
       this.#trackUnhandledExceptions()
       const configure = config => this.configure(config)
-      identityRefreshChannel.subscribe(configure)
       channel('datadog:config:update').subscribe(configure)
     } catch (e) {
       log.error('Error initializing crashtracker', e)

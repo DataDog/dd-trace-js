@@ -29,7 +29,6 @@ describe('Tracer', () => {
     config = getConfig({ service: 'service' })
 
     tracer = new Tracer(config)
-    tracer._exporter.setUrl = sinon.stub()
     tracer._exporter.export = sinon.stub()
     tracer._prioritySampler.configure = sinon.stub()
   })
@@ -37,8 +36,9 @@ describe('Tracer', () => {
   describe('configure', () => {
     it('preserves the destination when only sampling options change', () => {
       const sampler = { sampleRate: 0.5 }
+      const url = tracer._exporter._url
       tracer.configure({ env: 'updated', sampler })
-      sinon.assert.notCalled(tracer._exporter.setUrl)
+      assert.strictEqual(tracer._exporter._url, url)
       sinon.assert.calledWith(tracer._prioritySampler.configure, 'updated', sampler)
     })
 
@@ -55,23 +55,19 @@ describe('Tracer', () => {
     it('updates the Agent exporter from effective configuration', () => {
       const url = new URL('http://example.com')
       tracer.configure({ ...config, url })
-      sinon.assert.calledOnceWithExactly(tracer._exporter.setUrl, url)
+      assert.strictEqual(tracer._exporter._url, url)
     })
 
-    it('changes an independent exporter destination only for an explicit override', () => {
+    it('preserves an independent exporter destination on Agent updates', () => {
       const createConfig = proxyquire('../src/config', {})
       const independentConfig = createConfig({ experimental: { exporter: 'agentless' } })
       const independentTracer = new Tracer(independentConfig)
       const exporter = /** @type {import('../src/exporters/agentless')} */ (independentTracer._exporter)
-      const setUrl = sinon.spy(exporter, 'setUrl')
+      const url = exporter._url
 
       independentConfig.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
       independentTracer.configure(independentConfig)
-      sinon.assert.notCalled(setUrl)
-
-      independentConfig.setProgrammaticConfig({ url: 'http://override:8126/' })
-      independentTracer.configure(independentConfig)
-      sinon.assert.calledOnceWithExactly(setUrl, independentConfig.url)
+      assert.strictEqual(exporter._url, url)
     })
   })
 
@@ -114,7 +110,6 @@ describe('Tracer', () => {
         './serverless': serverless,
       })
       tracer = new VercelTracer(config)
-      tracer._exporter.setUrl = sinon.stub()
       tracer._exporter.export = sinon.stub()
       tracer._prioritySampler.configure = sinon.stub()
       flushServerlessTelemetry = flush.flushServerlessTelemetry

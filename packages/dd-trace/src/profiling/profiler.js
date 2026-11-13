@@ -289,10 +289,13 @@ class Profiler extends EventEmitter {
 
   /** @param {import('../config/config-base')} config */
   configure (config) {
-    if (!this.enabled || this.#exporters.every(exporter =>
-      exporter.configure === undefined || exporter.getExportUrl().href === /** @type {URL} */ (config.url).href)) return
+    if (!this.enabled) return
 
-    for (const exporter of this.#exporters) exporter.configure?.(config)
+    for (const exporter of this.#exporters) {
+      if (exporter.configure && exporter.getExportUrl().href !== /** @type {URL} */ (config.url).href) {
+        exporter.configure(config)
+      }
+    }
     for (const profiler of this.#profilers) profiler.refreshExportConfiguration?.()
   }
 

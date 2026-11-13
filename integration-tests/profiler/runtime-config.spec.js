@@ -11,6 +11,7 @@ const { describe, it } = require('mocha')
 
 const run = promisify(execFile)
 const tracerPath = path.resolve(__dirname, '../..')
+const configPath = path.join(tracerPath, 'packages/dd-trace/src/config')
 
 /** @param {(urls: string[], requests: { path: string, body: string }[][]) => Promise<void>} test */
 async function withAgents (test) {
@@ -61,7 +62,7 @@ describe('runtime Agent configuration', function () {
   this.timeout(30000)
 
   for (const enabled of [true, false]) {
-    it(`moves profile uploads after setUrl with APM tracing ${enabled ? 'enabled' : 'disabled'}`, async function () {
+    it(`moves profile uploads after remote configuration with APM tracing ${enabled}`, async function () {
       if (process.platform === 'win32') this.skip()
       await withAgents(async (urls, requests) => {
         await runTracer(`
@@ -73,7 +74,8 @@ describe('runtime Agent configuration', function () {
             flushInterval: 0,
             plugins: false,
           })
-          assert.strictEqual(tracer.setUrl(${JSON.stringify(urls[1])}), tracer)
+          const getConfig = require(${JSON.stringify(configPath)})
+          getConfig().setRemoteConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(urls[1])} })
           tracer.profilerStarted().then(started => assert.strictEqual(started, true))
           tracer.trace('updated-agent', () => {})
         `)
@@ -85,7 +87,29 @@ describe('runtime Agent configuration', function () {
     })
   }
 
-  it('uses the updated Agent when Data Streams activates after setUrl', async () => {
+  it('moves active custom metrics to the updated Agent', async () => {
+    await withAgents(async (urls, requests) => {
+      await runTracer(`
+        const tracer = require(${JSON.stringify(tracerPath)}).init({
+          url: ${JSON.stringify(urls[0])},
+          plugins: false,
+        })
+        const metrics = tracer.dogstatsd
+        metrics.distribution('pending.agent', 2)
+        const getConfig = require(${JSON.stringify(configPath)})
+        getConfig().setRemoteConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(urls[1])} })
+        metrics.gauge('updated.agent', 1)
+        metrics.flush()
+      `)
+
+      assert.strictEqual(requests[0].some(({ body }) => body.includes('updated.agent:1|g')), false)
+      assert.strictEqual(requests[0].some(({ body }) => body.includes('pending.agent:2|d')), false)
+      assert.strictEqual(requests[1].some(({ body }) => body.includes('updated.agent:1|g')), true)
+      assert.strictEqual(requests[1].some(({ body }) => body.includes('pending.agent:2|d')), true)
+    })
+  })
+
+  it('uses the updated Agent when Data Streams activates after remote configuration', async () => {
     await withAgents(async (urls, requests) => {
       const processorPath = path.join(tracerPath, 'packages/dd-trace/src/datastreams/processor')
       await runTracer(`
@@ -96,7 +120,8 @@ describe('runtime Agent configuration', function () {
           flushInterval: 0,
           plugins: false,
         })
-        tracer.setUrl(${JSON.stringify(urls[1])})
+        const getConfig = require(${JSON.stringify(configPath)})
+        getConfig().setRemoteConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(urls[1])} })
         assert.strictEqual(require.cache[require.resolve(${JSON.stringify(processorPath)})], undefined)
         tracer.dataStreamsCheckpointer.setProduceCheckpoint('kafka', 'events', {})
       `)
@@ -120,7 +145,8 @@ describe('runtime Agent configuration', function () {
         tracer.llmobs.flush()
         tracer.llmobs.disable()
         assert.strictEqual(tracer.llmobs.enabled, false)
-        tracer.setUrl(${JSON.stringify(urls[1])})
+        const getConfig = require(${JSON.stringify(configPath)})
+        getConfig().setRemoteConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(urls[1])} })
         tracer.llmobs.enable({ mlApp: 'second-app', agentlessEnabled: false })
         assert.strictEqual(tracer.llmobs.enabled, true)
         tracer.llmobs.trace({ kind: 'workflow', name: 'second-span' }, () => {})
@@ -137,30 +163,6 @@ describe('runtime Agent configuration', function () {
       assert.ok(spans[1][0].tags.includes('ml_app:second-app'))
     })
   })
-
-  for (const exporter of ['agentless', 'otlp']) {
-    it(`preserves an explicit setUrl for ${exporter} across unrelated configuration updates`, async () => {
-      await withAgents(async (urls, requests) => {
-        await runTracer(`
-          const tracer = require(${JSON.stringify(tracerPath)}).init({
-            url: ${JSON.stringify(urls[0])},
-            flushInterval: 0,
-            plugins: false,
-          })
-          tracer.setUrl(${JSON.stringify(exporter === 'otlp' ? `${urls[1]}/v1/traces` : urls[1])})
-          tracer.llmobs.enable({ mlApp: 'runtime', agentlessEnabled: false })
-          tracer.llmobs.disable()
-          tracer.trace('explicit-destination', () => {})
-        `, exporter === 'agentless'
-          ? { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless', DD_API_KEY: 'test-api-key' }
-          : { OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${urls[0]}/v1/traces` })
-
-        const intake = exporter === 'agentless' ? '/api/v2/spans' : '/v1/traces'
-        assert.strictEqual(requests[0].filter(({ path }) => path === intake).length, 0)
-        assert.strictEqual(requests[1].filter(({ path }) => path === intake).length, 1)
-      })
-    })
-  }
 
   it('preserves the OTLP destination when a remote Agent URL is removed', async () => {
     await withAgents(async (urls, requests) => {

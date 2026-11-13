@@ -144,33 +144,6 @@ describe('Config', () => {
   describe('runtime programmatic configuration', () => {
     const initial = 'http://initial:8126/'
     const remote = 'http://remote:8126/'
-    const updated = 'http://updated:8126/'
-
-    it('preserves the latest accepted writer through recalculation and remote removal', () => {
-      const config = getConfig({ url: initial })
-      config.setProgrammaticConfig({ url: updated })
-      assert.strictEqual(config.url.href, updated)
-      assert.strictEqual(config.getOrigin('url'), 'code')
-
-      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
-      assert.strictEqual(config.url.href, remote)
-      assert.strictEqual(config.getOrigin('url'), 'remote_config')
-
-      config.setProgrammaticConfig({ url: updated })
-      config.setRemoteConfig(null)
-      assert.strictEqual(config.url.href, updated)
-      assert.strictEqual(config.getOrigin('url'), 'code')
-    })
-
-    it('reasserts values in a newly received remote transaction', () => {
-      const config = getConfig({ url: initial })
-      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
-      config.setProgrammaticConfig({ url: updated })
-      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
-      assert.strictEqual(config.url.href, remote)
-      config.setRemoteConfig(null)
-      assert.strictEqual(config.url.href, updated)
-    })
 
     it('restores the programmatic URL when its remote replacement is removed', () => {
       const config = getConfig({ url: initial })
@@ -188,24 +161,9 @@ describe('Config', () => {
       assert.strictEqual(config.getOrigin('url'), 'code')
     })
 
-    it('distinguishes runtime URL overrides from initialization and remote configuration', () => {
-      const config = getConfig({ url: initial })
-      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
-      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
-      config.setRemoteConfig(null)
-      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
-      config.setProgrammaticConfig({ url: updated })
-      assert.strictEqual(config.hasRuntimeUrlOverride(), true)
-      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
-      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
-      config.setRemoteConfig(null)
-      assert.strictEqual(config.hasRuntimeUrlOverride(), true)
-    })
-
     for (const value of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
       it(`normalizes and retains ${value}`, () => {
-        const config = getConfig({ remoteConfig: { enabled: false } })
-        config.setProgrammaticConfig({ url: value })
+        const config = getConfig({ url: value, remoteConfig: { enabled: false } })
         assert.strictEqual(config.url.href, new URL(value).href)
         assert.strictEqual(config.getOrigin('url'), 'code')
         config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
@@ -230,7 +188,7 @@ describe('Config', () => {
         config.setRemoteConfig(null)
         assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
         config.setProgrammaticConfig({ llmobs: { enabled: false } })
-        config.setProgrammaticConfig({ url: updated })
+        config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
         assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       } finally {
         channel('datadog:config:update').unsubscribe(listener)
@@ -250,23 +208,6 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
       assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ML_APP'), 'code')
       assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_AGENTLESS_ENABLED'), 'code')
-    })
-
-    it('rejects invalid URLs without changing configuration or publishing', () => {
-      const config = getConfig({ url: initial })
-      const listener = sinon.spy()
-      channel('datadog:config:update').subscribe(listener)
-      try {
-        for (const url of ['', 'invalid', undefined]) {
-          config.setProgrammaticConfig({ url })
-          assert.strictEqual(config.url.href, initial)
-          assert.strictEqual(config.getOrigin('url'), 'code')
-        }
-        sinon.assert.notCalled(listener)
-        assert.strictEqual(config.hasRuntimeUrlOverride(), false)
-      } finally {
-        channel('datadog:config:update').unsubscribe(listener)
-      }
     })
   })
 
@@ -2176,7 +2117,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_ENABLED', value: true, origin: 'default' },
-      { name: 'DD_TRACE_AGENT_URL', value: '', origin: 'default' },
+      { name: 'DD_TRACE_AGENT_URL', value: null, origin: 'default' },
       { name: 'DD_VERSION', value: null, origin: 'default' },
       { name: 'DD_VERTEXAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE', value: 1.0, origin: 'default' },
@@ -6498,7 +6439,7 @@ rules:
       configUpdateChannel.subscribe(observe)
 
       try {
-        config.setProgrammaticConfig({ url: 'http://updated:8126/' })
+        config.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://updated:8126/' })
         assert.strictEqual(destination, 'http://updated:8126/')
         config.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
         assert.strictEqual(destination, 'http://remote:8126/')
@@ -6515,8 +6456,8 @@ rules:
       const secondDestinations = []
       second.setUpdateHandler(config => secondDestinations.push(config.url.href))
 
-      second.setProgrammaticConfig({ url: 'http://second:8126/' })
-      first.setProgrammaticConfig({ url: 'http://first:8126/' })
+      second.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://second:8126/' })
+      first.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://first:8126/' })
 
       assert.deepStrictEqual(firstDestinations, ['http://first:8126/'])
       assert.deepStrictEqual(secondDestinations, ['http://second:8126/'])
