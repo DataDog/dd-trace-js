@@ -145,7 +145,7 @@ function parse (id, file, problems) {
   if (parsedTargets === undefined) return
 
   const parsedProfilers = parseProfilers(profilers, problems)
-  validateSettings(settings, problems)
+  if (settings !== undefined && !isObject(settings)) problems.push('settings is not an object')
   return { id, profilers: parsedProfilers, targets: parsedTargets }
 }
 
@@ -170,16 +170,6 @@ function parseProfilers (profilers, problems) {
     }
   }
   return parsed
-}
-
-/**
- * The schema defines no settings this runtime maps yet, so only the section's shape is checked.
- *
- * @param {unknown} settings - The payload's `settings` section
- * @param {string[]} problems - Validation errors to report
- */
-function validateSettings (settings, problems) {
-  if (settings !== undefined && !isObject(settings)) problems.push('settings is not an object')
 }
 
 /**
@@ -307,7 +297,8 @@ function toSettings (requested, localProfileTypes) {
   // that weren't running locally are turned off; omitted types that were keep their local value.
   /** @type {RequestedProfilers} */
   const profilers = { ...requested }
-  if (PROFILE_TYPES.some(type => requested[type] === true)) {
+  const enablesProfiling = PROFILE_TYPES.some(type => requested[type] === true)
+  if (enablesProfiling) {
     for (const type of PROFILE_TYPES) {
       if (profilers[type] === undefined && !localProfileTypes.has(type)) profilers[type] = false
     }
@@ -341,7 +332,7 @@ function toSettings (requested, localProfileTypes) {
   }
 
   // Any true enables profiling, and no type left on disables it; otherwise use the local setting.
-  if (PROFILE_TYPES.some(type => profilers[type] === true)) {
+  if (enablesProfiling) {
     envs.DD_PROFILING_ENABLED = 'true'
   } else if (!PROFILE_TYPES.some(isOn)) {
     envs.DD_PROFILING_ENABLED = 'false'
@@ -360,5 +351,4 @@ function isObject (value) {
 
 module.exports = {
   enable,
-  PRODUCT,
 }

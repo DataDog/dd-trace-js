@@ -102,7 +102,7 @@ class Profiler extends EventEmitter {
    * @returns {string[]}
    */
   getRunningTypes () {
-    if (!this.#enabled || !this.#profilers) return []
+    if (!this.#enabled) return []
     const types = []
     for (const profiler of this.#profilers) {
       types.push(profiler.type)

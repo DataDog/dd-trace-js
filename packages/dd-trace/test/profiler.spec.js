@@ -98,6 +98,8 @@ describe('profiler', () => {
       sinon.assert.notCalled(profilingModule.profiler.start)
       sinon.assert.notCalled(profilingModule.profiler.stop)
       assert.strictEqual(profiler.isStarted(), false)
+      assert.deepStrictEqual(profiler.getRunningProfileTypes(), [])
+      sinon.assert.notCalled(profilingModule.profiler.getRunningTypes)
     })
 
     it('starts the profiler when enabled', () => {

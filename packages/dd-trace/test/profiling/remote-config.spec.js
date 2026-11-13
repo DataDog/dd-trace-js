@@ -20,7 +20,8 @@ function loadRemoteConfig (capabilities) {
 
 // Most tests run with CPU profiling but without allocation profiling, so that the set of mapped
 // profile types doesn't depend on the runtime running them.
-const { enable, PRODUCT } = loadRemoteConfig()
+const { enable } = loadRemoteConfig()
+const PRODUCT = 'APM_PROFILING'
 
 describe('Profiling Remote Config', () => {
   let rc
@@ -78,7 +79,6 @@ describe('Profiling Remote Config', () => {
   }
 
   it('subscribes to the product with a batch handler', () => {
-    assert.strictEqual(PRODUCT, 'APM_PROFILING')
     sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_PROFILING')
     sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_PROFILING'], sinon.match.func)
   })

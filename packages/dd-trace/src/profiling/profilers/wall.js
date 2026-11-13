@@ -64,7 +64,7 @@ class NativeWallProfiler {
   #captureSpanData = false
   #codeHotspotsEnabled = false
   #contextCountGaugeUpdater
-  #cpuProfilingEnabled = false
+  collectsCpuTime = false
   #currentContext
   #customLabelsActive = false
   #customLabelKeys
@@ -89,8 +89,6 @@ class NativeWallProfiler {
 
   get type () { return 'wall' }
 
-  get collectsCpuTime () { return this.#cpuProfilingEnabled }
-
   /**
    * @param {TracerConfig} config
    * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number }} runtime
@@ -98,7 +96,7 @@ class NativeWallProfiler {
   constructor (config, { asyncContextFrameEnabled, flushInterval }) {
     this.#asyncContextFrameEnabled = asyncContextFrameEnabled
     this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
-    this.#cpuProfilingEnabled = config.DD_PROFILING_CPU_ENABLED
+    this.collectsCpuTime = config.DD_PROFILING_CPU_ENABLED
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
     this.#samplingIntervalMicros = SAMPLING_INTERVAL * 1000
@@ -113,7 +111,7 @@ class NativeWallProfiler {
     // capturing span data or timeline is enabled (so we need sample timestamps, and for now
     // timestamps require the sample contexts feature in the pprof wall profiler), or
     // cpu profiling is enabled.
-    this.#withContexts = this.#captureSpanData || this.#timelineEnabled || this.#cpuProfilingEnabled
+    this.#withContexts = this.#captureSpanData || this.#timelineEnabled || this.collectsCpuTime
   }
 
   codeHotspotsEnabled () {
@@ -132,7 +130,7 @@ class NativeWallProfiler {
     kSampleCount = this.#pprof.time.constants.kSampleCount
 
     this.#pprof.time.start({
-      collectCpuTime: this.#cpuProfilingEnabled,
+      collectCpuTime: this.collectsCpuTime,
       columnNumbers: 'emit',
       durationMillis: this.#flushIntervalMillis,
       intervalMicros: this.#samplingIntervalMicros,

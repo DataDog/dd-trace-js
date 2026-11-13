@@ -15,11 +15,7 @@ const RESTART_SETTINGS = /** @type {const} */ ([
   'DD_PROFILING_UPLOAD_PERIOD',
 ])
 
-/**
- * Snapshot of restart-sensitive settings for the current run.
- *
- * @type {unknown[] | undefined}
- */
+/** @type {ReturnType<typeof getRemotelyConfigurableSettings> | undefined} */
 let startedSettings
 
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
@@ -106,7 +102,8 @@ function start (config) {
 }
 
 function stop () {
-  // Explicit stops cancel deferred config updates and restarts.
+  // An explicit stop is the latest desired state, so it retracts a configuration still waiting
+  // for an in-flight shutdown to settle.
   deferredConfig = undefined
   restartPending = false
 

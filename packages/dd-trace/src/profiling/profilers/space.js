@@ -17,7 +17,7 @@ const STACK_DEPTH = 64
 const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class NativeSpaceProfiler {
-  #collectsAllocations = false
+  collectsAllocations = false
   #config
   #exporters
   #identityRefreshListener
@@ -42,17 +42,13 @@ class NativeSpaceProfiler {
     return 'space'
   }
 
-  get collectsAllocations () {
-    return this.#collectsAllocations
-  }
-
   start ({ mapper, nearOOMCallback } = {}) {
     if (this.#started) return
 
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
-    this.#collectsAllocations = this.#config.DD_PROFILING_ALLOCATION_ENABLED
-    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, this.#collectsAllocations)
+    this.collectsAllocations = this.#config.DD_PROFILING_ALLOCATION_ENABLED
+    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, this.collectsAllocations)
 
     if (this.#config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED) {
       const config = this.#config
