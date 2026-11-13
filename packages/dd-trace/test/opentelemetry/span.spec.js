@@ -708,6 +708,23 @@ describe('OTel Span', () => {
       tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = false
     })
 
+    for (const codes of [[1], [2, 1], [1, 2], [1, 0]]) {
+      for (const attributeFirst of [false, true]) {
+        it(`keeps OK non-erroneous for statuses ${codes} and error attributes first ${attributeFirst}`, () => {
+          const span = makeSpan('request')
+          if (attributeFirst) span.setAttribute('error.type', '503')
+          for (const code of codes) span.setStatus({ code, message: 'request failed' })
+          if (!attributeFirst) span.setAttribute('error.type', '503')
+
+          const formatted = spanFormat(span._ddSpan)
+          assert.strictEqual(formatted.error, 0)
+          assert.strictEqual(formatted.meta['error.type'], '503')
+          assert.strictEqual(formatted.meta['error.message'], undefined)
+          span.end()
+        })
+      }
+    }
+
     it('does not mirror http.response.status_code to http.status_code', () => {
       const span = makeSpan('my-span')
       span.setAttribute('http.response.status_code', 200)

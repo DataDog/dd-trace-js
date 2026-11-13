@@ -542,6 +542,18 @@ module.exports = {
       versions: ['>=1.27.1'],
     },
   ],
+  'modelcontextprotocol-sdk': [
+    {
+      name: '@modelcontextprotocol/server',
+      versions: ['>=2'],
+      node: '>=20',
+    },
+    {
+      name: '@modelcontextprotocol/client',
+      versions: ['>=2'],
+      node: '>=20',
+    },
+  ],
   moleculer: [
     {
       name: 'bluebird',
@@ -812,6 +824,16 @@ module.exports = {
       versions: ['>=2.112.2'],
       // This package is the Supabase test target even though it differs from the integration key above.
       honourEnvRange: true,
+    },
+  ],
+  trpc: [
+    {
+      name: '@trpc/server',
+      versions: ['>=10.45.2 <11', '>=11 <11.4', '>=11.4'],
+    },
+    {
+      name: 'express',
+      versions: ['^5'],
     },
   ],
 }

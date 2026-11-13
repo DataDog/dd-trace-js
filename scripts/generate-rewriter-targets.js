@@ -28,6 +28,9 @@ function generateRewriterTargetPatterns () {
   const patterns = new Map()
   for (const { module: { name, filePath, sourceMatch } } of instrumentations) {
     if (!(filePath instanceof RegExp)) continue
+    if (filePath.flags || !filePath.source.startsWith('^') || !filePath.source.endsWith('$')) {
+      throw new Error(`Rewrite target ${name} has an unanchored or stateful file pattern`)
+    }
     patterns.set(`${name}|${filePath}`, { name, source: filePath.source, flags: filePath.flags, sourceMatch })
   }
   return `${JSON.stringify([...patterns.values()], null, 2)}\n`
@@ -50,7 +53,7 @@ A stale file can silently disable rewriting or plugin activation.
 To regenerate it locally, run:
   npm run generate:rewriter:targets
 
-Then commit the updated file:
+Then commit the updated files:
   ${OUTPUT_PATH_IN_REPOSITORY}
   ${PATTERN_OUTPUT_PATH_IN_REPOSITORY}
 `)

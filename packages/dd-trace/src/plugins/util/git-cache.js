@@ -41,9 +41,9 @@ function ensureCacheDir () {
   }
 }
 
-function getCacheKey (cmd, flags) {
-  // Create a hash of the command and flags to use as cache key
-  const commandString = `${cmd} ${flags.join(' ')}`
+function getCacheKey (cmd, flags, cwd = process.cwd()) {
+  // Commands in independent checkouts must not share cached output.
+  const commandString = JSON.stringify([path.resolve(cwd), cmd, flags])
   return crypto.createHash('sha256').update(commandString).digest('hex')
 }
 
@@ -85,7 +85,7 @@ function cachedExec (cmd, flags, options) {
   if (!ensureCacheDir()) {
     return cp.execFileSync(cmd, flags, options)
   }
-  const cacheKey = getCacheKey(cmd, flags)
+  const cacheKey = getCacheKey(cmd, flags, options.cwd)
   const cachedResult = getCache(cacheKey)
   if (cachedResult !== undefined) {
     if (cachedResult.startsWith('__GIT_COMMAND_FAILED__')) {
