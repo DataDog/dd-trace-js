@@ -1259,6 +1259,8 @@ describe('integrations', () => {
       })
 
       describe('decisions', function () {
+        const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEU' +
+          'lEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII='
         const input = 'I was charged twice for my subscription this month.'
         const questions = [
           {
@@ -1286,15 +1288,17 @@ describe('integrations', () => {
           const decision = await openai.decisions.create({ model: 'gpt-6-luna', input, questions })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const answers = JSON.parse(llmobsSpans[0].meta.output.messages[0].content)
+          const { answers } = JSON.parse(llmobsSpans[0].meta.output.messages[0].content)
           assert.deepStrictEqual(answers.map(answer => answer.name), ['department', 'severity', 'needs_refund'])
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createDecision',
-            inputMessages: [{ role: 'user', content: input }],
-            outputMessages: [{ role: 'assistant', content: JSON.stringify(decision.answers) }],
+            inputMessages: [{ role: 'user', content: JSON.stringify({ model: 'gpt-6-luna', input, questions }) }],
+            outputMessages: [
+              { role: 'assistant', content: JSON.stringify({ model: decision.model, answers: decision.answers }) },
+            ],
             metrics: {
               input_tokens: MOCK_NUMBER,
               output_tokens: 0,
@@ -1305,35 +1309,82 @@ describe('integrations', () => {
             },
             modelName: 'gpt-6-luna',
             modelProvider: 'openai',
-            metadata: { questions },
             tags: { ml_app: 'test', integration: 'openai', decision_provider: 'openai' },
           })
         })
 
         it('submits a decision span with image input', async function () {
-          const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEU' +
-            'lEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII='
+          const colorQuestions = [{
+            type: 'choice',
+            name: 'color',
+            instructions: 'What is the dominant color of the image?',
+            choices: [{ value: 'red' }, { value: 'green' }, { value: 'blue' }],
+          }]
+          const content = [{ type: 'input_text', text: 'Classify this image.' }]
           await openai.decisions.create({
             model: 'gpt-6-luna',
-            input: [{
-              role: 'user',
-              content: [
-                { type: 'input_text', text: 'Classify this image.' },
-                { type: 'input_image', image_url: image },
-              ],
-            }],
-            questions: [{
-              type: 'choice',
-              name: 'color',
-              instructions: 'What is the dominant color of the image?',
-              choices: [{ value: 'red' }, { value: 'green' }, { value: 'blue' }],
-            }],
+            input: [{ role: 'user', content: [...content, { type: 'input_image', image_url: image }] }],
+            questions: colorQuestions,
           })
 
           const { llmobsSpans } = await getEvents()
-          assert.deepStrictEqual(llmobsSpans[0].meta.input.messages, [
-            { role: 'user', content: 'Classify this image.\n[image]' },
-          ])
+          const request = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
+          assert.deepStrictEqual(request, {
+            model: 'gpt-6-luna',
+            input: [{ role: 'user', content: [...content, { type: 'input_image', image_url: '[image]' }] }],
+            questions: colorQuestions,
+          })
+        })
+
+        it('records known request fields and every input item as sent', async function () {
+          const decisionInput = [
+            { role: 'developer', content: 'Route support tickets.' },
+            {
+              role: 'user',
+              content: [
+                { type: 'input_text', text: 'data: customer reports a duplicate charge' },
+                { type: 'input_json', data: { plan: 'pro', seats: 50 } },
+                { type: 'input_json', data: { type: 'input_image', image_url: image } },
+              ],
+            },
+            { type: 'custom_tool_call', call_id: 'call_1', name: 'lookup', input: 'acct 42' },
+            { type: 'custom_tool_call_output', call_id: 'call_1', output: 'two charges on 2026-10-01' },
+          ]
+          await openai.decisions.create({
+            model: 'gpt-6-luna',
+            input: decisionInput,
+            questions,
+            prompt_cache_key: 'tickets',
+            safety_identifier: 'user-1',
+          })
+
+          const { llmobsSpans } = await getEvents()
+          assert.deepStrictEqual(JSON.parse(llmobsSpans[0].meta.input.messages[0].content), {
+            model: 'gpt-6-luna',
+            input: decisionInput,
+            questions,
+            prompt_cache_key: 'tickets',
+            safety_identifier: 'user-1',
+          })
+        })
+
+        it('drops unknown request fields and images in a chat-shaped url', async function () {
+          const content = [{ type: 'input_image', image_url: 'https://example.com/receipt.png' }]
+          try {
+            await openai.decisions.create({
+              model: 'gpt-6-luna',
+              input: [{ role: 'user', content: [...content, { type: 'input_image', image_url: { url: image } }] }],
+              questions,
+              provider_token: 'secret',
+            })
+          } catch {}
+
+          const { llmobsSpans } = await getEvents()
+          assert.deepStrictEqual(JSON.parse(llmobsSpans[0].meta.input.messages[0].content), {
+            model: 'gpt-6-luna',
+            input: [{ role: 'user', content: [...content, { type: 'input_image', image_url: '[image]' }] }],
+            questions,
+          })
         })
 
         it('submits a decision span with an error', async function () {
@@ -1349,11 +1400,12 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createDecision',
-            inputMessages: [{ role: 'user', content: input }],
+            inputMessages: [
+              { role: 'user', content: JSON.stringify({ model: 'not-a-decision-model', input, questions }) },
+            ],
             outputMessages: [{ content: '', role: '' }],
             modelName: 'not-a-decision-model',
             modelProvider: 'openai',
-            metadata: { questions },
             tags: { ml_app: 'test', integration: 'openai', decision_provider: 'openai' },
             error: {
               type: MOCK_STRING,
