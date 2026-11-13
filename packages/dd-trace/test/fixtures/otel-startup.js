@@ -11,6 +11,7 @@ const options = {
   remoteConfig: { enabled: false },
   runtimeMetrics: false,
   startupLogs: true,
+  startupLogsOutput: 'stderr',
   ...JSON.parse(process.argv[2] ?? '{}'),
 }
 const errors = []

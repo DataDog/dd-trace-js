@@ -361,6 +361,7 @@
 /packages/dd-trace/test/runtime_metrics.spec.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/startup-log.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/startup-log.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/startup/log-output.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/generate-supported-integrations.spec.js @DataDog/apm-sdk-capabilities
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities

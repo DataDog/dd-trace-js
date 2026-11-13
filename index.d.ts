@@ -627,7 +627,7 @@ declare namespace tracer {
      * Custom loggers receive these summaries through warn() for stderr or info() for stdout.
      * stderr-json writes JSON with status: 'info' to stderr, or calls info() on a custom logger.
      * Diagnostics retain warning output. The startupLogs option controls whether these logs are enabled.
-     * @default 'stderr'
+     * @default 'stderr-json'
      * @env DD_TRACE_STARTUP_LOGS_OUTPUT
      * Programmatic configuration takes precedence over the environment variable listed above.
      */

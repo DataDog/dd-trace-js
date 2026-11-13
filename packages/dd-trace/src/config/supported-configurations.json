@@ -4352,7 +4352,7 @@
         "configurationNames": [
           "startupLogsOutput"
         ],
-        "default": "stderr"
+        "default": "stderr-json"
       }
     ],
     "DD_TRACE_STATS_COMPUTATION_ENABLED": [

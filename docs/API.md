@@ -948,7 +948,7 @@ are disabled, quarantined, or run in Attempt to Fix mode.
 
 <h3 id="custom-logging">Custom Logging</h3>
 
-Startup configuration and integration summaries use stderr by default, so they do not mix with application output.
+Startup configuration and integration summaries use `stderr-json` by default, so they do not mix with application output.
 Set `DD_TRACE_STARTUP_LOGS_OUTPUT=stdout` or pass `startupLogsOutput: 'stdout'` to `tracer.init()` to use stdout.
 The accepted values are `stderr`, `stdout`, and `stderr-json`.
 The programmatic option takes precedence over the environment variable.
@@ -956,7 +956,7 @@ This option applies when startup logs are enabled, independently of `DD_TRACE_DE
 Agent errors and other startup diagnostics retain warning output.
 With a custom logger, summaries use `warn()` for stderr and `info()` for stdout, with `debug()` as the fallback.
 
-Use `stderr-json` to write one JSON object per summary to stderr with `status: "info"` and the original text in `message`.
+The default writes one JSON object per summary to stderr with `status: "info"` and the original text in `message`.
 Datadog recognizes `status` in JSON logs as their severity, so these summaries can remain informational without using stdout.
 Custom loggers receive the original text through `info()`, with `debug()` as the fallback.
 

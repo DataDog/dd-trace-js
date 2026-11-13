@@ -2036,7 +2036,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_STARTUP_LOGS', value: DD_MAJOR >= 6, origin: 'default' },
-      { name: 'DD_TRACE_STARTUP_LOGS_OUTPUT', value: 'stderr', origin: 'default' },
+      { name: 'DD_TRACE_STARTUP_LOGS_OUTPUT', value: 'stderr-json', origin: 'default' },
       { name: 'DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH', value: 512, origin: 'default' },
       { name: 'DD_TELEMETRY_DEBUG', value: false, origin: 'default' },
       { name: 'DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED', value: true, origin: 'default' },
@@ -2629,8 +2629,8 @@ describe('Config', () => {
   })
 
   describe('startup log output', () => {
-    it('defaults to stderr', () => {
-      assert.strictEqual(getConfig().startupLogsOutput, 'stderr')
+    it('defaults to stderr-json', () => {
+      assert.strictEqual(getConfig().startupLogsOutput, 'stderr-json')
     })
 
     it('preserves the v5 startup logs default', () => {
@@ -2660,7 +2660,7 @@ describe('Config', () => {
     for (const output of ['auto', '', 'file']) {
       it(`rejects unsupported environment output ${JSON.stringify(output)}`, () => {
         process.env.DD_TRACE_STARTUP_LOGS_OUTPUT = output
-        assert.strictEqual(getConfig().startupLogsOutput, 'stderr')
+        assert.strictEqual(getConfig().startupLogsOutput, 'stderr-json')
         sinon.assert.calledWithExactly(
           log.warn,
           `Invalid value: ${inspect(output)} for DD_TRACE_STARTUP_LOGS_OUTPUT (source: env_var), picked default`,
@@ -2668,7 +2668,7 @@ describe('Config', () => {
       })
 
       it(`rejects unsupported programmatic output ${JSON.stringify(output)}`, () => {
-        assert.strictEqual(getConfig({ startupLogsOutput: output }).startupLogsOutput, 'stderr')
+        assert.strictEqual(getConfig({ startupLogsOutput: output }).startupLogsOutput, 'stderr-json')
         sinon.assert.calledWithExactly(
           log.warn,
           `Invalid value: ${inspect(output)} for startupLogsOutput (source: code), picked default`,

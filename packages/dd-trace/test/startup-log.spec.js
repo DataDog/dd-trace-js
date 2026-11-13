@@ -354,6 +354,7 @@ describe('startup log output', () => {
     { output: 'stderr-json', options: { tags: { custom: 'check"out\nnext' } }, stream: 'stderr' },
     { output: 'stdout', options: { startupLogsOutput: 'stderr-json' }, stream: 'stderr' },
     { output: 'stderr', options: { startupLogsOutput: 'stdout' }, stream: 'stdout' },
+    { options: { startupLogs: false } },
     { output: 'stdout', options: { startupLogs: false } },
     { output: 'stderr-json', options: { startupLogs: false } },
   ]) {
@@ -383,7 +384,7 @@ describe('startup log output', () => {
         assert.strictEqual(result[destination].includes('DATADOG TRACER CONFIGURATION - '), destination === stream)
       }
       assert.match(result.stdout, /application output\n$/)
-      if ((options?.startupLogsOutput ?? output) === 'stderr-json' && stream) {
+      if ((options?.startupLogsOutput ?? output ?? 'stderr-json') === 'stderr-json' && stream) {
         assert.strictEqual(result.stdout, 'application output\n')
         const record = JSON.parse(result.stderr)
         assert.strictEqual(record.status, 'info')
@@ -414,7 +415,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
@@ -432,7 +434,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
@@ -450,7 +453,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, false)
   })
@@ -477,7 +481,8 @@ describe('profiling_enabled', () => {
       startupLog()
       /* eslint-disable-next-line no-console */
       const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-      const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const { message } = JSON.parse(warnStub.firstCall.args[0])
+      const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
       warnStub.restore()
       assert.strictEqual(logObj.profiling_enabled, expected)
     })
