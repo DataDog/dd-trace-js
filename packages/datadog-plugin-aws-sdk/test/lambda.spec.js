@@ -37,12 +37,12 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-lambda', (version, moduleName) => {
       let AWS
       let lambda
       let tracer
 
-      const lambdaClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-lambda' : 'aws-sdk'
+      const lambdaClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-lambda' : 'aws-sdk'
 
       const parsePayload = payload => {
         if (typeof payload !== 'string') {

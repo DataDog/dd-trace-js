@@ -12,12 +12,12 @@ describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     setup()
 
-    withAwsSdkVersions('>=3', (version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-bedrock-runtime', '>=3', (version, moduleName) => {
       let AWS
       let bedrockRuntimeClient
 
       const bedrockRuntimeClientName =
-        moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
+        moduleName !== 'aws-sdk' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
       describe('with configuration', () => {
         before(() => {
           return agent.load('aws-sdk')
@@ -25,10 +25,9 @@ describe('Plugin', () => {
 
         before(function () {
           this.timeout(10_000)
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
-          AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
+          AWS = require(`../../../versions/${bedrockRuntimeClientName}@${version}`).get()
           const NodeHttpHandler =
-            require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
+            require(`../../../versions/${bedrockRuntimeClientName}@${version}`)
               .get('@smithy/node-http-handler')
               .NodeHttpHandler
 

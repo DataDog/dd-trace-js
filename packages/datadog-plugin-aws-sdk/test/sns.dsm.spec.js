@@ -17,7 +17,7 @@ describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-sns', (version, moduleName) => {
     let sns
     let sqs
     let subParams
@@ -26,8 +26,8 @@ describe('Sns', function () {
     let QueueUrl
     let tracer
 
-    const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
-    const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+    const snsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sns' : 'aws-sdk'
+    const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
     function createResources (queueName, topicName, cb) {
       const { SNS } = require(`../../../versions/${snsClientName}@${version}`).get()
@@ -212,7 +212,7 @@ describe('Sns', function () {
         // publishBatch does not work with smithy-client 3.0.0, unable to find compatible version it
         // was released for, but works on 3.374.0
         if (
-          (moduleName === '@aws-sdk/smithy-client' && semver.intersects(version, '>=3.374.0')) ||
+          (moduleName !== 'aws-sdk' && semver.intersects(version, '>=3.374.0')) ||
           (moduleName === 'aws-sdk' && semver.intersects(version, '>=2.1031.0'))
         ) {
           // we need to stub Date.now() to ensure a new stats bucket is created for each call

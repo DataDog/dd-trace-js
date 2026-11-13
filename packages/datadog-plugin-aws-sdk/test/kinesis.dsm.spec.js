@@ -27,14 +27,14 @@ describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withAwsSdkVersions((version, moduleName, resolvedVersion) => {
+  withAwsSdkVersions('@aws-sdk/client-kinesis', (version, moduleName, resolvedVersion) => {
     let AWS
     let kinesis
     let tracer
 
-    const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+    const kinesisClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
     // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
-    const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
+    const promisesSupported = moduleName !== 'aws-sdk' || semver.gte(resolvedVersion, '2.3.0')
 
     /**
      * @param {string} endpoint
@@ -45,7 +45,7 @@ describe('Kinesis', function () {
         region: 'us-east-1',
       }
 
-      if (moduleName === '@aws-sdk/smithy-client') {
+      if (moduleName !== 'aws-sdk') {
         const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
 
         params.requestHandler = new NodeHttpHandler()

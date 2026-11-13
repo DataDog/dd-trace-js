@@ -47,7 +47,7 @@ describe('Plugin', () => {
 
             // pino-pretty uses `on-exit-leak-free` and that adds a listener to process.
             process.setMaxListeners(process.getMaxListeners() + 1)
-            const pretty = require('../../../versions/pino-pretty@13.2.0').get()
+            const pretty = require('../../../versions/pino-pretty').get()
 
             stream = pretty().pipe(stream)
           }
@@ -284,8 +284,6 @@ describe('Plugin', () => {
             })
           }
 
-          // TODO: test with a version matrix against pino. externals.js doesn't allow that
-          //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {
               setupTest({ prettyPrint: true })

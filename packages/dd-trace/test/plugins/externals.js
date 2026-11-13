@@ -1,9 +1,30 @@
 'use strict'
 
-const { DD_MAJOR } = require('../../../../version')
+const { minVersion, Range } = require('semver')
+
+const { getInstrumentation } = require('../setup/helpers/load-inst')
+
+const express = getInstrumentation('express')
+const express4 = withRange(express, '<5')
+const fastify = withRange(getInstrumentation('fastify'), '>=3')
+
+/**
+ * @param {Array<{ name: string, versions: string[], node?: string }>} declarations
+ * @param {string} range
+ */
+function withRange (declarations, range) {
+  return declarations.map(declaration => ({
+    ...declaration,
+    versions: declaration.versions.flatMap(version => new Range(version).set
+      .map(comparators => `${comparators.join(' ')} ${range}`))
+      .flatMap(version => {
+        const minimum = minVersion(version)
+        return minimum ? [`>=${minimum.version} ${version}`] : []
+      }),
+  })).filter(declaration => declaration.versions.length)
+}
 
 module.exports = {
-  elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
       name: '@aws/durable-execution-sdk-js-testing',
@@ -184,14 +205,7 @@ module.exports = {
       name: 'mongodb-core',
       versions: ['3.2.7'],
     },
-    {
-      name: 'express',
-      versions: [
-        '>=4 <5',
-        '>=4.0.0 <4.3.0',
-        '>=4.3.0 <5',
-      ],
-    },
+    ...express4,
     {
       name: 'body-parser',
       versions: ['1.20.1'],
@@ -204,10 +218,7 @@ module.exports = {
     },
   ],
   mquery: [
-    {
-      name: 'express',
-      versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
-    },
+    ...express,
     {
       name: 'mongodb',
       versions: ['5', '6'],
@@ -223,15 +234,12 @@ module.exports = {
       name: 'mysql2',
       versions: ['1.3.3'],
     },
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
+    ...express,
   ],
   fastify: [
     {
       name: 'fastify',
-      versions: ['2.15.0', '3.0.0', '3.9.2'],
+      versions: ['2.15.0', '3.9.2'],
     },
     {
       name: 'middie',
@@ -268,21 +276,12 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
-  genai: [
-    {
-      name: '@google/genai',
-      versions: ['>=1.19.0'],
-    },
-  ],
   graphql: [
     {
       name: 'apollo-server-core',
       versions: ['1.3.6'],
     },
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
+    ...express,
     {
       name: 'apollo-server-express',
       versions: ['>=3'],
@@ -311,7 +310,6 @@ module.exports = {
       name: 'graphql-jit',
       versions: [
         '>=0.8.0 <0.8.5',
-        '>=0.8.5 <0.8.7',
       ],
     },
   ],
@@ -322,14 +320,8 @@ module.exports = {
     },
   ],
   'apollo-server-core': [
-    {
-      name: 'fastify',
-      versions: ['>=3'],
-    },
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
+    ...fastify,
+    ...express,
     {
       name: 'apollo-server-fastify',
       versions: ['>=3'],
@@ -344,14 +336,7 @@ module.exports = {
     },
   ],
   'apollo-server': [
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
-    {
-      name: '@apollo/server',
-      versions: ['>=4'],
-    },
+    ...express,
     {
       name: 'graphql',
       versions: ['^16.6.0'],
@@ -451,36 +436,33 @@ module.exports = {
     },
     {
       name: '@langchain/core',
-      versions: ['>=0.1'],
       dep: true,
     },
   ],
-  langgraph: [
-    {
-      name: '@langchain/langgraph',
-      versions: ['>=1.1.2'],
-    },
+  '@langchain/anthropic': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/cohere': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/google-genai': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/langgraph': [
     {
       name: '@langchain/core',
-      versions: ['>=1.1.16'],
       dep: true,
     },
     {
       name: 'zod',
-      versions: ['>=3.25.32'],
       dep: true,
     },
     {
       name: 'zod-to-json-schema',
-      versions: ['>=3.0.0'],
       dep: true,
     },
   ],
   ldapjs: [
-    {
-      name: 'ldapjs',
-      versions: ['>= 2'],
-    },
     {
       // TODO: ldapjs-promise 4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet.
       name: 'ldapjs-promise',
@@ -502,12 +484,7 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
-    },
-    {
-      name: 'mariadb',
-      versions: ['3.5.3'],
-      node: '>=20',
+      versions: ['2.5.6', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
     },
   ],
   mercurius: [
@@ -526,26 +503,11 @@ module.exports = {
       versions: ['>=4'],
     },
   ],
-  mocha: [
-    {
-      name: 'mocha',
-      versions: DD_MAJOR >= 6 ? ['>=8.0.0'] : ['>=5.2.0', '>=8.0.0'],
-    },
-    {
-      name: 'mocha-each',
-      versions: ['>=2.0.1'],
-    },
-  ],
-  modelcontextprotocol_sdk: [
-    {
-      name: '@modelcontextprotocol/sdk',
-      versions: ['>=1.27.1'],
-    },
-  ],
   moleculer: [
     {
       name: 'bluebird',
-      versions: ['3.7.2'],
+      dep: true,
+      forced: true,
     },
   ],
   'mongodb-core': [
@@ -563,10 +525,7 @@ module.exports = {
       name: 'mongodb-core',
       versions: ['3.2.7'],
     },
-    {
-      name: 'express',
-      versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
-    },
+    ...express,
     {
       name: 'body-parser',
       versions: ['1.20.1'],
@@ -600,23 +559,6 @@ module.exports = {
       // `openai/realtime/ws.js` would throw. Dependency-only, so it adds no version matrix.
       name: 'ws',
       dep: true,
-    },
-  ],
-  'openai-agents': [
-    {
-      name: '@openai/agents',
-      versions: ['>=0.7.0'],
-      node: '>=22',
-    },
-    {
-      name: '@openai/agents-core',
-      versions: ['>=0.7.0'],
-      node: '>=22',
-    },
-    {
-      name: '@openai/agents-openai',
-      versions: ['>=0.7.0'],
-      node: '>=22',
     },
   ],
   passport: [
@@ -662,10 +604,7 @@ module.exports = {
       name: 'pg-native',
       versions: ['3.0.0'],
     },
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
+    ...express,
     {
       name: 'pg-query-stream',
       versions: ['>=4'],
@@ -679,7 +618,6 @@ module.exports = {
     {
       name: 'pino-pretty',
       dep: true,
-      versions: ['13.2.0'],
     },
   ],
   postgres: [
@@ -733,11 +671,8 @@ module.exports = {
   q: [
     {
       name: 'collections',
-      versions: ['5'],
-    },
-    {
-      name: 'q',
-      versions: ['2'],
+      dep: true,
+      forced: true,
     },
   ],
   'react-router': [
@@ -763,10 +698,7 @@ module.exports = {
     },
   ],
   sequelize: [
-    {
-      name: 'express',
-      versions: ['>=4'],
-    },
+    ...express,
     {
       name: 'mysql',
       dep: true,

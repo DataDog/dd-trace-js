@@ -254,6 +254,9 @@ async function patchPeerDependencies ({ folder, externalName }) {
           versionPkgJson.dependencies[name] = pkgJson.version
         } else {
           const declared = pkgJson[section][name]
+          if (declared.startsWith('workspace:') && section === 'devDependencies' && pkgJson.peerDependencies?.[name]) {
+            continue
+          }
           versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
             // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
             // cannot resolve outside the source repo, so fall back to the pinned compatible version.

@@ -16,7 +16,7 @@ describe('recursion regression test', () => {
   let agent
   let proc
 
-  withAwsSdkV3Versions(version => {
+  withAwsSdkV3Versions('@aws-sdk/client-sqs', version => {
     useSandbox([`'@aws-sdk/client-sqs'@${version}'`], false, [
       './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
 
