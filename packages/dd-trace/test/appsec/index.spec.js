@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const { Readable } = require('node:stream')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -21,6 +22,8 @@ const {
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
+  nextResponseBody,
+  nextJsonResponse,
   expressProcessParams,
   routerParam,
   responseBody,
@@ -955,6 +958,64 @@ describe('AppSec Index', function () {
           },
         }, req)
       })
+
+      for (const [framework, responseChannel] of [['Pages', nextResponseBody], ['App Router', nextJsonResponse]]) {
+        describe(`Next.js ${framework}`, () => {
+          const req = {}
+          const res = { statusCode: 201 }
+          const statusCode = framework === 'App Router' ? 202 : undefined
+
+          /** @param {unknown} body */
+          function publishBody (body) {
+            responseChannel.publish(statusCode ? { body, statusCode } : { arguments: [body] })
+          }
+
+          beforeEach(() => {
+            apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(
+              () => apiSecurity.SamplingDecision.SAMPLE
+            )
+            web.getContext.withArgs(req).returns({ res })
+          })
+
+          for (const body of [{ value: 'café' }, [{ nested: 1 }]]) {
+            it(`sends the ${Array.isArray(body) ? 'array' : 'object'} body to the request's WAF context`, () => {
+              storage('legacy').run(withRequest({}, req), () => {
+                publishBody(body)
+              })
+
+              sinon.assert.calledOnceWithExactly(apiSecurity.sampleRequest, req,
+                statusCode ? { statusCode: 202 } : res)
+              sinon.assert.calledOnceWithExactly(waf.run, {
+                persistent: { [addresses.HTTP_INCOMING_RESPONSE_BODY]: body },
+              }, req)
+            })
+          }
+
+          it('does not analyze a response without an active request', () => {
+            storage('legacy').run({}, () => publishBody({}))
+            sinon.assert.notCalled(waf.run)
+          })
+
+          it('does not analyze an unsampled response', () => {
+            apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(
+              () => apiSecurity.SamplingDecision.SKIP
+            )
+            storage('legacy').run(withRequest({}, req), () => {
+              publishBody({})
+            })
+            sinon.assert.notCalled(waf.run)
+          })
+
+          for (const body of [undefined, null, 'text', 1, true, Buffer.from('bytes'), Readable.from(['bytes'])]) {
+            it(`ignores non-JSON-object payload ${String(body)}`, () => {
+              storage('legacy').run(withRequest({}, req), () => {
+                publishBody(body)
+              })
+              sinon.assert.notCalled(waf.run)
+            })
+          }
+        })
+      }
     })
   })
 

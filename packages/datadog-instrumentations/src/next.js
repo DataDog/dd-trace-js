@@ -18,6 +18,7 @@ const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
+const responseJsonChannel = channel('apm:next:response:json')
 const queryParsedChannel = channel('apm:next:query-parsed')
 const backgroundRevalidationChannel = channel('apm:next:request:background-revalidation')
 
@@ -55,6 +56,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
  */
 
 const requests = new WeakSet()
+const responseConstructors = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const noFallbackErrorPrototypes = new WeakSet()
 // Next.js <= 14.2.6
@@ -644,6 +646,20 @@ addHook({
   file: 'dist/server/web/spec-extension/request.js',
 }, request => {
   const requestProto = Object.getPrototypeOf(request.NextRequest.prototype)
+
+  // Next bundles copies of NextResponse, but each delegates JSON serialization to the runtime's native/polyfill
+  // Response constructor. That constructor is selected at runtime and has no Next.js source function to rewrite.
+  const Response = globalThis.Response
+  if (typeof Response?.json === 'function' && !responseConstructors.has(Response)) {
+    responseConstructors.add(Response)
+    shimmer.wrap(Response, 'json', json => function (body) {
+      const response = json.apply(this, arguments)
+      if (responseJsonChannel.hasSubscribers) {
+        responseJsonChannel.publish({ body, statusCode: response.status })
+      }
+      return response
+    })
+  }
 
   shimmer.massWrap(requestProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {

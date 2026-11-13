@@ -5,6 +5,11 @@
     "flags": ""
   },
   {
+    "name": "next",
+    "source": "^dist\\/compiled\\/next-server\\/pages-api[\\w-]*\\.runtime\\.(?:dev|prod)\\.js$",
+    "flags": ""
+  },
+  {
     "name": "react-router",
     "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
     "flags": "",

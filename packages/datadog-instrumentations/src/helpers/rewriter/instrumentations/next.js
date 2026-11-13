@@ -7,6 +7,19 @@ const astQuery = 'MethodDefinition[key.name="handleNextImageRequest"] > Function
     ' > Property[key.name="fn"] > ArrowFunctionExpression'
 
 module.exports = [
+  ...[
+    'dist/next-server/server/api-utils.js',
+    'dist/server/api-utils.js',
+    'dist/server/api-utils/node.js',
+    'dist/server/api-utils/node/api-resolver.js',
+    /^dist\/compiled\/next-server\/pages-api[\w-]*\.runtime\.(?:dev|prod)\.js$/,
+  ].map(filePath => ({
+    module: { name: 'next', versionRange: '>=10.2', filePath },
+    // These response methods are assigned inside apiResolver, including in minified Pages runtimes.
+    astQuery: 'AssignmentExpression[left.property.name=/^(json|send)$/] > ArrowFunctionExpression',
+    functionQuery: { kind: 'Sync', index: null },
+    channelName: 'responseBody',
+  })),
   {
     module: {
       name: 'next',
