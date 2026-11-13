@@ -46,7 +46,6 @@ const mergedFunctions = new WeakSet()
  *   ssr?: boolean | string,
  *   terserOptions?: { keep_classnames?: unknown, keep_fnames?: unknown },
  * }} BuildOptions
- * @typedef {{ build?: BuildOptions, consumer?: string }} UserConfig
  * @typedef {{
  *   build: BuildOptions,
  *   builder?: { sharedConfigBuild?: boolean },
@@ -63,7 +62,6 @@ const mergedFunctions = new WeakSet()
  */
 function datadogVite () {
   const injectGitMetadata = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
-  const skippedEnvironments = new Set()
   const installed = getInstalledDependencies()
   /** @type {string|undefined} */
   let gitIntro
@@ -76,8 +74,8 @@ function datadogVite () {
     enforce: 'pre',
 
     /**
-     * Rollup-based Vite has no per-environment esbuild options. They are read when chunks are rendered, so they can
-     * still change once the configuration is resolved.
+     * Vite has normalized each environment's defaults, but has not created its CommonJS plugins yet.
+     * The shared esbuild options are read later, when chunks are rendered.
      *
      * @this {HookContext}
      * @param {ResolvedConfig} config
@@ -85,21 +83,15 @@ function datadogVite () {
     configResolved (config) {
       // Older versions lack the Environment API hooks, so the build would silently miss required configuration.
       if (!config.environments) throw new Error('dd-trace/vite requires Vite 6 or newer. Refusing to bundle.')
-      if (isRolldown(this) || !config.esbuild || !needsEsbuildKeepNames(config)) return
+      const rolldown = isRolldown(this)
+      for (const [name, environment] of Object.entries(config.environments)) {
+        if (environment && isNodeBuild(environment.consumer, environment.build)) {
+          configureBuild(name, environment.build, rolldown, installed)
+        }
+      }
+      if (rolldown || !config.esbuild || !needsEsbuildKeepNames(config)) return
       config.esbuild.keepNames = true
       log.debug('Enabled esbuild keepNames so minification preserves function and class names')
-    },
-
-    /**
-     * @this {HookContext}
-     * @param {string} name
-     * @param {UserConfig} config
-     */
-    configEnvironment (name, config) {
-      const consumer = config.consumer ?? (name === 'client' ? 'client' : 'server')
-      if (!isNodeBuild(consumer, config.build)) return
-      config.build ??= {}
-      configureBuild(name, config.build, consumer, isRolldown(this), installed)
     },
 
     /**
@@ -119,12 +111,7 @@ function datadogVite () {
      */
     applyToEnvironment (environment) {
       const { build, consumer } = environment.config
-      if (isNodeBuild(consumer, build)) return true
-      if (!skippedEnvironments.has(environment.name)) {
-        skippedEnvironments.add(environment.name)
-        log.debug('Skipping the %s environment: it does not build Node.js code', environment.name)
-      }
-      return false
+      return isNodeBuild(consumer, build)
     },
 
     transform: {
@@ -136,7 +123,10 @@ function datadogVite () {
        * @param {string} id
        */
       handler (code, id) {
-        return transform(this, code, id)
+        const result = isInstrumentable(id)
+          ? instrument({ source: code, resourcePath: id, warn: warning => this.warn(warning.message) })
+          : undefined
+        return result && result.code !== code ? { code: result.code, map: result.map ?? null } : undefined
       },
     },
 
@@ -152,24 +142,6 @@ function datadogVite () {
       return gitIntro
     },
   }
-}
-
-/**
- * @param {TransformContext} context
- * @param {string} code
- * @param {string} id
- * @returns {{ code: string, map: string | object | null } | undefined}
- */
-function transform (context, code, id) {
-  let output
-  if (!isInstrumentable(id)) return output
-  try {
-    const result = instrument({ source: code, resourcePath: id, warn: warning => context.warn(warning.message) })
-    if (result && result.code !== code) output = { code: result.code, map: result.map ?? null }
-  } catch (error) {
-    context.warn(`Skipped ${id}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  return output
 }
 
 /**
@@ -269,12 +241,11 @@ function prependAddon (code, addon) {
 /**
  * @param {string} name
  * @param {BuildOptions} build
- * @param {string} consumer
  * @param {boolean} rolldown
  * @param {Set<string>} installed
  */
-function configureBuild (name, build, consumer, rolldown, installed) {
-  const minify = getMinify(build.minify, consumer, rolldown)
+function configureBuild (name, build, rolldown, installed) {
+  const { minify } = build
   if (rolldown) {
     // Vite 8 aliases `rollupOptions` to `rolldownOptions`; reuse whichever object the configuration already has.
     const options = build.rolldownOptions ?? build.rollupOptions ?? (build.rolldownOptions = {})
@@ -294,20 +265,6 @@ function configureBuild (name, build, consumer, rolldown, installed) {
     terserOptions.keep_fnames ??= true
     log.debug('Enabled terser keep_classnames and keep_fnames for the %s environment', name)
   }
-}
-
-/**
- * Mirrors Vite's defaults: server environments are not minified.
- *
- * @param {unknown} minify
- * @param {string} consumer
- * @param {boolean} rolldown
- */
-function getMinify (minify, consumer, rolldown) {
-  const defaultMinifier = rolldown ? 'oxc' : 'esbuild'
-  if (minify === undefined) return consumer === 'server' ? false : defaultMinifier
-  if (minify === false || minify === 'false') return false
-  return minify === true ? defaultMinifier : minify
 }
 
 /**
