@@ -67,11 +67,11 @@ describe('esm with @modelcontextprotocol/client 2.x', () => {
         assert.strictEqual(serverSpan.parent_id.toString(), clientSpan.span_id.toString())
       })
 
-      proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'client-v2.mjs', agent.port, {
+      const spawned = spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'client-v2.mjs', agent.port, {
         NODE_OPTIONS: nodeOptions,
-      })
+      }).then(spawnedProc => { proc = spawnedProc })
 
-      await res
+      await Promise.all([res, spawned])
     }).timeout(20000)
   })
 })

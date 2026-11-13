@@ -115,9 +115,7 @@ describe('Plugin', () => {
               meta: { component: span.component, '_dd.integration': span.component, 'span.kind': 'client' },
             })
 
-            await call(client)
-
-            return traceAssertion
+            await Promise.all([traceAssertion, call(client)])
           })
         }
 
@@ -129,10 +127,8 @@ describe('Plugin', () => {
             meta: { component: 'modelcontextprotocol_client', 'error.message': 'Intentional test error' },
           })
 
-          const result = await client.callTool({ name: 'error-tool', arguments: {} })
+          const [, result] = await Promise.all([traceAssertion, client.callTool({ name: 'error-tool', arguments: {} })])
           assert.equal(result.isError, true)
-
-          return traceAssertion
         })
       })
 
@@ -176,9 +172,7 @@ describe('Plugin', () => {
             })), 'a server request span should be a child of a client tool call span')
           })
 
-          await client.callTool({ name: 'test-tool', arguments: {} })
-
-          return traceAssertion
+          await Promise.all([traceAssertion, client.callTool({ name: 'test-tool', arguments: {} })])
         })
       })
     })
