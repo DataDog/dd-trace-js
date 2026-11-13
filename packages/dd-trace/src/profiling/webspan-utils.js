@@ -2,6 +2,7 @@
 
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../ext/tags')
 const { WEB } = require('../../../../ext/types')
+const { INSTRUMENTATION_HTTP_RESOURCE, otelHttpResourceName } = require('../plugins/util/http-otel-semantics')
 
 function isWebServerSpan (tags) {
   return tags[SPAN_TYPE] === WEB
@@ -18,10 +19,9 @@ function endpointNameFromTags (tags) {
 }
 
 // The endpoint name a web-server span's tag bag yields changes over the span's
-// lifetime: plugins set `http.method` when the request arrives and only add
-// `http.route` (and often `resource.name`) once framework routing has resolved
-// the URL. Returns the endpoint name once its value looks stable, or undefined
-// while it is still an interim placeholder.
+// lifetime: plugins set `http.method` when the request arrives and refine
+// `http.route` and `resource.name` as nested framework routes resolve.
+// Returns the current endpoint, or undefined for a method-only placeholder.
 //
 // Consumers that read the tag bag lazily (the wall profiler resolves endpoint
 // labels at serialization time) see the settled value for free and only need
@@ -44,7 +44,8 @@ function finalEndpoint (tags) {
   // the string building inside endpointNameFromTags.
   if (tags[RESOURCE_NAME] == null && tags[HTTP_ROUTE] == null) return
   const endpoint = endpointNameFromTags(tags)
-  if (!endpoint || endpoint === tags[HTTP_METHOD]) return
+  if (!endpoint || endpoint === tags[HTTP_METHOD] ||
+      (endpoint === tags[INSTRUMENTATION_HTTP_RESOURCE] && endpoint === otelHttpResourceName(tags[HTTP_METHOD]))) return
   return endpoint
 }
 

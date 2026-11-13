@@ -142,6 +142,18 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    it('enables tRPC tracing by default', () => {
+      assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
+    })
+
+    for (const value of ['false', '0', 'true', '1']) {
+      it(`reads DD_TRACE_TRPC_ENABLED=${value}`, () => {
+        process.env.DD_TRACE_TRPC_ENABLED = value
+
+        assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, value === 'true' || value === '1')
+      })
+    }
+
     it('should throw when accessing unknown configuration', () => {
       assert.throws(
         () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
@@ -479,6 +491,148 @@ describe('Config', () => {
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  describe('AWS Lambda configuration', () => {
+    it('owns the datadog-lambda-js defaults in the Config singleton', () => {
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        DD_API_KEY_SECRET_ARN: undefined,
+        DD_CAPTURE_LAMBDA_PAYLOAD: false,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 10,
+        DD_COLD_START_TRACE_SKIP_LIB: './opentracing/tracer',
+        DD_COLD_START_TRACING: true,
+        DD_DECODE_AUTHORIZER_CONTEXT: true,
+        DD_ENCODE_AUTHORIZER_CONTEXT: true,
+        DD_ENHANCED_METRICS: true,
+        DD_FLUSH_TO_LOG: false,
+        DD_KMS_API_KEY: undefined,
+        DD_LAMBDA_FIPS_MODE: false,
+        DD_MERGE_XRAY_TRACES: false,
+        DD_MIN_COLD_START_DURATION: 3,
+        DD_TRACE_AWS_LAMBDA_ENABLED: true,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: true,
+        DD_TRACE_MANAGED_SERVICES: true,
+      })
+    })
+
+    it('parses Lambda environment variables into one namespace and tracks their origins', () => {
+      Object.assign(process.env, {
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: 'true',
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: '4',
+        DD_COLD_START_TRACING: 'false',
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_DECODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENCODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENHANCED_METRICS: 'false',
+        DD_FLUSH_TO_LOG: 'true',
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: 'true',
+        DD_MERGE_XRAY_TRACES: 'true',
+        DD_MIN_COLD_START_DURATION: '7',
+        DD_TRACE_AWS_LAMBDA_ENABLED: 'false',
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
+        DD_TRACE_MANAGED_SERVICES: 'false',
+      })
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: true,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 4,
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_COLD_START_TRACING: false,
+        DD_DECODE_AUTHORIZER_CONTEXT: false,
+        DD_ENCODE_AUTHORIZER_CONTEXT: false,
+        DD_ENHANCED_METRICS: false,
+        DD_FLUSH_TO_LOG: true,
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: true,
+        DD_MERGE_XRAY_TRACES: true,
+        DD_MIN_COLD_START_DURATION: 7,
+        DD_TRACE_AWS_LAMBDA_ENABLED: false,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: false,
+        DD_TRACE_MANAGED_SERVICES: false,
+      })
+      assert.strictEqual(config.getOrigin('lambda.DD_API_KEY_SECRET_ARN'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
+    })
+
+    for (const ddMajor of [5, 6, 7]) {
+      it(`ignores programmatic Lambda configuration on v${ddMajor}`, () => {
+        process.env.DD_ENHANCED_METRICS = 'false'
+        const expected = getConfig(undefined, { ddMajor }).lambda
+        const config = getConfig({
+          lambda: {
+            apiKeyKms: 'programmatic-kms',
+            apiKeySecretArn: 'programmatic-secret',
+            captureLambdaPayload: true,
+            captureLambdaPayloadMaxDepth: 1,
+            coldStartTraceSkipLib: 'programmatic-module',
+            coldStartTracing: false,
+            createInferredSpan: false,
+            decodeAuthorizerContext: false,
+            encodeAuthorizerContext: false,
+            enhancedMetrics: true,
+            fipsMode: true,
+            logForwarding: true,
+            mergeXrayTraces: true,
+            minColdStartTraceDurationMs: 1,
+            serviceRepresentationEnabled: false,
+            DD_ENHANCED_METRICS: true,
+          },
+        }, { ddMajor })
+
+        assert.deepStrictEqual(config.lambda, expected)
+        assert.strictEqual(config.lambda.DD_ENHANCED_METRICS, false)
+        assert.strictEqual(config.getOrigin('lambda.DD_ENHANCED_METRICS'), 'env_var')
+        assert.ok(!updateConfig.lastCall.args[0].some(entry =>
+          entry.origin === 'code' && (entry.name.startsWith('lambda.') || entry.name === 'DD_ENHANCED_METRICS')
+        ))
+      })
+    }
+
+    for (const ddMajor of [5, 6, 7]) {
+      for (const value of ['true', '1']) {
+        it(`ignores retired localTesting options on v${ddMajor} with DD_LOCAL_TESTING=${value}`, () => {
+          process.env.DD_LOCAL_TESTING = value
+          const config = getConfig({ lambda: { localTesting: true } }, { ddMajor })
+
+          assert.ok(!Object.hasOwn(config.lambda, 'localTesting'))
+          assert.ok(!updateConfig.firstCall.args[0].some(entry =>
+            entry.name === 'DD_LOCAL_TESTING' || entry.name === 'lambda.localTesting'
+          ))
+          // An existing shim may still read this flag; dd-trace must leave it alone.
+          assert.strictEqual(process.env.DD_LOCAL_TESTING, value)
+        })
+      }
+    }
+
+    it('calculates FIPS mode for GovCloud unless the user explicitly overrides it', () => {
+      process.env.AWS_REGION = 'us-gov-west-1'
+      let config = getConfig()
+
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, true)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'calculated')
+
+      process.env.DD_LAMBDA_FIPS_MODE = 'false'
+      config = getConfig()
+
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, false)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
+    })
+
+    it('reuses the global log-injection setting instead of creating a Lambda alias', () => {
+      process.env.DD_LOGS_INJECTION = 'false'
+      const config = getConfig()
+
+      assert.strictEqual(config.logInjection, false)
+      assert.ok(!Object.hasOwn(config.lambda, 'injectLogContext'))
+    })
   })
 
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
@@ -1472,31 +1626,68 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.5)
   })
 
-  it('auto-enables OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED', () => {
+  it('should leave span metrics disabled when OTLP traces and OTel metrics are enabled', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER is not otlp', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'env_var')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'env_var',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when DD_METRICS_OTEL_ENABLED is false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
   })
 
-  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED over auto-enable', () => {
+  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED=false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
+  })
+
+  it('should enable stats computation when OTLP span metrics are explicitly enabled', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'false'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'false'
+    process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'calculated',
+    })
   })
 
   describe('HTTP server error statuses', () => {
@@ -6974,6 +7165,73 @@ rules:
 
       assert.strictEqual(config.featureFlags[name], false)
       assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+    })
+
+    describe('flag selection', () => {
+      const SENTINEL = /SENTINEL_FLAG_SELECTION/
+
+      function assertNotReported () {
+        const entries = updateConfig.getCall(0).args[0]
+        assert.ok(
+          !entries.some(entry => entry.name === 'featureFlags.flagSelection'),
+          'Expected featureFlags.flagSelection to be omitted from telemetry'
+        )
+        assert.doesNotMatch(inspect(entries, { depth: null }), SENTINEL)
+        for (const method of [log.info, log.warn, log.error]) {
+          assert.doesNotMatch(inspect(method.args, { depth: null }), SENTINEL)
+        }
+      }
+
+      it('has no flag selection by default', () => {
+        assert.strictEqual(getConfig().featureFlags.flagSelection, undefined)
+      })
+
+      for (const [name, flagSelection] of Object.entries({
+        'a valid selection': { tags: ['SENTINEL_FLAG_SELECTION'], keyPatterns: ['SENTINEL_FLAG_SELECTION.*'] },
+        'a wrong-shape selection': [{ tags: ['SENTINEL_FLAG_SELECTION'] }],
+        'a string selection': 'SENTINEL_FLAG_SELECTION',
+      })) {
+        it(`passes ${name} through unchanged and keeps it out of logs and telemetry`, () => {
+          const config = getConfig({ featureFlags: { flagSelection } })
+
+          assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+          assert.strictEqual(config.getOrigin('featureFlags.flagSelection'), 'code')
+          assertNotReported()
+        })
+      }
+
+      it('keeps the selection when the legacy provider switch selects Remote Config delivery', () => {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+        const sourceLog = { debug: sinon.spy(), error: sinon.spy(), warn: sinon.spy() }
+        const configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+          '../log': sourceLog,
+          './flag-selection': proxyquire('../../src/openfeature/flag-selection', { '../log': sourceLog }),
+        })
+
+        const config = getConfig({ featureFlags: { flagSelection: { tags: ['mobile'] } } })
+        const source = configurationSource.create(config, sinon.spy())
+
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+        assert.strictEqual(source, undefined)
+        sinon.assert.calledOnceWithExactly(
+          sourceLog.warn,
+          'featureFlags.flagSelection is not supported when flags are delivered through Remote Config. ' +
+          'Loading the full flag configuration.'
+        )
+        sinon.assert.notCalled(sourceLog.error)
+      })
+
+      it('accepts the selection next to other Feature Flags options', () => {
+        const flagSelection = { tags: ['mobile'] }
+
+        const config = getConfig({
+          featureFlags: { enableEvaluationTelemetryOptOutParameter: true, flagSelection },
+        })
+
+        assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED, true)
+        sinon.assert.notCalled(log.warn)
+      })
     })
 
     it('reads the configuration source environment variable', () => {

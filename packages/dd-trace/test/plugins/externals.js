@@ -679,7 +679,7 @@ module.exports = {
     {
       name: 'pino-pretty',
       dep: true,
-      versions: ['8.0.0'],
+      versions: ['13.2.0'],
     },
   ],
   postgres: [
@@ -753,7 +753,7 @@ module.exports = {
   redis: [
     {
       name: 'redis',
-      versions: ['^4'],
+      versions: ['>=4'],
     },
   ],
   rhea: [
@@ -812,6 +812,16 @@ module.exports = {
       versions: ['>=2.112.2'],
       // This package is the Supabase test target even though it differs from the integration key above.
       honourEnvRange: true,
+    },
+  ],
+  trpc: [
+    {
+      name: '@trpc/server',
+      versions: ['>=10.45.2 <11', '>=11 <11.4', '>=11.4'],
+    },
+    {
+      name: 'express',
+      versions: ['^5'],
     },
   ],
 }

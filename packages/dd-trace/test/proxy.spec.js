@@ -533,6 +533,77 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(rewriter.enable, config)
       })
 
+      it('keeps tracing enabled when IAST fails to start', () => {
+        const error = new Error('IAST failure')
+        iast.enable = sinon.stub().throws(error)
+        config.iast.DD_IAST_ENABLED = true
+
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(log.error, '[IAST] Unable to start IAST, it stays disabled', error)
+        sinon.assert.calledOnceWithExactly(tracer.configure, config)
+        sinon.assert.calledOnceWithExactly(pluginManager.configure, config)
+        sinon.assert.notCalled(rewriter.enable)
+      })
+
+      it('does not retry IAST on remote config updates after it fails to start', () => {
+        iast.enable = sinon.stub().throws(new Error('IAST failure'))
+        config.iast.DD_IAST_ENABLED = true
+
+        proxy.init()
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('iast-failed', { DD_TRACE_ENABLED: 'true' }))
+
+        sinon.assert.calledOnce(iast.enable)
+        sinon.assert.calledOnce(log.error)
+        sinon.assert.calledTwice(pluginManager.configure)
+      })
+
+      it('traces integrations when the IAST native addon is not installed', () => {
+        const entry = require.resolve('..')
+        const script = `
+          const Module = require('node:module')
+          const resolveFilename = Module._resolveFilename
+          Module._resolveFilename = function (request, ...args) {
+            if (request === '@datadog/native-iast-taint-tracking') {
+              throw Object.assign(new Error('Cannot find module ' + request), { code: 'MODULE_NOT_FOUND' })
+            }
+            return resolveFilename.call(this, request, ...args)
+          }
+
+          const tracer = require(${JSON.stringify(entry)}).init()
+          const http = require('node:http')
+          const server = http.createServer((req, res) => {
+            res.end(String(tracer.scope().active() !== null))
+          })
+          server.listen(0, '127.0.0.1', () => {
+            http.get({ host: '127.0.0.1', port: server.address().port }, (res) => {
+              let body = ''
+              res.on('data', chunk => { body += chunk })
+              res.on('end', () => process.stdout.write(body, () => process.exit()))
+            })
+          })
+        `
+        const result = spawnSync(process.execPath, ['--eval', script], {
+          encoding: 'utf8',
+          timeout: 10_000,
+          env: {
+            ...process.env,
+            DD_IAST_ENABLED: 'true',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'error',
+            DD_TRACE_STARTUP_LOGS: 'false',
+          },
+        })
+
+        assert.strictEqual(result.status, 0, result.stderr)
+        assert.strictEqual(result.stdout, 'true')
+        assert.match(result.stderr, /\[IAST\] Unable to start IAST, it stays disabled/)
+        assert.match(result.stderr, /Cannot find module @datadog\/native-iast-taint-tracking/)
+      })
+
       it('should not initialize twice', () => {
         proxy.init()
         proxy.init()
@@ -731,6 +802,19 @@ describe('TracerProxy', () => {
         assert.strictEqual(typeof descriptor.get, 'function')
         sinon.assert.notCalled(OpenFeatureProvider)
         sinon.assert.notCalled(openfeature.enable)
+      })
+
+      it('keeps one provider and the flag selection of the first init for the process', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        const options = { featureFlags: { flagSelection: { tags: ['first'] } } }
+
+        proxy.init(options)
+        const provider = proxy.openfeature
+        proxy.init({ featureFlags: { flagSelection: { tags: ['second'] } } })
+
+        assert.strictEqual(proxy.openfeature, provider)
+        sinon.assert.calledOnceWithExactly(Config, options)
+        sinon.assert.calledOnceWithExactly(OpenFeatureProvider, sinon.match.any, config)
       })
 
       it('does not enable OpenFeature when provider construction fails', () => {
