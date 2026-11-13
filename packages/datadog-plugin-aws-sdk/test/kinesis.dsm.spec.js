@@ -14,6 +14,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
 const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
@@ -88,13 +89,15 @@ describe('Kinesis', function () {
 
         streamNameDSM = `MyStreamDSM-${id()}`
 
-        const phash = propagationHash.getHash()
+        const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+        const containerTagsHash = propagationHash.getContainerTagsHash()
         const producerHash = computePathwayHash(
           'test',
           'tester',
           ['direction:out', 'topic:' + streamNameDSM, 'type:kinesis'],
           ENTRY_PARENT_HASH,
-          phash
+          processTagsForHash,
+          containerTagsHash
         )
 
         expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
@@ -103,7 +106,8 @@ describe('Kinesis', function () {
           'tester',
           ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
           producerHash,
-          phash
+          processTagsForHash,
+          containerTagsHash
         ).readBigUInt64LE(0).toString()
 
         createResources(streamNameDSM, done)

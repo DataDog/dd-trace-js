@@ -1,9 +1,8 @@
 'use strict'
 
-// encoding used here is sha256
-// other languages use FNV1
-// this inconsistency is ok because hashes do not need to be consistent across services
-const crypto = require('crypto')
+// Pathway hashes must equal dd-trace-java's for the same checkpoint, so a pathway that crosses
+// tracers resolves to one set of nodes. The rules below mirror dd-trace-java's BaseHash and
+// DataStreamsTags (node hash) and DefaultPathwayContext#generatePathwayHash (pathway hash).
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const {
   hasDsmBase64,
@@ -15,8 +14,39 @@ const {
 } = require('../carrier')
 const log = require('../log')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
+const { writeFnv64LE } = require('./fnv')
 
 const cache = new LRUCache({ max: 500 })
+const seeds = new LRUCache({ max: 100 })
+let nextSeedId = 0
+/** @type {{ id: number, state: Buffer } | undefined} */
+let lastSeed
+/** @type {unknown[]} */
+let lastSeedInputs = []
+
+// dd-trace-java hashes these tag keys in this order, not alphabetically. Keys it does not know are
+// hashed after them, alphabetically.
+const HASHED_TAG_RANK = new Map([
+  ['bus', 0],
+  ['direction', 1],
+  ['exchange', 2],
+  ['topic', 3],
+  ['type', 4],
+  ['subscription', 5],
+  ['kafka_cluster_id', 6],
+])
+const UNKNOWN_TAG_RANK = HASHED_TAG_RANK.size
+
+// dd-trace-java reports these tags but keeps them out of the pathway hash.
+const UNHASHED_TAG_KEYS = new Set([
+  'ds.name',
+  'ds.namespace',
+  'manual_checkpoint',
+  'group',
+  'consumer_group',
+  'partition',
+  'has_routing_key',
+])
 
 const PATHWAY_CONTEXT_BYTES = 20
 
@@ -24,43 +54,98 @@ const PATHWAY_CONTEXT_BYTES = 20
 // `Buffer.from(...)` copy-out so callers never observe mutation between checkpoints.
 const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
 
-function shaHash (checkpointString) {
-  // Copy out of the 32-byte digest so the LRU cache doesn't retain it.
-  return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
+/**
+ * @param {string} tag
+ */
+function tagKey (tag) {
+  const colon = tag.indexOf(':')
+  return colon === -1 ? tag : tag.slice(0, colon)
 }
 
 /**
- * @param {string} service
- * @param {string} env
- * @param {string[]} edgeTags
- * @param {Buffer} parentHash
- * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
+ * @param {string} tag
  */
-function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
-  edgeTags.sort()
-  const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
-    ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
-    : edgeTags
+function tagRank (tag) {
+  return HASHED_TAG_RANK.get(tagKey(tag)) ?? UNKNOWN_TAG_RANK
+}
 
-  // The cache key includes parentHash so a fan-in node with different parents
-  // gets distinct cache entries; the hash input below excludes parentHash and
-  // gets combined with it via a second sha pass to produce the final hash.
-  const joinedEdgeTags = hashableEdgeTags.join('')
-  const propagationHex = propagationHashBigInt ? propagationHashBigInt.toString(16) : ''
-  const propagationPart = propagationHex ? `:${propagationHex}` : ''
-  const key = `${service}${env}${joinedEdgeTags}${parentHash}${propagationPart}`
+/**
+ * @param {string[]} sortedEdgeTags
+ */
+function hashedEdgeTags (sortedEdgeTags) {
+  return sortedEdgeTags
+    .filter(tag => !UNHASHED_TAG_KEYS.has(tagKey(tag)))
+    .sort((a, b) => tagRank(a) - tagRank(b))
+    .join('')
+}
+
+/**
+ * Like dd-trace-java's BaseHash, the FNV state over service, env, process tags and container tags
+ * hash is computed once per distinct value and continued for every checkpoint. `id` stands in for
+ * that value in the checkpoint cache key; ids are never reused, so an evicted seed cannot alias another.
+ *
+ * @param {string} service
+ * @param {string | undefined} env
+ * @param {string | undefined} processTags
+ * @param {string | null | undefined} containerTagsHash
+ * @returns {{ id: number, state: Buffer }}
+ */
+function nodeHashSeed (service, env, processTags, containerTagsHash) {
+  if (
+    lastSeed !== undefined &&
+    lastSeedInputs[0] === service &&
+    lastSeedInputs[1] === env &&
+    lastSeedInputs[2] === processTags &&
+    lastSeedInputs[3] === containerTagsHash
+  ) {
+    return lastSeed
+  }
+  // dd-trace-java folds the container tags hash only when it folds process tags.
+  const prefix = processTags
+    ? `${service}${env ?? ''}${processTags}${containerTagsHash || ''}`
+    : `${service}${env ?? ''}`
+  let seed = seeds.get(prefix)
+  if (seed === undefined) {
+    const state = Buffer.alloc(8)
+    writeFnv64LE(Buffer.from(prefix, 'utf8'), state, 0)
+    seed = { id: nextSeedId++, state }
+    seeds.set(prefix, seed)
+  }
+  lastSeedInputs = [service, env, processTags, containerTagsHash]
+  lastSeed = seed
+  return seed
+}
+
+/**
+ * Sorts `edgeTags` in place.
+ *
+ * Returns one Buffer instance per distinct set of arguments while it stays cached: StatsBucket keys
+ * stats points by that instance, which keeps tags left out of the hash, such as `group`, in separate
+ * stats points.
+ *
+ * @param {string} service
+ * @param {string | undefined} env
+ * @param {string[]} edgeTags
+ * @param {Buffer} parentHash Parent pathway hash as uint64 little-endian.
+ * @param {string} [processTags] Serialized process tags; omitted when process tags are off.
+ * @param {string | null} [containerTagsHash] Container tags hash from the agent.
+ * @returns {Buffer} Pathway hash as uint64 little-endian.
+ */
+function computeHash (service, env, edgeTags, parentHash, processTags, containerTagsHash) {
+  edgeTags.sort()
+  const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
+  const key = `${seed.id}\0${edgeTags.join('\0')}\0${parentHash.toString('hex')}`
 
   let value = cache.get(key)
   if (value) {
     return value
   }
 
-  const baseString = `${service}${env}${joinedEdgeTags}`
-  const hashInput = propagationHex ? `${baseString}:${propagationHex}` : baseString
-
-  const currentHash = shaHash(hashInput)
-  const buf = Buffer.concat([currentHash, parentHash], 16)
-  value = shaHash(buf.toString())
+  const pathwayInput = Buffer.alloc(16)
+  writeFnv64LE(Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), pathwayInput, 0, seed.state)
+  parentHash.copy(pathwayInput, 8)
+  value = Buffer.allocUnsafe(8)
+  writeFnv64LE(pathwayInput, value, 0)
   cache.set(key, value)
   return value
 }

@@ -10,6 +10,7 @@ const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helper
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const TestSetup = require('./test-setup')
 
@@ -18,7 +19,10 @@ const testSetup = new TestSetup()
 const getDsmPathwayHash = (queueName, isProducer, parentHash) => {
   const edgeTags = [isProducer ? 'direction:out' : 'direction:in', `topic:${queueName}`, 'type:bullmq']
   edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash, propagationHash.getHash())
+  const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+  return computePathwayHash(
+    'test', 'tester', edgeTags, parentHash, processTagsForHash, propagationHash.getContainerTagsHash()
+  )
 }
 
 createIntegrationTestSuite('bullmq', 'bullmq', {

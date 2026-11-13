@@ -19,12 +19,10 @@ const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 
 describe('encoding', () => {
   it('hash should always give the same value', () => {
-    // note: we use a different hash function than the one used in the other languages,
-    // so if you switch language, the hash will change.
-    // given the tag resolution we do on the backend, this is not a big issue.
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
-    assert.deepStrictEqual(hash, Buffer.from('67b0b35e65c0acfa', 'hex'))
+    // Expected hash comes from dd-trace-java's FNV64Hash.
+    assert.strictEqual(hash.toString('hex'), '43ac630dffaa73de')
   })
 
   it('encoding and decoding should be a no op', () => {
@@ -135,7 +133,8 @@ describe('encoding', () => {
     const injectedCarrier = DsmPathwayCodec.encode(ctx, carrier)
 
     assert.strictEqual(injectedCarrier, carrier)
-    const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
+    // Expected header is dd-trace-java's DefaultPathwayContext encoding of its FNV64Hash for the same checkpoint.
+    const expectedBase64Hash = 'Q6xjDf+qc97E58Cfj2LI2cOfj2I='
     assert.strictEqual(carrier['dd-pathway-ctx-base64'], expectedBase64Hash)
   })
 
@@ -193,7 +192,8 @@ describe('encoding', () => {
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
     const carrier = {}
-    const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
+    // Header is dd-trace-java's DefaultPathwayContext encoding of its FNV64Hash for the same checkpoint.
+    const expectedBase64Hash = 'Q6xjDf+qc97E58Cfj2LI2cOfj2I='
     carrier['dd-pathway-ctx-base64'] = expectedBase64Hash
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
@@ -201,8 +201,9 @@ describe('encoding', () => {
   })
 
   it('should resolve a repeated base64 pathway field to the last one', () => {
+    // The last header is dd-trace-java's DefaultPathwayContext encoding of its FNV64Hash for the same checkpoint.
     const carrier = {
-      'dd-pathway-ctx-base64': ['pgeYnLTHrPrE58Cfj2LI2cOfj2I=', 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='],
+      'dd-pathway-ctx-base64': ['pgeYnLTHrPrE58Cfj2LI2cOfj2I=', 'Q6xjDf+qc97E58Cfj2LI2cOfj2I='],
     }
 
     const decodedCtx = DsmPathwayCodec.decode(carrier)
