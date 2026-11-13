@@ -43,6 +43,10 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   {
+    activate: { setup: () => require('../../modelcontextprotocol-client') },
+    instrumentations: require('./instrumentations/modelcontextprotocol-client'),
+  },
+  {
     activate: { setup: () => require('../../modelcontextprotocol-server') },
     instrumentations: require('./instrumentations/modelcontextprotocol-server'),
   },

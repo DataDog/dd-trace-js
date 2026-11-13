@@ -61,7 +61,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span || ctx.error) return
 
-    this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
+    this._tagger.tagTextIO(span, null, safeStringify(ctx.result))
   }
 }
 
@@ -100,4 +100,20 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-module.exports = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin, McpServerRequestLLMObsPlugin]
+class McpToolCallV2LLMObsPlugin extends McpToolCallLLMObsPlugin {
+  static id = 'llmobs_mcp_tool_call_v2'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/client:Client_callTool'
+}
+
+class McpListToolsV2LLMObsPlugin extends McpListToolsLLMObsPlugin {
+  static id = 'llmobs_mcp_list_tools_v2'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/client:Client_listTools'
+}
+
+module.exports = [
+  McpToolCallLLMObsPlugin,
+  McpListToolsLLMObsPlugin,
+  McpToolCallV2LLMObsPlugin,
+  McpListToolsV2LLMObsPlugin,
+  McpServerRequestLLMObsPlugin,
+]
