@@ -20,7 +20,8 @@ describe('Next.js response schemas', () => {
     if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) return
 
     const apps = [{ appName: 'pages-dir', serverPath: 'server' }]
-    if (satisfies(realVersion, '>=13.2') && (NODE_MAJOR < 24 || !satisfies(realVersion, '13.2.x'))) {
+    // Next 13.2 clears the final status of dynamic App Router responses, preventing request-end schema extraction.
+    if (satisfies(realVersion, '>=13.3')) {
       apps.push({ appName: 'app-dir', serverPath: '.next/standalone/server.js' })
     }
 
@@ -52,7 +53,9 @@ describe('Next.js response schemas', () => {
             const [response] = await Promise.all([
               httpRequest.get(`http://127.0.0.1:${serverData.port}/api/response-schema?mode=${mode}`),
               agent.assertSomeTraces(traces => {
-                assert.strictEqual(getWebSpan(traces).meta['_dd.appsec.s.res.body'], undefined)
+                const span = getWebSpan(traces)
+                assert.strictEqual(span.meta['http.status_code'], mode === 'empty' ? '204' : '201')
+                assert.strictEqual(span.meta['_dd.appsec.s.res.body'], undefined)
               }),
             ])
             assert.strictEqual(response.status, mode === 'empty' ? 204 : 201)
