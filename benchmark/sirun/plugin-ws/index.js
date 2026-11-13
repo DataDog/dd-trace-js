@@ -11,8 +11,8 @@ const id = require('../../../packages/dd-trace/src/id')
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
 
-// Every traced websocket message walks the plugin's bindStart (split the resource
-// path, build the meta literal, startSpan) and end (add the span link plus, when the
+// Every traced websocket message walks the plugin's bindStart (build the meta
+// literal, startSpan) and end (add the span link plus, when the
 // handshake carried distributed context, the span-pointer hash). `send` drives the
 // producer, `receive` the receiver. Subclass the real plugins and stub only the
 // tracer-reaching hooks so the measured surface is the plugin's own per-message work
@@ -47,7 +47,11 @@ handshakeContext._trace.tags['_dd.p.tid'] = '640cfd8d00000000'
 
 const socket = {
   spanContext: handshakeContext,
-  spanTags: { 'resource.name': 'websocket /v2/chat', 'service.name': 'ws-svc' },
+  spanTags: {
+    messageResource: 'websocket /v2/chat',
+    'resource.name': 'GET /v2/chat',
+    'service.name': 'ws-svc',
+  },
   hasTraceHeaders: true,
 }
 
