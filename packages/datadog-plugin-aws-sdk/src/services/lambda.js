@@ -9,11 +9,20 @@ class Lambda extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params?.FunctionName) return
 
-    return {
+    const tags = {
       'resource.name': `${operation} ${params.FunctionName}`,
       functionname: params.FunctionName,
       'aws.lambda': params.FunctionName,
     }
+
+    // Like dd-trace-java, only a full ARN (arn:<partition>:lambda:<region>:<account>:function:<name>[:<qualifier>]),
+    // which cross-account and cross-Region invocations require, identifies the function; names and partial ARNs
+    // lack its account or Region.
+    if (params.FunctionName.startsWith('arn:')) {
+      tags['aws.function.arn'] = params.FunctionName
+    }
+
+    return tags
   }
 
   requestInject (span, request) {

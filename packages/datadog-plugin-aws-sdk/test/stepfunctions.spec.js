@@ -117,6 +117,7 @@ describe('Sfn', () => {
             assert.ok(span, 'expected startExecution span')
             assert.strictEqual(span.resource, 'startExecution')
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
+            assert.strictEqual(span.meta['aws.step_functions.state_machine.arn'], stateMachineArn)
           }, { spanResourceMatch: /startExecution/ })
 
           const [result] = await Promise.all([

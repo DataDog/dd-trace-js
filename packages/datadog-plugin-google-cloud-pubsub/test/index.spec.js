@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -240,6 +241,7 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'pubsub.topic': resource,
+                'gcp.pubsub.topic.name': resource,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
                 component: 'google-cloud-pubsub',
@@ -286,6 +288,8 @@ describe('Plugin', () => {
                 'pubsub.topic': resource,
                 'pubsub.subscription': subscriptionName,
                 'pubsub.subscription_type': 'pull',
+                'gcp.pubsub.topic.name': resource,
+                'gcp.pubsub.subscription.name': `projects/${project}/subscriptions/foo`,
               },
               metrics: {
                 'pubsub.ack': 1,
@@ -295,6 +299,102 @@ describe('Plugin', () => {
             sub.on('message', msg => msg.ack())
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
+          })
+
+          it('should name a subscription and its topic of another project separately', async () => {
+            const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+            const subscriberProject = getProjectId()
+            const subscriber = new lib.PubSub({ projectId: subscriberProject })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await subscriber.createSubscription(resource, 'warehouse-orders')
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              type: 'worker',
+              meta: {
+                'span.kind': 'consumer',
+                'gcloud.project_id': subscriberProject,
+                'pubsub.topic': resource,
+                'pubsub.subscription': `projects/${subscriberProject}/subscriptions/warehouse-orders`,
+                'gcp.pubsub.topic.name': resource,
+                'gcp.pubsub.subscription.name': `projects/${subscriberProject}/subscriptions/warehouse-orders`,
+              },
+            })
+
+            sub.on('message', msg => msg.ack())
+            await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
+          })
+
+          it('should name only the subscription when no topic is known', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [created] = await topic.createSubscription('foo')
+            // A fresh handle has no cached metadata, and a producer without this tracer propagates no topic.
+            const sub = pubsub.subscription(created.name)
+            const requestStart = dc.channel('apm:google-cloud-pubsub:request:start')
+            const requestedApis = []
+            const dropPropagatedTopic = ({ api, request }) => {
+              requestedApis.push(api)
+              if (api !== 'publish') return
+              for (const message of request.messages) delete message.attributes['pubsub.topic']
+            }
+            requestStart.subscribe(dropPropagatedTopic)
+
+            const spanPromise = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+              assert.ok(span)
+              assert.strictEqual(span.meta['gcp.pubsub.subscription.name'], created.name)
+              assert.ok(!('gcp.pubsub.topic.name' in span.meta))
+              assert.ok(!('pubsub.topic' in span.meta))
+              assert.strictEqual(span.resource, 'Message from foo')
+            }, { timeoutMs: TIMEOUT })
+
+            try {
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+              await spanPromise
+            } finally {
+              requestStart.unsubscribe(dropPropagatedTopic)
+              await sub.close()
+            }
+
+            // Naming the resources must not look up the subscription or topic metadata.
+            assert.ok(!requestedApis.includes('getSubscription'), `Requested: ${requestedApis}`)
+            assert.ok(!requestedApis.includes('getTopic'), `Requested: ${requestedApis}`)
+          })
+
+          it('should name the subscription of a client with an auto-detected project', async () => {
+            const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+            const [topic] = await pubsub.createTopic(topicName)
+            await topic.createSubscription('foo')
+
+            const previousProject = process.env.GOOGLE_CLOUD_PROJECT
+            process.env.GOOGLE_CLOUD_PROJECT = project
+            // Before 4.0 the subscription name keeps `{{projectId}}` until the client resolved the project.
+            const sub = new lib.PubSub().subscription('foo')
+            try {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                type: 'worker',
+                meta: {
+                  'span.kind': 'consumer',
+                  'gcp.pubsub.subscription.name': `projects/${project}/subscriptions/foo`,
+                },
+              })
+
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+              await expectedSpanPromise
+            } finally {
+              await sub.close()
+              if (previousProject === undefined) {
+                delete process.env.GOOGLE_CLOUD_PROJECT
+              } else {
+                process.env.GOOGLE_CLOUD_PROJECT = previousProject
+              }
+            }
           })
 
           it('should parent the first batch message to the Pub/Sub request span', async () => {

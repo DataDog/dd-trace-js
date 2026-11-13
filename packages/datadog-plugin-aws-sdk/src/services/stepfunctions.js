@@ -33,6 +33,9 @@ class Stepfunctions extends BaseAwsSdkPlugin {
     if (operation === 'startExecution' || operation === 'startSyncExecution') {
       tags.statemachinearn = params.stateMachineArn
     }
+    if (params.stateMachineArn) {
+      tags['aws.step_functions.state_machine.arn'] = params.stateMachineArn
+    }
     return tags
   }
 
