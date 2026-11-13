@@ -131,6 +131,28 @@ describe('AI Guard client transport', () => {
     assert.equal(received[1].url, '/application')
   })
 
+  it('sends mcp_servers only when the list is not empty', async () => {
+    const mcpServers = [{
+      id: 'mcp_0f2f11f8cafdbcc5',
+      managed_by: 'client',
+      transport: 'stdio',
+      command: 'uvx',
+      args: ['mcp-example'],
+      tools: { search: 'search' },
+    }]
+
+    await client.evaluate(messages, meta, mcpServers)
+    await client.evaluate(messages, meta, [])
+    await client.evaluate(messages, meta)
+
+    assert.deepEqual(received.map(request => request.body), [
+      { data: { attributes: { messages, meta, mcp_servers: mcpServers } } },
+      { data: { attributes: { messages, meta } } },
+      { data: { attributes: { messages, meta } } },
+    ])
+    assert.ok(!Object.hasOwn(received[1].body.data.attributes, 'mcp_servers'))
+  })
+
   it('uses direct transport without relying on global fetch when no proxy is configured', async () => {
     const fetch = sinon.stub(global, 'fetch').throws(new Error('Application-owned fetch'))
     assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')

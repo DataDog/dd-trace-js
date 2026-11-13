@@ -13,6 +13,7 @@ export interface GeneratedConfig {
     DD_AI_GUARD_ENDPOINT: string | undefined;
     DD_AI_GUARD_MAX_CONTENT_SIZE: number;
     DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+    DD_AI_GUARD_MCP_ENABLED: boolean;
     DD_AI_GUARD_REDACTION_ENABLED: boolean;
     DD_AI_GUARD_TIMEOUT: number;
   };
@@ -649,6 +650,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+  DD_AI_GUARD_MCP_ENABLED: boolean;
   DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;

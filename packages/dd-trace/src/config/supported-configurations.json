@@ -249,6 +249,18 @@
         "default": "16"
       }
     ],
+    "DD_AI_GUARD_MCP_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "aiguard",
+        "configurationNames": [
+          "experimental.aiguard.mcpEnabled"
+        ],
+        "default": "true",
+        "description": "Check client-managed MCP tool calls with AI Guard and send their MCP server metadata."
+      }
+    ],
     "DD_AI_GUARD_REDACTION_ENABLED": [
       {
         "implementation": "A",
