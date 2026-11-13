@@ -46,22 +46,19 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
     assert.equal(apmTags['gen_ai.operation.name'], 'workflow')
   })
 
-  it('claims the llm kind when langchain-openai calls the untraced beta client', () => {
+  it('defers to the provider integration for structured output', () => {
     publish({ response_format: { type: 'json_object' } })
 
-    assert.equal(apmTags['gen_ai.operation.name'], 'llm')
+    assert.equal(apmTags['gen_ai.operation.name'], 'workflow')
     assert.equal(apmTags['gen_ai.request.model'], 'gpt-4o')
     assert.equal(apmTags['gen_ai.provider.name'], 'openai')
   })
 
-  // a model-backed span always reports a model, so a promotion has to pick up the defaults the
-  // enabled path would have written
-  it('defaults the model when the promotion finds none on the span', () => {
+  it('keeps structured output as a workflow even without a model tag', () => {
     publish({ response_format: { type: 'json_object' } }, 'openai', undefined, { omitModel: true })
 
-    assert.equal(apmTags['gen_ai.operation.name'], 'llm')
-    assert.equal(apmTags['gen_ai.request.model'], 'custom')
-    assert.equal(apmTags['gen_ai.provider.name'], 'openai')
+    assert.equal(apmTags['gen_ai.operation.name'], 'workflow')
+    assert.equal(apmTags['gen_ai.request.model'], undefined)
   })
 
   it('leaves a non-openai provider as a workflow', () => {
@@ -72,6 +69,7 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
 
   // some providers report usage on each generated message rather than on `llmOutput`
   it('reads token usage off the generated messages when the result has none at the top level', () => {
+    plugin.isLLMIntegrationEnabled = () => false
     publish({ response_format: { type: 'json_object' } }, 'openai', {
       generations: [[
         { message: { id: 'run-1-0', usage_metadata: { input_tokens: 7, output_tokens: 3, total_tokens: 10 } } },
@@ -84,6 +82,7 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
   })
 
   it('prefers the top-level usage over the per-message counts', () => {
+    plugin.isLLMIntegrationEnabled = () => false
     publish({ response_format: { type: 'json_object' } }, 'openai', {
       llmOutput: { tokenUsage: { promptTokens: 11, completionTokens: 5, totalTokens: 16 } },
       generations: [[
@@ -97,6 +96,7 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
   })
 
   it('emits no usage when neither the result nor the messages report any', () => {
+    plugin.isLLMIntegrationEnabled = () => false
     publish({ response_format: { type: 'json_object' } }, 'openai', {
       generations: [[{ message: { id: 'run-1-0' } }]],
     })
