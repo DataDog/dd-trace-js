@@ -26,5 +26,6 @@ function tagErrorResult (span, result) {
 
 module.exports = {
   DISTRIBUTED_TRACE_META_KEY,
+  setErrorTags,
   tagErrorResult,
 }

@@ -35,6 +35,7 @@ describe('git_metadata', () => {
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
   let unshallowRepositoryStub
+  let fetchHeadCommitShaStub
   let fakeConfig
 
   before(() => {
@@ -57,6 +58,7 @@ describe('git_metadata', () => {
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
+    fetchHeadCommitShaStub = sinon.stub()
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
@@ -75,6 +77,7 @@ describe('git_metadata', () => {
       getCommitsRevList: getCommitsRevListStub,
       isShallowRepository: isShallowRepositoryStub,
       unshallowRepository: unshallowRepositoryStub,
+      fetchHeadCommitSha: fetchHeadCommitShaStub,
     }
 
     gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
@@ -131,6 +134,33 @@ describe('git_metadata', () => {
     })
   })
 
+  for (const recovery of ['available', 'unavailable', 'disabled']) {
+    it(`deepens an already-present selected boundary commit: ${recovery}`, (done) => {
+      const selected = 'a'.repeat(40)
+      const parent = 'c'.repeat(40)
+      const expected = recovery === 'available' ? [selected, parent] : [selected]
+      getLatestCommitsStub.returns([selected])
+      getCommitsRevListStub.callsFake((known, commits) => commits)
+      isShallowRepositoryStub.returns(true)
+      fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
+      unshallowRepositoryStub.callsFake((parentOnly, sha) => {
+        if (recovery === 'available' && sha === selected) getLatestCommitsStub.returns(expected)
+      })
+      requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onCall(1).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onCall(2).callsArgWith(2, null, '', 204)
+
+      gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(JSON.parse(requestStub.getCall(1).args[0]).data.map(({ id }) => id), expected)
+        sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, expected, process.cwd())
+        if (recovery === 'disabled') sinon.assert.notCalled(unshallowRepositoryStub)
+        else sinon.assert.calledOnceWithExactly(unshallowRepositoryStub, false, selected, process.cwd())
+        done()
+      }, selected)
+    })
+  }
+
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
     fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
     requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
@@ -157,6 +187,97 @@ describe('git_metadata', () => {
       assert.match(requestStub.getCall(1).args[1].path, /\/api\/v2\/git\/repository\/packfile/)
       done()
     })
+  })
+
+  it('reports unavailable history when the local checkout cannot be read', (done) => {
+    getLatestCommitsStub.returns([])
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false },
+      'https://example.com/provider.git', (err) => {
+        assert.strictEqual(err?.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+        sinon.assert.notCalled(requestStub)
+        sinon.assert.notCalled(generatePackFilesForCommitsStub)
+        done()
+      }, 'a'.repeat(40))
+  })
+
+  for (const shallow of [true, false]) {
+    const checkout = shallow ? 'shallow' : 'non-shallow'
+    for (const recovery of ['available', 'unavailable', 'disabled']) {
+      it(`recovers a missing selected commit in a ${checkout} checkout: ${recovery}`, (done) => {
+        const selected = 'a'.repeat(40)
+        getLatestCommitsStub.returns([])
+        if (recovery === 'available') getLatestCommitsStub.onCall(1).returns([selected])
+        isShallowRepositoryStub.returns(shallow)
+        fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
+        getCommitsRevListStub.returns([selected])
+        requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+        requestStub.onCall(1).callsArgWith(2, null, '', 204)
+
+        gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+          if (recovery === 'available') {
+            assert.strictEqual(err, null)
+            sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, [selected], process.cwd())
+          } else {
+            assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+            sinon.assert.notCalled(requestStub)
+            sinon.assert.notCalled(generatePackFilesForCommitsStub)
+          }
+          assert.strictEqual(unshallowRepositoryStub.callCount, recovery !== 'disabled' && shallow ? 1 : 0)
+          assert.strictEqual(fetchHeadCommitShaStub.callCount, recovery !== 'disabled' && !shallow ? 1 : 0)
+          if (recovery !== 'disabled') {
+            if (shallow) sinon.assert.calledWithExactly(unshallowRepositoryStub, false, selected, process.cwd())
+            else sinon.assert.calledWithExactly(fetchHeadCommitShaStub, selected, false, process.cwd())
+          }
+          assert.strictEqual(getLatestCommitsStub.callCount, recovery === 'disabled' ? 1 : 2)
+          done()
+        }, selected)
+      })
+    }
+  }
+
+  it('does not upload a different history when the selected commit is unavailable', (done) => {
+    getLatestCommitsStub.returns([])
+    const selected = 'a'.repeat(40)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.match(err.message, /Selected Git commit is unavailable/)
+      assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+      sinon.assert.calledTwice(getLatestCommitsStub)
+      sinon.assert.calledOnceWithExactly(fetchHeadCommitShaStub, selected, false, process.cwd())
+      sinon.assert.notCalled(requestStub)
+      sinon.assert.notCalled(generatePackFilesForCommitsStub)
+      done()
+    }, selected)
+  })
+
+  it('rejects a local filesystem remote instead of sending an inconsistent repository identity', (done) => {
+    getRepositoryUrlStub.returns('/local/repository')
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.ok(err)
+      sinon.assert.notCalled(requestStub)
+      done()
+    })
+  })
+
+  it('labels packfiles with the selected event and request commit identity', (done) => {
+    const selected = 'a'.repeat(40)
+    getLatestCommitsStub.returns([selected, ...latestCommits])
+    getCommitsRevListStub.returns([selected, ...latestCommits])
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsFake(async (form, options, callback) => {
+      const chunks = []
+      for await (const chunk of form) chunks.push(chunk)
+      assert.match(Buffer.concat(chunks).toString(), new RegExp(`"id":"${selected}"`))
+      callback(null, '', 204)
+    })
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.strictEqual(err, null)
+      sinon.assert.calledTwice(requestStub)
+      sinon.assert.calledOnceWithExactly(getLatestCommitsStub, selected, process.cwd())
+      const searched = JSON.parse(requestStub.getCall(0).args[0]).data.map(({ id }) => id)
+      assert.ok(searched.includes(selected))
+      assert.ok(getCommitsRevListStub.getCall(0).args[1].includes(selected))
+      done()
+    }, selected)
   })
 
   it('should not request to /api/v2/git/repository/packfile if the backend has the commit info', (done) => {
@@ -226,6 +347,31 @@ describe('git_metadata', () => {
     })
   })
 
+  for (const enabled of [false, true]) {
+    it(`retries local object enumeration only when Git recovery is enabled (${enabled})`, (done) => {
+      fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = enabled
+      getCommitsRevListStub.onFirstCall().returns(null)
+      getCommitsRevListStub.onSecondCall().returns(latestCommits)
+      requestStub.onFirstCall().callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onSecondCall().callsArgWith(2, null, '', 204)
+
+      gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', err => {
+        if (enabled) {
+          assert.strictEqual(err, null)
+          sinon.assert.calledTwice(getCommitsRevListStub)
+          assert.strictEqual(getCommitsRevListStub.getCall(1).args[2], true)
+          sinon.assert.calledTwice(requestStub)
+        } else {
+          assert.match(err.message, /git rev-list failed/)
+          sinon.assert.calledOnce(getCommitsRevListStub)
+          sinon.assert.calledOnce(requestStub)
+        }
+        assert.strictEqual(getCommitsRevListStub.getCall(0).args[2], false)
+        done()
+      })
+    })
+  }
+
   it('should fail if the getCommitsRevList fails because the repository is too big', (done) => {
     // returning null means that the git rev-list failed
     getCommitsRevListStub.returns(null)
@@ -233,6 +379,7 @@ describe('git_metadata', () => {
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /git rev-list failed/)
+      sinon.assert.calledTwice(getCommitsRevListStub)
       sinon.assert.calledOnce(requestStub)
       done()
     })
@@ -265,6 +412,10 @@ describe('git_metadata', () => {
         'www.test.com/repo/dummy.git',
         'test.com/repo/dummy.git',
         'test.com/repo/dummy',
+        '../repo:local.git',
+        '/tmp/repo:local.git',
+        'C:/repo/local.git',
+        'C:\\repo\\local.git',
       ]
       invalidUrls.forEach((invalidUrl) => {
         assert.strictEqual(validateGitRepositoryUrl(invalidUrl), false)
@@ -281,6 +432,12 @@ describe('git_metadata', () => {
         'git@github.com:DataDog/dd-trace-js.git',
         'git@github.com:user/repo.git',
         'git@github.com:user/repo',
+        'deploy@host:org/repo.git',
+        'host:org/repo.git',
+        'deploy@host:/srv/repo.git',
+        'host:~owner/repo.git',
+        'deploy@[2001:db8::1]:org/repo.git',
+        '[2001:db8::1]:org/repo.git',
       ]
 
       validUrls.forEach((validUrl) => {
@@ -404,6 +561,34 @@ describe('git_metadata', () => {
       })
   })
 
+  for (const [input, expected] of [
+    ['deploy@host:org/repo.git', 'host:org/repo.git'],
+    ['host:org/repo.git', 'host:org/repo.git'],
+    ['deploy@[2001:db8::1]:org/repo.git', '[2001:db8::1]:org/repo.git'],
+  ]) {
+    for (const source of ['input', 'git']) {
+      it(`uploads sanitized SCP-style repository URLs from ${source}: ${input}`, async () => {
+        requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+        requestStub.onCall(1).callsArgWith(2, null, '', 204)
+        getRepositoryUrlStub.returns(input)
+
+        await new Promise((resolve, reject) => {
+          gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false },
+            source === 'input' ? input : '', err => err ? reject(err) : resolve())
+        })
+
+        sinon.assert.calledTwice(requestStub)
+        const search = JSON.parse(requestStub.getCall(0).args[0])
+        assert.strictEqual(search.meta.repository_url, expected)
+        const chunks = []
+        for await (const chunk of requestStub.getCall(1).args[0]) chunks.push(chunk)
+        const upload = Buffer.concat(chunks).toString()
+        assert.ok(upload.includes(expected))
+        assert.ok(!upload.includes('deploy@'))
+      })
+    }
+  }
+
   it('should use the input repository url and not call getRepositoryUrl', (done) => {
     requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
     requestStub.onCall(1).callsArgWith(2, null, '', 204)
@@ -416,7 +601,7 @@ describe('git_metadata', () => {
         assert.strictEqual(err, null)
         sinon.assert.notCalled(getRepositoryUrlStub)
         const { meta: { repository_url: repositoryUrl } } = JSON.parse(requestStub.getCall(0).args[0])
-        assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
+        assert.strictEqual(repositoryUrl, 'https://datadog.com')
         done()
       })
   })

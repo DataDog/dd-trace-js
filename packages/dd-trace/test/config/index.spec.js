@@ -4106,6 +4106,14 @@ describe('Config', () => {
     assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
+  it('should preserve AI Guard outside Test Optimization', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, true)
+  })
+
   it('should set telemetry default values', () => {
     const config = getConfig()
 
@@ -4129,6 +4137,48 @@ describe('Config', () => {
     exporters.PLAYWRIGHT_WORKER,
     exporters.VITEST_WORKER,
   ]) {
+    it(`should disable security and LLMObs products for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_AI_GUARD_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, false)
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_RESOURCE_RENAMING_ENABLED, false)
+    })
+
+    for (const profiling of ['true', 'auto']) {
+      it(`should preserve profiling=${profiling} and DSM for the ${exporter} Test Optimization exporter`, () => {
+        process.env.DD_PROFILING_ENABLED = profiling
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
+
+        const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
+
+        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, profiling)
+        assert.strictEqual(config.dsmEnabled, true)
+      })
+    }
+
+    it(`should prevent implicit LLMObs enablement for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_LLMOBS_ML_APP = 'test-app'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+    })
+
     it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
 
