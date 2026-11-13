@@ -147,7 +147,7 @@ function wrapProtocol (Protocol) {
       }
 
       wrapAbortControllers(this)
-      const ctx = { request, extra }
+      const ctx = { request, extra, server: this }
       serverRequestCh.start.runStores(ctx, () => {
         let pending = pendingContexts.get(this)
         if (!pending) {
@@ -162,6 +162,10 @@ function wrapProtocol (Protocol) {
           ctx.error = err
           finishServerRequest(this, request.id)
           throw err
+        } finally {
+          // runStores restores only the APM store. `end` lets the LLM Obs plugin restore its own store. The handler
+          // keeps the server span because the SDK schedules it before `_onrequest` returns.
+          serverRequestCh.end.publish(ctx)
         }
 
         // The SDK registers an AbortController only when it actually dispatches a handler.
