@@ -23,11 +23,13 @@ const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
 
 /**
  * @param {import('oracledb').Connection} connection
- * @param {{ dbInstance?: string, hostname?: string, port?: string }} ctx
+ * @param {{ allowBareHostname: boolean, dbInstance?: string, hostname?: string, port?: string }} ctx
  */
 function addConnectionMetadata (connection, ctx) {
   try {
-    if (connection.thin) {
+    const thin = connection.thin
+    ctx.allowBareHostname ||= !thin
+    if (thin) {
       const details = connection._impl ?? connection
       ctx.dbInstance = connection.serviceName ?? details.serviceName
       ctx.hostname = connection.hostName ?? details.nscon?.ntAdapter?.hostName
@@ -98,6 +100,7 @@ function wrapPoolGetConnection (getConnection) {
           pool,
           connectionAttrs,
           poolAttrs,
+          allowBareHostname: connectionAttrs.allowBareHostname,
           dbInstance: undefined,
           hostname: undefined,
           port: undefined,
@@ -183,13 +186,15 @@ function wrapPoolGetConnection (getConnection) {
  *   user?: string,
  *   username?: string
  * }} poolAttrs
+ * @param {boolean} supportsThinBareHostname
  */
-function storePoolAttributes (pool, poolAttrs) {
+function storePoolAttributes (pool, poolAttrs, supportsThinBareHostname) {
   // OracleDB 5.0 expands the pool descriptor and changes the service-name case.
   const connectString = poolAttrs.connectString ?? poolAttrs.connectionString
   poolAttributes.set(pool, poolAttrs)
   poolConnectionAttributes.set(pool, {
     connectString: connectString ?? pool.connectString,
+    allowBareHostname: !pool.thin || supportsThinBareHostname,
     hasSessionCallback: typeof pool.sessionCallback === 'function',
     homogeneous: pool.homogeneous ?? true,
     // OracleDB 5 accepts the `username` alias but only copies `user`/`userName` to `pool.user`.
@@ -225,6 +230,9 @@ function callPoolCallback (sessionCtx, callback, thisArg, args) {
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
+  // Thin mode treats bare names as TNS aliases starting with 6.2.
+  const supportsThinBareHostname = oracledb.version < 60_200
+
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery) {
       if (!startChannel.hasSubscribers) {
@@ -250,6 +258,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       const connAttrs = connectionAttributes.get(this)
 
       const ctx = {
+        allowBareHostname: supportsThinBareHostname,
         dbInstance: undefined,
         port: undefined,
         hostname: undefined,
@@ -320,7 +329,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       if (callback) {
         arguments[1] = shimmer.wrapFunction(callback, callback => (err, pool) => {
           if (pool) {
-            storePoolAttributes(pool, poolAttrs)
+            storePoolAttributes(pool, poolAttrs, supportsThinBareHostname)
             bindPoolRequestContexts(pool)
           }
           callback(err, pool)
@@ -329,7 +338,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         createPool.apply(this, arguments)
       } else {
         return createPool.apply(this, arguments).then((pool) => {
-          storePoolAttributes(pool, poolAttrs)
+          storePoolAttributes(pool, poolAttrs, supportsThinBareHostname)
           bindPoolRequestContexts(pool)
           return pool
         })

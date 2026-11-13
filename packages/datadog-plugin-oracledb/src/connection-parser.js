@@ -7,6 +7,7 @@ const log = require('../../dd-trace/src/log')
 const easyConnectProtocol = /^tcps?:\/\//i
 let cachedConnectString
 let cachedInfo
+let cachedAllowBareHostname
 
 /** @param {string} descriptor */
 function parseOracleDescriptor (descriptor) {
@@ -23,16 +24,19 @@ function parseOracleDescriptor (descriptor) {
   return { hostname, port, dbInstance }
 }
 
-/** @param {{ connectString?: string, connectionString?: string }} [connAttrs] */
-module.exports = function getDBInformation (connAttrs) {
+/**
+ * @param {{ connectString?: string, connectionString?: string }} [connAttrs]
+ * @param {boolean} [allowBareHostname]
+ */
+module.exports = function getDBInformation (connAttrs, allowBareHostname = true) {
   // Users can pass either connectString or connectionString
   const connectString = ((connAttrs?.connectString || connAttrs?.connectionString) ?? '').trim()
-  if (connectString === cachedConnectString) return cachedInfo
+  if (connectString === cachedConnectString && allowBareHostname === cachedAllowBareHostname) return cachedInfo
 
   let dbInfo
   if (connectString.startsWith('(')) {
     dbInfo = parseOracleDescriptor(connectString)
-  } else if (/[:/]/.test(connectString)) {
+  } else if (connectString && (allowBareHostname || /[:/]/.test(connectString))) {
     try {
       const url = new URL(easyConnectProtocol.test(connectString) ? connectString : `oracle://${connectString}`)
       dbInfo = {
@@ -50,5 +54,6 @@ module.exports = function getDBInformation (connAttrs) {
 
   cachedConnectString = connectString
   cachedInfo = dbInfo
+  cachedAllowBareHostname = allowBareHostname
   return dbInfo
 }

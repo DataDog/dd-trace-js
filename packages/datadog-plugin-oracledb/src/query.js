@@ -40,7 +40,7 @@ class OracledbQueryPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
-    let { query, connAttrs, port, hostname, dbInstance } = ctx
+    let { query, connAttrs, port, hostname, dbInstance, allowBareHostname } = ctx
 
     if (connAttrs === undefined) {
       connAttrs = storage('legacy').getStore()?.oracledbPoolAttrs
@@ -51,7 +51,7 @@ class OracledbQueryPlugin extends DatabasePlugin {
     if (hostname === undefined) {
       // Lazy load for performance. This is not needed in v6 and up
       parser ??= require('./connection-parser')
-      const dbInfo = parser(connAttrs)
+      const dbInfo = parser(connAttrs, allowBareHostname)
       hostname = dbInfo.hostname
       port ??= dbInfo.port
       dbInstance ??= dbInfo.dbInstance

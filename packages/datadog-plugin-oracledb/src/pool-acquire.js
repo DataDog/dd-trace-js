@@ -17,6 +17,7 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
 
   /**
    * @param {{
+   *   allowBareHostname: boolean,
    *   connectionAttrs: { connectString?: string },
    *   pool: object,
    *   poolAttrs: object,
@@ -24,11 +25,11 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
    * }} ctx
    */
   bindStart (ctx) {
-    const { connectionAttrs, pool, poolAttrs, user } = ctx
+    const { allowBareHostname, connectionAttrs, pool, poolAttrs, user } = ctx
     let metadata = this.#poolMetadata.get(pool)
     if (metadata === undefined) {
       parser ??= require('./connection-parser')
-      metadata = parser(connectionAttrs)
+      metadata = parser(connectionAttrs, allowBareHostname)
       this.#poolMetadata.set(pool, metadata)
     }
 

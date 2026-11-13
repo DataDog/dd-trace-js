@@ -44,11 +44,17 @@ describe('oracledb instrumentation', () => {
   }
 
   /**
-   * @param {{ homogeneous?: boolean, poolUser?: string, legacy?: boolean }} options
+   * @param {{ homogeneous?: boolean, poolUser?: string, legacy?: boolean, thin?: boolean, version?: number }} options
    */
   function createOracledb (options) {
     class Connection {
-      execute () {}
+      constructor () {
+        this.thin = options.thin
+      }
+
+      execute () {
+        return Promise.resolve({ rows: [[1]] })
+      }
     }
 
     class Pool {
@@ -56,6 +62,7 @@ describe('oracledb instrumentation', () => {
         this.homogeneous = options.homogeneous ?? poolAttrs.homogeneous ?? true
         this.connectString = poolAttrs.connectString ?? poolAttrs.connectionString
         this.user = options.poolUser
+        this.thin = options.thin
         this.poolAttrs = poolAttrs
         if (options.legacy) {
           this.getConnection = nativeGetConnection
@@ -84,6 +91,7 @@ describe('oracledb instrumentation', () => {
     const oracledb = {
       Connection,
       Pool,
+      version: options.version ?? 61000,
       createPool: poolAttrs => Promise.resolve(new Pool(poolAttrs)),
       getConnection: () => Promise.resolve(new Connection()),
     }
@@ -210,6 +218,31 @@ describe('oracledb instrumentation', () => {
   })
 
   for (const useCallback of [false, true]) {
+    for (const [version, thin, allowBareHostname] of [
+      [50000, undefined, true],
+      [60000, true, true],
+      [60100, true, true],
+      [60200, true, false],
+      [61000, true, false],
+      [61000, false, true],
+    ]) {
+      it(`publishes bare-hostname support for ${version}/${thin} ${useCallback ? 'callback' : 'Promise'} calls`,
+        async () => {
+          let startMode
+          let queryMode
+          subscribe(poolAcquireStartChannel, ctx => { startMode = ctx.allowBareHostname })
+          subscribe(dc.channel('apm:oracledb:query:start'), ctx => { queryMode = ctx.allowBareHostname })
+          const oracledb = createOracledb({ thin, version })
+          const pool = await oracledb.createPool({ connectString: 'db.example' })
+
+          const connection = useCallback ? await getConnectionWithCallback(pool) : await pool.getConnection()
+          await connection.execute('select 1 from dual')
+
+          assert.strictEqual(startMode, allowBareHostname)
+          assert.strictEqual(queryMode, allowBareHostname)
+        })
+    }
+
     it(`preserves ${useCallback ? 'callback' : 'Promise'} results without logging metadata failures`, async () => {
       let finishContext
       subscribe(poolAcquireStartChannel, () => {})

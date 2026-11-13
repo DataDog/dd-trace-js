@@ -533,6 +533,31 @@ describe('Plugin', () => {
                 await aliasPool.close(0)
               }
             })
+
+            it(`preserves Thick bare-hostname metadata for failed ${api} acquisitions`, async function () {
+              if (oracledb.thin) this.skip()
+              const bareHostPool = await oracledb.createPool({
+                ...config,
+                connectString: hostname,
+                poolMin: 0,
+              })
+              try {
+                const acquire = useCallback ? promisify(bareHostPool.getConnection) : bareHostPool.getConnection
+                await Promise.all([
+                  agent.assertFirstTraceSpan(span => {
+                    assert.strictEqual(span.meta['db.hostname'], hostname)
+                    assert.strictEqual(span.meta['out.host'], hostname)
+                    assert.strictEqual(span.meta['network.destination.port'], port)
+                    assert.strictEqual(span.meta['db.instance'], undefined)
+                  }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
+                  assert.rejects(acquire.call(bareHostPool, null), {
+                    message: 'NJS-005: invalid value for parameter 1',
+                  }),
+                ])
+              } finally {
+                await bareHostPool.close(0)
+              }
+            })
           }
 
           for (const useCallback of [false, true]) {
