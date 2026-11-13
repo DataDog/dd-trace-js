@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -248,6 +248,151 @@ describe('OpenFeature configuration source', () => {
     assert.ok(source instanceof AgentlessConfigurationSource)
     assert.strictEqual(AgentlessConfigurationSource.firstCall.args[0].apiKey, undefined)
     sinon.assert.notCalled(log.error)
+  })
+
+  it('passes the tracer service so the CDN can attribute usage to it', () => {
+    config.service = 'checkout'
+
+    assert.strictEqual(createSourceConfig().service, 'checkout')
+  })
+
+  it('passes the service to a custom endpoint, unlike the API key', () => {
+    config.service = 'checkout'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc'
+
+    const resolved = createSourceConfig()
+
+    assert.strictEqual(resolved.service, 'checkout')
+    assert.strictEqual(resolved.apiKey, undefined)
+  })
+
+  // Expected DD-Service values. They come from the Agent NormalizeService (datadog-agent
+  // pkg/trace/traceutil/normalize v0.82.3) and the ASCII check. `undefined` means: no DD-Service header.
+  const APM_SERVICE_NAMES = [
+    ['checkout', 'checkout'],
+    ['My Service', 'my_service'],
+    ['My-API', 'my-api'],
+    ['UPPER', 'upper'],
+    ['bad\nvalue', 'bad_value'],
+    ['a\tb', 'a_b'],
+    ['a  b!', 'a_b'],
+    ['svc ', 'svc'],
+    [' svc', '_svc'],
+    ['a_', 'a'],
+    ['svc-', 'svc-'],
+    ['a..b', 'a..b'],
+    ['2fa-service', '2fa-service'],
+    ['9lives', '9lives'],
+    ['unnamed-service', 'unnamed-service'],
+    ['svc_name.v2:api/edge-1', 'svc_name.v2:api/edge-1'],
+    ['my__service', 'my_service'],
+    ['Default Web Site/Shop', 'default_web_site/shop'],
+    [`a${'b'.repeat(99)}`, `a${'b'.repeat(99)}`],
+    [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
+    [`${'a'.repeat(100)} b`, 'a'.repeat(100)],
+    [`${'a'.repeat(99)}é`, 'a'.repeat(99)],
+    ['_svc', '_svc'],
+    ['-svc', '-svc'],
+    ['.svc', '.svc'],
+    [':svc', ':svc'],
+    ['café-api', undefined],
+    ['Café', undefined],
+    ['支付', undefined],
+    ['a🐶b', 'a_b'],
+    ['İstanbul', undefined],
+    ['é'.repeat(60), undefined],
+    ['___', undefined],
+    ['-', '-'],
+    ['', undefined],
+    ['   ', undefined],
+  ]
+
+  it('passes the name APM shows for the service, or none when that name is empty or not plain ASCII', () => {
+    for (const [service, sent] of APM_SERVICE_NAMES) {
+      AgentlessConfigurationSource.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, sent, JSON.stringify(service))
+    }
+  })
+
+  it('derives only the service it sends, not the tracer service', () => {
+    config.service = 'My Service'
+
+    assert.strictEqual(createSourceConfig().service, 'my_service')
+    assert.strictEqual(config.service, 'My Service')
+  })
+
+  // A different name attributes the usage to a service that APM does not show.
+  it('does not pass a service whose APM name is empty or not plain ASCII', () => {
+    for (const service of ['café-api', '支付', '___']) {
+      AgentlessConfigurationSource.resetHistory()
+      log.debug.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, undefined, service)
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Feature Flags: service %s has no ASCII APM name; DD-Service header not sent',
+        service
+      )
+    }
+  })
+
+  it('does not pass an empty service', () => {
+    config.service = ''
+
+    assert.strictEqual(createSourceConfig().service, undefined)
+    sinon.assert.calledOnce(log.debug)
+  })
+
+  describe('with the agentless source polling', () => {
+    let clock
+    let requests
+    let source
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+      requests = []
+      const RealAgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+        '../exporters/common/request': (data, options) => { requests.push(options) },
+        '../log': log,
+      })
+      configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+        '../log': log,
+        './agentless_configuration_source': RealAgentlessConfigurationSource,
+      })
+    })
+
+    afterEach(() => {
+      source?.stop()
+      clock.restore()
+    })
+
+    async function firstRequestHeaders () {
+      source = configurationSource.create(config, sinon.spy())
+      source.start()
+      for (let i = 0; i < 10; i++) await clock.tickAsync(0)
+      assert.strictEqual(requests.length, 1)
+      return requests[0].headers
+    }
+
+    it('sends the name APM shows for the service in DD-Service', async () => {
+      config.service = 'My Service'
+
+      assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
+    })
+
+    it('still polls, without DD-Service, when the APM name of the service is not plain ASCII', async () => {
+      for (const service of ['café-api', '支付']) {
+        source?.stop()
+        requests = []
+        config.service = service
+
+        assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false, service)
+      }
+    })
   })
 
   for (const apiKey of [undefined, '', '   ']) {
