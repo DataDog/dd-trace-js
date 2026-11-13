@@ -45,20 +45,18 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   #sdkTelemetry
 
-  /** @type {Promise<void> | undefined} */
-  #initializationPromise
-
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
+    const sdkTelemetry = SDKTelemetry.create(config)
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
+      onDiagnostic: sdkTelemetry && (observation => sdkTelemetry.emit(observation)),
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
-    const sdkTelemetry = SDKTelemetry.create(config)
     this.#sdkTelemetry = sdkTelemetry
 
     const enableOptOut =
@@ -99,8 +97,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     try {
       this.#configurationSource = configurationSource.create(
         config, this.setConfiguration.bind(this),
-        sdkTelemetry && (success => sdkTelemetry.fetchResult(success)),
-        sdkTelemetry && (() => sdkTelemetry.fetchStarted())
+        sdkTelemetry && this.reportConfigurationFetchResult.bind(this),
+        sdkTelemetry && this.reportConfigurationFetchStart.bind(this)
       )
     } catch (error) {
       this.#configurationSourceError = error
@@ -121,8 +119,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     const hasConfiguration = this.getConfiguration() !== undefined
 
-    const sdkTelemetry = this.#sdkTelemetry
-    sdkTelemetry?.start(hasConfiguration)
+    this.#sdkTelemetry?.start()
     this.#waitingForConfiguration = !hasConfiguration
     const promise = super.initialize(context)
 
@@ -135,25 +132,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       log.debug('Feature Flags: waiting for provider initialization (timeout %dms)...', this.#initializationTimeoutMs)
     }
 
-    if (!sdkTelemetry) return promise
-    if (hasConfiguration) {
-      // Upstream returns immediately when rules are already available.
-      sdkTelemetry.finish('ready')
-      return promise
-    }
-    const initialization = promise.then(
-      () => {
-        this.#initializationPromise = undefined
-        sdkTelemetry.finish('ready')
-      },
-      error => {
-        this.#initializationPromise = undefined
-        sdkTelemetry.finish('failed')
-        throw error
-      }
-    )
-    this.#initializationPromise = initialization
-    return initialization
+    return promise
   }
 
   /**
@@ -168,7 +147,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     super.setConfiguration(configuration)
     // An empty update leaves upstream initialization pending until configuration arrives or it times out.
     if (configuration == null) return
-    this.#sdkTelemetry?.configurationReceived()
     this.#waitingForConfiguration = false
 
     if (wasWaiting) {
@@ -213,16 +191,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
-    const sdkTelemetry = this.#sdkTelemetry
-    let closing
-    if (sdkTelemetry && this.#initializationPromise && !this.#waitingForConfiguration) {
-      // Rules or an error arrived, but upstream still has promise continuations to run.
-      // Preserve their actual outcome, including a failure during cache initialization.
-      const close = () => sdkTelemetry.close()
-      closing = this.#initializationPromise.then(close, close)
-    } else {
-      sdkTelemetry?.close()
-    }
+    const closing = super.onClose()
     this.#configurationSource?.stop()
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
@@ -230,7 +199,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#flagEvalEVPHook?.destroy()
     this.#flagEvalEVPHook = undefined
     log.debug('Feature Flags: provider closed')
-    return closing
+    return closing.finally(() => this.#sdkTelemetry?.close())
   }
 }
 

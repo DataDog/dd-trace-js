@@ -47,9 +47,12 @@ describe('Feature Flags SDK diagnostics', () => {
     telemetryNow = sinon.spy(clock.performance.now)
     const Telemetry = proxyquire('../../src/openfeature/sdk-telemetry', {
       './writers/sdk-diagnostics': Writer,
+    })
+    const upstream = proxyquire('../../../../vendor/dist/@datadog/openfeature-node-server', {
       'node:perf_hooks': { performance: { now: telemetryNow } },
     })
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
+      '../../../../vendor/dist/@datadog/openfeature-node-server': upstream,
       './sdk-telemetry': Telemetry,
       './configuration_source': {
         create: (config, apply, observe, start) => {
@@ -60,8 +63,8 @@ describe('Feature Flags SDK diagnostics', () => {
     })
   })
 
-  afterEach(() => {
-    provider?.onClose()
+  afterEach(async () => {
+    await provider?.onClose()
     assert.deepStrictEqual(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, handlers)
     clock.restore()
   })
@@ -123,185 +126,37 @@ describe('Feature Flags SDK diagnostics', () => {
     assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
   })
 
-  it('reports preloaded rules as ready, without a cached-fallback claim', async () => {
-    await ready()
-    provider.onClose()
-    assert.deepStrictEqual(events(), [{
-      ...identity(),
-      timestamp: NOW,
-      event_type: 'sdk_initialization',
-      initialization: {
-        outcome: 'ready',
-        started_at_ms: NOW,
-        duration_ms: 0,
-        final: true,
-        milestones: { configuration_received: { elapsed_ms: 0 }, provider_ready: { elapsed_ms: 0 } },
-      },
-    }])
-  })
-
-  for (const outcome of ['preloaded', 'ready', 'failed', 'rules removed']) {
-    it(`preserves ${outcome} initialization when closed in the same turn`, async () => {
-      create()
-      if (outcome === 'preloaded') provider.setConfiguration(configuration)
-      const pending = provider.initialize()
-      const failed = outcome === 'failed' || outcome === 'rules removed'
-      const error = new Error('initialization failed')
-      const settled = failed
-        ? assert.rejects(pending, outcome === 'failed' ? actual => actual === error : /configuration is unavailable/)
-        : pending
-      if (outcome === 'failed') provider.setError(error)
-      else if (outcome !== 'preloaded') provider.setConfiguration(configuration)
-      if (outcome === 'rules removed') provider.setConfiguration(undefined)
-      provider.onClose()
+  for (const outcome of ['failed', 'incomplete']) {
+    it(`delivers the upstream ${outcome} observation on close`, async () => {
+      const pending = create().initialize()
+      const settled = pending.catch(() => {})
+      if (outcome === 'failed') {
+        provider.setError(new Error('private initialization error'))
+        await assert.rejects(pending, /private initialization error/)
+      }
+      await provider.onClose()
+      assert.strictEqual(events().length, 1)
+      assert.strictEqual(events()[0].initialization.outcome, outcome)
+      assert.doesNotMatch(request.firstCall.args[0], /private initialization error/)
+      if (outcome === 'incomplete') provider.setConfiguration(configuration)
       await settled
-      assert.deepStrictEqual(events().map(event => event.initialization.outcome), [failed ? 'failed' : 'ready'])
-      sinon.assert.calledOnce(stopDelivery)
     })
   }
 
-  it('preserves a cache initialization failure when closed after receiving rules', async () => {
-    const error = new Error('cache initialization failed')
-    create()
-    sinon.stub(provider.exposureCache, 'init').rejects(error)
-    const pending = provider.initialize()
-    const rejected = assert.rejects(pending, actual => actual === error)
-    provider.setConfiguration(configuration)
-    provider.onClose()
-    await rejected
-    assert.deepStrictEqual(events().map(event => event.initialization.outcome), ['failed'])
-    sinon.assert.calledOnce(stopDelivery)
-  })
-
-  it('keeps a rate-limited outage suppressed after the cooldown expires', async () => {
-    await ready()
-    onFetchResult(false)
-    await clock.tickAsync(59_999)
-    onFetchResult(true)
-    onFetchResult(false)
-    await clock.tickAsync(1)
-    onFetchResult(false)
-    await clock.tickAsync(1000)
-    assert.strictEqual(events().length, 2)
-    onFetchResult(true)
-    onFetchResult(false)
-    provider.onClose()
-    assert.strictEqual(events().length, 3)
-  })
-
-  it('reports the existing timeout once and never reports late configuration as recovery', async () => {
-    const rejected = assert.rejects(create().initialize(), /Initialization timeout/)
-    onFetchResult(false)
-    await clock.tickAsync(30_000)
-    await rejected
-    provider.setConfiguration(configuration)
-    onFetchResult(true)
-    provider.onClose()
-    assert.deepStrictEqual(events(), [{
-      ...identity(),
-      timestamp: NOW + 30_000,
-      event_type: 'sdk_initialization',
-      error_code: 'INIT_FAILED',
-      initialization: {
-        outcome: 'failed', started_at_ms: NOW, duration_ms: 30_000, final: true, milestones: {},
-      },
-    }])
-  })
-
-  it('preserves the original error and excludes its message from diagnostics', async () => {
-    const error = new Error('credential-and-customer-data')
-    const rejected = assert.rejects(create().initialize(), actual => actual === error)
-    provider.setError(error)
-    await rejected
-    provider.onClose()
-    assert.strictEqual(events()[0].error_code, 'INIT_FAILED')
-    assert.doesNotMatch(request.firstCall.args[0], /credential-and-customer-data/)
-  })
-
-  it('reports a pending close once and ignores late initialization settlement', async () => {
-    const pending = create().initialize()
-    await clock.tickAsync(25)
-    provider.onClose()
-    provider.onClose()
-    provider.setConfiguration(configuration)
-    await pending
-    onFetchResult(false)
-    await clock.tickAsync(1000)
-    assert.deepStrictEqual(events(), [{
-      ...identity(),
-      timestamp: NOW + 25,
-      event_type: 'sdk_initialization',
-      initialization: {
-        outcome: 'incomplete',
-        reason: 'provider_closed',
-        started_at_ms: NOW,
-        duration_ms: 25,
-        final: false,
-        milestones: {},
-      },
-    }])
-    sinon.assert.calledOnce(stopDelivery)
-  })
-
-  it('does not emit for construction and close without initialization', () => {
-    create().onClose()
+  it('does not emit for construction and close without initialization', async () => {
+    await create().onClose()
     sinon.assert.notCalled(selectRoute)
     sinon.assert.notCalled(request)
   })
 
-  it('bounds fetch errors, resets on success, and does not change the usable rules', async () => {
+  it('delivers configuration fetch observations measured upstream', async () => {
     await ready()
+    onFetchStart()
     onFetchResult(false)
-    await clock.tickAsync(60_000)
-    onFetchResult(false)
-    assert.strictEqual(events().length, 2)
-    onFetchResult(true)
-    onFetchResult(false)
-    onFetchResult(true)
-    onFetchResult(false)
-    await clock.tickAsync(1000)
-    assert.strictEqual(events().length, 3)
-    assert.deepStrictEqual(events().slice(1), [NOW, NOW + 60_000].map(timestamp => ({
-      ...identity(), timestamp, event_type: 'provider_error', error_code: 'CONFIG_FETCH_FAILED',
-    })))
-    assert.strictEqual(provider.getConfiguration(), configuration)
-    onFetchResult(true)
-    provider.setConfiguration(configuration)
-    provider.onClose()
-    assert.strictEqual(events().length, 3)
-  })
-
-  for (const outcome of ['ready', 'failed']) {
-    it(`does not report a startup fetch failure that completes after initialization is ${outcome}`, async () => {
-      create()
-      onFetchStart()
-      const pending = provider.initialize()
-      const settled = pending.catch(() => {})
-      if (outcome === 'ready') {
-        provider.setConfiguration(configuration)
-        await pending
-      } else {
-        await clock.tickAsync(30_000)
-        await assert.rejects(pending, /Initialization timeout/)
-      }
-      onFetchResult(false)
-      await clock.tickAsync(1000)
-      assert.deepStrictEqual(events().map(event => event.event_type), ['sdk_initialization'])
-
-      // A new poll after initialization may report its own failure.
-      onFetchStart()
-      onFetchResult(false)
-      provider.onClose()
-      assert.deepStrictEqual(events().map(event => event.event_type), ['sdk_initialization', 'provider_error'])
-      await settled
+    await provider.onClose()
+    assert.deepStrictEqual(events()[1], {
+      ...identity(), timestamp: NOW, event_type: 'provider_error', error_code: 'CONFIG_FETCH_FAILED',
     })
-  }
-
-  it('does not turn arbitrary provider errors into configuration fetch errors', async () => {
-    await ready()
-    provider.setError(new Error('not a fetch failure'))
-    provider.onClose()
-    assert.strictEqual(events().length, 1)
   })
 
   for (const field of ['service', 'env']) {
@@ -309,7 +164,7 @@ describe('Feature Flags SDK diagnostics', () => {
       it(`skips diagnostics work with invalid ${field}: ${String(value).slice(0, 10)}`, async () => {
         config[field] = value
         await ready()
-        provider.onClose()
+        await provider.onClose()
         assert.strictEqual(onFetchResult, undefined)
         assert.strictEqual(onFetchStart, undefined)
         sinon.assert.notCalled(telemetryNow)
@@ -328,12 +183,12 @@ describe('Feature Flags SDK diagnostics', () => {
           provider.setError(error)
           await rejected
         } else {
-          if (outcome === 'closed') provider.onClose()
+          if (outcome === 'closed') await provider.onClose()
           provider.setConfiguration(configuration)
           await pending
           assert.strictEqual(provider.getConfiguration(), configuration)
         }
-        provider.onClose()
+        await provider.onClose()
         assert.strictEqual(onFetchResult, undefined)
         assert.strictEqual(onFetchStart, undefined)
         sinon.assert.notCalled(telemetryNow)
@@ -347,38 +202,17 @@ describe('Feature Flags SDK diagnostics', () => {
     config.service = 's'.repeat(200)
     config.env = 'e'.repeat(200)
     await ready()
-    provider.onClose()
+    await provider.onClose()
     assert.strictEqual(events()[0].service_id, config.service)
     assert.strictEqual(events()[0].environment, config.env)
   })
 
-  it('skips an initialization report if the wall clock moves behind its start', async () => {
-    const pending = create().initialize()
-    clock.setSystemTime(NOW - 1)
-    provider.setConfiguration(configuration)
-    await pending
-    provider.onClose()
-    sinon.assert.notCalled(request)
-  })
-
-  for (const elapsed of [86_400_000, 86_400_001]) {
-    it(`honors the initialization duration limit at ${elapsed}ms`, async () => {
-      config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = elapsed + 1
-      const pending = create().initialize()
-      // Exercise the duration boundary without running a day of periodic writer flushes.
-      clock.jump(elapsed)
-      provider.setConfiguration(configuration)
-      await pending
-      provider.onClose()
-      assert.strictEqual(events().length, elapsed === 86_400_000 ? 1 : 0)
-      if (events().length) assert.strictEqual(events()[0].initialization.duration_ms, elapsed)
-    })
-  }
-
   it('keeps initialization successful if diagnostics cannot select a route', async () => {
     selectRoute.throws(new Error('route failure'))
     await ready()
-    provider.onClose()
+    await provider.initialize()
+    await provider.onClose()
+    sinon.assert.calledOnce(selectRoute)
     sinon.assert.notCalled(request)
   })
 
@@ -420,7 +254,7 @@ describe('Feature Flags SDK diagnostics', () => {
         provider.setError(new Error('initialization failed'))
         await assert.rejects(pending, /initialization failed/)
       }
-      provider.onClose()
+      await provider.onClose()
       assert.strictEqual(events().length, 1)
       assert.strictEqual(events()[0].initialization.outcome, outcome)
       sinon.assert.calledOnce(discover)
@@ -433,7 +267,7 @@ describe('Feature Flags SDK diagnostics', () => {
   it('does not send through an unconfirmed route at shutdown or accept late discovery', async () => {
     selectRoute.returns(stopDelivery)
     await ready()
-    provider.onClose()
+    await provider.onClose()
     selectRoute.firstCall.args[1](true, { url: config.url, basePath: '/evp_proxy/v2' })
     await clock.tickAsync(1000)
     sinon.assert.notCalled(request)
@@ -475,7 +309,7 @@ describe('Feature Flags SDK diagnostics', () => {
     })
     request.onFirstCall().callsFake((body, options, callback) => callback(null, '', 404))
     await ready()
-    provider.onClose()
+    await provider.onClose()
     assert.strictEqual(request.callCount, 2)
     assert.strictEqual(request.firstCall.args[0], request.secondCall.args[0])
     assert.strictEqual(request.secondCall.args[1].path, '/api/v2/flagevaluation')
