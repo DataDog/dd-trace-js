@@ -1,14 +1,32 @@
 'use strict'
 
+const { Stream } = require('node:stream')
+
 const web = require('../../plugins/util/web')
 const { isEmpty } = require('../../util')
 const addresses = require('../addresses')
 const apiSecurity = require('../api_security')
 const { isBlocked, callBlockDelegation, handleResults } = require('../blocking')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
 
 const responseAnalyzedSet = new WeakSet()
+
+/**
+ * @param {{ arguments?: unknown[], body?: unknown, statusCode?: number }} ctx
+ */
+function onNextResponseBody (ctx) {
+  const body = ctx.arguments ? ctx.arguments[0] : ctx.body
+  if (!body || typeof body !== 'object' || Buffer.isBuffer(body) || body instanceof Stream) return
+
+  const req = getActiveRequest()
+  if (!req) return
+
+  // A Web Response has its final status before Next copies it to the Node response.
+  const res = ctx.statusCode ? { statusCode: ctx.statusCode } : web.getContext(req)?.res
+  if (res) onResponseBody({ req, res, body })
+}
 
 function onResponseBody ({ req, res, body }) {
   if (
@@ -77,6 +95,7 @@ function onResponseOperation ({ res, abortController }) {
 }
 
 module.exports = {
+  onNextResponseBody,
   onResponseBody,
   onResponseWriteHead,
   onResponseOperation,
