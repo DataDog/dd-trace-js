@@ -8,26 +8,18 @@ const path = require('node:path')
  * @param {string} resourcePath
  */
 function run (resourcePath) {
-  const loader = require('../../src/loader')
+  const { instrument } = require('../../../src/helpers/bundler-transform')
   const source = fs.readFileSync(resourcePath, 'utf8')
-  let result
-  loader.call({
-    callback (error, code) {
-      if (error) throw error
-      result = code
-    },
-    resourcePath,
-  }, source)
-  return result
+  return instrument({ source, resourcePath })?.code ?? source
 }
 
 function main () {
   delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
   if (process.argv[2] === 'disabled') {
     process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'ai'
-    require('../../../datadog-instrumentations/src/helpers/register')
+    require('../../../src/helpers/register')
   }
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-disablement-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-bundler-transform-disablement-'))
   try {
     const packageDir = path.join(directory, 'node_modules', 'ai')
     fs.mkdirSync(path.join(packageDir, 'dist'), { recursive: true })
