@@ -20,8 +20,9 @@ const OPTIONAL_DEPENDENCY_PATTERN =
 // tracer and the application share one copy that does not need to be deployed next to the bundle.
 const BUNDLED_WHEN_INSTALLED = ['@opentelemetry/api', '@opentelemetry/api-logs']
 // Rollup leaves `require`, `__filename` and `__dirname` as free variables in ESM output, where Node.js lacks them.
-// Rollup reserves these names in every chunk, so declaring them cannot collide with bundled code, and keeping them
-// chunk-local resolves each chunk against its own location instead of whichever bundle loaded first.
+// Rollup 4.53.1 and newer reserve these names in every chunk, renaming bundled declarations such as
+// `const __dirname = ...`, so declaring them cannot collide with bundled code. Keeping them chunk-local resolves each
+// chunk against its own location instead of whichever bundle loaded first.
 const ESM_COMMONJS_BINDINGS = 'import { createRequire as $dd_createRequire } from \'node:module\';\n' +
   'import { fileURLToPath as $dd_fileURLToPath } from \'node:url\';\n' +
   'import { dirname as $dd_dirname } from \'node:path\';\n' +
@@ -52,7 +53,7 @@ const mergedFunctions = new WeakSet()
  *   environments: Record<string, { build: BuildOptions, consumer: string } | undefined>,
  *   esbuild: false | { keepNames?: boolean },
  * }} ResolvedConfig
- * @typedef {{ meta?: { rolldownVersion?: string } } | undefined} HookContext
+ * @typedef {{ meta?: { rolldownVersion?: string, rollupVersion?: string } } | undefined} HookContext
  * @typedef {{ warn: (message: string) => void }} TransformContext
  * @typedef {{ name: string, config: { build: BuildOptions, consumer: string } }} Environment
  */
@@ -103,6 +104,9 @@ function datadogVite () {
      */
     outputOptions (output) {
       if (isRolldown(this) || !ESM_FORMATS.has(output.format ?? 'es')) return
+      if (!reservesCommonJsNames(this?.meta?.rollupVersion)) {
+        throw new Error('dd-trace/vite requires Rollup 4.53.1 or newer for ESM output. Refusing to bundle.')
+      }
       return { ...output, intro: prependAddon(ESM_COMMONJS_BINDINGS, output.intro) }
     },
 
@@ -157,6 +161,15 @@ function isInstrumentable (id) {
  */
 function isRolldown (context) {
   return Boolean(context?.meta?.rolldownVersion)
+}
+
+/**
+ * @param {string | undefined} version
+ */
+function reservesCommonJsNames (version) {
+  if (version === undefined) return false
+  const [major, minor, patch] = version.split('.').map(part => Number.parseInt(part, 10))
+  return major > 4 || (major === 4 && (minor > 53 || (minor === 53 && patch >= 1)))
 }
 
 /**
