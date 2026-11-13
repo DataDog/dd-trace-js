@@ -44,8 +44,11 @@ class SpanProcessor {
     this._killAll = false
     this.#exportOtlpTraces = usesOtlpTraceExporter(config)
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
-        !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
+    if (
+      config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+      !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED &&
+      (!exporter.isAgentless || config.OTEL_TRACES_SPAN_METRICS_ENABLED)
+    ) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
       if (otlpStatsExporter) {
@@ -54,6 +57,12 @@ class SpanProcessor {
           resourceAttributes: otlpStatsExporter.getStartupResourceAttributes(),
         }
       }
+      exporter.onTransportSelected?.(agentless => {
+        if (agentless && !config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+          this._stats.stop()
+          this._stats = undefined
+        }
+      })
     }
 
     this._spanSampler = new SpanSampler(config.sampler)

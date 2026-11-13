@@ -5,9 +5,11 @@ const http = require('node:http')
 const { URL } = require('node:url')
 const zlib = require('node:zlib')
 
+const { decode } = require('@msgpack/msgpack')
 const { after, before, describe, it } = require('mocha')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../../version')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 
 const agent = require('../../plugins/agent')
@@ -26,6 +28,20 @@ describe('AgentlessWriter data pipeline', () => {
   let intakeUrl
   let resolveRequest
   let request
+
+  /**
+   * @param {number} count
+   * @returns {Promise<object[]>}
+   */
+  function receiveRequests (count) {
+    const requests = []
+    return new Promise(resolve => {
+      resolveRequest = received => {
+        requests.push(received)
+        if (requests.length === count) resolve(requests)
+      }
+    })
+  }
 
   before(done => {
     process.env.DD_API_KEY = 'test-api-key'
@@ -128,5 +144,89 @@ describe('AgentlessWriter data pipeline', () => {
     await new Promise(resolve => writer.flush(resolve))
     await request
     await noIntakeTrace
+  })
+
+  it('exports traces and native client stats from one v0.4 payload', async () => {
+    request = receiveRequests(2)
+    const metadata = {
+      env: 'test-env',
+      hostname: 'test-host',
+      runtimeID: 'test-runtime-id',
+      containerId: 'container-id',
+      entityId: 'in-1234',
+    }
+    const writer = new AgentlessWriter({
+      url: intakeUrl,
+      stats: {
+        endpoint: new URL('/api/v0.2/stats', intakeUrl).href,
+        intervalMs: 10_000,
+      },
+      metadata,
+    })
+
+    const root = {
+      duration: 5_000_000,
+      error: 0,
+      meta: { 'http.status_code': '200' },
+      metrics: {},
+      name: 'operation',
+      parent_id: id('0'),
+      resource: 'resource',
+      service: 'service',
+      span_id: id('2'),
+      start: 1,
+      trace_id: id('1'),
+    }
+    writer.append([
+      root,
+      {
+        ...root,
+        duration: 17_000_000,
+        metrics: { '_dd.measured': 1 },
+        parent_id: id('2'),
+        resource: 'measured-child',
+        span_id: id('3'),
+      },
+      { ...root, parent_id: id('2'), resource: 'ordinary-child', span_id: id('4') },
+    ])
+    writer.append([{ ...root, duration: 7_000_000, error: 1 }])
+    writer.append([{ ...root, duration: 11_000_000, error: 1, meta: { 'http.status_code': '503' } }])
+    writer.append([{ ...root, duration: 13_000_000, resource: 'other-resource' }])
+
+    await new Promise(resolve => writer.flushAndDrainStats(resolve))
+    const received = await request
+    const traceRequest = received.find(({ path }) => path === '/api/v2/spans')
+    const statsRequest = received.find(({ path }) => path === '/api/v0.2/stats')
+
+    assert.notStrictEqual(traceRequest, undefined)
+    assert.notStrictEqual(statsRequest, undefined)
+    assert.strictEqual(traceRequest.headers['datadog-client-computed-stats'], 'true')
+    assert.strictEqual(traceRequest.headers['datadog-client-computed-top-level'], 'true')
+    assert.strictEqual(traceRequest.headers['datadog-entity-id'], 'in-1234')
+    assert.strictEqual(statsRequest.headers['datadog-client-computed-stats'], 'true')
+    assert.strictEqual(statsRequest.headers['datadog-client-computed-top-level'], 'true')
+    assert.strictEqual(statsRequest.headers['datadog-entity-id'], 'in-1234')
+    assert.deepStrictEqual(statsRequest.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
+    if (zstdDecompressSync) {
+      const payload = decode(zstdDecompressSync(statsRequest.payload), { useBigInt64: true })
+      assert.strictEqual(payload.AgentHostname, 'test-host')
+      assert.strictEqual(payload.AgentEnv, 'test-env')
+      assert.strictEqual(payload.ClientComputed, true)
+      assert.strictEqual(payload.Stats[0].RuntimeID, 'test-runtime-id')
+      assert.strictEqual(payload.Stats[0].ContainerID, 'container-id')
+      const groups = payload.Stats[0].Stats.flatMap(bucket => bucket.Stats)
+      assert.strictEqual(groups.some(group => group.Resource === 'ordinary-child'), false)
+      assert.strictEqual(groups.length, 4)
+      for (const expected of [
+        { Resource: 'resource', HTTPStatusCode: 200, Hits: 2, Errors: 1, Duration: 12_000_000, TopLevelHits: 2 },
+        { Resource: 'resource', HTTPStatusCode: 503, Hits: 1, Errors: 1, Duration: 11_000_000, TopLevelHits: 1 },
+        { Resource: 'other-resource', HTTPStatusCode: 200, Hits: 1, Errors: 0, Duration: 13_000_000, TopLevelHits: 1 },
+        { Resource: 'measured-child', HTTPStatusCode: 200, Hits: 1, Errors: 0, Duration: 17_000_000, TopLevelHits: 0 },
+      ]) {
+        const group = groups.find(group =>
+          group.Resource === expected.Resource && group.HTTPStatusCode === expected.HTTPStatusCode)
+        assertObjectContains(group, expected)
+      }
+    }
   })
 })

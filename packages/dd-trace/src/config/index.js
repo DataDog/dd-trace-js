@@ -680,8 +680,6 @@ class Config extends ConfigBase {
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
-      // Disable client-side stats computation
-      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation

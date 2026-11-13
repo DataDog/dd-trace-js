@@ -15,13 +15,17 @@ const MAX_BUFFERED_SPANS = 1000
  * agentless APM exporter.
  */
 class LLMObsExporter extends BufferingExporter {
-  #agentless = false
   #bufferLimitWarned = false
   #bufferedSpanCount = 0
   #exporter
+  /** @type {((agentless: boolean) => void) | undefined} */
+  #onTransportSelected
   /** @type {Array<Function | undefined>} */
   #pendingFlushes = []
   #prioritySampler
+
+  /** @type {boolean | undefined} */
+  isAgentless
 
   /**
    * @param {import('../../config/config-base')} config
@@ -55,10 +59,14 @@ class LLMObsExporter extends BufferingExporter {
   #initialize (useAgentless) {
     const Exporter = useAgentless ? AgentlessExporter : AgentExporter
     const pendingUrl = this._url
-    this.#agentless = useAgentless
     this.#exporter = new Exporter(this._config, this.#prioritySampler)
     if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
     this._url = this.#exporter._url
+    this.isAgentless = useAgentless
+
+    const onTransportSelected = this.#onTransportSelected
+    this.#onTransportSelected = undefined
+    onTransportSelected?.(useAgentless)
 
     this._isInitialized = true
     this.exportUncodedTraces()
@@ -67,6 +75,15 @@ class LLMObsExporter extends BufferingExporter {
     const pendingFlushes = this.#pendingFlushes
     this.#pendingFlushes = []
     for (const done of pendingFlushes) this.#exporter.flush(done)
+  }
+
+  /** @param {(agentless: boolean) => void} callback */
+  onTransportSelected (callback) {
+    if (this._isInitialized) {
+      callback(this.isAgentless)
+    } else {
+      this.#onTransportSelected = callback
+    }
   }
 
   /** @param {object[]} trace */
@@ -87,7 +104,7 @@ class LLMObsExporter extends BufferingExporter {
       return true
     }
 
-    if (this.#agentless) this.#normalizeTagKeys(trace)
+    if (this.isAgentless) this.#normalizeTagKeys(trace)
     return this.#exporter.export(trace)
   }
 
