@@ -386,6 +386,28 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_DATA_STREAMS_HTTP_ENABLED', () => {
+    it('defaults to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_DATA_STREAMS_HTTP_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_DATA_STREAMS_HTTP_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+
+    it('can be disabled from the environment', () => {
+      process.env.DD_DATA_STREAMS_HTTP_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_DATA_STREAMS_HTTP_ENABLED, false)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_DATA_STREAMS_HTTP_ENABLED', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
     // Shape mirrors winston: log methods, transports with a parent back-reference,
     // and stream-state self-references (Transform's _readableState.pipes).

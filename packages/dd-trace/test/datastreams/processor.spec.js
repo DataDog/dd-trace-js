@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { randomBytes } = require('node:crypto')
 const { hostname } = require('node:os')
 const { inspect } = require('node:util')
 
@@ -13,6 +14,7 @@ const { DsmPathwayCodec } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const propagationHash = require('../../src/propagation-hash')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -113,6 +115,23 @@ describe('StatsBucket', () => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(anotherMockCheckpoint)
       assert.strictEqual(buckets.checkpoints.size, 2)
+    })
+
+    it('stops adding entries at 2000 checkpoints but keeps aggregating existing ones', () => {
+      const checkpointFor = index => {
+        const hash = Buffer.alloc(8)
+        hash.writeUInt32LE(index)
+        return { ...mockCheckpoint, hash }
+      }
+      const first = checkpointFor(0)
+      const firstPoint = buckets.forCheckpoint(first)
+      for (let index = 1; index < 2000; index++) {
+        assert.ok(buckets.forCheckpoint(checkpointFor(index)) instanceof StatsPoint)
+      }
+
+      assert.strictEqual(buckets.forCheckpoint(checkpointFor(2000)), undefined)
+      assert.strictEqual(buckets.forCheckpoint(first), firstPoint)
+      assert.strictEqual(buckets.checkpoints.size, 2000)
     })
   })
 
@@ -521,6 +540,39 @@ describe('DataStreamsProcessor', () => {
       // Expected hash comes from dd-trace-java's FNV64Hash with process tags off.
       assert.strictEqual(ctx.hash.readBigUInt64LE(), 11375375775841093325n)
     })
+  })
+})
+
+describe('DataStreamsProcessor with forged parent contexts', () => {
+  let processor
+  let clock
+  let dropped
+
+  beforeEach(() => {
+    processor = new DataStreamsProcessor({ dsmEnabled: true, env: 'test', service: 'service1' })
+    clearTimeout(processor.timer)
+    clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    dropped = sinon.spy(
+      telemetryMetrics.manager.namespace('tracers').count('data_streams.checkpoints_dropped', ['reason:bucket_full']),
+      'inc'
+    )
+  })
+
+  afterEach(() => {
+    dropped.restore()
+    clock.restore()
+  })
+
+  it('bounds the checkpoints a bucket holds and counts the dropped ones', () => {
+    for (let index = 0; index < 5000; index++) {
+      const header = Buffer.concat([randomBytes(8), Buffer.alloc(12)]).toString('base64')
+      const parent = DsmPathwayCodec.decode({ 'dd-pathway-ctx-base64': header })
+      processor.setCheckpoint(['direction:in', 'type:http'], null, parent, 0, 0)
+    }
+
+    const bucket = processor.bucketFromTimestamp(DEFAULT_TIMESTAMP * 1e6)
+    assert.strictEqual(bucket.checkpoints.size, 2000)
+    assert.strictEqual(dropped.callCount, 3000)
   })
 })
 
