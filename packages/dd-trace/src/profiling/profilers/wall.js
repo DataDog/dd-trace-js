@@ -86,6 +86,8 @@ class NativeWallProfiler {
   #boundSpanFinished = this.#spanFinished.bind(this)
   #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
+  // OTLP profiles carry each sample's time as a sample timestamp, not as a label
+  #boundGenerateOtelLabels = ({ node, context }) => this.#generateLabels(node, context, false)
 
   get type () { return 'wall' }
 
@@ -304,7 +306,12 @@ class NativeWallProfiler {
     profilerTelemetryMetrics.count(metric, [tag]).inc()
   }
 
-  #stop (restart) {
+  /**
+   * @param {boolean} restart
+   * @param {import('@datadog/pprof').ProfileVisitor} [visitor] - Receives the profile instead of it
+   *   being returned as pprof.
+   */
+  #stop (restart, visitor) {
     if (!this.#started) return
 
     if (this.#captureSpanData && !this.#asyncContextFrameEnabled) {
@@ -313,18 +320,27 @@ class NativeWallProfiler {
       this.#lastSampleCount = 0
     }
 
-    // Mark thread labels and trace endpoint label as good deduplication candidates
-    const lowCardinalityLabels = Object.keys(getThreadLabels())
-    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
+    let profile
+    if (visitor === undefined) {
+      // Mark thread labels and trace endpoint label as good deduplication candidates
+      const lowCardinalityLabels = Object.keys(getThreadLabels())
+      lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
 
-    // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
-    if (this.#customLabelKeys) {
-      for (const key of this.#customLabelKeys) {
-        lowCardinalityLabels.push(key)
+      // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
+      if (this.#customLabelKeys) {
+        for (const key of this.#customLabelKeys) {
+          lowCardinalityLabels.push(key)
+        }
       }
-    }
 
-    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+      profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+    } else {
+      // Every sample with a context is a timestamped observation, as the timeline needs
+      profile = this.#pprof.time.stopAndVisit(restart, visitor, {
+        generateLabels: this.#boundGenerateOtelLabels,
+        samplePerContext: true,
+      })
+    }
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -353,6 +369,10 @@ class NativeWallProfiler {
   }
 
   _generateLabels ({ node, context }) {
+    return this.#generateLabels(node, context, this.#timelineEnabled)
+  }
+
+  #generateLabels (node, context, withEndTimestamp) {
     // check for special node that represents CPU time all non-JS threads.
     // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
     if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
@@ -389,7 +409,7 @@ class NativeWallProfiler {
       ? { ...getThreadLabels() }
       : { ...customLabels, ...getThreadLabels() }
 
-    if (this.#timelineEnabled) {
+    if (withEndTimestamp) {
       // Incoming timestamps are in microseconds, we emit nanos.
       labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
@@ -462,6 +482,17 @@ class NativeWallProfiler {
 
   profile (restart) {
     return this.#stop(restart)
+  }
+
+  /**
+   * Passes the profile to the visitor instead of returning it as pprof, e.g. to an OTLP profiles
+   * builder.
+   *
+   * @param {boolean} restart
+   * @param {import('@datadog/pprof').ProfileVisitor} visitor
+   */
+  visit (restart, visitor) {
+    return this.#stop(restart, visitor)
   }
 
   getInfo () {

@@ -50,6 +50,7 @@ describe('profilers/native/wall', () => {
       time: {
         start: sinon.stub(),
         stop: sinon.stub().returns(profile0),
+        stopAndVisit: sinon.stub().returns({ hasMissingMapFiles: false }),
         setContext: sinon.stub(),
         getContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
@@ -228,6 +229,26 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     assert.strictEqual(profiler.isStarted(), false)
     sinon.assert.calledTwice(pprof.time.stop)
+  })
+
+  it('should pass profiles to a visitor, with timestamps as sample timestamps instead of labels', () => {
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true })
+    profiler.start()
+    const visitor = {}
+
+    const result = profiler.visit(true, visitor)
+
+    assert.deepStrictEqual(result, { hasMissingMapFiles: false })
+    sinon.assert.notCalled(pprof.time.stop)
+    sinon.assert.calledOnceWithExactly(pprof.time.stopAndVisit, true, visitor, sinon.match({ samplePerContext: true }))
+    assert.strictEqual(profiler.isStarted(), true)
+    const { generateLabels } = pprof.time.stopAndVisit.firstCall.args[2]
+    const labels = generateLabels({ node: {}, context: { timestamp: 1234n } })
+    assert.strictEqual(labels.end_timestamp_ns, undefined)
+    assert.strictEqual(labels['thread name'], 'Main Event Loop')
+
+    profiler.visit(false, visitor)
+    assert.strictEqual(profiler.isStarted(), false)
   })
 
   it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {

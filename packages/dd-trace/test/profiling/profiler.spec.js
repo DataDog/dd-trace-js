@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
@@ -33,6 +34,7 @@ describe('profiler', function () {
   let interval
   let flushInterval
   let buildProfilingRuntimeError
+  let otlp
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
@@ -54,6 +56,7 @@ describe('profiler', function () {
         profilers,
         uploadCompression: { method, level: Number.isNaN(level) ? undefined : level },
         systemInfoReport: { oomMonitoring: { enabled: false } },
+        otlp,
       }
     },
     getProfilingTags: (config) => ({ ...config.tags }),
@@ -76,6 +79,7 @@ describe('profiler', function () {
 
   function setUpProfiler () {
     buildProfilingRuntimeError = undefined
+    otlp = false
     flushInterval = 65 * 1000
     interval = flushInterval
     clock = sinon.useFakeTimers({
@@ -408,6 +412,54 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should export a cycle as one OTLP request with OTLP export enabled', async () => {
+      const pprof = require('@datadog/pprof')
+      initProfiler({
+        '@datadog/pprof': {
+          SourceMapper: SourceMapperStub,
+          setLogger: sinon.stub(),
+          OtelProfilesBuilder: pprof.OtelProfilesBuilder,
+        },
+      })
+      otlp = true
+      const wall = { type: 'wall', unit: 'nanoseconds' }
+      wallProfiler.visit = sinon.stub().callsFake((restart, visitor) => {
+        visitor.metadata({ sampleTypes: [wall], periodType: wall, period: 10_000_000, timeNanos: 0n })
+        const stackId = visitor.stack([visitor.frame({ name: 'work', file: 'app.js', missingMapFile: false })])
+        visitor.sample({ stackId, values: [10_000_000], labels: [['thread name', 'Main Event Loop']], timestamp: 1n })
+        visitor.end({ hasMissingMapFiles: false })
+        return { hasMissingMapFiles: false }
+      })
+      profilers = [wallProfiler]
+
+      await profiler.start(makeStartOptions({ service: 'otlp-service', tags: { service: 'otlp-service' } }))
+      clock.tick(interval)
+      // Encoding the request yields to the event loop
+      for (let i = 0; i < 100 && exporter.export.notCalled; i++) {
+        await new Promise(resolve => setImmediate(resolve))
+      }
+
+      sinon.assert.calledOnce(exporter.export)
+      sinon.assert.calledWith(wallProfiler.visit, true)
+      sinon.assert.notCalled(wallProfiler.profile)
+      const [exportSpec] = exporter.export.firstCall.args
+      assert.deepStrictEqual(exportSpec.profiles, {})
+      const { ExportProfilesServiceRequest } = require(
+        require.resolve('pprof-format/otel', { paths: [path.dirname(require.resolve('@datadog/pprof'))] })
+      )
+      const request = ExportProfilesServiceRequest.decode(exportSpec.otlp)
+      const [resourceProfiles] = request.resourceProfiles
+      const resource = Object.fromEntries(resourceProfiles.resource.attributes.map(a => [a.key, a.value.stringValue]))
+      assert.strictEqual(resource['datadog.family'], 'node')
+      assert.strictEqual(resource['service.name'], 'otlp-service')
+      const [profile] = resourceProfiles.scopeProfiles[0].profiles
+      assert.strictEqual(profile.originalPayloadFormat, 'datadog-event-json')
+      const event = JSON.parse(Buffer.from(profile.originalPayload).toString())
+      assert.strictEqual(event.family, 'node')
+      assert.deepStrictEqual(event.attachments, ['wall.pprof'])
+      assert.match(event.tags_profiler, /snapshot:periodic/)
     })
 
     it('should flush when the profiler is stopped', async () => {
