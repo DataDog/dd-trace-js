@@ -1604,6 +1604,8 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                // The sandbox remote is a local path; replay links need an explicit source URL.
+                DD_GIT_REPOSITORY_URL: 'https://github.com/DataDog/dd-trace-js',
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               },
