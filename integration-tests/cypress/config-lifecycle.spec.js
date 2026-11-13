@@ -32,6 +32,13 @@ const {
   VIDEO_UPLOAD_SCOPE_TEST_SUITE,
 } = require('../../packages/dd-trace/src/ci-visibility/test-video')
 
+function browserSupportSource () {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+  )
+  return `(function () { const module = { exports: {} }; ${source}\nmodule.exports() })()`
+}
+
 describe('Cypress plugin run lifecycle', () => {
   const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
   const originalState = {
@@ -627,9 +634,7 @@ describe('Cypress plugin run lifecycle', () => {
           return Promise.resolve(result)
         })
 
-        runInNewContext(fs.readFileSync(
-          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-        ), {
+        runInNewContext(browserSupportSource(), {
           Cypress: {
             _: { isEqual, cloneDeep },
             config: name => {
@@ -775,9 +780,7 @@ describe('Cypress plugin run lifecycle', () => {
       afterEach: () => hooks.push('afterEach'),
       after: () => hooks.push('after'),
     }
-    runInNewContext(fs.readFileSync(
-      path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-    ), context)
+    runInNewContext(browserSupportSource(), context)
     assert.deepStrictEqual(hooks, [])
     assert.strictEqual(runner.runTests, originalRunTests)
     const observedRetries = context.Cypress.config('retries')
@@ -791,6 +794,48 @@ describe('Cypress plugin run lifecycle', () => {
     install()
     assert.deepStrictEqual(hooks, registered)
     assert.strictEqual(context.Cypress.config('retries'), observedRetries)
+  })
+
+  it('initializes a cached support module with independent state for each Mocha root', () => {
+    let root
+    let registrations = 0
+    const runner = { runTests () {}, suite: { ctx: {} } }
+    const context = {
+      module: { exports: {} },
+      Cypress: {
+        mocha: { getRootSuite: () => root, getRunner: () => runner },
+        _: { isEqual, cloneDeep },
+        state () {},
+        on () {},
+      },
+      cy: { on () {} },
+      before () {},
+      beforeEach: () => { registrations++ },
+      afterEach () {},
+      after () {},
+    }
+    runInNewContext(fs.readFileSync(
+      path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+    ), context)
+    const initializeBrowserSupport = context.module.exports
+    const installers = []
+    const observed = []
+    for (const retries of [2, 4]) {
+      root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+      const nativeRetries = { runMode: retries, openMode: 0 }
+      context.Cypress.config = name => name === 'retries' ? nativeRetries : true
+      initializeBrowserSupport()
+      observed.push(context.Cypress.config('retries'))
+      installers.push(root[Symbol.for('dd-trace.cypress.install-lifecycle')])
+      assert.strictEqual(observed.at(-1).runMode, retries)
+      observed.at(-1).runMode++
+      const installLifecycle = installers.at(-1)
+      installLifecycle()
+    }
+    assert.strictEqual(registrations, 2)
+    assert.notStrictEqual(installers[0], installers[1])
+    assert.strictEqual(observed[0].runMode, 3)
+    assert.strictEqual(observed[1].runMode, 5)
   })
 
   for (const fields of [
@@ -831,9 +876,7 @@ describe('Cypress plugin run lifecycle', () => {
         afterEach () {},
         after () {},
       }
-      runInNewContext(fs.readFileSync(
-        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-      ), context)
+      runInNewContext(browserSupportSource(), context)
       const before = reads
       const observed = context.Cypress.config()
       const result = fields.reduce((current, field) => current[field], observed.retries)
@@ -868,9 +911,7 @@ describe('Cypress plugin run lifecycle', () => {
       after () {},
       afterEach: callback => { hooks.afterEach = callback },
     }
-    runInNewContext(fs.readFileSync(
-      path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-    ), context)
+    runInNewContext(browserSupportSource(), context)
     let reads = 0
     Object.defineProperty(context.Cypress.config(), 'retries', {
       configurable: true,
@@ -910,9 +951,7 @@ describe('Cypress plugin run lifecycle', () => {
         after () {},
         afterEach: callback => { hooks.afterEach = callback },
       }
-      runInNewContext(fs.readFileSync(
-        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-      ), context)
+      runInNewContext(browserSupportSource(), context)
       const retries = { runMode: experimental ? true : 2, experimentalOptions: { maxRetries: 2 } }
       Object.defineProperty(retries, 'experimentalStrategy', {
         configurable: true,
@@ -943,9 +982,7 @@ describe('Cypress plugin run lifecycle', () => {
           },
         }
         if (instrumented) {
-          runInNewContext(fs.readFileSync(
-            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-          ), context)
+          runInNewContext(browserSupportSource(), context)
         }
         const config = context.Cypress.config()
         const retries = config.retries
@@ -984,9 +1021,7 @@ describe('Cypress plugin run lifecycle', () => {
         },
       }
       if (instrumented) {
-        runInNewContext(fs.readFileSync(
-          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-        ), context)
+        runInNewContext(browserSupportSource(), context)
       }
       Object.defineProperty(context.Cypress.config(), 'custom', { configurable: false })
       assert.strictEqual(reads, 0)
@@ -1007,9 +1042,7 @@ describe('Cypress plugin run lifecycle', () => {
           },
         }
         if (instrumented) {
-          runInNewContext(fs.readFileSync(
-            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-          ), context)
+          runInNewContext(browserSupportSource(), context)
         }
         let reads = 0
         const config = context.Cypress.config()
@@ -1061,9 +1094,7 @@ describe('Cypress plugin run lifecycle', () => {
         afterEach () {},
         after () {},
       }
-      runInNewContext(fs.readFileSync(
-        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-      ), context)
+      runInNewContext(browserSupportSource(), context)
       await hooks.before()
       const applied = ['suite', 'explicit-root'].includes(stage)
         ? 'complete'
@@ -1180,9 +1211,7 @@ describe('Cypress plugin run lifecycle', () => {
         afterEach: callback => { hooks.afterEach = callback },
         after () {},
       }
-      runInNewContext(fs.readFileSync(
-        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-      ), context)
+      runInNewContext(browserSupportSource(), context)
       if (mode === 'saved-accessor-options') {
         await hooks.before()
         const saved = context.Cypress.config('retries')
@@ -1511,9 +1540,7 @@ describe('Cypress plugin run lifecycle', () => {
       specify: declareTest,
       describe: declareSuite,
     }
-    runInNewContext(fs.readFileSync(
-      path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
-    ), context)
+    runInNewContext(browserSupportSource(), context)
     const alias = context.it
     const error = new Error('suite declaration failed')
     assert.throws(() => context.describe.skip('throws', () => { throw error }), candidate => candidate === error)
