@@ -392,6 +392,15 @@ lambdaHandler({ value: 'ok' }, { getRemainingTimeInMillis: () => 1000 });
 // Compile-only checks: wrappers require Lambda invocation arguments and preserve results and metadata.
 function checkLambdaWrapperTypes() {
   const context = { getRemainingTimeInMillis: () => 1000 };
+  const extractor: plugins.aws_lambda['traceExtractor'] = async (event, context) => ({
+    traceId: String(event.traceId), parentId: String(context.parentId), sampleMode: 2, source: 'event',
+  });
+  tracer.use('aws-lambda', { traceExtractor: extractor });
+  lambda.wrap(() => 'custom', { traceExtractor: extractor, mergeDatadogXrayTraces: true })({}, context);
+  lambda.wrap(() => 'legacy', { traceExtractor: () => ({
+    traceID: '123', parentID: '456', sampleMode: 0, source: 'event',
+  }) })({}, context);
+
   const sync = lambda.wrap((event: { value: number }) => event.value);
   const syncResult: Promise<number> = sync({ value: 42 }, context);
   // @ts-expect-error Wrapped event-only handlers still require the runtime context.

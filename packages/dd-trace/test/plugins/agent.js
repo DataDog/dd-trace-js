@@ -56,6 +56,7 @@ let loaded = false
 // `agent.load()` calls. The `eslint-non-prefix-env-names` rule extracts
 // this Set at lint time and reports new reads that bypass it.
 const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
+  '_X_AMZN_TRACE_ID',
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
   'AWS_LAMBDA_INITIALIZATION_TYPE',

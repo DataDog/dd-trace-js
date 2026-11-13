@@ -2600,8 +2600,23 @@ declare namespace tracer {
      */
     interface aws_durable_execution_sdk_js extends Integration {}
 
+    /** Distributed context returned by a Lambda custom trace extractor. */
+    interface LambdaTraceContext {
+      traceId?: string;
+      parentId?: string;
+      /** @deprecated Use traceId. */
+      traceID?: string;
+      /** @deprecated Use parentId. */
+      parentID?: string;
+      sampleMode: -1 | 0 | 1 | 2;
+      source: 'event' | 'xray' | 'ddtrace';
+    }
+
     /** Configuration for AWS Lambda invocation instrumentation in Lambda runtimes. */
     interface aws_lambda extends Instrumentation {
+      /** Extracted and awaited before the invocation span starts; falls back to standard extraction on failure. */
+      traceExtractor?: (event: Record<string, unknown>, context: Record<string, unknown>) =>
+        LambdaTraceContext | Promise<LambdaTraceContext>;
       /** @default true @env DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED */
       serviceRepresentationEnabled?: boolean;
       /** @default true @env DD_ENHANCED_METRICS */

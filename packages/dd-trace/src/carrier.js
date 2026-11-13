@@ -281,6 +281,19 @@ const dsmBase64 = defineField(
 )
 const dsmBinary = defineField('dsmBinary', dsmBinaryHeader, readDsmBinary, FIELD_READ | FIELD_HAS)
 
+defineCapability('stepFunctionTraceContext', FIELD_READ, {
+  /**
+   * Step Functions schema fields accept scalar strings only, unlike HTTP propagation headers.
+   * @param {Carrier} carrier
+   * @returns {{ traceId: string, tags: string } | undefined}
+   */
+  read (carrier) {
+    const traceId = carrier[datadogTraceIdHeader]
+    const tags = carrier[datadogTagsHeader]
+    if (typeof traceId === 'string' && typeof tags === 'string') return { traceId, tags }
+  },
+})
+
 const legacyBaggagePrefix = 'ot-baggage-'
 // RFC 7230 `token`, compatible with Node.js header-name validation.
 const httpHeaderNameExpr = /^[0-9A-Za-z!#$%&'*+\-.^_`|~]+$/
@@ -379,6 +392,7 @@ function pickDsm (carrier) {
  * @property {typeof readDatadogSamplingPriority} readDatadogSamplingPriority
  * @property {typeof readDatadogTags} readDatadogTags
  * @property {typeof readDatadogTraceId} readDatadogTraceId
+ * @property {(carrier: Carrier) => { traceId: string, tags: string } | undefined} readStepFunctionTraceContext
  * @property {typeof readDsmBase64} readDsmBase64
  * @property {typeof readDsmBinary} readDsmBinary
  * @property {(carrier: Carrier, target: Record<string, string>) => void} readLegacyBaggage

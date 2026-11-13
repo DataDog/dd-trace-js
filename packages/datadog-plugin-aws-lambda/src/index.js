@@ -4,11 +4,52 @@ const dc = require('dc-polyfill')
 
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const log = require('../../dd-trace/src/log')
+const TraceContextExtractor = require('./context/extractor')
 
 const invocationStartChannel = dc.channel('datadog:aws-lambda:invocation:start')
 const invocationEndChannel = dc.channel('datadog:aws-lambda:invocation:end')
 
 class AwsLambdaPlugin extends TracingPlugin {
+  /** @param {...object} args Plugin constructor arguments. */
+  constructor (...args) {
+    super(...args)
+    this.addSub('datadog:aws-lambda:invocation:prepare', this.prepare)
+  }
+
+  /**
+   * Subscribers publish synchronously; the instrumentation awaits this explicit preparation promise
+   * before publishing span start. No invocation span is created during extraction.
+   * @param {object} context Invocation channel context.
+   */
+  prepare (context) {
+    const config = {
+      traceExtractor: context.config?.traceExtractor ?? this.config.traceExtractor,
+      decodeAuthorizerContext: context.config?.decodeAuthorizerContext ?? this.config.decodeAuthorizerContext,
+    }
+    const extractor = new TraceContextExtractor(this.tracer, config)
+    const apply = extracted => {
+      const merge = context.config?.mergeXrayTraces ??
+        context.config?.mergeDatadogXrayTraces ?? this.config.mergeXrayTraces
+      if (extracted.source === 'event' || merge) {
+        context.parent = extracted.spanContext
+        context.parentSource = extracted.source
+      }
+    }
+    try {
+      const extracted = this.tracer.scope().activate(null, () => extractor.extract(context.event, context.context))
+      if (config.traceExtractor) {
+        context.preparation = extracted.then(apply).catch(error => {
+          log.error('Unable to prepare Lambda trace context: %s', error)
+        })
+      } else {
+        apply(extracted)
+      }
+    } catch (error) {
+      log.error('Unable to prepare Lambda trace context: %s', error)
+    }
+  }
+
   /**
    * Starts the invocation span and publishes the invocation start boundary.
    *
@@ -22,11 +63,9 @@ class AwsLambdaPlugin extends TracingPlugin {
   bindStart (context) {
     const functionName = context.context?.functionName ||
       getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
-    // TODO(migration PR 8): the extracted upstream context becomes the parent. Until the context
-    // extractors land, pinning `childOf` keeps the span from adopting a stale active span left
-    // behind by a previous invocation in the same warm container.
     const span = this.startSpan('aws.lambda', {
-      childOf: null,
+      childOf: context.parent || null,
+      meta: context.parent ? { '_dd.parent_source': context.parentSource } : undefined,
       kind: 'server',
       resource: functionName,
       service: resolveServiceName(functionName, this.config, context.config),

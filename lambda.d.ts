@@ -2,7 +2,10 @@ import tracer = require('./index')
 
 export type LambdaHandler = (...args: any[]) => any
 
-export interface LambdaWrapOptions extends tracer.plugins.aws_lambda {}
+export interface LambdaWrapOptions extends tracer.plugins.aws_lambda {
+  /** Legacy datadog-lambda-js spelling. mergeXrayTraces takes precedence when both are supplied. */
+  mergeDatadogXrayTraces?: boolean;
+}
 
 // Buffered wrappers require an event and context even when the customer handler omits them.
 type LambdaHandlerArguments<THandler extends LambdaHandler> =
