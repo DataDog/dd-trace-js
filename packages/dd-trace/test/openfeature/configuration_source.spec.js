@@ -268,7 +268,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   // Expected DD-Service values. They come from the Agent NormalizeService (datadog-agent
-  // pkg/trace/traceutil/normalize v0.82.3) and the CDN format check. `undefined` means: no DD-Service header.
+  // pkg/trace/traceutil/normalize v0.82.3) and the ASCII check. `undefined` means: no DD-Service header.
   const APM_SERVICE_NAMES = [
     ['checkout', 'checkout'],
     ['My Service', 'my_service'],
@@ -278,7 +278,7 @@ describe('OpenFeature configuration source', () => {
     ['a\tb', 'a_b'],
     ['a  b!', 'a_b'],
     ['svc ', 'svc'],
-    [' svc', undefined],
+    [' svc', '_svc'],
     ['a_', 'a'],
     ['svc-', 'svc-'],
     ['a..b', 'a..b'],
@@ -292,10 +292,10 @@ describe('OpenFeature configuration source', () => {
     [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
     [`${'a'.repeat(100)} b`, 'a'.repeat(100)],
     [`${'a'.repeat(99)}é`, 'a'.repeat(99)],
-    ['_svc', undefined],
-    ['-svc', undefined],
-    ['.svc', undefined],
-    [':svc', undefined],
+    ['_svc', '_svc'],
+    ['-svc', '-svc'],
+    ['.svc', '.svc'],
+    [':svc', ':svc'],
     ['café-api', undefined],
     ['Café', undefined],
     ['支付', undefined],
@@ -303,12 +303,12 @@ describe('OpenFeature configuration source', () => {
     ['İstanbul', undefined],
     ['é'.repeat(60), undefined],
     ['___', undefined],
-    ['-', undefined],
+    ['-', '-'],
     ['', undefined],
     ['   ', undefined],
   ]
 
-  it('passes the name APM shows for the service, or none when the CDN would drop that name', () => {
+  it('passes the name APM shows for the service, or none when that name is empty or not plain ASCII', () => {
     for (const [service, sent] of APM_SERVICE_NAMES) {
       AgentlessConfigurationSource.resetHistory()
       config.service = service
@@ -325,8 +325,8 @@ describe('OpenFeature configuration source', () => {
   })
 
   // A different name attributes the usage to a service that APM does not show.
-  it('does not pass a service whose APM name the CDN would drop', () => {
-    for (const service of ['_svc', 'café-api', '支付', '___']) {
+  it('does not pass a service whose APM name is empty or not plain ASCII', () => {
+    for (const service of ['café-api', '支付', '___']) {
       AgentlessConfigurationSource.resetHistory()
       log.debug.resetHistory()
       config.service = service
@@ -334,7 +334,7 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(createSourceConfig().service, undefined, service)
       sinon.assert.calledWithExactly(
         log.debug,
-        'Feature Flags: service %s has no APM name the CDN can attribute usage to; DD-Service header not sent',
+        'Feature Flags: service %s has no ASCII APM name; DD-Service header not sent',
         service
       )
     }
@@ -384,8 +384,8 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
     })
 
-    it('still polls, without DD-Service, when the CDN would drop the APM name of the service', async () => {
-      for (const service of ['_svc', 'café-api', '支付']) {
+    it('still polls, without DD-Service, when the APM name of the service is not plain ASCII', async () => {
+      for (const service of ['café-api', '支付']) {
         source?.stop()
         requests = []
         config.service = service

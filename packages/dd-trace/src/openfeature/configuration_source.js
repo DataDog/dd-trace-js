@@ -11,10 +11,9 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
-// The CDN uses DD-Service for usage attribution only when the value matches this pattern. It ignores other values.
-const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
-const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has no APM name the CDN can attribute usage to; ' +
-  'DD-Service header not sent'
+// Node.js throws on some non-ASCII header values (for example `支付`), and then every poll fails.
+const PRINTABLE_ASCII = /^[\x21-\x7E]+$/
+const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has no ASCII APM name; DD-Service header not sent'
 // The Agent cuts span service names to this many UTF-8 bytes before it normalizes them.
 const MAX_APM_SERVICE_BYTES = 100
 const APM_SERVICE_ASCII_CHAR = /^[a-z0-9:./-]$/
@@ -128,15 +127,15 @@ function endpoint (config, configuredBaseUrl) {
  * Selects the DD-Service value: the name that APM shows for the tracer service. Thus the usage goes to the same
  * service as the traces. For example, `My Service` becomes `my_service`.
  *
- * If the CDN does not accept the APM name (for example `_svc` or `café-api`), no value is sent. A different name
- * would attribute the usage to the wrong service. The tracer service itself does not change. A value that is sent is
- * always plain ASCII, so Node.js cannot throw on the header.
+ * If the APM name is empty or not plain ASCII (for example `café-api`), no value is sent. A different name would
+ * attribute the usage to the wrong service. The tracer service itself does not change. A value that is sent is always
+ * plain ASCII, so Node.js cannot throw on the header. The CDN alone decides which values it uses.
  *
  * @param {string | undefined} service - Tracer service name.
  */
 function usageService (service) {
   const name = service ? apmServiceName(service) : ''
-  const accepted = USAGE_SERVICE_PATTERN.test(name)
+  const accepted = PRINTABLE_ASCII.test(name)
   if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
   return accepted ? name : undefined
 }
@@ -149,7 +148,7 @@ function usageService (service) {
  * - Keep letters, digits, and `:./-`.
  * - Replace each run of other characters (`_` included) with one `_`. Remove a run at the end.
  *
- * Non-ASCII letters stay. The CDN pattern then rejects the name.
+ * Non-ASCII letters stay. `usageService` then sends no value.
  *
  * @param {string} service - Tracer service name.
  */
