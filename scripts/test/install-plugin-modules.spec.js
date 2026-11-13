@@ -100,7 +100,7 @@ describe('scripts/install_plugin_modules.js', function () {
       1: '1.5.7',
       2: '2.1.0',
       3: '3.0.0',
-      4: '4.1.7',
+      4: require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies['@graphql-tools/executor'],
     }
     for (const [version, expected] of Object.entries(expectedVersions)) {
       const executor = require(path.join(versionsDir, `@graphql-tools/executor@${version}`))
