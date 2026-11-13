@@ -19,7 +19,7 @@ describe('esm', () => {
   let proc
 
   withVersions('bullmq', 'bullmq', '>=5.66.0', version => {
-    useSandbox([`'bullmq@${version}'`], false, [
+    useSandbox([`'bullmq@${version}'`, 'ioredis'], false, [
       './packages/datadog-plugin-bullmq/test/integration-test/*'])
 
     beforeEach(async () => {

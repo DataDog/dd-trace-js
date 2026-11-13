@@ -1,0 +1,19 @@
+{
+  "version": "0",
+  "id": "bd3c8258-8d30-007c-2562-64715b2d0ea8",
+  "detail-type": "UserSignUp",
+  "source": "my.event",
+  "account": "601427279990",
+  "time": "2022-01-24T16:00:10Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "hello": "there",
+    "_datadog": {
+      "x-datadog-trace-id": "5827606813695714842",
+      "x-datadog-parent-id": "4726693487091824375",
+      "x-datadog-sampled": "1",
+      "x-datadog-sampling-priority": "1"
+    }
+  }
+}

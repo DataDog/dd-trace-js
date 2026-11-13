@@ -8,7 +8,7 @@ precedence within their scope.
 ## Setup and Commands
 
 - Use a Node.js version satisfying `package.json#engines`; service-backed tests require Docker with Docker Compose.
-- Use yarn 1.x only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
+- Use Bun (pinned in `package.json`) for dependency installs and npm to run `npm run services`.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
 - Never run the root `npm test`; it is intentionally disabled. Use a targeted `test:<area>` script or spec below.
 
@@ -51,7 +51,7 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
+The `:ci` script runs `npm run services` to install versioned dependencies and check services before testing.
 After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
 For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
 Match its test action or script, `PLUGINS`, and any `SPEC` filter.
@@ -131,13 +131,16 @@ Update every supported public TypeScript surface for new public APIs unless the 
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Add the default in `packages/dd-trace/src/config/defaults.js`.
-2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
-3. Update both supported public TypeScript surfaces when applicable.
-4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
-5. Update `packages/dd-trace/src/config/supported-configurations.json`.
-6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
-7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
+1. Register the option in `packages/dd-trace/src/config/supported-configurations.json`, including its default,
+    type, and `configurationNames` when exposed through `tracer.init()`.
+2. Defaults, environment/programmatic parsing, and canonical configuration telemetry are derived from the registry
+    at runtime by `config/defaults.js` and `config/index.js`. Edit these or `telemetry/telemetry.js` only for behavior
+    the registry cannot express; ordinary options do not need a separate telemetry name mapping.
+3. Run `npm run generate:config:types` and commit the generated configuration types. Update both supported public
+    TypeScript surfaces when applicable.
+4. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
+5. Test the option in `packages/dd-trace/test/config/index.spec.js`. Add telemetry tests when adding or changing
+    a configuration source.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
 
@@ -157,6 +160,10 @@ never weaken or delete assertions to make them pass.
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
+- **One PR, one purpose**: every change in a PR must serve its title. Defer drive-by typo fixes,
+  refactors, dependency bumps, and unrelated fixes to a follow-up PR, even when obviously correct.
+- Exceptions: a prerequisite refactor lands as its own PR first, and mechanical fallout or sibling
+  instances of the same bug move with the change.
 
 ## Specialized Workflows
 
@@ -176,5 +183,5 @@ Validate new plugin registration and structure with
 
 Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
 
-For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
+For vendored rspack dependencies, run Bun from `vendor/`; generated bundles are written under
 `packages/node_modules/`.

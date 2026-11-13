@@ -181,6 +181,45 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
+<h3 id="feature-flag-selection">Flag Selection</h3>
+
+Load only the flags a service needs by passing a flag selection before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
+Tags and key patterns are case-sensitive. Tags match exactly. A key pattern matches the whole key: `*` matches any run
+of characters, including none, and every other character, including `?`, is literal.
+Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
+Without a selection, the provider loads every flag.
+
+Values are trimmed, deduplicated and sorted before they are sent. Each list accepts at most 31 values, each value is
+at most 200 UTF-8 bytes, and the request URL is at most 8192 bytes. A selection over these limits, or one that is not an
+object with optional `tags` and `keyPatterns` string arrays, is not sent: the provider logs an error and loads every
+flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
+logs, these errors are written only when `DD_TRACE_DEBUG=true`.
+
+Flag selection has no environment variable. `node --require dd-trace/init` and `node --import dd-trace/initialize.mjs`
+call `init()` without options, and later `init()` calls are ignored, so they cannot set a selection; call `init()` with
+the option in your application or in your own preload file instead. With Single Step Instrumentation, an application
+that installs `dd-trace` and calls `init()` with the option can set a selection, because the injected tracer then skips
+its own `init()`. An application that relies only on the injected tracer cannot set one.
+
+Flag selection applies to agentless delivery only. When flags are delivered through Remote Config
+(`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, or `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true` without a
+configuration source), the provider logs a warning and loads every flag.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -230,8 +269,10 @@ tracer.use('openai', {
 <h5 id="anthropic"></h5>
 <h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
+<h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
+<h5 id="aws-lambda"></h5>
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the
@@ -366,6 +407,7 @@ Playback with missing per-response start events remains a live validation gap.
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -381,8 +423,10 @@ Playback with missing per-response start events remains a live validation gap.
 * [anthropic](./interfaces/plugins.anthropic.html)
 * [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/plugins.apollo.html)
+* [async-mutex](./interfaces/plugins.async_mutex.html)
 * [avsc](./interfaces/plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-lambda](./interfaces/plugins.aws_lambda.html)
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)
@@ -457,6 +501,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [trpc](./interfaces/plugins.trpc.html)
 * [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)
@@ -770,6 +815,9 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
+When exporting traces over OTLP, the tracing library delegates span metrics computation
+to the OpenTelemetry Collector or Datadog intake by default.
+
 dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 
 ```javascript
@@ -984,8 +1032,8 @@ preserved in serial and parallel workers. Native Mocha retries remain available 
 
 ## Cucumber test automation exclusions
 
-Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
-`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+Use the native Gherkin tags `@datadog_prevent_failure_suppression` and
+`@datadog_no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
 to every example. These are tracer declaration annotations, resolved before
 Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
 settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,

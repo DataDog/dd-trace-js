@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execSync } = require('node:child_process')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs/promises')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
+const { globSync } = require('glob')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const semifies = require('semifies')
@@ -25,39 +27,28 @@ const {
 } = require('./prisma-fixtures')
 
 function execPrismaGenerate (config, cwd) {
+  const requireFromWorkspace = createRequire(path.join(cwd, 'package.json'))
+  const options = { cwd, stdio: 'inherit' }
+  execFileSync(process.execPath, [requireFromWorkspace.resolve('prisma/build/index.js'), 'generate'], options)
+
   if (config.ts) {
-    const outDir = config.v7 ? '../v7/dist' : '../dist'
-    execSync([
-      './node_modules/.bin/prisma generate',
-      [
-        './node_modules/.bin/tsc ../generated/**/*.ts',
-        `--outDir ${outDir}`,
-        '--target esnext',
-        '--module commonjs',
-        '--allowJs true',
-        '--skipLibCheck true',
-        '--moduleResolution node',
-      ].join(' '),
-    ].join(' && '), {
-      cwd,
-      stdio: 'inherit',
-    })
-  } else {
-    execSync('./node_modules/.bin/prisma generate', {
-      cwd,
-      stdio: 'inherit',
-    })
+    const typescriptPackagePath = requireFromWorkspace.resolve('typescript/package.json')
+    const { bin } = requireFromWorkspace(typescriptPackagePath)
+    execFileSync(process.execPath, [
+      path.resolve(path.dirname(typescriptPackagePath), bin.tsc),
+      ...globSync('generated/**/*.ts', { cwd }),
+      '--outDir', './dist',
+      '--target', 'esnext',
+      '--module', 'node16',
+      '--allowJs', 'true',
+      '--skipLibCheck', 'true',
+      '--moduleResolution', 'node16',
+    ], options)
   }
 }
 
 function loadPrismaModule (config, range) {
-  if (config.file.includes('generated')) {
-    return require(config.file)
-  }
-
-  const file = config.file.replace('range', range)
-  const prismaModule = require(file)
-  return config.ts ? prismaModule : prismaModule.get()
+  return require(`../../../versions/@prisma/client@${range}`).get(config.file)
 }
 
 function clearPrismaEnv () {
@@ -84,10 +75,10 @@ async function copySchemaToVersionDir (schemaPath, range) {
   return cwd
 }
 
-function createPrismaClient (prisma, config) {
+function createPrismaClient (prisma, config, range) {
   // With the introduction of v7 prisma now enforces the use of adapters
   if (config.v7) {
-    const { PrismaPg } = require('@prisma/adapter-pg')
+    const { PrismaPg } = require(`../../../versions/@prisma/client@${range}`).get('@prisma/adapter-pg')
     const adapter = new PrismaPg({ connectionString: process.env[TEST_DATABASE_ENV_NAME] })
     return new prisma.PrismaClient({ adapter })
   }
@@ -226,6 +217,25 @@ describe('Plugin', () => {
       assert.strictEqual(started.length, 0)
     })
 
+    it('dispatchEngineSpans should not start engine spans when engine is disabled', () => {
+      const DatadogTracingHelper = getHelperClass()
+      /** @type {Array<unknown>} */
+      const started = []
+
+      const prismaClient = {
+        config: { engine: false },
+        startEngineSpan: (ctx) => started.push(ctx),
+      }
+      const helper = new DatadogTracingHelper({ database: 'db' }, prismaClient)
+
+      helper.dispatchEngineSpans([
+        { id: '1', parentId: null, name: 'prisma:engine:query' },
+        { id: '2', parentId: '1', name: 'prisma:engine:db_query' },
+      ])
+
+      assert.strictEqual(started.length, 0)
+    })
+
     it('runInChildSpan should use tracePromise for allowed non-serialize operations', () => {
       /** @type {Array<{ type: string, ctx?: { resourceName?: string, attributes?: Record<string, unknown> } }>} */
       const calls = []
@@ -279,20 +289,52 @@ describe('Plugin', () => {
       assert.strictEqual(calls[0].ctx.resourceName, 'serialize')
     })
 
-    it('runInChildSpan should bypass tracing when there are no subscribers', () => {
-      /** @type {Array<{ type: string }>} */
-      const calls = []
-      const DatadogTracingHelper = getHelperClass({
-        hasSubscribers: false,
-        tracePromise: () => { calls.push({ type: 'promise' }) },
-        traceSync: () => { calls.push({ type: 'sync' }) },
+    for (const hasSubscribers of [false, true]) {
+      const condition = hasSubscribers ? 'client is disabled' : 'there are no subscribers'
+      it(`runInChildSpan should bypass tracing when ${condition}`, () => {
+        /** @type {Array<{ type: string }>} */
+        const calls = []
+        const DatadogTracingHelper = getHelperClass({
+          hasSubscribers,
+          tracePromise: () => { calls.push({ type: 'promise' }) },
+          traceSync: () => { calls.push({ type: 'sync' }) },
+        })
+
+        const config = hasSubscribers ? { client: false } : {}
+        const helper = new DatadogTracingHelper(undefined, { config })
+
+        for (const options of ['operation', { name: 'operation' }, { name: 'serialize' }, { name: 'middleware' }]) {
+          for (const result of ['ok', Promise.resolve('ok')]) {
+            let callbackCalls = 0
+            const actual = helper.runInChildSpan(options, function () {
+              assert.strictEqual(arguments.length, 0)
+              callbackCalls++
+              return result
+            })
+
+            assert.strictEqual(calls.length, 0)
+            assert.strictEqual(callbackCalls, 1)
+            assert.strictEqual(actual, result)
+          }
+        }
       })
+    }
 
-      const helper = new DatadogTracingHelper(undefined, {})
-      const result = helper.runInChildSpan({ name: 'operation' }, () => 'ok')
+    it('getTraceParent should still return a sampled traceparent when engine and client are disabled', () => {
+      const DatadogTracingHelper = getHelperClass()
+      const helper = new DatadogTracingHelper(undefined, { config: { client: false, engine: false } })
 
-      assert.strictEqual(result, 'ok')
-      assert.strictEqual(calls.length, 0)
+      const span = {
+        _spanContext: {
+          _sampling: {},
+          toTraceId: () => '00000000000000000000000000000001',
+          toSpanId: () => '0000000000000001',
+        },
+      }
+
+      storage('legacy').enterWith({ span })
+
+      assert.strictEqual(helper.getTraceParent(), '00-00000000000000000000000000000001-0000000000000001-01')
     })
 
     it('runInChildSpan should bypass tracing when operation is not in the allowlist', () => {
@@ -314,22 +356,21 @@ describe('Plugin', () => {
   describe('prisma', () => {
     const prismaClients = [{
       schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
-      file: '../../../versions/@prisma/generated/prisma',
+      file: './generated/prisma',
       usesGeneratedClientOutput: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.clientJs}`,
-      file: '../../../versions/@prisma/client@range',
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
-      file: '../../../versions/@prisma/dist/client.js',
+      file: './dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
-      file: '../../../versions/@prisma/v7/dist/client.js',
+      file: './dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
       v7: true,
@@ -361,7 +402,7 @@ describe('Plugin', () => {
             await agent.load(['prisma', 'pg'])
             prisma = loadPrismaModule(config, range)
 
-            prismaClient = createPrismaClient(prisma, config)
+            prismaClient = createPrismaClient(prisma, config, range)
 
             tracingHelper = prismaClient._tracingHelper
 
@@ -528,11 +569,11 @@ describe('Plugin', () => {
               const initialDbUrl = process.env[TEST_DATABASE_ENV_NAME]
               process.env[TEST_DATABASE_ENV_NAME] =
                 'postgres://postgres:postgres@primary.db.internal:5432/postgres'
-              const primaryClient = createPrismaClient(prisma, config)
+              const primaryClient = createPrismaClient(prisma, config, range)
 
               process.env[TEST_DATABASE_ENV_NAME] =
                 'postgres://postgres:postgres@replica.db.internal:5433/postgres'
-              const replicaClient = createPrismaClient(prisma, config)
+              const replicaClient = createPrismaClient(prisma, config, range)
 
               if (initialDbUrl === undefined) {
                 delete process.env[TEST_DATABASE_ENV_NAME]
@@ -580,7 +621,7 @@ describe('Plugin', () => {
             require('../../dd-trace')
 
             prisma = loadPrismaModule(config, range)
-            prismaClient = createPrismaClient(prisma, config)
+            prismaClient = createPrismaClient(prisma, config, range)
           })
 
           it('should not break prisma load when dd-trace is loaded but not initialized', async function () {
@@ -590,6 +631,106 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
+          /**
+           * @param {Array<Array<{ name: string }>>} traces
+           * @param {string} name
+           */
+          function assertNoSpanNamed (traces, name) {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === name) {
+                  throw new Error(`Unexpected ${name} span`)
+                }
+              }
+            }
+          }
+
+          describe('with engine spans disabled', () => {
+            before(async function () {
+              this.timeout(10000)
+              await agent.load(['prisma', 'pg'], { engine: false })
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config, range)
+              tracingHelper = prismaClient._tracingHelper
+            })
+
+            after(() => { return agent.close() })
+
+            it('should keep client spans and not create engine spans', async () => {
+              const noEngineSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.engine.opName)
+              })
+              const clientSpan = agent.assertFirstTraceSpan({
+                name: expectedSchema.client.opName,
+                resource: 'queryRaw',
+              }, { spanResourceMatch: /^queryRaw$/ })
+
+              await Promise.all([
+                prismaClient.$queryRaw`SELECT 1`,
+                // Engine spans reported by Prisma must be dropped regardless of the engine type in use.
+                tracingHelper.dispatchEngineSpans([{
+                  id: '1',
+                  parentId: null,
+                  name: 'prisma:engine:query',
+                  startTime: [1745340876, 436692000],
+                  endTime: [1745340876, 438653250],
+                  kind: 'internal',
+                }]),
+                clientSpan,
+                noEngineSpans,
+              ])
+            })
+          })
+
+          describe('with client spans disabled', () => {
+            before(async function () {
+              this.timeout(10000)
+              await agent.load(['prisma', 'pg'], { client: false })
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config, range)
+            })
+
+            after(() => { return agent.close() })
+
+            it('should keep the database span and not create client spans', async () => {
+              const noClientSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.client.opName)
+              })
+              const databaseSpan = agent.assertFirstTraceSpan({
+                name: config.v7 ? 'pg.query' : expectedSchema.engine.opName,
+                resource: 'SELECT 1',
+              }, { spanResourceMatch: /^SELECT 1$/ })
+
+              await Promise.all([
+                prismaClient.$queryRaw`SELECT 1`,
+                databaseSpan,
+                noClientSpans,
+              ])
+            })
+
+            it('should support query middleware without client spans', async function () {
+              if (typeof prismaClient.$use !== 'function') this.skip()
+
+              prismaClient.$use((params, next) => next(params))
+
+              const noClientSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.client.opName)
+              })
+              const databaseSpan = agent.assertFirstTraceSpan({
+                name: expectedSchema.engine.opName,
+                resource: 'SELECT 1 AS value',
+              }, { spanResourceMatch: /^SELECT 1 AS value$/ })
+
+              const [rows] = await Promise.all([
+                prismaClient.$queryRaw`SELECT 1 AS value`,
+                noClientSpans,
+                databaseSpan,
+              ])
+
+              assert.deepStrictEqual(rows, [{ value: 1 }])
+            })
+          })
+
           describe('with custom service name', () => {
             before(async function () {
               this.timeout(10000)
@@ -603,7 +744,7 @@ describe('Plugin', () => {
 
             beforeEach(() => {
               prisma = loadPrismaModule(config, range)
-              prismaClient = createPrismaClient(prisma, config)
+              prismaClient = createPrismaClient(prisma, config, range)
             })
 
             it('should be configured with the correct values', async () => {

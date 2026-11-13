@@ -4,6 +4,7 @@ const path = require('path')
 const { types: { isModuleNamespaceObject } } = require('node:util')
 
 const { datadog } = require('../handler')
+const { withTimeoutMonitor } = require('../wrap')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
@@ -21,7 +22,9 @@ function patchDatadogLambdaModule (datadogLambdaModule) {
 
 /** @param {Function} datadogHandler */
 function patchDatadogLambdaHandler (datadogHandler) {
-  return userHandler => datadogHandler(datadog(userHandler))
+  return function (userHandler, ...args) {
+    return Reflect.apply(datadogHandler, this, [instrumentLambdaHandler(userHandler, args[0]), ...args])
+  }
 }
 
 /**
@@ -46,7 +49,7 @@ function patchLambdaModule (handlerPath) {
       if (!descriptor.configurable && !descriptor.writable) return lambdaModule
       // The monitor copies Lambda metadata without invoking application accessors or Proxy traps.
       // Generic shimmer wrapping would copy the original properties back onto that safe wrapper.
-      descriptor.value = datadog(descriptor.value)
+      descriptor.value = instrumentLambdaHandler(descriptor.value)
       // Native ESM namespaces reject replacement even when their export reports writable: true.
       const exports = isModuleNamespaceObject(lambdaModule)
         ? Object.create(lambdaModule, Object.getOwnPropertyDescriptors(lambdaModule))
@@ -54,8 +57,21 @@ function patchLambdaModule (handlerPath) {
       Object.defineProperty(exports, handlerPath, descriptor)
       return exports
     }
-    return shimmer.wrap(lambdaModule, handlerPath, datadog)
+    return shimmer.wrap(lambdaModule, handlerPath, instrumentLambdaHandler)
   }
+}
+
+/**
+ * Only internal migration builds may delegate invocation-span ownership from the final shim.
+ * Old shims retain timeout monitoring, including their selected-completion helper hooks.
+ * Explicit facade wrapping is opt-in and independent of the automatic hooks.
+ *
+ * @param {Function} handler Customer handler.
+ * @param {Record<string, unknown>} [config] Per-handler overrides.
+ * @returns {Function} Monitored or invocation-wrapped handler.
+ */
+function instrumentLambdaHandler (handler, config) {
+  return withTimeoutMonitor(handler) // Import and return `wrapLambdaHandler(handler, config)` for migration testing.
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')

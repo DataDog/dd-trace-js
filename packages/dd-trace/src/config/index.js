@@ -380,6 +380,13 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
+    if (this.isCiVisibility) {
+      setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
+      setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', false)
+      setAndTrack(this, 'aiguard.DD_AI_GUARD_ENABLED', false)
+    }
+
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -491,6 +498,11 @@ class Config extends ConfigBase {
       setAndTrack(this, 'flushInterval', 0)
     }
 
+    if (!trackedConfigOrigins.has('lambda.DD_LAMBDA_FIPS_MODE') &&
+        getEnvironmentVariable('AWS_REGION')?.startsWith('us-gov-')) {
+      setAndTrack(this, 'lambda.DD_LAMBDA_FIPS_MODE', true)
+    }
+
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
         trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
       setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
@@ -521,7 +533,8 @@ class Config extends ConfigBase {
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+    if (!this.isCiVisibility &&
+        !this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
@@ -798,11 +811,10 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = usesOtlpTraceExporter(this) && this.DD_METRICS_OTEL_ENABLED === true
-    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? false)
 
-    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    if (usesOtlpTraceExporter(this) || this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED)
     }
 
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')

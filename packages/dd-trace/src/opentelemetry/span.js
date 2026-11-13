@@ -261,8 +261,8 @@ class Span extends BridgeSpanBase {
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
     // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
-    if (spanEndingHook.hook !== undefined) {
-      spanEndingHook.hook(this._ddSpan)
+    if (spanEndingHook.hook?.(this._ddSpan, this._otelTraceSemanticsEnabled)) {
+      this.setStatus({ code: api.SpanStatusCode.ERROR, message: this._ddSpan.context().getTag('error.message') })
     }
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)

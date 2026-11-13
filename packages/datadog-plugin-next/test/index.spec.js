@@ -4,11 +4,13 @@ const assert = require('node:assert/strict')
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('node:path')
-const http = require('node:http')
-const { execSync, spawn } = require('node:child_process')
-const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const { execFileSync, execSync, spawn } = require('node:child_process')
+const { once } = require('node:events')
+const { mkdirSync, writeFileSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
 const { rm } = require('node:fs/promises')
+const http = require('node:http')
+const path = require('node:path')
+
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -16,6 +18,7 @@ const { satisfies } = require('semver')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
+const { BUN, BUN_CONFIG } = require('../../../integration-tests/helpers/bun')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
@@ -25,7 +28,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
-const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
 
 /**
  * @param {'app-page'|'app-route'|'pages-api'} runtime
@@ -73,6 +76,130 @@ function getDisabledRuntimeHooks () {
   return runtime => hooks.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
 }
 
+/**
+ * @param {string} version
+ * @param {number} port
+ * @param {number} width
+ * @param {'MISS'|'HIT'|undefined} cacheStatus
+ * @param {object} [options]
+ * @param {string} [options.parentRoute]
+ * @param {boolean} [options.withHttp]
+ * @param {boolean} [options.withQuery]
+ * @param {'GET'|'HEAD'} [options.method]
+ * @param {string} [options.pathname]
+ * @param {boolean} [options.standalone]
+ * @param {string} [options.source]
+ * @param {boolean} [options.sourceError]
+ * @param {number} [options.statusCode]
+ */
+async function assertImageRequest (
+  version,
+  port,
+  width,
+  cacheStatus,
+  {
+    parentRoute = '/_next/image',
+    withHttp = true,
+    withQuery = true,
+    method = 'GET',
+    pathname = '/_next/image',
+    standalone = false,
+    source = '/test.png',
+    sourceError = false,
+    statusCode = cacheStatus ? 200 : 400,
+  } = {}
+) {
+  let imageSpan
+  const tracingPromise = agent.assertSomeTraces(traces => {
+    const spans = traces[0]
+    const nextSpans = spans.filter(span => span.name === 'next.request')
+    assert.strictEqual(nextSpans.length, 1)
+    assert.strictEqual(nextSpans[0].resource, `${method} /_next/image`)
+    assert.strictEqual(nextSpans[0].meta['next.page'], '/_next/image')
+
+    const httpSpan = spans.find(span => span.name === 'web.request')
+    if (withHttp) {
+      assert.strictEqual(httpSpan.resource, `${method} ${parentRoute}`)
+      assert.strictEqual(httpSpan.meta['http.route'], parentRoute)
+    } else {
+      assert.strictEqual(httpSpan, undefined)
+    }
+    imageSpan = nextSpans[0]
+  }, { timeoutMs: 4000 })
+  const cacheWatchers = []
+  const cacheFiles = new Set()
+  let cacheWritten
+  if (cacheStatus === 'MISS') {
+    const distDir = standalone ? '.next/standalone/.next' : '.next'
+    const cacheDir = path.join(__dirname, distDir, 'cache/images')
+    mkdirSync(cacheDir, { recursive: true })
+    const directories = new Set(readdirSync(cacheDir))
+    cacheWritten = new Promise((resolve, reject) => {
+      const rootWatcher = watch(cacheDir, (_event, directory) => {
+        if (!directory || directories.has(directory)) return
+        const imageDir = path.join(cacheDir, directory)
+        if (!statSync(imageDir, { throwIfNoEntry: false })?.isDirectory()) return
+        directories.add(directory)
+        const checkCacheFile = () => {
+          for (const filename of readdirSync(imageDir)) {
+            if (!filename.endsWith('.png')) continue
+            const filePath = path.join(imageDir, filename)
+            const file = statSync(filePath, { throwIfNoEntry: false })
+            if (file?.size > 0) {
+              resolve()
+            } else if (!cacheFiles.has(filePath)) {
+              cacheFiles.add(filePath)
+              // File creation can arrive before the asynchronous cache write completes.
+              watchFile(filePath, { interval: 10 }, current => {
+                if (current.size > 0) resolve()
+              })
+            }
+          }
+        }
+        const imageWatcher = watch(imageDir, checkCacheFile)
+        imageWatcher.once('error', reject)
+        cacheWatchers.push(imageWatcher)
+        checkCacheFile()
+      })
+      rootWatcher.once('error', reject)
+      cacheWatchers.push(rootWatcher)
+    })
+  }
+  const headers = parentRoute === '/_next/image' ? {} : { 'x-test-upstream-route': parentRoute }
+  const query = withQuery ? `?url=${encodeURIComponent(source)}&w=${width}&q=75` : ''
+  const request = (async () => {
+    const response = await httpRequest.request(`http://127.0.0.1:${port}${pathname}${query}`, {
+      headers,
+      method,
+      validateStatus: () => true,
+      responseType: 'arraybuffer',
+    })
+    if (sourceError) {
+      assert.ok(response.status >= 400)
+    } else {
+      assert.strictEqual(response.status, statusCode)
+    }
+    if (cacheStatus) {
+      assert.strictEqual(response.headers['x-nextjs-cache'], satisfies(version, '<12') ? undefined : cacheStatus)
+      assert.strictEqual(response.headers['content-type'], 'image/png')
+      if (method === 'GET') {
+        assert.ok(response.data.byteLength > 0)
+      } else {
+        assert.strictEqual(response.data.byteLength, 0)
+      }
+    }
+    return response
+  })()
+  try {
+    const [response] = await Promise.all([request, tracingPromise, cacheWritten])
+    assert.strictEqual(imageSpan.meta['http.status_code'], String(response.status))
+    if (response.status >= 500) assert.strictEqual(imageSpan.error, 1)
+  } finally {
+    for (const watcher of cacheWatchers) watcher.close()
+    for (const filePath of cacheFiles) unwatchFile(filePath)
+  }
+}
+
 describe('Plugin', function () {
   let server
   let port
@@ -84,10 +211,11 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     withVersions('next', 'next', min, version => {
-      const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+      const pkg = require(require(`../../../versions/next@${version}`).pkgJsonPath())
 
       before(done => {
-        downstreamServer = http.createServer((_req, res) => {
+        downstreamServer = http.createServer((req, res) => {
+          if (req.url === '/image-error') return res.destroy()
           res.writeHead(204)
           res.end()
         }).listen(0, '127.0.0.1', () => {
@@ -114,8 +242,7 @@ describe('Plugin', function () {
           return agent.load('next')
         })
 
-        before(function (done) {
-          this.timeout(300 * 1000)
+        const launchServer = () => new Promise((resolve, reject) => {
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -144,7 +271,7 @@ describe('Plugin', function () {
             },
           })
 
-          server.once('error', done)
+          server.once('error', reject)
 
           function waitUntilServerStarted (chunk) {
             const chunkStr = chunk.toString()
@@ -154,7 +281,7 @@ describe('Plugin', function () {
             if (match) {
               port = Number(match[1])
               server.stdout.off('data', waitUntilServerStarted)
-              done()
+              resolve()
             }
           }
           server.stdout.on('data', waitUntilServerStarted)
@@ -163,14 +290,22 @@ describe('Plugin', function () {
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
 
+        before(async function () {
+          this.timeout(300 * 1000)
+          await launchServer()
+        })
+
         after(async function () {
           this.timeout(30 * 1000)
 
           await stopProc(server)
-
-          await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close()
         })
+
+        return async () => {
+          await stopProc(server)
+          await launchServer()
+        }
       }
 
       before(async function () {
@@ -191,12 +326,12 @@ describe('Plugin', function () {
 
         writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
-        // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
-        // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
+        // Install a standalone tree because copying node_modules from versions does not generate the server files.
+        const installArguments = [`--config=${BUN_CONFIG}`, 'install', '--linker=hoisted', '--trust']
         try {
-          execSync('yarn install', { cwd })
+          execFileSync(BUN, installArguments, { cwd })
         } catch { // retry in case of error from registry
-          execSync('yarn install', { cwd })
+          execFileSync(BUN, installArguments, { cwd })
         }
 
         // dd-trace is the package under test, not a published dependency of this app. Drop a tiny
@@ -219,7 +354,7 @@ describe('Plugin', function () {
         // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer
         // next does not, and from 16 the flag is rejected in a build worker's NODE_OPTIONS.
         const legacyOpenssl = satisfies(realVersion, '<12') ? '--openssl-legacy-provider' : ''
-        execSync('yarn exec next build', {
+        execFileSync(BUN, ['run', 'next', 'build'], {
           cwd,
           env: {
             ...process.env,
@@ -233,8 +368,8 @@ describe('Plugin', function () {
           // copy public and static files to the `standalone` folder
           const publicOrigin = path.join(__dirname, 'public')
           const publicDestination = path.join(__dirname, '.next/standalone/public')
-          execSync(`mkdir ${publicDestination}`)
-          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+          mkdirSync(publicDestination, { recursive: true })
+          execSync(`cp ${publicOrigin}/test.txt ${publicOrigin}/test.png ${publicDestination}/`)
         }
       })
 
@@ -244,7 +379,7 @@ describe('Plugin', function () {
           'package.json',
           'node_modules',
           '.next',
-          'yarn.lock',
+          'bun.lock',
         ]
         await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
@@ -267,7 +402,7 @@ describe('Plugin', function () {
       )
 
       describe('without configuration', () => {
-        startServer({ withConfig: false, standalone: false })
+        const restartServer = startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -602,6 +737,69 @@ describe('Plugin', function () {
               .catch(done)
 
             httpRequest.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+          })
+        })
+
+        describe('for the image optimizer', () => {
+          it('names image optimizer cache misses and hits', async () => {
+            await assertImageRequest(pkg.version, port, 64, 'MISS')
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 64, 'HIT')
+          })
+
+          it('names image optimizer HEAD cache hits', async () => {
+            await assertImageRequest(pkg.version, port, 384, 'MISS')
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 384, 'HIT', { method: 'HEAD' })
+          })
+
+          it('names rewritten image optimizer requests', async () => {
+            await assertImageRequest(pkg.version, port, 640, 'MISS', { pathname: '/image-optimizer' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 640, 'HIT', { pathname: '/image-optimizer' })
+          })
+
+          it('preserves the optimizer route when an API route serves the image', async () => {
+            await assertImageRequest(pkg.version, port, 32, 'MISS', { source: '/api/image' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 32, 'HIT', { source: '/api/image' })
+          })
+
+          it('preserves the optimizer route when its image source fails', async () => {
+            await assertImageRequest(pkg.version, port, 32, undefined, {
+              source: '/api/image?error=true', sourceError: true,
+            })
+          })
+
+          it('records the final status when an external image request rejects', async () => {
+            await assertImageRequest(pkg.version, port, 32, undefined, {
+              source: `http://127.0.0.1:${downstreamPort}/image-error`, statusCode: 500,
+            })
+          })
+
+          it('finishes rejected image requests after the response is destroyed', async () => {
+            const tracingPromise = agent.assertSomeTraces(traces => {
+              const nextSpans = traces[0].filter(span => span.name === 'next.request')
+              assert.strictEqual(nextSpans.length, 1)
+              assert.strictEqual(nextSpans[0].resource, 'GET /_next/image')
+              assert.strictEqual(nextSpans[0].error, 1)
+            }, { timeoutMs: 4000 })
+            const source = encodeURIComponent(`http://127.0.0.1:${downstreamPort}/image-error`)
+            const request = httpRequest.get(`http://127.0.0.1:${port}/_next/image?url=${source}&w=32&q=75`, {
+              headers: { 'x-test-close-response': 'true' },
+            })
+            await Promise.all([assert.rejects(request, { code: 'ECONNRESET' }), tracingPromise])
+          })
+
+          it('preserves an upstream parent route for image optimizer requests', async () => {
+            await assertImageRequest(pkg.version, port, 256, 'MISS', { parentRoute: '/upstream/[id]' })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 256, 'HIT', { parentRoute: '/upstream/[id]' })
+          })
+
+          it('names image optimizer validation failures', async () => {
+            await assertImageRequest(pkg.version, port, 0, undefined)
+            await assertImageRequest(pkg.version, port, 0, undefined, { withQuery: false })
           })
         })
 
@@ -975,7 +1173,13 @@ describe('Plugin', function () {
       // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
         describe('with standalone', () => {
-          startServer({ withConfig: false, standalone: true })
+          const restartServer = startServer({ withConfig: false, standalone: true })
+
+          it('names image optimizer cache misses and hits in standalone mode', async () => {
+            await assertImageRequest(pkg.version, port, 96, 'MISS', { standalone: true })
+            await restartServer()
+            await assertImageRequest(pkg.version, port, 96, 'HIT', { standalone: true })
+          })
 
           // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`
           const standaloneTests = [
@@ -1034,7 +1238,19 @@ describe('Plugin', function () {
       })
 
       describe('without HTTP instrumentation', () => {
-        startServer({ withConfig: false, standalone: false, withHttp: false })
+        const restartServer = startServer({ withConfig: false, standalone: false, withHttp: false })
+
+        it('names image optimizer cache misses and hits without HTTP instrumentation', async () => {
+          await assertImageRequest(pkg.version, port, 128, 'MISS', { withHttp: false })
+          await restartServer()
+          await assertImageRequest(pkg.version, port, 128, 'HIT', { withHttp: false })
+        })
+
+        it('records rejected image requests without HTTP instrumentation', async () => {
+          await assertImageRequest(pkg.version, port, 32, undefined, {
+            source: `http://127.0.0.1:${downstreamPort}/image-error`, statusCode: 500, withHttp: false,
+          })
+        })
 
         it('should continue incoming distributed context', done => {
           agent
@@ -2002,5 +2218,228 @@ describe('compiled Next runtimes', () => {
       }), /App Page handler error/)
       pageResponse.emit('finish')
     })
+  })
+
+  describe('with OTel semantics', () => {
+    before(async () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      await agent.load(['http', 'next'], [{ client: false }, undefined])
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+    })
+
+    after(() => {
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      return agent.close()
+    })
+
+    for (const [runtime, exportName] of [
+      ['app-page', 'AppPageRouteModule'],
+      ['pages-api', 'PagesAPIRouteModule'],
+    ]) {
+      it(`finishes consecutive ${runtime} requests without a Web request`, async () => {
+        for (const status of [200, 503]) {
+          const pathname = `/node-request-${status}`
+          class RouteModule {
+            definition = { pathname, page: pathname }
+
+            prepare () {
+              return Promise.resolve()
+            }
+
+            /** @param {{responseGenerator: () => Promise<object>}} options */
+            handleResponse ({ responseGenerator }) {
+              return responseGenerator()
+            }
+
+            render () {
+              return Promise.resolve()
+            }
+          }
+          applyCompiledRuntimeHook(runtime, { [exportName]: RouteModule })
+
+          const request = { headers: { host: 'example.com' }, method: 'GET', url: pathname }
+          const response = new http.ServerResponse(request)
+          response.statusCode = status
+          const trace = agent.assertSomeTraces(traces => {
+            const [span] = traces[0]
+            assertObjectContains(span, {
+              resource: `GET ${pathname}`,
+              error: status >= 500 ? 1 : 0,
+              meta: {
+                'http.request.method': 'GET',
+                'url.path': pathname,
+                'server.address': 'example.com',
+              },
+              metrics: {
+                'http.response.status_code': status,
+              },
+            })
+            assert.strictEqual(span.meta['error.type'], status >= 500 ? String(status) : undefined)
+          })
+          const routeModule = new RouteModule()
+          async function handleRequest () {
+            if (runtime === 'pages-api') {
+              await routeModule.render(request, response, { page: pathname })
+            } else {
+              await routeModule.prepare(request, response, {})
+              await routeModule.handleResponse({
+                req: request,
+                responseGenerator: () => Promise.resolve({ value: { status } }),
+              })
+            }
+            response.emit('finish')
+          }
+          await Promise.all([trace, handleRequest()])
+        }
+      })
+    }
+
+    it('preserves Node request attributes through the App Route lifecycle', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/web-request' }
+
+        prepare () {
+          return Promise.resolve()
+        }
+
+        handleResponse ({ responseGenerator }) {
+          return responseGenerator()
+        }
+
+        handle (_request, _context) {
+          return Promise.resolve({ status: 503 })
+        }
+      }
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+
+      const request = new Request('http://n/api/web-request?token=secret', {
+        headers: { 'user-agent': 'test-agent/1.0' },
+        method: 'PROPFIND',
+      })
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          resource: 'HTTP /api/web-request',
+          error: 1,
+          meta: {
+            'error.type': '503',
+            'http.request.method': '_OTHER',
+            'http.request.method_original': 'PROPFIND',
+            'url.path': '/api/web-request',
+            'url.scheme': 'https',
+            'server.address': 'example.com',
+            'user_agent.original': 'test-agent/1.0',
+          },
+          metrics: {
+            'http.response.status_code': 503,
+          },
+        })
+      })
+      const nodeRequest = {
+        headers: { host: 'example.com', 'user-agent': 'test-agent/1.0' },
+        method: 'PROPFIND',
+        url: '/api/web-request?token=secret',
+        socket: { encrypted: true },
+      }
+      const nodeResponse = new http.ServerResponse(nodeRequest)
+      const routeModule = new AppRouteRouteModule()
+
+      await routeModule.prepare(nodeRequest, nodeResponse, {})
+      const result = await routeModule.handleResponse({
+        req: nodeRequest,
+        responseGenerator: async () => {
+          const response = await routeModule.handle(request, {})
+          return { response, value: { status: response.status } }
+        },
+      })
+      nodeResponse.emit('finish')
+      assert.strictEqual(result.response.status, 503)
+      await trace
+    })
+
+    for (const { title, customResource, expectedResource } of [
+      {
+        title: 'preserves a custom HTTP parent resource through the App Route lifecycle',
+        customResource: 'custom-http-resource',
+        expectedResource: 'custom-http-resource',
+      },
+      {
+        title: 'updates the HTTP parent resource through the App Route lifecycle',
+        expectedResource: 'HTTP /api/web-request',
+      },
+    ]) {
+      it(title, async () => {
+        class AppRouteRouteModule {
+          definition = { pathname: '/api/web-request' }
+
+          prepare () {
+            return Promise.resolve()
+          }
+
+          handleResponse ({ responseGenerator }) {
+            return responseGenerator()
+          }
+
+          handle () {
+            return Promise.resolve({ status: 201 })
+          }
+        }
+        applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+        const routeModule = new AppRouteRouteModule()
+        const server = http.createServer(async (req, res) => {
+          try {
+            if (customResource) {
+              storage('legacy').getStore().span.setTag('resource.name', customResource)
+            }
+            const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
+            await routeModule.prepare(req, res, {})
+            const result = await routeModule.handleResponse({
+              req,
+              responseGenerator: async () => {
+                const response = await routeModule.handle(request, {})
+                return { value: { status: response.status } }
+              },
+            })
+            res.statusCode = result.value.status
+            res.end()
+          } catch (error) {
+            res.destroy(error)
+          }
+        })
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+        const port = server.address().port
+        const trace = agent.assertSomeTraces(traces => {
+          const spans = traces.find(trace => trace.some(span => span.meta.component === 'next'))
+          assert.ok(spans)
+          const nextSpan = spans.find(span => span.meta.component === 'next')
+          assert.ok(nextSpan)
+          const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
+          assert.ok(parentSpan)
+          assert.strictEqual(parentSpan.resource, expectedResource)
+          assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
+          assertObjectContains(nextSpan.meta, {
+            'network.peer.address': '127.0.0.1',
+            'server.address': '127.0.0.1',
+            'url.path': '/api/web-request',
+            'user_agent.original': 'test-agent/1.0',
+          })
+        })
+
+        try {
+          const [response] = await Promise.all([
+            httpRequest({
+              method: 'PROPFIND',
+              url: `http://127.0.0.1:${port}/api/web-request`,
+              headers: { 'user-agent': 'test-agent/1.0' },
+            }),
+            trace,
+          ])
+          assert.strictEqual(response.status, 201)
+        } finally {
+          await new Promise(resolve => server.close(resolve))
+        }
+      })
+    }
   })
 })

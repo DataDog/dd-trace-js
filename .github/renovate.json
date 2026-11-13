@@ -4,17 +4,32 @@
     "config:recommended"
   ],
   "enabledManagers": [
+    "bun",
     "npm"
   ],
   "includePaths": [
     "package.json",
-    "yarn.lock",
+    "bun.lock",
     "docs/package.json",
-    "docs/yarn.lock",
+    "docs/bun.lock",
     ".github/actions/datadog-ci/package.json",
-    ".github/actions/datadog-ci/yarn.lock",
+    ".github/actions/datadog-ci/bun.lock",
     "vendor/package.json",
-    "vendor/package-lock.json"
+    "vendor/bun.lock",
+    ".github/all-green/package.json",
+    ".github/all-green/bun.lock",
+    ".github/workflow-job-names/package.json",
+    ".github/workflow-job-names/bun.lock",
+    "packages/dd-trace/test/plugins/versions/package.json",
+    "integration-tests/esbuild/package.json",
+    "integration-tests/appsec/iast-esbuild-cjs/package.json",
+    "integration-tests/appsec/iast-esbuild-esm/package.json",
+    "integration-tests/webpack/package.json",
+    "benchmark/sirun/startup/everything-fixture/package.json",
+    "benchmark/sirun/startup/everything-fixture/package-lock.json"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**"
   ],
   "timezone": "UTC",
   "dependencyDashboard": true,
@@ -22,9 +37,6 @@
   "automergeStrategy": "squash",
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "postUpdateOptions": [
-    "yarnDedupeHighest"
-  ],
   "vulnerabilityAlerts": {
     "enabled": false
   },
@@ -39,6 +51,7 @@
     {
       "description": "Disable regular dependency updates",
       "matchManagers": [
+        "bun",
         "npm"
       ],
       "matchUpdateTypes": [
@@ -57,6 +70,7 @@
     {
       "description": "Automerge Sunday lockfile maintenance",
       "matchManagers": [
+        "bun",
         "npm"
       ],
       "matchUpdateTypes": [
@@ -73,7 +87,7 @@
     {
       "description": "Root lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -87,7 +101,7 @@
     {
       "description": "Docs lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -101,7 +115,7 @@
     {
       "description": "datadog-ci action lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -115,7 +129,7 @@
     {
       "description": "Vendor lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -125,6 +139,20 @@
       ],
       "groupName": "vendor lockfile maintenance",
       "groupSlug": "vendor-lockfile-maintenance"
+    },
+    {
+      "description": "All-green lockfile maintenance",
+      "matchManagers": [
+        "bun"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        ".github/all-green/package.json"
+      ],
+      "groupName": "all-green lockfile maintenance",
+      "groupSlug": "all-green-lockfile-maintenance"
     }
   ]
 }

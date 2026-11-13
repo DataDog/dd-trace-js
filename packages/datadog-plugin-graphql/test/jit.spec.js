@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { createRequire } = require('node:module')
-const { join } = require('node:path')
+const { dirname, join } = require('node:path')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
 const dc = require('dc-polyfill')
@@ -333,7 +333,7 @@ void generatedResolver
 
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
       const graphqlJit = require(`../../../versions/graphql-jit@${version}`)
-      const packageRoot = join(__dirname, '../../../versions', `graphql-jit@${version}`, 'node_modules/graphql-jit')
+      const packageRoot = dirname(graphqlJit.pkgJsonPath())
       // This CommonJS matrix has no ESM loader. GraphQL 17's module-sync export is covered by the ESM matrix.
       const cjsGraphqlIt = graphqlJit.getPath('graphql').endsWith('.mjs') ? it.skip : it
 
@@ -354,7 +354,7 @@ void generatedResolver
       it('pairs graphql-jit with its declared GraphQL range', () => {
         const { devDependencies, peerDependencies, version: installedVersion } =
           require(join(packageRoot, 'package.json'))
-        const graphqlRange = devDependencies?.graphql ?? peerDependencies.graphql
+        const graphqlRange = peerDependencies?.graphql ?? devDependencies.graphql
 
         assert.ok(
           semifies(graphql.version, graphqlRange),
@@ -402,6 +402,25 @@ void generatedResolver
             `${filePath} retained its compilation context as ${format}`
           )
           assert.doesNotMatch(queryWrapper, /const __apm\$traced =/, `${filePath} retained the traced closure as ${format}`)
+
+          const ast = parse(content, { range: true, isModule: format === 'module' })
+          const [compileArguments] = query(ast,
+            'FunctionDeclaration[id.name="compileArguments"]:has(VariableDeclarator[id.name="valuesExpression"])')
+          if (compileArguments === undefined) continue
+
+          const [start, end] = compileArguments.range
+          const original = content.slice(start, end)
+          for (const binding of ['args', 'bind']) {
+            const renamed = original.replace(new RegExp(`\\b${binding}\\b`, 'g'), `renamed${binding}`)
+            assert.notStrictEqual(renamed, original, `${filePath} did not contain ${binding}`)
+            const unsupported = content.slice(0, start) + renamed + content.slice(end)
+
+            assert.strictEqual(
+              rewrite(unsupported, filename, format),
+              unsupported,
+              `${filePath} was rewritten with a renamed ${binding} binding as ${format}`
+            )
+          }
         }
       })
 
@@ -2270,7 +2289,9 @@ void generatedResolver
             count: 42,
             empty: null,
             emptyFilter: {},
-            filter: { name: null, size: 7, exact: true },
+            filter: semifies(graphqlJit.version(), '>=0.9.4')
+              ? { size: 7, exact: true }
+              : { name: null, size: 7, exact: true },
             flag: true,
             fixedFilter: { name: 'fixed', size: 8, exact: false },
             fixedTags: ['fixed'],

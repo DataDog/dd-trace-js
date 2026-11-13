@@ -391,6 +391,23 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
+  /**
+   * Annotates an experiment row span with its inputs, outputs, and expected output.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {{
+   *   inputData: unknown,
+   *   outputData: unknown,
+   *   expectedOutput: unknown,
+   *   metadata: object,
+   *   tags: object
+   * }} options
+   */
+  _annotateExperimentSpan (span, options) {
+    this.annotate(span, options)
+    this._tagger.tagExperimentExpectedOutput(span, options.expectedOutput)
+  }
+
   exportSpan (span) {
     span ||= this._active()
     let err = ''

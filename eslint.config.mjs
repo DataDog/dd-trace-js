@@ -353,6 +353,11 @@ export default [
             group: 'builtin',
             position: 'before',
           },
+          {
+            pattern: '@actions/**',
+            group: 'external',
+            position: 'before',
+          },
         ],
       }],
       'import/no-useless-path-segments': 'error',
@@ -805,6 +810,9 @@ export default [
       'unicorn/no-declarations-before-early-exit': 'off', // many
       'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
+      // Enable when Map and Set initialization can be excluded.
+      // https://github.com/sindresorhus/eslint-plugin-unicorn/issues/3992
+      'unicorn/no-immediate-mutation': 'off',
       'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
@@ -1256,7 +1264,7 @@ export default [
     // These fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`), so dd-trace never appears in their own manifest.
     // Both extraneous-require rules must be off; otherwise the rule fires
-    // whenever dd-trace happens to be resolvable locally (e.g. `yarn link`),
+    // whenever dd-trace happens to be resolvable through a local package link,
     // even though CI's clean install keeps it unresolvable.
     name: 'dd-trace/tests/integration-and-resources',
     plugins: {

@@ -64,6 +64,7 @@ module.exports = {
   DEFAULT_MODEL: 'custom',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
+  EXPERIMENT_EXPECTED_OUTPUT: '_ml_obs.meta.expected_output',
   EXPERIMENT_INPUT: '_ml_obs.meta.input',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
   INPUT_VALUE: '_ml_obs.meta.input.value',

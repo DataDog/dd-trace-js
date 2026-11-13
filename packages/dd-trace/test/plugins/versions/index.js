@@ -1,10 +1,8 @@
 'use strict'
 
-const { clean, coerce, intersects, satisfies, subset, validRange } = require('semver')
+const { Range, clean, coerce, intersects, satisfies, subset, validRange } = require('semver')
 
 const latests = require('./package.json').dependencies
-
-const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
 // Exclude majors without stable releases so published releases on either side of a gap retain test coverage.
 const nonConsecutiveMajorPackages = new Map([
@@ -49,7 +47,7 @@ function getCappedRange (name, range) {
  * @param {string} subrange
  */
 function capSubrange (name, subrange) {
-  if (exactVersionExp.test(subrange)) return subrange
+  if (clean(subrange)) return subrange
 
   if (!latests[name]) {
     throw new Error(
@@ -58,14 +56,7 @@ function capSubrange (name, subrange) {
   }
 
   if (!subrange || subrange === 'latest') return latests[name]
-  if (subset(subrange, `<=${latests[name]}`)) return subrange
-  if (subrange.includes(' - ')) {
-    const minRange = subrange.split(' - ')[0].trim()
-
-    return `${minRange} - ${latests[name]}`
-  }
-
-  return `${subrange} <=${latests[name]}`
+  return `${new Range(subrange).range} <=${latests[name]}`.trim()
 }
 
 /**
