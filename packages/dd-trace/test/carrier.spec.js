@@ -16,6 +16,7 @@ const {
   readDsmBase64,
   readDsmBinary,
   readLegacyBaggage,
+  readStepFunctionTraceContext,
   readTraceparent,
   readTracestate,
   writeDatadogParentId,
@@ -24,6 +25,24 @@ const {
 } = require('../src/carrier')
 
 describe('carrier fields', () => {
+  describe('Step Functions schema fields', () => {
+    it('reads scalar trace IDs and tags without changing the carrier', () => {
+      const carrier = Object.freeze({ 'x-datadog-trace-id': '123', 'x-datadog-tags': '_dd.p.tid=1' })
+      assert.deepStrictEqual(readStepFunctionTraceContext(carrier), { traceId: '123', tags: '_dd.p.tid=1' })
+      assert.deepStrictEqual(readStepFunctionTraceContext({ 'x-datadog-trace-id': '', 'x-datadog-tags': '' }),
+        { traceId: '', tags: '' })
+    })
+
+    for (const value of [undefined, null, 123, [], ['123']]) {
+      it(`rejects non-string schema fields: ${JSON.stringify(value)}`, () => {
+        assert.strictEqual(readStepFunctionTraceContext({ 'x-datadog-trace-id': value, 'x-datadog-tags': '' }),
+          undefined)
+        assert.strictEqual(readStepFunctionTraceContext({ 'x-datadog-trace-id': '123', 'x-datadog-tags': value }),
+          undefined)
+      })
+    }
+  })
+
   describe('list-valued fields', () => {
     const reads = [
       ['passes a scalar string through untouched', 'a=1', 'a=1'],

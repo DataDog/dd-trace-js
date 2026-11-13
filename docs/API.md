@@ -273,6 +273,14 @@ tracer.use('openai', {
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-lambda"></h5>
+
+`dd-trace/lambda.wrap(handler, options)` accepts a `traceExtractor(event, context)` option.
+The extractor may return a promise and is awaited before the invocation span starts. Return
+`{ traceId, parentId, sampleMode, source: 'event' }`, where the IDs are decimal strings and
+`sampleMode` is a Datadog sampling priority (`-1`, `0`, `1`, or `2`). If extraction fails, the
+standard event, Lambda client-context, and X-Ray extraction chain is used. The option can also
+be configured with `tracer.use('aws-lambda', { traceExtractor })`.
+
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the
