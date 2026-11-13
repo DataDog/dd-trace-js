@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -96,6 +96,23 @@ describe('sdk', () => {
     sinon.restore()
     llmobsModule.disable()
     await agent.close()
+  })
+
+  it('retains the registered processor when the Agent URL changes', () => {
+    const processor = sinon.stub().returns(null)
+    llmobs.registerProcessor(processor)
+    try {
+      const before = llmobs.trace({ kind: 'workflow', name: 'before-update' }, span => span)
+      tracer.setUrl(`http://127.0.0.1:${agent.port}`)
+      const after = llmobs.trace({ kind: 'workflow', name: 'after-update' }, span => span)
+
+      assert.strictEqual(before.meta_struct?._llmobs, undefined)
+      assert.strictEqual(after.meta_struct?._llmobs, undefined)
+      sinon.assert.notCalled(LLMObsSpanWriter.prototype.append)
+      sinon.assert.calledTwice(processor)
+    } finally {
+      llmobs.deregisterProcessor()
+    }
   })
 
   describe('enabled', () => {
