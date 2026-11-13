@@ -15,6 +15,7 @@ const semver = require('semver')
 const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
 const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
+const { BUN, BUN_CONFIG, withBun } = require('./helpers/bun')
 
 const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', '1.9.0', '1.9.1', latestVersions['@opentelemetry/api']]
 const execFileAsync = promisify(execFile)
@@ -29,9 +30,9 @@ async function installApi (directory, version) {
     private: true,
     dependencies: { '@opentelemetry/api': version },
   }))
-  await execFileAsync('yarn', ['install', '--ignore-scripts', '--non-interactive', '--no-lockfile'], {
+  await execFileAsync(BUN, ['install', `--config=${BUN_CONFIG}`, '--ignore-scripts', '--no-save'], {
     cwd: directory,
-    env: { ...process.env, NODE_OPTIONS: '' },
+    env: withBun({ ...process.env, NODE_OPTIONS: '' }),
   })
 }
 
