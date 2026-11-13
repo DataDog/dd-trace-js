@@ -8,13 +8,19 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { computePathwayHash } = require('./pathway')
+const telemetryMetrics = require('../telemetry/metrics')
+const { computePathwayHash, statsPointKey } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+
+// Parent hashes come from inbound headers, so without a bound a caller can grow a bucket without limit.
+const MAX_CHECKPOINTS_PER_BUCKET = 2000
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -149,11 +155,20 @@ class StatsBucket {
     return Buffer.concat(this._transactionChunks)
   }
 
+  /**
+   * @param {object} checkpoint
+   * @param {Buffer} checkpoint.hash
+   * @param {Buffer} checkpoint.parentHash
+   * @param {string[]} checkpoint.edgeTags
+   * @returns {StatsPoint | undefined} `undefined` when the bucket already holds the maximum number of checkpoints.
+   */
   forCheckpoint ({ hash, parentHash, edgeTags }) {
-    let checkpoint = this._checkpoints.get(hash)
+    const key = statsPointKey(hash, edgeTags)
+    let checkpoint = this._checkpoints.get(key)
     if (!checkpoint) {
+      if (this._checkpoints.size >= MAX_CHECKPOINTS_PER_BUCKET) return
       checkpoint = new StatsPoint(hash, parentHash, edgeTags)
-      this._checkpoints.set(hash, checkpoint)
+      this._checkpoints.set(key, checkpoint)
     }
 
     return checkpoint
@@ -275,6 +290,10 @@ class DataStreamsProcessor {
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
     const statsPoint = this.bucketFromTimestamp(checkpoint.currentTimestamp).forCheckpoint(checkpoint)
+    if (statsPoint === undefined) {
+      tracerMetrics.count('data_streams.checkpoints_dropped', ['reason:bucket_full']).inc()
+      return
+    }
     statsPoint.addLatencies(checkpoint)
     if (span) {
       // StatsPoint already converted the 8-byte Buffer hash to a uint64 BigInt.

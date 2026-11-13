@@ -48,6 +48,12 @@ const UNHASHED_TAG_KEYS = new Set([
   'has_routing_key',
 ])
 
+// dd-trace-java aggregates stats per pathway hash and these tags (DataStreamsTags aggregation tags), so
+// has_routing_key and partition variants of one pathway share a stats point.
+const AGGREGATION_TAG_PREFIXES = ['ds.name:', 'ds.namespace:', 'manual_checkpoint:', 'group:', 'consumer_group:']
+/** @type {WeakMap<Buffer, string>} */
+const statsPointKeys = new WeakMap()
+
 const PATHWAY_CONTEXT_BYTES = 20
 
 // Reused across `encodePathwayContext` calls; the buffer is fully rewritten before each
@@ -119,10 +125,6 @@ function nodeHashSeed (service, env, processTags, containerTagsHash) {
 /**
  * Sorts `edgeTags` in place.
  *
- * Returns one Buffer instance per distinct set of arguments while it stays cached: StatsBucket keys
- * stats points by that instance, which keeps tags left out of the hash, such as `group`, in separate
- * stats points.
- *
  * @param {string} service
  * @param {string | undefined} env
  * @param {string[]} edgeTags
@@ -148,6 +150,32 @@ function computeHash (service, env, edgeTags, parentHash, processTags, container
   writeFnv64LE(pathwayInput, value, 0)
   cache.set(key, value)
   return value
+}
+
+/**
+ * Key of the stats point a checkpoint aggregates into, as dd-trace-java's aggregation hash.
+ *
+ * A hash Buffer from computeHash always stands for one tag set, because its cache key holds every tag, so the key
+ * is built once per Buffer.
+ *
+ * @param {Buffer} hash Pathway hash as uint64 little-endian.
+ * @param {string[]} edgeTags
+ */
+function statsPointKey (hash, edgeTags) {
+  let key = statsPointKeys.get(hash)
+  if (key !== undefined) return key
+
+  key = hash.toString('latin1')
+  for (const tag of edgeTags) {
+    for (const prefix of AGGREGATION_TAG_PREFIXES) {
+      if (tag.startsWith(prefix)) {
+        key += `\0${tag}`
+        break
+      }
+    }
+  }
+  statsPointKeys.set(hash, key)
+  return key
 }
 
 /**
@@ -274,4 +302,5 @@ module.exports = {
   encodePathwayContextBase64,
   decodePathwayContextBase64,
   DsmPathwayCodec,
+  statsPointKey,
 }

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { randomBytes } = require('node:crypto')
 const { hostname } = require('node:os')
 const { inspect } = require('node:util')
 
@@ -13,6 +14,7 @@ const { DsmPathwayCodec } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const propagationHash = require('../../src/propagation-hash')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -98,9 +100,9 @@ describe('StatsBucket', () => {
       const checkpoints = buckets.checkpoints
       assert.ok(bucket instanceof StatsPoint)
       assert.strictEqual(checkpoints.size, 1)
-      const [key, value] = Array.from(checkpoints.entries())[0]
-      assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
+      const [value] = checkpoints.values()
       assert.ok(value instanceof StatsPoint)
+      assert.strictEqual(value.hash, mockCheckpoint.hash.readBigUInt64LE())
     })
 
     it('should not add a new entry if matching key is found', () => {
@@ -113,6 +115,23 @@ describe('StatsBucket', () => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(anotherMockCheckpoint)
       assert.strictEqual(buckets.checkpoints.size, 2)
+    })
+
+    it('stops adding entries at 2000 checkpoints but keeps aggregating existing ones', () => {
+      const checkpointFor = index => {
+        const hash = Buffer.alloc(8)
+        hash.writeUInt32LE(index)
+        return { ...mockCheckpoint, hash }
+      }
+      const first = checkpointFor(0)
+      const firstPoint = buckets.forCheckpoint(first)
+      for (let index = 1; index < 2000; index++) {
+        assert.ok(buckets.forCheckpoint(checkpointFor(index)) instanceof StatsPoint)
+      }
+
+      assert.strictEqual(buckets.forCheckpoint(checkpointFor(2000)), undefined)
+      assert.strictEqual(buckets.forCheckpoint(first), firstPoint)
+      assert.strictEqual(buckets.checkpoints.size, 2000)
     })
   })
 
@@ -486,6 +505,78 @@ describe('DataStreamsProcessor', () => {
     ])
   })
 
+  describe('stats points', () => {
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    })
+
+    afterEach(() => {
+      clock.restore()
+    })
+
+    function bucketPoints () {
+      return [...processor.bucketFromTimestamp(DEFAULT_TIMESTAMP * 1e6).checkpoints.values()]
+    }
+
+    it('keeps one point per pathway and consumer group when more pathways repeat than the hash cache holds', () => {
+      const parents = Array.from({ length: 300 }, (_, index) => {
+        const hash = Buffer.alloc(8)
+        hash.writeUInt32LE(index + 1)
+        return { hash, pathwayStartNs: DEFAULT_TIMESTAMP * 1e6, edgeStartNs: DEFAULT_TIMESTAMP * 1e6 }
+      })
+
+      for (let round = 0; round < 4; round++) {
+        for (const parent of parents) {
+          processor.setCheckpoint(['direction:in', 'group:g1', 'topic:t', 'type:kafka'], null, parent)
+          processor.setCheckpoint(['direction:in', 'group:g2', 'topic:t', 'type:kafka'], null, parent)
+        }
+      }
+
+      const points = bucketPoints()
+      assert.strictEqual(points.length, 600)
+      assert.strictEqual(new Set(points.map(point => point.hash)).size, 300)
+      for (const point of points) {
+        assert.strictEqual(point.edgeLatency.count, 4)
+      }
+    })
+
+    for (const [name, tags] of [
+      ['has_routing_key', ['has_routing_key:true', 'has_routing_key:false']],
+      ['partition', ['partition:1', 'partition:2']],
+    ]) {
+      it(`aggregates checkpoints that differ only in ${name} into one point`, () => {
+        for (const tag of tags) {
+          processor.setCheckpoint(['direction:out', 'exchange:e', tag, 'type:rabbitmq'], null, null)
+        }
+
+        const points = bucketPoints()
+        assert.strictEqual(points.length, 1)
+        assert.strictEqual(points[0].edgeLatency.count, 2)
+      })
+    }
+
+    for (const [name, tags] of [
+      ['consumer_group', ['consumer_group:a', 'consumer_group:b']],
+      ['ds.name', ['ds.name:a', 'ds.name:b']],
+      ['ds.namespace', ['ds.namespace:a', 'ds.namespace:b']],
+      ['group', ['group:a', 'group:b']],
+      ['manual_checkpoint', ['manual_checkpoint:false', 'manual_checkpoint:true']],
+    ]) {
+      it(`keeps checkpoints that differ only in ${name} as separate points under one hash`, () => {
+        for (const tag of tags) {
+          processor.setCheckpoint(['direction:in', tag, 'topic:t', 'type:kafka'], null, null)
+        }
+
+        const points = bucketPoints()
+        assert.strictEqual(points.length, 2)
+        assert.strictEqual(points[0].hash, points[1].hash)
+        assert.deepStrictEqual(points.map(point => point.edgeLatency.count), [1, 1])
+      })
+    }
+  })
+
   describe('process tags', () => {
     const serializedProcessTags = 'entrypoint.basedir:src,entrypoint.name:server,entrypoint.type:script,' +
       'entrypoint.workdir:orders,package.json.name:orders-api,svc.user:true'
@@ -521,6 +612,39 @@ describe('DataStreamsProcessor', () => {
       // Expected hash comes from dd-trace-java's FNV64Hash with process tags off.
       assert.strictEqual(ctx.hash.readBigUInt64LE(), 11375375775841093325n)
     })
+  })
+})
+
+describe('DataStreamsProcessor with forged parent contexts', () => {
+  let processor
+  let clock
+  let dropped
+
+  beforeEach(() => {
+    processor = new DataStreamsProcessor({ dsmEnabled: true, env: 'test', service: 'service1' })
+    clearTimeout(processor.timer)
+    clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    dropped = sinon.spy(
+      telemetryMetrics.manager.namespace('tracers').count('data_streams.checkpoints_dropped', ['reason:bucket_full']),
+      'inc'
+    )
+  })
+
+  afterEach(() => {
+    dropped.restore()
+    clock.restore()
+  })
+
+  it('bounds the checkpoints a bucket holds and counts the dropped ones', () => {
+    for (let index = 0; index < 5000; index++) {
+      const header = Buffer.concat([randomBytes(8), Buffer.alloc(12)]).toString('base64')
+      const parent = DsmPathwayCodec.decode({ 'dd-pathway-ctx-base64': header })
+      processor.setCheckpoint(['direction:in', 'type:http'], null, parent, 0, 0)
+    }
+
+    const bucket = processor.bucketFromTimestamp(DEFAULT_TIMESTAMP * 1e6)
+    assert.strictEqual(bucket.checkpoints.size, 2000)
+    assert.strictEqual(dropped.callCount, 3000)
   })
 })
 
