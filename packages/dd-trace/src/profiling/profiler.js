@@ -2,9 +2,12 @@
 
 const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
+const { version } = require('../../../../package.json')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
+const { buildResourceAttributes } = require('../opentelemetry/resource-attributes')
 const { buildProfilingRuntime, getProfilingTags } = require('./config')
+const { EventSerializer } = require('./exporters/event_serializer')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -34,6 +37,31 @@ function profileHasMissingSourceMaps (profile) {
   return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
 }
 
+/** @typedef {ReturnType<import('@datadog/pprof').OtelProfilesBuilder['build']>} OtlpProfilesRequest */
+
+// The Profile.original_payload_format of the event.json in OTLP profiles, as the backend reads it
+const EVENT_JSON_PAYLOAD_FORMAT = 'datadog-event-json'
+
+/**
+ * Converts attributes to OTLP key-values, leaving out values OTLP resources don't need, such as
+ * undefined ones.
+ *
+ * @param {Record<string, unknown>} attributes
+ */
+function toKeyValues (attributes) {
+  const keyValues = []
+  for (const [key, value] of Object.entries(attributes)) {
+    if (typeof value === 'string') {
+      keyValues.push({ key, value: { stringValue: value } })
+    } else if (typeof value === 'number') {
+      keyValues.push({ key, value: Number.isInteger(value) ? { intValue: value } : { doubleValue: value } })
+    } else if (typeof value === 'boolean') {
+      keyValues.push({ key, value: { boolValue: value } })
+    }
+  }
+  return keyValues
+}
+
 function processInfo (infos, info, type) {
   if (info !== undefined) {
     infos[type] = info
@@ -58,9 +86,11 @@ class Profiler extends EventEmitter {
   #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
+  #eventSerializer
   #exporters
   #flushInterval
   #lastStart
+  #otlp = false
   #profileSeq = 0
   #profilers
   #spanFinishListener
@@ -200,9 +230,11 @@ class Profiler extends EventEmitter {
     }
 
     try {
-      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport, otlp } =
         buildProfilingRuntime(config)
       this.#config = config
+      this.#otlp = otlp
+      this.#eventSerializer = otlp ? new EventSerializer(config) : undefined
       this.#exporters = exporters
       this.#flushInterval = flushInterval
       this.#profilers = profilers
@@ -398,12 +430,16 @@ class Profiler extends EventEmitter {
       const endDate = new Date()
       const snapshotTags = this.#currentSnapshotTags
       const profiles = []
+      // With OTLP, all profiles of the cycle go into one request, sharing its dictionary
+      const otlpBuilder = this.#otlp ? this.#createOtlpBuilder() : undefined
 
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
         for (const profiler of this.#profilers) {
           const info = profiler.getInfo()
-          const profile = profiler.profile(restart, startDate, endDate)
+          const profile = otlpBuilder === undefined
+            ? profiler.profile(restart, startDate, endDate)
+            : profiler.visit(restart, otlpBuilder.visitor())
           if (!restart) {
             log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
           }
@@ -415,6 +451,15 @@ class Profiler extends EventEmitter {
       if (restart) {
         this.#currentSnapshotTags = getProfilingTags(this.#config)
         this._capture(this._timeoutInterval, endDate)
+      }
+
+      if (otlpBuilder !== undefined) {
+        if (profiles.length > 0) {
+          await this.#submitOtlp(otlpBuilder, profiles, startDate, endDate, snapshotTags, snapshotKind)
+          profileSubmittedChannel.publish()
+          log.debug('Submitted OTLP profiles')
+        }
+        return
       }
 
       let hasEncoded = false
@@ -461,6 +506,67 @@ class Profiler extends EventEmitter {
     }
   }
 
+  #createOtlpBuilder () {
+    const { OtelProfilesBuilder } = require('@datadog/pprof')
+    return new OtelProfilesBuilder({
+      resourceAttributes: toKeyValues({
+        ...buildResourceAttributes(this.#config),
+        'telemetry.sdk.name': 'datadog',
+        'telemetry.sdk.language': 'nodejs',
+        'telemetry.sdk.version': version,
+        // Tells the backend to rebuild the upload that dd-trace-js sends without OTLP
+        'datadog.family': 'node',
+      }),
+      scope: { name: 'dd-trace-js', version },
+    })
+  }
+
+  /**
+   * Submits a cycle's profiles as one OTLP request: the profilers' visits, with the event.json that
+   * goes with pprof uploads as every profile's original payload.
+   *
+   * @param {import('@datadog/pprof').OtelProfilesBuilder} builder
+   * @param {Array<{ profiler: { type: string }, profile: { hasMissingMapFiles: boolean }, info: unknown }>} visits
+   * @param {Date} start
+   * @param {Date} end
+   * @param {Record<string, string|number|boolean|undefined>} snapshotTags
+   * @param {string} snapshotKind
+   */
+  #submitOtlp (builder, visits, start, end, snapshotTags, snapshotKind) {
+    const infos = this.#createInitialInfos()
+    const types = []
+    for (const { profiler, profile, info } of visits) {
+      types.push(profiler.type)
+      if (profile.hasMissingMapFiles) {
+        infos.hasMissingSourceMaps = true
+      }
+      processInfo(infos, info, profiler.type)
+    }
+    return this.#submit({}, infos, start, end, snapshotTags, snapshotKind, { request: builder.build(), types })
+  }
+
+  /**
+   * Encodes an OTLP request, with the cycle's event.json as every profile's original payload.
+   *
+   * @param {OtlpProfilesRequest} request
+   * @param {string[]} types - The profile types in the request, for the event's attachments
+   * @param {object} exportSpec - The cycle's export, as for pprof uploads
+   * @returns {Promise<Buffer>}
+   */
+  async #encodeOtlp (request, types, exportSpec) {
+    const attachments = Object.fromEntries(types.map(type => [type, true]))
+    const event = Buffer.from(this.#eventSerializer.getEventJSON({ ...exportSpec, profiles: attachments }))
+    for (const resourceProfiles of request.resourceProfiles) {
+      for (const scopeProfiles of resourceProfiles.scopeProfiles) {
+        for (const profile of scopeProfiles.profiles) {
+          profile.originalPayloadFormat = EVENT_JSON_PAYLOAD_FORMAT
+          profile.originalPayload = event
+        }
+      }
+    }
+    return Buffer.from(await request.encodeAsync())
+  }
+
   /**
    * @param {Record<string, Buffer|string>} profiles
    * @param {Record<string, unknown>} infos
@@ -468,8 +574,10 @@ class Profiler extends EventEmitter {
    * @param {Date} end
    * @param {Record<string, string|number|boolean|undefined>} snapshotTags
    * @param {string} snapshotKind
+   * @param {{ request: OtlpProfilesRequest, types: string[] }} [otlp] - The
+   *   cycle's OTLP request, unencoded, in place of pprof profiles
    */
-  #submit (profiles, infos, start, end, snapshotTags, snapshotKind) {
+  async #submit (profiles, infos, start, end, snapshotTags, snapshotKind, otlp) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {
@@ -483,13 +591,21 @@ class Profiler extends EventEmitter {
       ? [...this.#customLabelKeys]
       : undefined
     const exportSpec = { profiles, infos, start, end, tags: snapshotTags, endpointCounts, customAttributes }
+    if (otlp !== undefined) {
+      try {
+        exportSpec.otlp = await this.#encodeOtlp(otlp.request, otlp.types, exportSpec)
+      } catch (error) {
+        log.error('Failed to encode OTLP profiles', error)
+        return
+      }
+    }
     const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)
       })
     )
 
-    return Promise.all(tasks)
+    await Promise.all(tasks)
   }
 }
 

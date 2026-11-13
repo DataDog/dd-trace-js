@@ -4706,6 +4706,48 @@
         ]
       }
     ],
+    "OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "transform": "validateHttpUrl",
+        "default": null
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_PROFILES_HEADERS": [
+      {
+        "implementation": "A",
+        "type": "map",
+        "default": null,
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_HEADERS"
+        ],
+        "sensitive": true
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "http/protobuf",
+        "allowed": "http/protobuf",
+        "transform": "toLowerCase",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_PROTOCOL"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "10000",
+        "allowed": "[1-9]\\d*",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_TIMEOUT"
+        ]
+      }
+    ],
     "OTEL_EXPORTER_OTLP_PROTOCOL": [
       {
         "implementation": "A",
@@ -4735,6 +4777,15 @@
     "OTEL_METRICS_EXPORTER": [
       {
         "implementation": "C",
+        "type": "string",
+        "default": null,
+        "allowed": "none|otlp",
+        "transform": "toLowerCase"
+      }
+    ],
+    "OTEL_PROFILES_EXPORTER": [
+      {
+        "implementation": "A",
         "type": "string",
         "default": null,
         "allowed": "none|otlp",

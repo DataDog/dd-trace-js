@@ -59,6 +59,7 @@ describe('profilers/native/space', () => {
         start: sinon.stub(),
         stop: sinon.stub(),
         profile: sinon.stub().returns(profile0),
+        visitProfile: sinon.stub().returns({ hasMissingMapFiles: false }),
         monitorOutOfMemory: sinon.stub(),
         CallbackMode: { Async: 1 },
       },
@@ -154,6 +155,25 @@ describe('profilers/native/space', () => {
     profiler.encode(profile)
 
     sinon.assert.calledOnce(profile0.encodeAsync)
+  })
+
+  it('should pass profiles to a visitor, with the mapper and thread labels', () => {
+    const profiler = makeSpace(NativeSpaceProfiler)
+    const mapper = {}
+    const visitor = {}
+    profiler.start({ mapper })
+
+    const result = profiler.visit(true, visitor)
+
+    assert.deepStrictEqual(result, { hasMissingMapFiles: false })
+    sinon.assert.notCalled(pprof.heap.profile)
+    sinon.assert.calledOnceWithExactly(pprof.heap.visitProfile, visitor, sinon.match({ sourceMapper: mapper }))
+    const { generateLabels } = pprof.heap.visitProfile.firstCall.args[1]
+    assert.strictEqual(generateLabels()['thread name'], 'Main Event Loop')
+    assert.strictEqual(profiler.isStarted(), true)
+
+    profiler.visit(false, visitor)
+    assert.strictEqual(profiler.isStarted(), false)
   })
 
   it('should use mapper if given', () => {
