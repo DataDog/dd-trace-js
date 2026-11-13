@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -62,19 +63,22 @@ describe('Plugin', () => {
           let expectedConsumerHash
 
           beforeEach(() => {
-            const phash = propagationHash.getHash()
+            const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+            const containerTagsHash = propagationHash.getContainerTagsHash()
             const producerHash = computePathwayHash(
               'test', 'tester',
               ['direction:out', 'exchange:amq.topic', 'type:rabbitmq'],
               ENTRY_PARENT_HASH,
-              phash
+              processTagsForHash,
+              containerTagsHash
             )
             expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
             expectedConsumerHash = computePathwayHash(
               'test', 'tester',
               ['direction:in', 'topic:amq.topic', 'type:rabbitmq'],
               producerHash,
-              phash
+              processTagsForHash,
+              containerTagsHash
             ).readBigUInt64LE(0).toString()
           })
 
