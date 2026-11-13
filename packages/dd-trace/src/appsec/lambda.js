@@ -41,43 +41,43 @@ function onLambdaStartInvocation (data) {
       '_dd.runtime_family': 'nodejs',
     })
 
-    const persistent = {}
+    const requestData = {}
 
     if (path) {
-      persistent[addresses.HTTP_INCOMING_URL] = path
+      requestData[addresses.HTTP_INCOMING_URL] = path
     }
 
     if (method) {
-      persistent[addresses.HTTP_INCOMING_METHOD] = method
+      requestData[addresses.HTTP_INCOMING_METHOD] = method
     }
 
     if (headers) {
       // Cookie header is already stripped by the Lambda layer's event-data-extractor
-      persistent[addresses.HTTP_INCOMING_HEADERS] = headers
+      requestData[addresses.HTTP_INCOMING_HEADERS] = headers
     }
 
     if (clientIp) {
       span.setTag(HTTP_CLIENT_IP, clientIp)
-      persistent[addresses.HTTP_CLIENT_IP] = clientIp
+      requestData[addresses.HTTP_CLIENT_IP] = clientIp
     }
 
     if (query) {
-      persistent[addresses.HTTP_INCOMING_QUERY] = query
+      requestData[addresses.HTTP_INCOMING_QUERY] = query
     }
 
     if (body !== undefined && body !== null) {
-      persistent[addresses.HTTP_INCOMING_BODY] = body
+      requestData[addresses.HTTP_INCOMING_BODY] = body
     }
 
     if (pathParams) {
-      persistent[addresses.HTTP_INCOMING_PARAMS] = pathParams
+      requestData[addresses.HTTP_INCOMING_PARAMS] = pathParams
     }
 
     if (cookies) {
-      persistent[addresses.HTTP_INCOMING_COOKIES] = cookies
+      requestData[addresses.HTTP_INCOMING_COOKIES] = cookies
     }
 
-    waf.run({ persistent }, req, undefined, span)
+    waf.run(requestData, req, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda start-invocation handler', err)
   }
@@ -108,16 +108,16 @@ function onLambdaEndInvocation (data) {
     activeInvocations.delete(span)
 
     try {
-      const persistent = {}
+      const requestData = {}
 
       if (statusCode) {
-        persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+        requestData[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
       }
 
       if (responseHeaders) {
         const filteredHeaders = { ...responseHeaders }
         delete filteredHeaders['set-cookie']
-        persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
+        requestData[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
       }
 
       const samplingDecision = apiSecurity.sampleRootSpanRequest(span, {
@@ -129,17 +129,17 @@ function onLambdaEndInvocation (data) {
       }, true)
 
       if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
-        persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+        requestData[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
 
         const parsedBody = parseResponseBody(responseBody, responseHeaders, isBase64Encoded)
         if (parsedBody !== undefined) {
-          persistent[addresses.HTTP_INCOMING_RESPONSE_BODY] = parsedBody
+          requestData[addresses.HTTP_INCOMING_RESPONSE_BODY] = parsedBody
         }
       }
 
       let wafResult
-      if (!isEmpty(persistent)) {
-        wafResult = waf.run({ persistent }, req, undefined, span)
+      if (!isEmpty(requestData)) {
+        wafResult = waf.run(requestData, req, undefined, span)
       }
 
       apiSecurity.reportRootSpanRequest(span, samplingDecision, wafResult)

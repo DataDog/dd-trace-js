@@ -1,12 +1,16 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { storage } = require('../../../../datadog-core')
-const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
+const {
+  fsOperationStart,
+  incomingHttpRequestStart,
+  expressResponseRenderStart,
+} = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 const { APPSEC_FS_STORAGE, RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { withRequest } = require('../../../src/appsec/store')
@@ -16,7 +20,7 @@ describe('RASP - lfi.js', () => {
 
   beforeEach(() => {
     waf = {
-      run: sinon.stub(),
+      runSubContext: sinon.stub(),
     }
 
     web = {
@@ -109,9 +113,19 @@ describe('RASP - lfi.js', () => {
 
       fsOperationStart.publish(ctx)
 
-      const ephemeral = { [FS_OPERATION_PATH]: path }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'lfi' })
+      const subcontextData = { [FS_OPERATION_PATH]: path }
+      sinon.assert.calledOnceWithExactly(waf.runSubContext, subcontextData, { type: 'lfi' }, undefined, req)
     })
+
+    for (const activeReq of [undefined, {}]) {
+      const scenario = activeReq ? 'belongs to another request' : 'has no request'
+      it(`uses the render request when async storage ${scenario}`, () => {
+        storage('legacy').enterWith(activeReq ? withRequest({}, activeReq) : {})
+        expressResponseRenderStart.publish({ req, view: path })
+        sinon.assert.calledOnceWithExactly(waf.runSubContext,
+          { [FS_OPERATION_PATH]: path }, { type: 'lfi' }, undefined, req)
+      })
+    }
 
     it('should NOT analyze lfi for root fs operations outside of a request', () => {
       storage('legacy').enterWith({})
@@ -119,7 +133,7 @@ describe('RASP - lfi.js', () => {
 
       fsOperationStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should NOT analyze lfi for child fs operations', () => {
@@ -129,7 +143,7 @@ describe('RASP - lfi.js', () => {
 
       fsOperationStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
@@ -139,7 +153,7 @@ describe('RASP - lfi.js', () => {
 
       fsOperationStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should NOT analyze lfi for excluded operations', () => {
@@ -149,7 +163,7 @@ describe('RASP - lfi.js', () => {
 
       fsOperationStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
   })
 })

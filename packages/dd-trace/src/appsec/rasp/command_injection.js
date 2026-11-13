@@ -31,20 +31,20 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   const req = getActiveRequest()
   if (!req) return
 
-  const ephemeral = {}
+  const subcontextData = {}
   const raspRule = { type: RULE_TYPES.COMMAND_INJECTION }
   const params = fileArgs ? [file, ...fileArgs] : file
 
   if (shell) {
-    ephemeral[addresses.SHELL_COMMAND] = params
+    subcontextData[addresses.SHELL_COMMAND] = params
     raspRule.variant = 'shell'
   } else {
     const commandParams = Array.isArray(params) ? params : [params]
-    ephemeral[addresses.EXEC_COMMAND] = commandParams
+    subcontextData[addresses.EXEC_COMMAND] = commandParams
     raspRule.variant = 'exec'
   }
 
-  const result = waf.run({ ephemeral }, req, raspRule)
+  const result = waf.runSubContext(subcontextData, raspRule)
 
   handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 }

@@ -52,7 +52,7 @@ function onGraphqlStartResolver (data) {
 
   const knownActions = fieldsWithoutArgumentsActions.get(req)
   if (knownActions === undefined &&
-      !waf.wafManager.getWAFContext(req).knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+    !waf.wafManager.getWAFContext(req)?.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
 
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
@@ -63,12 +63,12 @@ function onGraphqlStartResolver (data) {
     return
   }
 
-  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const result = waf.runSubContext({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo })
   const blockingAction = getBlockingAction(result?.actions)
 
   // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
   // occurrence run again instead of reading it back as "allowed".
-  if (cacheKey !== undefined && result !== undefined && !result.timeout) {
+  if (cacheKey !== undefined && result !== undefined && !result.timeout && !(result.errorCode < 0)) {
     if (knownActions === undefined) {
       const blockingActions = new Map()
       blockingActions.set(cacheKey, blockingAction)
@@ -82,17 +82,14 @@ function onGraphqlStartResolver (data) {
 }
 
 /**
- * Persistent inputs stay in the request's WAF context, so they can change the action of a field checked before
- * they arrived. Forget what we know about the request when a run carries them. Resolver runs send ephemeral
- * inputs only, so they never invalidate their own answers.
+ * Inputs stay in the request's WAF context, so they can change the action of a field checked before
+ * they arrived. Invalidate cached answers after evaluations on the request context.
+ * Resolver evaluations use subcontexts, so they never invalidate their own answers.
  *
- * @param {{ payload?: { persistent?: object } }} data
+ * @param {{ req?: object, payload?: object, isSubcontext?: boolean }} data
  */
-function onWafRunFinished ({ payload }) {
-  if (!payload?.persistent) return
-
-  const req = getActiveRequest()
-  if (!req) return
+function onWafRunFinished ({ req, payload, isSubcontext }) {
+  if (!req || !payload || isSubcontext) return
 
   fieldsWithoutArgumentsActions.delete(req)
 }
@@ -112,7 +109,7 @@ function getFieldCacheKey (resolverInfo) {
   for (const name of names) {
     const directive = fieldArguments[name]
     if ((name !== 'include' && name !== 'skip') ||
-        !directive || typeof directive !== 'object') return
+      !directive || typeof directive !== 'object') return
     const argumentNames = Object.keys(directive)
     if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
     const value = directive.if

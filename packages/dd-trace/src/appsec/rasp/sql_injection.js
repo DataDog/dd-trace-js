@@ -65,37 +65,27 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
   }
   executedQueries.add(query)
 
-  const ephemeral = {
+  const subcontextData = {
     [addresses.DB_STATEMENT]: query,
     [addresses.DB_SYSTEM]: dbSystem,
   }
 
   const raspRule = { type: RULE_TYPES.SQL_INJECTION }
 
-  const result = waf.run({ ephemeral }, req, raspRule)
+  const result = waf.runSubContext(subcontextData, raspRule)
 
   handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 }
 
-function hasInputAddress (payload) {
-  return hasAddressesObjectInputAddress(payload.ephemeral) || hasAddressesObjectInputAddress(payload.persistent)
-}
-
-function hasAddressesObjectInputAddress (addressesObject) {
-  return addressesObject && Object.keys(addressesObject)
-    .some(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
-}
-
-function clearQuerySet ({ payload }) {
-  if (!payload) return
-
-  const req = getActiveRequest()
-  if (!req) return
+function clearQuerySet ({ req, payload }) {
+  if (!req || !payload) return
 
   const executedQueries = reqQueryMap.get(req)
   if (!executedQueries) return
 
-  if (hasInputAddress(payload)) {
+  const hasInput = Object.keys(payload)
+    .some(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
+  if (hasInput) {
     executedQueries.clear()
   }
 }

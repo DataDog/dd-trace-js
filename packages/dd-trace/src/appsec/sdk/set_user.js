@@ -27,15 +27,15 @@ function setUser (tracer, user) {
 
   setUserTags(user, rootSpan)
 
-  const persistent = {
+  const requestData = {
     [addresses.USER_ID]: String(user.id),
   }
 
   if (user.session_id && typeof user.session_id === 'string') {
-    persistent[addresses.USER_SESSION_ID] = user.session_id
+    requestData[addresses.USER_SESSION_ID] = user.session_id
   }
 
-  waf.run({ persistent })
+  waf.run(requestData)
 }
 
 module.exports = {
