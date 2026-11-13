@@ -161,6 +161,38 @@ describe('Config', () => {
       assert.strictEqual(config.getOrigin('url'), 'code')
     })
 
+    for (const url of [undefined, initial]) {
+      it(`retains runtime URLs across remote overrides with initial URL ${url}`, () => {
+        const config = getConfig({ url })
+        const updated = new URL('https://updated:443')
+
+        config.setProgrammaticConfig({ url: updated })
+        assert.strictEqual(config.url, updated)
+        assert.strictEqual(config.getOrigin('url'), 'code')
+
+        config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+        assert.strictEqual(config.url.href, remote)
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.url.href, updated.href)
+        assert.strictEqual(config.getOrigin('url'), 'code')
+      })
+    }
+
+    it('retains a later programmatic URL when unrelated remote settings change', () => {
+      const config = getConfig({ url: initial })
+      const updated = new URL('http://updated:8126')
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+
+      config.setProgrammaticConfig({ url: updated })
+      assert.strictEqual(config.url, updated)
+      assert.strictEqual(config.getOrigin('url'), 'code')
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      assert.strictEqual(config.url, updated)
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.url, updated)
+    })
+
     for (const value of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
       it(`normalizes and retains ${value}`, () => {
         const config = getConfig({ url: value, remoteConfig: { enabled: false } })

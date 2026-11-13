@@ -5,6 +5,7 @@ const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
+const { transformers: { toURL } } = require('./config/parsers')
 const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
@@ -534,6 +535,19 @@ class Tracer extends NoopProxy {
    */
   use () {
     this._pluginManager.configurePlugin(...arguments)
+    return this
+  }
+
+  /** @param {string} url */
+  setUrl (url) {
+    if (this.#configPublished) {
+      const parsedUrl = toURL(url)
+      if (parsedUrl) {
+        getConfig().setProgrammaticConfig({ url: parsedUrl })
+      } else {
+        log.error('Invalid Agent URL: %s', url)
+      }
+    }
     return this
   }
 

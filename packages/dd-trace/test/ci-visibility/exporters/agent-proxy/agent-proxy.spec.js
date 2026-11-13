@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
+const { execFile } = require('node:child_process')
+const { inspect, promisify } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
@@ -19,6 +20,8 @@ const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentles
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
+
+const run = promisify(execFile)
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
@@ -40,6 +43,85 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const queryDelay = 50
   const agentInfoTimeoutMs = 5000
   const tags = {}
+
+  for (const evp of [false, true]) {
+    for (const pending of [false, true]) {
+      it(`updates CI-entrypoint destinations with EVP ${evp} and pending discovery ${pending}`, async () => {
+        const result = await run(process.execPath, ['-e', `
+          const assert = require('node:assert/strict')
+          const { promisify } = require('node:util')
+          const nock = require('nock')
+          const id = require(${JSON.stringify(require.resolve('../../../../src/id'))})
+          delete process.env.OTEL_TRACES_EXPORTER
+          for (const name of ['JEST_WORKER_ID', 'MOCHA_WORKER_ID', 'CUCUMBER_WORKER_ID',
+            'TINYPOOL_WORKER_ID', 'DD_PLAYWRIGHT_WORKER', 'DD_VITEST_WORKER']) {
+            delete process.env[name]
+          }
+          const initial = 'http://old-agent:8126'
+          const updated = 'http://new-agent:8126'
+          nock.disableNetConnect()
+          let oldRequests = 0
+          nock(initial).persist().put('/v0.4/traces').reply(() => { oldRequests++; return [200, '{}'] })
+          nock(initial).persist().post(/.*/).reply(() => { oldRequests++; return [200, '{}'] })
+          let finishDiscovery
+          let onDiscovery
+          const discoveryStarted = new Promise(resolve => { onDiscovery = resolve })
+          nock(initial).get('/info').reply((path, body, reply) => {
+            finishDiscovery = () => reply(null, [200, {
+              endpoints: ${JSON.stringify(evp ? ['/evp_proxy/v2', '/debugger/v1/input'] : [])},
+            }])
+            onDiscovery()
+          })
+          const expected = nock(updated)
+          if (${evp}) {
+            expected.post('/evp_proxy/v2/api/v2/citestcycle').reply(200, '{}')
+            expected.post('/evp_proxy/v2/api/v2/citestcov').reply(200, '{}')
+            expected.post('/debugger/v1/input').reply(200, '{}')
+          } else {
+            expected.put('/v0.4/traces').reply(200, '{}')
+          }
+          ;(async () => {
+            const tracer = require(${JSON.stringify(require.resolve('../../../../../../ci/init'))})
+            const exporter = tracer._tracer._exporter
+            await discoveryStarted
+            if (!${pending}) {
+              finishDiscovery()
+              await exporter._canUseCiVisProtocolPromise
+            }
+            tracer.setUrl(updated)
+            if (${pending}) finishDiscovery()
+            await exporter._canUseCiVisProtocolPromise
+            tracer.startSpan('updated-agent').finish()
+            if (${evp}) {
+              exporter.exportCoverage({ sessionId: id('1'), testId: id('2'), files: [] })
+              exporter.exportDiLogs({}, { message: 'updated-agent' })
+            }
+            await promisify(exporter.flush.bind(exporter))()
+            assert.strictEqual(oldRequests, 0)
+            assert.strictEqual(expected.isDone(), true, expected.pendingMocks().join(', '))
+            process.stdout.write('CI update complete')
+          })().catch(error => { console.error(error); process.exitCode = 1 })
+        `], {
+          env: {
+            ...process.env,
+            DD_TRACE_ENABLED: 'true',
+            DD_INJECT_FORCE: 'true',
+            DD_TRACE_AGENT_URL: 'http://old-agent:8126',
+            DD_TRACE_AGENT_PROTOCOL_VERSION: '0.4',
+            DD_CIVISIBILITY_ENABLED: 'true',
+            DD_CIVISIBILITY_AGENTLESS_ENABLED: 'false',
+            DD_AGENTLESS_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_CRASHTRACKING_ENABLED: 'false',
+            DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true',
+          },
+          timeout: 30000,
+        })
+        assert.match(result.stdout, /CI update complete/, result.stderr)
+      })
+    }
+  }
 
   function createControlledExporter () {
     const writers = []

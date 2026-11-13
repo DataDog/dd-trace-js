@@ -53,6 +53,10 @@ const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 /** @type {LLMObsSpanProcessor | null} */
 let spanProcessor
 
+/** @typedef {Parameters<import('../../../../index').llmobs.LLMObs['registerProcessor']>[0]} UserSpanProcessor */
+/** @type {UserSpanProcessor | null | undefined} */
+let userSpanProcessor
+
 /** @type {LLMObsSpanWriter | null} */
 let spanWriter
 
@@ -87,6 +91,7 @@ function enable (config) {
   const startTime = performance.now()
   // Register the processor lifecycle first so pending events reach the writers before they shut down.
   spanProcessor = new LLMObsSpanProcessor(config)
+  if (userSpanProcessor) spanProcessor.setUserSpanProcessor(userSpanProcessor)
 
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
@@ -272,8 +277,10 @@ function handleFlush () {
   telemetry.recordUserFlush(err)
 }
 
-function handleRegisterProcessor (userSpanProcessor) {
-  spanProcessor.setUserSpanProcessor(userSpanProcessor)
+/** @param {UserSpanProcessor | null} processor */
+function handleRegisterProcessor (processor) {
+  userSpanProcessor = processor
+  spanProcessor.setUserSpanProcessor(processor)
 }
 
 function handleSpanProcess (span) {

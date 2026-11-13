@@ -826,8 +826,7 @@ module.exports = {
           }
         }
 
-        const createConfig = require('../../src/config')
-        createConfig().setRemoteConfig({ DD_TRACE_AGENT_URL: url })
+        tracer.setUrl(url)
 
         for (const [name, pluginConfig] of loadedPlugins) {
           tracer.use(name, pluginConfig)

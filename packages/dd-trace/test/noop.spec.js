@@ -30,7 +30,9 @@ describe('NoopTracer', () => {
         assert.strictEqual(identity.hasSubscribers, false)
         const tracer = require(${JSON.stringify(require.resolve('../../..'))})
         assert.strictEqual(identity.hasSubscribers, false)
+        assert.strictEqual(tracer.setUrl('http://agent:8126'), tracer)
         tracer.init()
+        assert.strictEqual(tracer.setUrl('http://agent:8126'), tracer)
         tracer.trace('test', span => {
           assert.match(span.context().toTraceId(), /^\\d+$/)
           span.finish()

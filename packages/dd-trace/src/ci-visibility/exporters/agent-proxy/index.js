@@ -124,6 +124,18 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this.exportUncodedCoverages()
     }, initializationOptions, request)
   }
+
+  /** @param {import('../../../config/config-base')} config */
+  configure (config) {
+    this._url = config.url
+    this._writer?.setUrl(config.url)
+    this._coverageWriter?.setUrl(config.url)
+    this._logsWriter?.setUrl(config.url)
+    if (this._isUsingEvpProxy) {
+      this._codeCoverageReportUrl = config.url
+      this._testScreenshotUploadUrl = config.url
+    }
+  }
 }
 
 module.exports = AgentProxyCiVisibilityExporter

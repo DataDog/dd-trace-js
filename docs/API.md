@@ -887,6 +887,11 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 Options can be configured as a parameter to the [init()](./interfaces/Tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
+Use `tracer.setUrl(url)` after initialization when the Agent address becomes available later or changes during execution.
+The method returns the tracer. Invalid URLs leave the current destination unchanged.
+Future Agent requests use the new destination without restarting active profile collection.
+Independent OTLP and agentless intake destinations retain their own configuration.
+
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
 Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.

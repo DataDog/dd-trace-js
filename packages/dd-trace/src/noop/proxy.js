@@ -42,6 +42,10 @@ class NoopProxy {
     return this
   }
 
+  setUrl () {
+    return this
+  }
+
   profilerStarted () {
     return Promise.resolve(false)
   }

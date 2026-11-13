@@ -91,6 +91,7 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {{
+ *   url?: URL,
  *   llmobs?: { enabled?: boolean } & Pick<NonNullable<TracerOptions['llmobs']>, 'mlApp' | 'agentlessEnabled'>
  * }} ProgrammaticConfig
  * @typedef {import('./config-types').ConfigKey} ConfigKey
@@ -378,6 +379,9 @@ class Config extends ConfigBase {
    * @param {ProgrammaticConfig} options
    */
   setProgrammaticConfig (options) {
+    if (options.url !== undefined) {
+      setAndTrack(this, 'url', options.url, options.url.href, 'code')
+    }
     if (options.llmobs !== undefined) {
       const { enabled, ...values } = options.llmobs
       this.#applyOptions(values, 'llmobs', true)

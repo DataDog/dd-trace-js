@@ -1448,8 +1448,30 @@ describe('TracerProxy', () => {
     })
 
     describe('setUrl', () => {
-      it('keeps configuration mutation off the public tracer', () => {
-        assert.strictEqual(proxy.setUrl, undefined)
+      for (const url of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
+        it(`normalizes ${url} before updating shared configuration`, () => {
+          proxy.init()
+
+          assert.strictEqual(proxy.setUrl(url), proxy)
+
+          sinon.assert.calledOnceWithExactly(config.setProgrammaticConfig, { url: new URL(url) })
+        })
+      }
+
+      it('does not initialize configuration before init', () => {
+        assert.strictEqual(proxy.setUrl('http://agent:8126'), proxy)
+
+        sinon.assert.notCalled(Config)
+        sinon.assert.notCalled(config.setProgrammaticConfig)
+      })
+
+      it('preserves configuration when the URL is invalid', () => {
+        proxy.init()
+
+        assert.strictEqual(proxy.setUrl('invalid URL'), proxy)
+
+        sinon.assert.notCalled(config.setProgrammaticConfig)
+        sinon.assert.calledWith(log.error, 'Invalid Agent URL: %s', 'invalid URL')
       })
     })
 
