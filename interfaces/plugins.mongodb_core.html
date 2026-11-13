@@ -17,7 +17,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">mongodb_core</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#enabled">enabled</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#heartbeatenabled">heartbeatEnabled</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#measured">measured</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#obfuscatequery">obfuscateQuery</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;none&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;types&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;redact&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#queryinresourcename">queryInResourceName</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#service">service</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3055">index.d.ts:3055</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L3143">index.d.ts:3143</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -48,7 +48,7 @@
 </div></div><aside class="tsd-sources">
 <p>Inherited from Instrumentation.enabled</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L2097">index.d.ts:2097</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L2133">index.d.ts:2133</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="heartbeatenabled"><code class="tsd-tag">Optional</code><span>heartbeat<wbr/>Enabled</span><a href="#heartbeatenabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">heartbeatEnabled</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -61,7 +61,7 @@
 
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3061">index.d.ts:3061</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L3149">index.d.ts:3149</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="measured"><code class="tsd-tag">Optional</code><span>measured</span><a href="#measured" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">measured</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span></div>
@@ -70,7 +70,7 @@ names as keys and booleans as values for more granular control.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from Instrumentation.measured</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L2083">index.d.ts:2083</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L2119">index.d.ts:2119</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="obfuscatequery"><code class="tsd-tag">Optional</code><span>obfuscate<wbr/>Query</span><a href="#obfuscatequery" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">obfuscateQuery</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;none&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;types&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;redact&quot;</span></div>
@@ -95,14 +95,14 @@ to design indexes.</li>
 
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3079">index.d.ts:3079</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L3167">index.d.ts:3167</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="queryinresourcename"><code class="tsd-tag">Optional</code><span>query<wbr/>In<wbr/>Resource<wbr/>Name</span><a href="#queryinresourcename" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">queryInResourceName</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>Whether to include the query contents in the resource name.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3084">index.d.ts:3084</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L3172">index.d.ts:3172</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="service"><code class="tsd-tag">Optional</code><span>service</span><a href="#service" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">service</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">any</span></div>
@@ -110,7 +110,7 @@ to design indexes.</li>
 </div><aside class="tsd-sources">
 <p>Inherited from Instrumentation.service</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L2092">index.d.ts:2092</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3a5ed07da22cf24f0903718af5df3d0d610bdd95/index.d.ts#L2128">index.d.ts:2128</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
