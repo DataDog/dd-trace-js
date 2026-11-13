@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "provider": "elevenlabs",
+  "currency": "USD",
+  "scope": "conversation",
+  "conversation_id": "conv_example",
+  "owner": {
+    "trace_id": "759eec54694e3d015548545f6c7f0b39",
+    "span_id": "16104195360118446121"
+  },
+  "amounts": {
+    "total": 0.12,
+    "llm": 0.02,
+    "platform": 0.1
+  },
+  "provenance": {
+    "total": {
+      "kind": "conversation_details",
+      "field": "metadata.cost_fiat"
+    },
+    "llm": {
+      "kind": "conversation_details",
+      "field": "metadata.charging.llm_price"
+    },
+    "platform": {
+      "kind": "conversation_details",
+      "field": "metadata.charging.platform_price"
+    }
+  },
+  "status": "done"
+}
