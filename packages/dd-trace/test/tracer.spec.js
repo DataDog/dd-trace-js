@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { ServerResponse } = require('node:http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -291,6 +292,45 @@ describe('Tracer', () => {
     })
 
     describe('with a callback taking a callback', () => {
+      for (const rejected of [false, true]) {
+        it(`should preserve ${rejected ? 'rejected' : 'fulfilled'} thenables with explicit completion`, async () => {
+          const error = new Error('boom')
+          const promise = rejected ? Promise.reject(error) : Promise.resolve('value')
+          const thenable = { then: promise.then.bind(promise) }
+          const result = tracer.trace('name', {}, (_span, done) => {
+            thenable.then(() => done(), error => done(error))
+            return thenable
+          })
+
+          assert.strictEqual(result, thenable)
+          if (rejected) {
+            await assert.rejects(async () => result, error)
+          } else {
+            assert.strictEqual(await result, 'value')
+          }
+          sinon.assert.calledOnce(tracer._exporter.export)
+          assert.strictEqual(tracer._exporter.export.firstCall.args[0][0].error, Number(rejected))
+        })
+      }
+
+      it('should preserve the return value and wait for explicit completion after a promise settles', async () => {
+        const promise = Promise.resolve('value')
+        let complete
+
+        const result = tracer.trace('name', {}, (_span, done) => {
+          complete = done
+          return promise
+        })
+
+        assert.strictEqual(result, promise)
+        assert.strictEqual(await result, 'value')
+        sinon.assert.notCalled(tracer._exporter.export)
+
+        complete()
+
+        sinon.assert.calledOnce(tracer._exporter.export)
+      })
+
       it('should wait for the callback to be called before finishing the span', () => {
         let span
         let done
@@ -452,6 +492,80 @@ describe('Tracer', () => {
   })
 
   describe('wrap', () => {
+    it('should leave HTTP response completion to the caller', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      let complete
+      const callback = sinon.spy()
+      const fn = tracer.wrap('name', {}, function (_error, _request, response, next) {
+        complete = next
+        response.end('value')
+      })
+
+      fn(undefined, {}, response, callback)
+
+      sinon.assert.notCalled(tracer._exporter.export)
+      assert.strictEqual(response.listenerCount('finish'), 0)
+      assert.strictEqual(response.listenerCount('close'), 0)
+
+      complete()
+
+      sinon.assert.calledOnce(tracer._exporter.export)
+      sinon.assert.calledOnce(callback)
+    })
+
+    it('should trace a synchronous terminal HTTP handler through an explicit adapter', () => {
+      const response = new ServerResponse({ method: 'GET' })
+
+      function handler (error, request, response, next) {
+        return tracer.trace('name', {}, () => response.end(error.message))
+      }
+
+      const result = handler(new Error('boom'), {}, response, () => {})
+
+      assert.strictEqual(result, response)
+      assert.strictEqual(response.writableEnded, true)
+      sinon.assert.calledOnce(tracer._exporter.export)
+    })
+
+    it('should preserve function-valued data through a trace adapter', async () => {
+      class Value {}
+      const receiver = { value: 'value' }
+
+      async function original (Constructor) {
+        assert.strictEqual(Constructor, Value)
+        assert.strictEqual(this, receiver)
+        return new Constructor()
+      }
+
+      function adapted (...args) {
+        return tracer.trace('name', {}, () => original.apply(this, args))
+      }
+
+      assert.ok(await adapted.call(receiver, Value) instanceof Value)
+      sinon.assert.calledOnce(tracer._exporter.export)
+    })
+
+    it('should wait for the final callback even after a returned promise settles', async () => {
+      const promise = Promise.resolve('value')
+      let complete
+      const callback = sinon.spy()
+      const fn = tracer.wrap('name', {}, done => {
+        complete = done
+        return promise
+      })
+
+      const result = fn(callback)
+
+      assert.strictEqual(result, promise)
+      assert.strictEqual(await result, 'value')
+      sinon.assert.notCalled(tracer._exporter.export)
+
+      complete()
+
+      sinon.assert.calledOnce(tracer._exporter.export)
+      sinon.assert.calledOnce(callback)
+    })
+
     it('should return a new function that automatically calls tracer.trace()', () => {
       const it = {}
       const callback = sinon.spy(function (foo) {
