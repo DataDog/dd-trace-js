@@ -422,9 +422,11 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
-          () => this.openfeature)
+        if (!config.isCiVisibility) {
+          lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+          lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+            () => this.openfeature)
+        }
 
         if (aiguardEnabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
