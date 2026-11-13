@@ -8,7 +8,7 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { computePathwayHash } = require('./pathway')
+const { computePathwayHash, statsPointKey } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
@@ -150,10 +150,11 @@ class StatsBucket {
   }
 
   forCheckpoint ({ hash, parentHash, edgeTags }) {
-    let checkpoint = this._checkpoints.get(hash)
+    const key = statsPointKey(hash, edgeTags)
+    let checkpoint = this._checkpoints.get(key)
     if (!checkpoint) {
       checkpoint = new StatsPoint(hash, parentHash, edgeTags)
-      this._checkpoints.set(hash, checkpoint)
+      this._checkpoints.set(key, checkpoint)
     }
 
     return checkpoint
