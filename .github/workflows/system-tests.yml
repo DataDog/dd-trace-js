@@ -36,13 +36,14 @@ jobs:
   main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@jj/node-dsm-hashing
     permissions:
       contents: read
       id-token: write
       packages: write
     with:
       library: nodejs
+      ref: jj/node-dsm-hashing
       binaries_artifact: system_tests_binaries
       desired_execution_time: 120 # 2 minutes
       scenarios_groups: tracer-release
