@@ -16,7 +16,6 @@ describeNotWindows('crashtracker', () => {
   let crashtracker
   let binding
   let config
-  let identityRefreshChannel
   let configUpdateChannel
   let libdatadogExtras
   let log
@@ -42,9 +41,6 @@ describeNotWindows('crashtracker', () => {
     log = {
       error: sinon.stub(),
     }
-    identityRefreshChannel = {
-      subscribe: sinon.stub(),
-    }
     configUpdateChannel = { subscribe: sinon.stub() }
     getAgentlessTelemetryUrl = sinon.stub().callsFake(actualGetAgentlessTelemetryUrl)
 
@@ -55,7 +51,7 @@ describeNotWindows('crashtracker', () => {
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       'dc-polyfill': {
-        channel: name => name === 'datadog:config:update' ? configUpdateChannel : identityRefreshChannel,
+        channel: () => configUpdateChannel,
       },
       '../log': log,
       '../telemetry/agentless-url': getAgentlessTelemetryUrl,
@@ -273,12 +269,12 @@ describeNotWindows('crashtracker', () => {
     })
   })
 
-  describe('identity refresh', () => {
+  describe('configuration updates', () => {
     it('should reconfigure the binding with refreshed tags when the identity-refresh channel fires', () => {
       crashtracker.start(config)
 
       const refreshedConfig = { ...config, tags: { foo: 'baz' } }
-      identityRefreshChannel.subscribe.firstCall.args[0](refreshedConfig)
+      configUpdateChannel.subscribe.firstCall.args[0](refreshedConfig)
 
       sinon.assert.called(binding.updateMetadata)
       const metadata = binding.updateMetadata.lastCall.args[0]
@@ -290,7 +286,7 @@ describeNotWindows('crashtracker', () => {
 
       crashtracker.start(config)
 
-      sinon.assert.notCalled(identityRefreshChannel.subscribe)
+      sinon.assert.notCalled(configUpdateChannel.subscribe)
     })
   })
 

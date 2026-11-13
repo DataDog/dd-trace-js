@@ -21,15 +21,6 @@ APM spans, LLMObs traces, other AI Guard integrations, and manual `tracer.aiguar
 Setting `DD_AI_GUARD_ENABLED=false` disables AI Guard entirely, regardless of this list.
 AI Guard is disabled by default and requires its API and application keys when enabled.
 
-<h2 id="runtime-agent-url">Runtime Agent URL</h2>
-
-Call `tracer.setUrl(url)` after `init()` to change the Agent destination for subsequent exports and remote configuration polls.
-Active profiling keeps its collected samples and uses the new destination for later uploads.
-Calls before initialization have no effect. Invalid URLs preserve the previous destination.
-
-Programmatic and remote updates apply in arrival order. A later remote update can replace the programmatic URL.
-Unrelated configuration updates preserve product-specific destinations.
-
 <h2 id="agentless-mode">Agentless mode</h2>
 
 Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.

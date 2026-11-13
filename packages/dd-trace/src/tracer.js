@@ -25,7 +25,7 @@ const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
-/** @typedef {Partial<Pick<import('./exporters/agent'), 'configure' | 'setUrl'>>} ConfigurableExporter */
+/** @typedef {Partial<Pick<import('./exporters/agent'), 'configure'>>} ConfigurableExporter */
 
 class DatadogTracer extends Tracer {
   #url
@@ -59,11 +59,7 @@ class DatadogTracer extends Tracer {
     this._prioritySampler.configure(env, sampler, config)
     if (config.url !== undefined && this.#url !== config.url) {
       const exporter = /** @type {typeof this._exporter & ConfigurableExporter} */ (this._exporter)
-      if (exporter.configure) {
-        exporter.configure(config)
-      } else if (config.hasRuntimeUrlOverride()) {
-        exporter.setUrl?.(config.url)
-      }
+      exporter.configure?.(config)
       this.#url = config.url
     }
   }

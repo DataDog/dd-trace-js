@@ -39,12 +39,12 @@ function proxyMetricsClient (Client) {
   return proxyquire('../src/runtime_metrics/client', {
     '../dogstatsd': {
       DogStatsDClient: Client,
-      createMetricsAggregationClient: options => new MetricsAggregationClient(new Client(options)),
+      createMetricsAggregationClient: options => new MetricsAggregationClient(new Client(options), options),
     },
   })
 }
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -208,7 +208,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
-            updateTags: client.updateTags,
+            configure: client.configure,
           }
         })
 
@@ -219,7 +219,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           increment: sinon.spy(),
           histogram: sinon.spy(),
           flush: sinon.stub().callsFake(done => done?.()),
-          updateTags: sinon.spy(),
+          configure: sinon.spy(),
         }
 
         const proxiedObject = {
@@ -345,30 +345,30 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
         })
 
-        it('should refresh the DogStatsD client tags when the identity-refresh channel fires', () => {
+        it('should refresh the DogStatsD client tags when the config-update channel fires', () => {
           config.tags['runtime-id'] = 'initial-id'
           config.runtimeMetricsRuntimeId = true
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
-          client.updateTags.resetHistory()
+          client.configure.resetHistory()
 
           // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place
-          // and then publishing to the shared identity-refresh channel (MicroVM clone resume).
+          // and then publishing to the shared config-update channel (MicroVM clone resume).
           config.tags['runtime-id'] = 'refreshed-id'
-          identityRefreshChannel.publish(config)
+          configUpdateChannel.publish(config)
 
-          sinon.assert.calledOnce(client.updateTags)
-          const tags = client.updateTags.lastCall.args[0]
+          sinon.assert.calledOnce(client.configure)
+          const tags = client.configure.lastCall.args[0].tags
           assert.ok(tags.includes('runtime-id:refreshed-id'), `expected tags to include refreshed-id: ${tags}`)
         })
 
         it('should stop reacting to identity refresh after stop', () => {
           runtimeMetrics.stop()
-          client.updateTags.resetHistory()
+          client.configure.resetHistory()
 
-          identityRefreshChannel.publish(config)
+          configUpdateChannel.publish(config)
 
-          sinon.assert.notCalled(client.updateTags)
+          sinon.assert.notCalled(client.configure)
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -1193,7 +1193,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
-      subscribeToIdentityRefresh: (client, config) => {
+      subscribeToConfigUpdates: (client, config) => {
         const unsubscribe = sinon.spy()
         identityRefreshCalls.push({ client, config, unsubscribe })
         return unsubscribe
@@ -1502,7 +1502,7 @@ describe('otlp_runtime_metrics', () => {
       '../log': { debug () {}, error: errorLog },
       './client': {
         createMetricsClient: () => ({ flush () {} }),
-        subscribeToIdentityRefresh: () => () => {},
+        subscribeToConfigUpdates: () => () => {},
       },
     })
     const loadRuntimeMetrics = proxyquire.noCallThru()

@@ -197,23 +197,6 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Re-targets the exporter to a different URL, updating transport, hostname, port, and path.
-   * @param {string} url
-   */
-  setUrl (url) {
-    try {
-      this.#applyUrl(url)
-    } catch (error) {
-      log.error(
-        'Invalid OTLP %s URL: %s. Using previous URL. Error: %s',
-        this.signalType,
-        url,
-        error.message
-      )
-    }
-  }
-
-  /**
    * @param {() => void} [done]
    */
   shutdown (done) {

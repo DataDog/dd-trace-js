@@ -2,7 +2,6 @@
 
 const fs = require('node:fs')
 const { hostname: getHostname } = require('node:os')
-const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
@@ -883,19 +882,6 @@ class CiVisibilityExporter extends BufferingExporter {
       this.exportCoverage(oldCoveragePayload)
     }
     this._coverageBuffer = []
-  }
-
-  _setUrl (url, coverageUrl = url) {
-    try {
-      url = new URL(url)
-      coverageUrl = new URL(coverageUrl)
-      this._url = url
-      this._coverageUrl = coverageUrl
-      this._writer.setUrl(url)
-      this._coverageWriter.setUrl(coverageUrl)
-    } catch (e) {
-      log.error('Error setting CI exporter url', e)
-    }
   }
 
   _getApiUrl () {

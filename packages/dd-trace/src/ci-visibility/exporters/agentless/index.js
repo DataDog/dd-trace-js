@@ -2,7 +2,6 @@
 
 const URL = require('url').URL
 const CiVisibilityExporter = require('../ci-visibility-exporter')
-const log = require('../../../log')
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 
@@ -35,17 +34,6 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._testScreenshotUploadUrl = this._apiUrl
     // Agentless is always gzip compatible
     this._isGzipCompatible = true
-  }
-
-  setUrl (url, coverageUrl = url, apiUrl = url) {
-    this._setUrl(url, coverageUrl)
-    try {
-      apiUrl = new URL(apiUrl)
-      this._apiUrl = apiUrl
-      this._testScreenshotUploadUrl = apiUrl
-    } catch (e) {
-      log.error('Error setting CI exporter api url', e)
-    }
   }
 
   _getApiUrl () {

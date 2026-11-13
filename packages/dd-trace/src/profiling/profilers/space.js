@@ -1,7 +1,5 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
 const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
@@ -14,13 +12,12 @@ const { encodeProfileAsync, getThreadLabels } = require('./shared')
  */
 
 const STACK_DEPTH = 64
-const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class NativeSpaceProfiler {
   collectsAllocations = false
   #config
   #exporters
-  #identityRefreshListener
+  #refreshExportConfiguration
   #mapper
   #pprof
   #samplingInterval
@@ -66,7 +63,7 @@ class NativeSpaceProfiler {
       monitorOutOfMemory()
 
       if (strategies.includes(oomExportStrategies.PROCESS)) {
-        this.#identityRefreshListener = () => {
+        this.#refreshExportConfiguration = () => {
           try {
             Object.assign(this.#tags, config.tags)
             monitorOutOfMemory()
@@ -74,7 +71,6 @@ class NativeSpaceProfiler {
             log.error(error)
           }
         }
-        identityRefreshChannel.subscribe(this.#identityRefreshListener)
       }
     }
 
@@ -92,7 +88,7 @@ class NativeSpaceProfiler {
   getInfo () {}
 
   refreshExportConfiguration () {
-    this.#identityRefreshListener?.()
+    this.#refreshExportConfiguration?.()
   }
 
   encode (profile) {
@@ -102,10 +98,7 @@ class NativeSpaceProfiler {
   stop () {
     if (!this.#started) return
 
-    if (this.#identityRefreshListener !== undefined) {
-      identityRefreshChannel.unsubscribe(this.#identityRefreshListener)
-      this.#identityRefreshListener = undefined
-    }
+    this.#refreshExportConfiguration = undefined
 
     this.#pprof.heap.stop()
     this.#started = false

@@ -17,7 +17,7 @@ const datadogCore = require('../../datadog-core')
 require('./setup/core')
 const TelemetryDeliveryTracker = require('../src/serverless/telemetry-delivery-tracker')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 describe('dogstatsd', () => {
   let client
@@ -239,7 +239,13 @@ describe('dogstatsd', () => {
 
       try {
         client = createTelemetryClient({ tags: ['runtime-id:initial-id'] })
-        client.updateTags(['runtime-id:refreshed-id'])
+        client.configure({
+          host: '127.0.0.1',
+          port: 8125,
+          lookup: dns.lookup,
+          tags: ['runtime-id:refreshed-id'],
+          runtimeId: 'refreshed-id',
+        })
 
         now.returns(10_000)
         client.flush()
@@ -376,12 +382,13 @@ describe('dogstatsd', () => {
       const now = sinon.stub(performance, 'now').returns(0)
 
       try {
-        client = new MetricsAggregationClient(new DogStatsDClient({
+        const options = {
           host: '127.0.0.1',
           lookup: dns.lookup,
           port: 8125,
           tags: [],
-        }))
+        }
+        client = new MetricsAggregationClient(new DogStatsDClient(options), options)
         client.increment('test.count')
         client.flush()
 
@@ -988,6 +995,52 @@ describe('dogstatsd', () => {
     sinon.assert.called(udp4.send)
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
     assert.strictEqual(udp4.send.firstCall.args[2], 16)
+
+    const previousHttpData = httpData
+    client.configure({
+      host: '127.0.0.1',
+      port: 8125,
+      lookup: dns.lookup,
+      tags: [],
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    })
+    client.increment('test.after.update', 1)
+    await flushClient(client)
+
+    assert.strictEqual(httpData, previousHttpData)
+    assert.match(getUdpPayload(1), /test.after.update:1\|c/)
+  })
+
+  it('keeps the new HTTP destination after a previous Agent request returns 404', async () => {
+    udp4.send = sinon.stub().yields()
+    const listeners = httpServer.listeners('request')
+    httpServer.removeAllListeners('request')
+    const received = once(httpServer, 'request')
+    const options = {
+      host: '127.0.0.1',
+      port: 8125,
+      lookup: dns.lookup,
+      tags: [],
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    }
+    client = new DogStatsDClient(options)
+    client.gauge('test.previous', 1)
+    const pendingFlush = flushClient(client)
+    const [request, response] = await received
+    request.resume()
+
+    client.configure({ ...options, metricsProxyUrl: `http://127.0.0.1:${httpPort}` })
+    response.statusCode = 404
+    response.end()
+    await pendingFlush
+
+    for (const listener of listeners) httpServer.on('request', listener)
+    client.gauge('test.current', 2)
+    await flushClient(client)
+
+    assert.doesNotMatch(getUdpPayload(0), /test.current/)
+    assert.strictEqual(httpData.toString(), 'test.current:2|g\n')
+    assert.match(getUdpPayload(0), /test.previous:1\|g/)
   })
 
   it('should fail over to UDP when receiving network error from agent', (done) => {
@@ -1307,7 +1360,7 @@ describe('dogstatsd', () => {
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
     })
 
-    it('should refresh its tags when the identity-refresh channel fires', () => {
+    it('should refresh its tags when the config-update channel fires', () => {
       const config = {
         dogstatsd: {
           hostname: '127.0.0.1',
@@ -1320,9 +1373,10 @@ describe('dogstatsd', () => {
 
       client = new CustomMetrics(config)
       client.distribution('test.stale', 1)
+      client.gauge('test.stale.gauge', 1)
 
       config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
 
       client.gauge('test.avg', 10)
       client.flush()
@@ -1331,12 +1385,52 @@ describe('dogstatsd', () => {
 
       udp4.send.resetHistory()
       config.tags = {}
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
 
       client.gauge('test.avg', 20)
       client.flush()
 
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:20|g\n')
+    })
+
+    it('discards cloned buffers when the runtime ID is excluded from metric tags', () => {
+      const config = {
+        dogstatsd: { hostname: '127.0.0.1', port: 8125 },
+        lookup: dns.lookup,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+      client = new CustomMetrics(config)
+      client.distribution('test.stale.distribution', 1)
+      client.gauge('test.stale.gauge', 2)
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      configUpdateChannel.publish(config)
+      client.gauge('test.current', 3)
+      client.flush()
+
+      assert.strictEqual(getUdpPayload(0), 'test.current:3|g\n')
+    })
+
+    it('preserves live buffered metrics with their original tags on a configuration update', () => {
+      const config = {
+        dogstatsd: { hostname: '127.0.0.1', port: 8125 },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'same-id', env: 'initial' },
+      }
+      client = new CustomMetrics(config)
+      client.distribution('test.distribution', 1)
+      client.gauge('test.gauge', 2)
+
+      config.tags.env = 'updated'
+      configUpdateChannel.publish(config)
+      client.gauge('test.updated', 3)
+      client.flush()
+
+      const payload = getUdpPayload(0)
+      assert.match(payload, /test.distribution:1\|d\|#runtime-id:same-id,env:initial/)
+      assert.match(payload, /test.gauge:2\|g\|#runtime-id:same-id,env:initial/)
+      assert.match(payload, /test.updated:3\|g\|#runtime-id:same-id,env:updated/)
     })
 
     it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
@@ -1353,7 +1447,7 @@ describe('dogstatsd', () => {
       client = new CustomMetrics(config)
       client.distribution('test.buffered', 1)
 
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
       client.flush()
 
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
@@ -1375,7 +1469,7 @@ describe('dogstatsd', () => {
         histogram: () => {},
         flush: () => {},
       }
-      aggregator = new MetricsAggregationClient(inner)
+      aggregator = new MetricsAggregationClient(inner, { tags: [] })
     })
 
     it('emits a gauge once and then stays silent until it is set again', () => {

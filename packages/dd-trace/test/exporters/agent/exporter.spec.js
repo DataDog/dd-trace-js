@@ -213,17 +213,4 @@ describe('Exporter', () => {
       sinon.assert.calledOnce(flushed)
     })
   })
-
-  describe('setUrl', () => {
-    beforeEach(() => {
-      exporter = new Exporter({ url })
-    })
-
-    it('should set the URL on self and writer', () => {
-      exporter.setUrl('http://example2.com')
-      const url = new URL('http://example2.com')
-      assert.deepStrictEqual(exporter._url, url)
-      sinon.assert.calledWith(writer.setUrl, url)
-    })
-  })
 })
