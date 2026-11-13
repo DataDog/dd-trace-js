@@ -556,6 +556,25 @@ describe('DataStreamsProcessor', () => {
         assert.strictEqual(points[0].edgeLatency.count, 2)
       })
     }
+
+    for (const [name, tags] of [
+      ['consumer_group', ['consumer_group:a', 'consumer_group:b']],
+      ['ds.name', ['ds.name:a', 'ds.name:b']],
+      ['ds.namespace', ['ds.namespace:a', 'ds.namespace:b']],
+      ['group', ['group:a', 'group:b']],
+      ['manual_checkpoint', ['manual_checkpoint:false', 'manual_checkpoint:true']],
+    ]) {
+      it(`keeps checkpoints that differ only in ${name} as separate points under one hash`, () => {
+        for (const tag of tags) {
+          processor.setCheckpoint(['direction:in', tag, 'topic:t', 'type:kafka'], null, null)
+        }
+
+        const points = bucketPoints()
+        assert.strictEqual(points.length, 2)
+        assert.strictEqual(points[0].hash, points[1].hash)
+        assert.deepStrictEqual(points.map(point => point.edgeLatency.count), [1, 1])
+      })
+    }
   })
 
   describe('process tags', () => {
