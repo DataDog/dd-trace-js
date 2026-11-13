@@ -1,6 +1,6 @@
 # Lambda helper source provenance
 
-PR7 ports private helpers from
+The private Lambda helpers were ported from
 [DataDog/datadog-lambda-js at da9fc3c0c9dca00893f70c9a1bd5ac1254af3b01](https://github.com/DataDog/datadog-lambda-js/tree/da9fc3c0c9dca00893f70c9a1bd5ac1254af3b01).
 The relevant files and `event_samples/` were compared with upstream `main` at
 `bb5266a00e72eba0edcfe8d73256fe70461547c4` on 2026-11-12: no differences. The source pin is unchanged.
@@ -45,7 +45,7 @@ ARN boundary cases cover numeric and named qualifiers, `$LATEST`, undefined vers
 The same 70 helper cases were also run locally against the committed TypeScript source, once with its free
 functions and once with the overlapping validator methods. Both controls passed.
 
-These modules are preparatory. No invocation path imports them yet. Nested SQS events remain classified as SQS;
-MSK, Durable and AppSync predicates do not add trigger names the source does not define. Applying metadata,
-extracting parents and creating inferred spans belong to subsequent PRs. These tests establish helper behavior,
-not invocation parity, release-line CI, deployed acceptance or frozen-golden equivalence.
+Nested SQS events remain classified as SQS; MSK, Durable and AppSync predicates do not add trigger names
+the source does not define. These tests establish helper behavior. Invocation metadata, parent extraction,
+inferred spans, release-line compatibility, deployed behavior and migration snapshot equivalence require
+separate validation.
