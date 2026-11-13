@@ -61,7 +61,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span || ctx.error) return
 
-    this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
+    this._tagger.tagTextIO(span, null, safeStringify(ctx.result))
   }
 }
 

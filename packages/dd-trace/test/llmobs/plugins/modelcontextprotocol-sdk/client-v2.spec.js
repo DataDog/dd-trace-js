@@ -92,6 +92,50 @@ describe('integrations', () => {
           tags: BASE_TAGS,
         })
       })
+
+      it('keeps tracing Client.listTools after a result that cannot be serialized', async () => {
+        // The SDK does not validate `_meta`, so a server can return one nested deeper than JSON.stringify supports.
+        const nested = JSON.parse('['.repeat(10_000) + ']'.repeat(10_000))
+        const [clientTransport, serverTransport] = clientModule.InMemoryTransport.createLinkedPair()
+        let listCalls = 0
+        serverTransport.onmessage = message => {
+          if (message.id === undefined) return
+          const result = message.method === 'initialize'
+            ? {
+                protocolVersion: message.params.protocolVersion,
+                capabilities: { tools: {} },
+                serverInfo: { name: 'deep-server', version: '1.0.0' },
+              }
+            : { tools: [], ...(listCalls++ === 0 && { _meta: { nested } }) }
+          serverTransport.send({ jsonrpc: '2.0', id: message.id, result })
+        }
+        await serverTransport.start()
+        const deepClient = new clientModule.Client({ name: 'test-client', version: '1.0.0' })
+        await deepClient.connect(clientTransport)
+
+        try {
+          await deepClient.listTools()
+          const { apmSpans: deepApmSpans, llmobsSpans: deepSpans } = await getEvents()
+          assertLlmObsSpanEvent(deepSpans[0], {
+            span: deepApmSpans[0],
+            spanKind: 'task',
+            name: 'MCP Client List Tools',
+            tags: BASE_TAGS,
+          })
+
+          const result = await deepClient.listTools()
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'task',
+            name: 'MCP Client List Tools',
+            outputValue: JSON.stringify(result),
+            tags: BASE_TAGS,
+          })
+        } finally {
+          await deepClient.close()
+        }
+      })
     })
   })
 })
