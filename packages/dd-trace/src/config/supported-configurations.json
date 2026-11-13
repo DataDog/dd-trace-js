@@ -271,6 +271,22 @@
         "default": "10000"
       }
     ],
+    "DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "namespace": "ai"
+      }
+    ],
+    "DD_AI_SDK_USAGE_METRICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "ai"
+      }
+    ],
     "DD_API_KEY": [
       {
         "implementation": "A",

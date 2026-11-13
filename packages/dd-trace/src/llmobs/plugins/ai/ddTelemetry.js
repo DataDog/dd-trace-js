@@ -19,6 +19,8 @@ const {
   getLlmObsSpanName,
   getTelemetryMetadata,
 } = require('./util')
+const { createGatewayUsageMetrics, isGatewayProvider } = require('./usage-metrics')
+const { spanUsage } = require('./usage-tokens')
 
 /**
  * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
@@ -69,11 +71,51 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   static integration = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
+  #usageMetrics
+
   constructor (...args) {
     super(...args)
 
+    this.#usageMetrics = createGatewayUsageMetrics(this._tracerConfig)
+
     setAttributesCh.subscribe(({ ctx, attributes }) => {
       Object.assign(ctx.attributes, attributes)
+    })
+  }
+
+  /**
+   * @override
+   */
+  start (ctx) {
+    super.start(ctx)
+
+    if (!this.#usageMetrics) return
+
+    const operation = ctx.name?.slice(ctx.name.lastIndexOf('.') + 1)
+    if ((operation === 'doGenerate' || operation === 'doStream') &&
+      isGatewayProvider(ctx.attributes?.['ai.model.provider'])) {
+      ctx.gatewayUsageStart = performance.now()
+    }
+  }
+
+  /**
+   * @override
+   */
+  asyncEnd (ctx) {
+    super.asyncEnd(ctx)
+
+    const start = ctx.gatewayUsageStart
+    if (start === undefined) return
+    ctx.gatewayUsageStart = undefined
+
+    const tags = getSpanTags(ctx)
+    this.#usageMetrics?.record({
+      requestModel: tags['ai.model.id'],
+      responseModel: tags['ai.response.model'],
+      providerMetadata: getJsonStringValue(tags['ai.response.providerMetadata'], {}),
+      usage: spanUsage(tags),
+      durationSeconds: (performance.now() - start) / 1000,
+      error: ctx.error,
     })
   }
 
