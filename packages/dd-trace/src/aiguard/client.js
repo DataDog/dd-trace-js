@@ -88,17 +88,15 @@ class AIGuardClient {
    *
    * @param {import('../../../../index').aiguard.Message[]} messages
    * @param {{ service: string, env: string }} meta
+   * @param {import('./mcp').McpServer[]} [mcpServers] The servers that the MCP tool calls reference.
    * @returns {Promise<NonNullable<ReturnType<typeof parseEvaluationResponse>>>}
    */
-  evaluate (messages, meta) {
-    const payload = {
-      data: {
-        attributes: {
-          messages,
-          meta,
-        },
-      },
-    }
+  evaluate (messages, meta, mcpServers) {
+    // A request without MCP tool calls keeps the exact payload of earlier versions.
+    const attributes = mcpServers?.length
+      ? { messages, meta, mcp_servers: mcpServers }
+      : { messages, meta }
+    const payload = { data: { attributes } }
     return executeRequest(
       payload,
       { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout }
