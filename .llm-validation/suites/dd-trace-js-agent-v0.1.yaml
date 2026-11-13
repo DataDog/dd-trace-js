@@ -35,6 +35,7 @@ cases:
       Give me only the commands needed to run that plugin's service-backed tests, including the exporter cleanup.
     expected_criteria:
       - Unsets OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER.
+      - Installs dependencies with yarn install before running repository scripts.
       - Clears the inherited SPEC filter before running the plugin tests.
       - Starts the service with docker compose up -d rabbitmq.
       - Runs SERVICES="rabbitmq" PLUGINS="amqplib" npm run test:plugins:ci.
@@ -110,7 +111,7 @@ cases:
       - >
         Defines the environment variable, type, default, and tracer.init() option name through configurationNames in
         packages/dd-trace/src/config/supported-configurations.json.
-      - Regenerates internal configuration types with npm run generate:config:types.
+      - Regenerates internal configuration types with npm run generate:config:types and commits the generated types.
       - >
         Uses the registry machinery for defaults and environment/option mappings without requiring manual edits to
         packages/dd-trace/src/config/defaults.js or packages/dd-trace/src/config/index.js for this case.
@@ -119,6 +120,7 @@ cases:
     bad_signals:
       - Duplicates the registry default or option mapping in configuration runtime code without a concrete need.
       - Omits packages/dd-trace/src/config/supported-configurations.json.
+      - Omits the registry default or the configurationNames mapping for tracer.init().
       - Edits generated configuration types manually instead of regenerating them.
       - Requires editing packages/dd-trace/src/telemetry/telemetry.js to register this option.
       - Uses a size option name without a unit suffix.
@@ -182,11 +184,47 @@ cases:
     input: |
       A shipped control-plane API already returns a promise and calls an inherently asynchronous upstream API.
       May its implementation use async/await or a promise-returning helper? What constraints still apply to
-      synchronous, hot, and inactive paths? Answer in at most 3 bullets.
+      synchronous and inactive paths? Must an already asynchronous request API become synchronous?
+      Answer in at most 3 bullets.
     expected_criteria:
       - Allows async/await or promise helpers when they preserve the existing asynchronous API contract.
-      - Does not add promise machinery to synchronous or hot paths.
+      - Preserves existing asynchronous request contracts without adding avoidable promise overhead.
+      - Keeps synchronous library contracts synchronous.
       - Keeps inactive paths cheap instead of paying for the asynchronous work when it is disabled.
     bad_signals:
       - Forbids promises or async/await in all shipped production code.
       - Treats the asynchronous exception as permission to add promise machinery to synchronous or inactive paths.
+
+  # AGENTS.md — Cross-Cutting Configuration Changes: scope and version-specific surfaces.
+  - id: dd-trace-js-config-scope-015
+    files: [AGENTS.md]
+    input: |
+      I am adding an internal, environment-only tracer byte limit with a registry-supported default and parser.
+      It has no tracer.init() option. Do I need configurationNames, public option declarations, or API guide content?
+      Does a separate public option supported only on v5 require edits to both public type surfaces?
+      Answer in at most 4 bullets.
+    expected_criteria:
+      - Registers the environment-only option and its type and default in the configuration registry.
+      - Regenerates and commits the internal configuration types without inventing a tracer.init() option.
+      - Does not require configurationNames, public declarations, or public guide content for the internal option.
+      - Updates only index.d.v5.ts and its declaration comments for the v5-only public option.
+    bad_signals:
+      - Treats every environment variable as a public tracer.init() option.
+      - Requires edits to both public type surfaces for the explicitly v5-only option.
+      - Requires docs/API.md for every registry entry.
+
+  # AGENTS.md — Cross-Cutting Configuration Changes: custom behavior and configuration sources.
+  - id: dd-trace-js-custom-configuration-016
+    files: [AGENTS.md]
+    input: |
+      A configuration change needs behavior the existing registry machinery cannot express and changes a configuration
+      source. Must I avoid runtime configuration and telemetry changes? Which tests should cover the change?
+      Answer in at most 3 bullets.
+    expected_criteria:
+      - Allows runtime configuration or telemetry changes when the registry cannot express the behavior.
+      - Tests the configuration behavior in packages/dd-trace/test/config/index.spec.js.
+      - Adds telemetry tests for the added or changed configuration source.
+    bad_signals:
+      - Forbids runtime configuration or telemetry edits for all registry-backed settings.
+      - Requires a manual telemetry name mapping for every ordinary registry option.
+      - Omits telemetry coverage for the changed configuration source.
