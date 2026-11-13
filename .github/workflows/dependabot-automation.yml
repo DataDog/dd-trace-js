@@ -12,7 +12,9 @@ env:
   # (`runtime-minor-and-patch-dependencies`, `vendor-minor-and-patch-dependencies`) are
   # intentionally absent: they ship to customers and stay on manual review. Production
   # *security* fixes still auto-merge (see `security-production`), but only below a major.
-  GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "docker-images", "ai-and-llm", "cloud-and-messaging", "databases", "web-frameworks", "testing-and-build", "test-versions", "security-production", "security-non-production"]'
+  GROUPS: >-
+    ["dev-minor-and-patch-dependencies", "gh-actions-packages", "docker-images", "test-versions",
+    "security-production", "security-non-production"]
 
 jobs:
   dependabot-automation:
