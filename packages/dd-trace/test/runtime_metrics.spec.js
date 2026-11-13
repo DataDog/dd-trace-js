@@ -362,6 +362,44 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           assert.ok(tags.includes('runtime-id:refreshed-id'), `expected tags to include refreshed-id: ${tags}`)
         })
 
+        it('should discard unflushed aggregated metrics on identity refresh', () => {
+          const staleMetricNames = [
+            'runtime.node.pre_refresh.counter',
+            'runtime.node.pre_refresh.gauge',
+            'runtime.node.pre_refresh.histogram',
+          ]
+          const postRefreshMetricNames = [
+            'runtime.node.post_refresh.counter',
+            'runtime.node.post_refresh.gauge',
+            'runtime.node.post_refresh.histogram',
+          ]
+          runtimeMetrics.count(staleMetricNames[0], 1, undefined, true)
+          runtimeMetrics.gauge(staleMetricNames[1], 2)
+          runtimeMetrics.histogram(staleMetricNames[2], 3)
+
+          identityRefreshChannel.publish(config)
+
+          runtimeMetrics.count(postRefreshMetricNames[0], 4, undefined, true)
+          runtimeMetrics.gauge(postRefreshMetricNames[1], 5)
+          runtimeMetrics.histogram(postRefreshMetricNames[2], 6)
+          runtimeMetrics.flush()
+
+          const calls = [...client.increment.getCalls(), ...client.gauge.getCalls()]
+          for (const name of staleMetricNames) {
+            assert.strictEqual(
+              calls.some(call => call.args[0] === name || call.args[0].startsWith(`${name}.`)),
+              false,
+              `expected ${name} to be discarded on identity refresh`,
+            )
+          }
+          for (const name of postRefreshMetricNames) {
+            assert.ok(
+              calls.some(call => call.args[0] === name || call.args[0].startsWith(`${name}.`)),
+              `expected ${name} to be exported after identity refresh`,
+            )
+          }
+        })
+
         it('should stop reacting to identity refresh after stop', () => {
           runtimeMetrics.stop()
           client.updateTags.resetHistory()
@@ -369,6 +407,30 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           identityRefreshChannel.publish(config)
 
           sinon.assert.notCalled(client.updateTags)
+        })
+
+        it('should reset the event-loop-delay observer baseline on identity refresh', function () {
+          if (nativeMetrics) this.skip()
+
+          const fakeHistogram = makeFakeEventLoopDelayHistogram({ count: 5 })
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            perf_hooks: { ...require('perf_hooks'), monitorEventLoopDelay: () => fakeHistogram },
+            '@datadog/native-metrics': {
+              start () {
+                throw new Error('Native metrics are not supported in this environment')
+              },
+            },
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: Client },
+            }),
+          })
+
+          localRuntimeMetrics.start(config)
+          identityRefreshChannel.publish(config)
+
+          assert.strictEqual(fakeHistogram.getResetCallCount(), 1)
+
+          localRuntimeMetrics.stop()
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -1115,7 +1177,7 @@ FakePerformanceObserverForOtlp.instances = []
  *   batchCallbacks: Array<{ cb: Function, observables: object[] }>,
  *   fireBatchCallbacks: () => Map<object, Array<{ v: number, a: object }>>,
  *   fakeMetricsClient: object,
- *   identityRefreshCalls: Array<{ client: object, config: object, unsubscribe: Function }>,
+ *   identityRefreshCalls: Array<{ client: object, config: object, onRefresh: Function, unsubscribe: Function }>,
  * }}
  */
 function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
@@ -1193,9 +1255,9 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
-      subscribeToIdentityRefresh: (client, config) => {
+      subscribeToIdentityRefresh: (client, config, onRefresh) => {
         const unsubscribe = sinon.spy()
-        identityRefreshCalls.push({ client, config, unsubscribe })
+        identityRefreshCalls.push({ client, config, onRefresh, unsubscribe })
         return unsubscribe
       },
     },
@@ -1574,6 +1636,21 @@ describe('otlp_runtime_metrics', () => {
     ctx.otlpMetrics.stop()
 
     sinon.assert.calledOnce(ctx.identityRefreshCalls[0].unsubscribe)
+  })
+
+  it('resets the event-loop-delay histogram baseline on identity refresh', () => {
+    const fakeH = makeFakeEventLoopDelayHistogram({ count: 5 })
+    const ctx = loadOtlpRuntimeMetricsTestModule({
+      monitorEventLoopDelay: () => fakeH,
+    })
+    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    assert.strictEqual(ctx.identityRefreshCalls.length, 1)
+    ctx.identityRefreshCalls[0].onRefresh()
+
+    assert.strictEqual(fakeH.getResetCallCount(), 1)
+
+    ctx.otlpMetrics.stop()
   })
 })
 

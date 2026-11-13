@@ -5,7 +5,7 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const { createServerlessDeliveryTracker, IS_AWS_LAMBDA_MICROVM } = require('../../serverless')
 const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { version: tracerVersion } = require('../../../../../package.json')
@@ -30,6 +30,8 @@ class OtlpHttpExporterBase {
 
   #transport = https
   #serverlessDeliveryTracker
+  // Only MicroVM clones publish identity refreshes, so avoid per-request tracking elsewhere.
+  #pendingRequests = IS_AWS_LAMBDA_MICROVM ? new Set() : null
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -116,9 +118,24 @@ class OtlpHttpExporterBase {
     }
 
     let completed = false
+    const pendingRequest = this.#pendingRequests && {
+      request: null,
+      cancelled: false,
+      cancel: () => {
+        pendingRequest.cancelled = true
+        try {
+          pendingRequest.request?.destroy()
+        } catch (error) {
+          log.error('Error cancelling OTLP %s request:', this.signalType, error)
+        }
+        complete({ code: 1, error: new Error('OTLP export cancelled') })
+      },
+    }
+    this.#pendingRequests?.add(pendingRequest)
     const complete = result => {
       if (completed) return
       completed = true
+      this.#pendingRequests?.delete(pendingRequest)
       resultCallback(result)
       done?.()
     }
@@ -146,8 +163,17 @@ class OtlpHttpExporterBase {
             }
           })
         })
+        if (pendingRequest) {
+          pendingRequest.request = req
+        }
+
+        if (pendingRequest?.cancelled) {
+          req.destroy?.()
+          return
+        }
 
         req.on('error', (error) => {
+          if (pendingRequest?.cancelled) return
           log.error('Error sending OTLP %s:', this.signalType, error)
           complete({ code: 1, error })
         })
@@ -165,6 +191,20 @@ class OtlpHttpExporterBase {
       log.error('Error sending OTLP %s:', this.signalType, error)
       complete({ code: 1, error })
     }
+  }
+
+  /**
+   * Cancels requests started before an identity refresh. The processor already removed their
+   * records from its queue, so clearing the queue alone would leave those payloads in flight.
+   * @returns {void}
+   */
+  resetPendingState () {
+    if (!this.#pendingRequests) return
+
+    for (const pendingRequest of this.#pendingRequests) {
+      pendingRequest.cancel()
+    }
+    this.#pendingRequests.clear()
   }
 
   /**
