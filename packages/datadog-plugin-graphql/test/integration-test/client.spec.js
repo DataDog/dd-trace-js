@@ -28,9 +28,9 @@ describe('esm', () => {
     const variants = varySandbox('server.mjs', {
       bindingName: 'graphqlLib',
       packageName: 'graphql',
-      defaultExport: true,
+      defaultExport: false,
       namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
-      namedExportBinding: 'namespace',
+      namedExportBinding: 'destructure',
     })
 
     afterEach(async () => {

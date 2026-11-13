@@ -1,12 +1,12 @@
 import 'dd-trace/init.js'
-import graphqlLib from 'graphql'
+import { GraphQLSchema, GraphQLString, graphql, GraphQLObjectType } from 'graphql'
 
-const schema = new graphqlLib.GraphQLSchema({
-  query: new graphqlLib.GraphQLObjectType({
+const schema = new GraphQLSchema({
+  query: new GraphQLObjectType({
     name: 'test',
     fields: {
       hello: {
-        type: graphqlLib.GraphQLString,
+        type: GraphQLString,
         resolve (obj, args) {
           return args.name
         },
@@ -15,7 +15,7 @@ const schema = new graphqlLib.GraphQLSchema({
   }),
 })
 
-await graphqlLib.graphql({
+await graphql({
   schema,
   source: 'query MyQuery { hello(name: "world") }',
   variableValues: { who: 'world' },

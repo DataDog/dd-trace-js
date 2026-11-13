@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const Module = require('node:module')
 
 const semver = require('semver')
 
@@ -19,9 +18,6 @@ const supportedRuntime = isTrue(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection skips unsupported runtimes.
 const describeEsmFirst = supportedRuntime && process.features.require_module ? describe : describe.skip
-// Earlier loaders can instrument import(), but cannot observe GraphQL's ESM internals loaded through require().
-// eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection for require(esm) hooks.
-const hasRequireEsmHooks = typeof Module.registerHooks === 'function'
 
 describeEsmFirst('GraphQL ESM-first exports', () => {
   for (const version of ['16.14.2', '17.0.2']) {
@@ -40,12 +36,15 @@ describeEsmFirst('GraphQL ESM-first exports', () => {
         await agent.stop()
       })
 
-      for (const mode of ['import', 'require']) {
+      // A CommonJS app needs no loader for GraphQL 17, which publishes its own tracing channels.
+      const modes = [
+        ['import', '--import dd-trace/register.js'],
+        ['require', '--import dd-trace/register.js'],
+        ['require', ''],
+      ]
+      for (const [mode, nodeOptions] of modes) {
         for (const outcome of ['success', 'error', 'disabled']) {
-          const needsRequireEsmHooks = mode === 'require' && semver.gte(version, '17.0.0') && outcome !== 'disabled'
-          const test = needsRequireEsmHooks && !hasRequireEsmHooks ? it.skip : it
-
-          test(`traces ${mode} with ${outcome}`, async () => {
+          it(`traces ${mode}${nodeOptions ? '' : ' without a loader'} with ${outcome}`, async () => {
             const received = agent.assertMessageReceived(({ payload }) => {
               const spans = payload.flat()
               const graphqlSpans = spans.filter(span => span.name.startsWith('graphql.'))
@@ -80,7 +79,7 @@ describeEsmFirst('GraphQL ESM-first exports', () => {
             await Promise.all([
               received,
               spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'esm-first.mjs', agent.port, {
-                NODE_OPTIONS: '--import dd-trace/register.js',
+                NODE_OPTIONS: nodeOptions,
                 GRAPHQL_VERSION: version,
                 LOAD_MODE: mode,
                 OUTCOME: outcome,

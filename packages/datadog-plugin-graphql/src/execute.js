@@ -59,6 +59,7 @@ const walkedTypes = new WeakMap()
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
+let hasExecuteHook = false
 
 // Initial key for the per-operation variables-filter cache. A unique sentinel
 // so the first #filterVariables call never falsely matches, even when the
@@ -156,6 +157,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   configure (config) {
     super.configure(config)
     depthDisabled = config.depth === 0
+    hasExecuteHook = config.hooks?.execute !== undefined
   }
 
   addTraceSubs () {
@@ -390,7 +392,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     } else if (rootCtx?.jitResolveHooksPending === true) {
       runResolveHooks(rootCtx)
     }
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+    this.config.hooks.execute?.(span, ctx.ddArgs, res)
     if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
@@ -441,7 +443,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       rootCtx.resolveFields = field
     }
 
-    if (fieldNode && this.config.variables && fieldNode.arguments) {
+    if (fieldNode && variableValues && this.config.variables && fieldNode.arguments) {
       const variables = this.#filterVariables(rootCtx, variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
@@ -559,7 +561,7 @@ function wrapResolve (resolve, isJit = false) {
 
     // Combined fast-path: depth=0 AND no IAST/AppSec subscriber means nothing
     // to do — skip rootCtx lookup, path walk, publish gates.
-    if (depthDisabled && !hasIastSub && !hasResolverSub) {
+    if (depthDisabled && !hasIastSub && !hasResolverSub && !hasExecuteHook) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
@@ -567,6 +569,14 @@ function wrapResolve (resolve, isJit = false) {
       ? legacyStorage.getStore()?.graphqlRootCtx
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
+
+    // GraphQL 17's execute channel leaves out the root value and context the execute hook receives.
+    const hookArgs = rootCtx.hookArgs
+    if (hookArgs !== undefined) {
+      rootCtx.hookArgs = undefined
+      hookArgs.rootValue = info.rootValue
+      hookArgs.contextValue = contextValue
+    }
 
     const infoPath = info?.path
     const config = rootCtx.config
@@ -609,24 +619,12 @@ function wrapResolve (resolve, isJit = false) {
     // Compilations performed while tracing is disabled have no static JIT
     // descriptor. Their resolver-info path nodes are recreated for each
     // resolver, so use the stable path string to preserve span parenting.
-    const useStringKey = config.collapse || isJit
+    // GraphQL 17's resolve channel keys the default-resolver fields by their path string.
+    const useStringKey = config.collapse || isJit || rootCtx.native
     const fieldKey = useStringKey ? pathString : infoPath
     const parentTypeName = info.parentType.name
-    let field = rootCtx.fields.get(fieldKey)
-    const collapsedField = field
-    if (config.collapse && field !== undefined && field.parentTypeName !== parentTypeName) {
-      const parentTypeFields = field.parentTypeFields
-      if (parentTypeFields?.parentTypeName === undefined) {
-        field = parentTypeFields?.get(parentTypeName)
-      } else if (parentTypeFields.parentTypeName === parentTypeName) {
-        field = parentTypeFields
-      } else {
-        field = undefined
-      }
-      if (field && infoPath.typename === undefined) {
-        cacheFieldByPath(rootCtx, infoPath, field)
-      }
-    }
+    const collapsedField = rootCtx.fields.get(fieldKey)
+    let field = findCollapsedField(rootCtx, collapsedField, parentTypeName, infoPath)
     const isFirst = !field
 
     if (isFirst) {
@@ -646,25 +644,7 @@ function wrapResolve (resolve, isJit = false) {
         parentStore: null,
         currentStore: null,
       }
-      if (config.collapse && collapsedField) {
-        const parentTypeFields = collapsedField.parentTypeFields
-        if (parentTypeFields === undefined) {
-          collapsedField.parentTypeFields = field
-        } else if (parentTypeFields.parentTypeName === undefined) {
-          parentTypeFields.set(parentTypeName, field)
-        } else {
-          const fieldsByParentType = new Map()
-            .set(collapsedField.parentTypeName, collapsedField)
-            .set(parentTypeFields.parentTypeName, parentTypeFields)
-            .set(parentTypeName, field)
-          collapsedField.parentTypeFields = fieldsByParentType
-        }
-        if (infoPath.typename === undefined) {
-          cacheFieldByPath(rootCtx, infoPath, field)
-        }
-      } else {
-        rootCtx.fields.set(fieldKey, field)
-      }
+      addField(rootCtx, fieldKey, field, collapsedField, infoPath)
     } else {
       field.endTime = REUSED_FIELD_END_TIME
       return callInCollapsedScope(
@@ -678,7 +658,7 @@ function wrapResolve (resolve, isJit = false) {
 
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
-    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, info.variableValues)
+    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, coercedVariables(info.variableValues))
 
     /**
      * @param {unknown} error
@@ -698,6 +678,63 @@ function wrapResolve (resolve, isJit = false) {
   }
   originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
+}
+
+/**
+ * Collapsed fields share a path across parent types, so each parent type keeps its own field.
+ *
+ * @param {object} rootCtx
+ * @param {object | undefined} field The field stored for the path.
+ * @param {string} parentTypeName
+ * @param {object} [infoPath]
+ * @returns {object | undefined}
+ */
+function findCollapsedField (rootCtx, field, parentTypeName, infoPath) {
+  if (!rootCtx.config.collapse || field === undefined || field.parentTypeName === parentTypeName) return field
+
+  const parentTypeFields = field.parentTypeFields
+  if (parentTypeFields?.parentTypeName === undefined) {
+    field = parentTypeFields?.get(parentTypeName)
+  } else if (parentTypeFields.parentTypeName === parentTypeName) {
+    field = parentTypeFields
+  } else {
+    field = undefined
+  }
+  if (field && infoPath !== undefined && infoPath.typename === undefined) {
+    cacheFieldByPath(rootCtx, infoPath, field)
+  }
+  return field
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {unknown} fieldKey
+ * @param {object} field
+ * @param {object | undefined} collapsedField The field already stored for the path.
+ * @param {object} [infoPath]
+ */
+function addField (rootCtx, fieldKey, field, collapsedField, infoPath) {
+  if (!rootCtx.config.collapse || !collapsedField) {
+    rootCtx.fields.set(fieldKey, field)
+    return
+  }
+
+  const parentTypeName = field.parentTypeName
+  const parentTypeFields = collapsedField.parentTypeFields
+  if (parentTypeFields === undefined) {
+    collapsedField.parentTypeFields = field
+  } else if (parentTypeFields.parentTypeName === undefined) {
+    parentTypeFields.set(parentTypeName, field)
+  } else {
+    const fieldsByParentType = new Map()
+      .set(collapsedField.parentTypeName, collapsedField)
+      .set(parentTypeFields.parentTypeName, parentTypeFields)
+      .set(parentTypeName, field)
+    collapsedField.parentTypeFields = fieldsByParentType
+  }
+  if (infoPath !== undefined && infoPath.typename === undefined) {
+    cacheFieldByPath(rootCtx, infoPath, field)
+  }
 }
 
 /**
@@ -1071,6 +1108,19 @@ function wrapFieldType (field, schema) {
 }
 
 /**
+ * GraphQL 17 exposes `info.variableValues` as `{ sources, coerced }` instead of
+ * the coerced map itself.
+ *
+ * @param {Record<string, unknown> | undefined} variableValues
+ * @returns {Record<string, unknown> | undefined}
+ */
+function coercedVariables (variableValues) {
+  return variableValues && 'sources' in variableValues && 'coerced' in variableValues
+    ? /** @type {Record<string, unknown>} */ (variableValues.coerced)
+    : variableValues
+}
+
+/**
  * @param {GraphQLFieldResolver} resolve
  * @param {unknown} self
  * @param {ArgumentsList} args
@@ -1282,6 +1332,7 @@ function cacheFieldByPath (rootCtx, path, field) {
 // count toward depth; list indices are execution artifacts and are transparent.
 // On the v5 line `countListIndices` keeps the legacy behaviour of counting every
 // node when collapsing folds the numeric indices into '*'.
+// native.js shouldInstrumentSegments() mirrors this check for graphql 17's dotted paths.
 function shouldInstrumentNode (config, path) {
   if (config.depth < 0) return true
 
@@ -1299,7 +1350,9 @@ function shouldInstrumentNode (config, path) {
 
 function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-    const fieldKey = rootCtx.config.collapse || field.jitPathKey ? rootCtx.pathCache.get(curr) : curr
+    const fieldKey = rootCtx.config.collapse || field.jitPathKey || rootCtx.native
+      ? rootCtx.pathCache.get(curr)
+      : curr
     const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) {
       if (curr.typename === undefined) {
@@ -1597,6 +1650,12 @@ function addVariableTags (config, span, variableValues) {
 }
 
 module.exports = GraphQLExecutePlugin
+module.exports.PENDING_FIELD_END_TIME = PENDING_FIELD_END_TIME
+module.exports.REUSED_FIELD_END_TIME = REUSED_FIELD_END_TIME
+module.exports.addField = addField
+module.exports.createResolverInfo = createResolverInfo
+module.exports.findCollapsedField = findCollapsedField
+module.exports.wrapFields = wrapFields
 module.exports.readJitDefaultInScope = readJitDefaultInScope
 module.exports.recordJitResolverError = recordJitResolverError
 module.exports.resolveCompiledJitField = resolveCompiledJitField

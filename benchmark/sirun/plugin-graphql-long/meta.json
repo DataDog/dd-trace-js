@@ -9,9 +9,9 @@
     "with-depth-off": {
       "iterations": 7,
       "operations_by_node": {
-        "20": "1280",
-        "24": "2550",
-        "26": "2250"
+        "20": "880",
+        "24": "1480",
+        "26": "1480"
       },
       "env": {
         "DEPTH": "0",
@@ -26,8 +26,8 @@
     "with-depth-on-max": {
       "iterations": 6,
       "operations_by_node": {
-        "20": "840",
-        "24": "1680"
+        "20": "760",
+        "24": "1200"
       },
       "env": {
         "COLLAPSE": "1",
