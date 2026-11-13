@@ -78,7 +78,7 @@ function initApp (appName, version, realVersion) {
 }
 
 function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
-  const result = {}
+  const result = { stderr: '' }
   let server
 
   const appDir = path.join(__dirname, 'next', appName)
@@ -122,7 +122,10 @@ function startServer (appName, serverPath, version, ddInitFile = 'datadog.js') {
     }
     server.stdout.on('data', waitUntilServerStarted)
 
-    server.stderr.on('data', chunk => process.stderr.write(chunk))
+    server.stderr.on('data', chunk => {
+      result.stderr += chunk
+      process.stderr.write(chunk)
+    })
     server.stdout.on('data', chunk => process.stdout.write(chunk))
   })
 

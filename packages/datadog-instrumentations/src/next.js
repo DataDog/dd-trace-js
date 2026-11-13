@@ -65,6 +65,9 @@ const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
+const abortReasons = new WeakSet()
+const incomingRequests = new WeakSet()
+
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
 
@@ -204,7 +207,7 @@ function getRequestMeta (req, key) {
  * @param {(ctx: NextRequestContext) => Promise<T>} handler
  * @param {unknown} [error]
  * @param {boolean} [finishOnResponse]
- * @returns {Promise<T>}
+ * @returns {Promise<T | undefined>}
  */
 function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
@@ -237,14 +240,20 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
       const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
-      const query = {}
-      for (const key of searchParams.keys()) {
-        if (!query[key]) {
-          query[key] = searchParams.getAll(key)
+      /** @type {Record<string, string[]>} */
+      const query = Object.create(null)
+      for (const [key, value] of searchParams) {
+        const values = query[key]
+        if (values === undefined) {
+          query[key] = [value]
+        } else {
+          values.push(value)
         }
       }
 
-      queryParsedChannel.publish({ query })
+      const abortController = new AbortController()
+      queryParsedChannel.publish({ req, res, query, abortController })
+      if (abortController.signal.aborted) return /** @type {Promise<undefined>} */ (Promise.resolve())
     }
   }
 
@@ -294,7 +303,7 @@ function publishFinish (ctx, error) {
 function finish (ctx, result, error) {
   if (ctx.finishOnResponse) {
     ctx.handlerFinished = true
-    if (error && !isNoFallbackError(error)) ctx.error = error
+    if (error && !isIgnoredError(error)) ctx.error = error
     if (!ctx.responseFinished) return
   }
 
@@ -306,13 +315,18 @@ function isNoFallbackError (error) {
   return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
 }
 
+/** @param {unknown} error */
+function isIgnoredError (error) {
+  return abortReasons.has(/** @type {object} */ (error)) || isNoFallbackError(error)
+}
+
 /**
  * @param {NextNodeRequest} req
  * @param {NextRequestContext | undefined} ctx
  * @param {unknown} error
  */
 function publishError (req, ctx, error) {
-  if (!error || isNoFallbackError(error)) return
+  if (!error || isIgnoredError(error)) return
 
   if (ctx) {
     ctx.error = error
@@ -335,6 +349,7 @@ addHook({
     return function (nodeNextRequest) {
       const nextRequest = fromNodeNextRequest.apply(this, arguments)
       nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
+      if (bodyParsedChannel.hasSubscribers) incomingRequests.add(nextRequest)
       return nextRequest
     }
   })
@@ -402,6 +417,7 @@ function wrapAppRouteHandle (handle) {
         nodeNextRequestsToNextRequests.set(nodeRequest, req)
       }
     }
+    if (bodyParsedChannel.hasSubscribers) incomingRequests.add(req)
 
     return handle.apply(this, arguments)
   }
@@ -638,6 +654,23 @@ addHook({
   return nextServer
 })
 
+/**
+ * @param {Request} request
+ * @param {unknown} body
+ */
+function publishBodyParsed (request, body) {
+  if (!bodyParsedChannel.hasSubscribers) return
+
+  const abortController = incomingRequests.has(request) ? new AbortController() : undefined
+  bodyParsedChannel.publish({ body, abortController })
+
+  if (abortController?.signal.aborted) {
+    const { reason } = abortController.signal
+    abortReasons.add(reason)
+    throw reason
+  }
+}
+
 addHook({
   name: 'next',
   versions: ['>=13'],
@@ -649,7 +682,7 @@ addHook({
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
-      bodyParsedChannel.publish({ body })
+      publishBodyParsed(this, body)
 
       return body
     }
@@ -663,9 +696,21 @@ addHook({
       if (typeof body.entries === 'function') {
         normalizedBody = Object.fromEntries(body.entries())
       }
-      bodyParsedChannel.publish({ body: normalizedBody })
+      publishBodyParsed(this, normalizedBody)
 
       return body
+    }
+  })
+
+  shimmer.wrap(requestProto, 'clone', function (originalClone) {
+    return function wrappedClone () {
+      const clone = originalClone.apply(this, arguments)
+
+      if (bodyParsedChannel.hasSubscribers && incomingRequests.has(this)) {
+        incomingRequests.add(clone)
+      }
+
+      return clone
     }
   })
 
