@@ -3,6 +3,7 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const { withRequest } = require('../../dd-trace/src/appsec/store')
+const { setHttpServerCheckpoint } = require('../../dd-trace/src/datastreams')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
@@ -62,10 +63,17 @@ class HttpServerPlugin extends ServerPlugin {
       store = withRequest(store, req)
     }
 
+    // A reused context (HTTP/2 stream, serverless re-entry) is not a new inbound hop.
+    const dsmCheckpoint = spanCreated && this.config.dsmEnabled
+    if (dsmCheckpoint) {
+      const dataStreamsContext = setHttpServerCheckpoint(this.tracer, span, req.headers)
+      store = { ...store, dataStreamsContext }
+    }
+
     // Skip the re-enter when web.startSpan already entered { ...store, span }
-    // and AppSec did not rebuild the store with req: the bind would be
+    // and neither AppSec nor DSM rebuilt the store: the bind would be
     // identical to the one startSpan just made.
-    if (!spanCreated || appsecActive) {
+    if (!spanCreated || appsecActive || dsmCheckpoint) {
       this.enter(span, store)
     }
 

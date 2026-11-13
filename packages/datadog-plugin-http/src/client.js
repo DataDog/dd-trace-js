@@ -16,6 +16,7 @@ const {
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
+const { isAwsSdkRequest, setHttpClientCheckpoint } = require('../../dd-trace/src/datastreams')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -85,6 +86,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
+    let dataStreamsContext
     if (this.shouldInjectTraceHeaders(options, uri)) {
       // Clone the headers object in case an upstream lib has a reference to the original headers
       // Implemented due to aws-sdk issue where request signing is broken if we mutate the headers
@@ -92,11 +94,19 @@ class HttpClientPlugin extends ClientPlugin {
       // https://github.com/open-telemetry/opentelemetry-js-contrib/issues/1609#issuecomment-1826167348
       options.headers = { ...options.headers }
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
+
+      if (
+        this.config.dsmEnabled &&
+        allowed &&
+        !isAwsSdkRequest(store?.span, options.headers['amz-sdk-invocation-id'])
+      ) {
+        dataStreamsContext = setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, options.headers)
+      }
     }
 
     message.span = span
     message.parentStore = store
-    message.currentStore = { ...store, span }
+    message.currentStore = dataStreamsContext ? { ...store, span, dataStreamsContext } : { ...store, span }
 
     return message.currentStore
   }
