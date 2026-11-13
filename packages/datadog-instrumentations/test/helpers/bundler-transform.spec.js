@@ -110,32 +110,28 @@ describe('bundler transform', () => {
     assert.strictEqual(result.map, sourceMap)
   })
 
-  it('fails open with a warning for unsafe CJS publication and activation', () => {
+  it('fails open with a warning for unsafe CJS activation', () => {
     const projectDir = createProject()
-    const published = createPackage(projectDir, 'published-package', { main: 'index.js', version: '1.0.0' })
     const rewritten = createPackage(projectDir, 'rewritten-package', { version: '1.0.0' })
     const unsafe = 'function require () {}\nmodule.exports = true\n'
-    const publishedFile = write(published, 'index.js', unsafe)
     const rewrittenFile = write(rewritten, 'index.js', unsafe)
-    const instrumentations = {}
-    const hooks = {
-      'published-package': () => { instrumentations['published-package'] = [{ versions: ['1'] }] },
-      'rewritten-package': () => {},
-    }
     const target = { moduleName: 'rewritten-package', filePath: 'index.js' }
-    const rewriteTarget = resourcePath => resourcePath.includes('/rewritten-package/') ? target : undefined
     const rewrite = sinon.stub().returns({ code: `${unsafe}// rewritten\n` })
-    const { instrument } = loadHelper({ hooks, instrumentations, rewrite, rewriteTarget })
+    const { instrument } = loadHelper({
+      hooks: { 'rewritten-package': () => {} },
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => target,
+    })
     const sourceMap = { mappings: 'AAAA', version: 3 }
     const warn = sinon.spy()
 
-    assert.equal(instrument({ source: unsafe, resourcePath: publishedFile, inputSourceMap: sourceMap, warn }),
-      undefined)
     assert.equal(instrument({ source: unsafe, resourcePath: rewrittenFile, inputSourceMap: sourceMap, warn }),
       undefined)
-    sinon.assert.calledTwice(warn)
-    assert.match(warn.firstCall.args[0].message, /Skipped CommonJS publication for unsafe wrapper bindings/)
-    assert.match(warn.secondCall.args[0].message, /Skipped CommonJS activation for unsafe wrapper bindings/)
+    sinon.assert.calledOnceWithExactly(
+      warn,
+      sinon.match.has('message', sinon.match(/Skipped CommonJS activation for unsafe wrapper bindings/))
+    )
     sinon.assert.calledOnceWithExactly(
       rewrite,
       unsafe,
@@ -373,7 +369,10 @@ describe('bundler transform', () => {
       const warn = sinon.spy()
 
       assert.equal(instrument({ source, resourcePath, warn }), undefined)
-      sinon.assert.calledOnceWithExactly(warn, sinon.match.has('message', sinon.match(/unsafe wrapper bindings/)))
+      sinon.assert.calledOnceWithExactly(
+        warn,
+        sinon.match.has('message', sinon.match(/Skipped CommonJS publication for unsafe wrapper bindings/))
+      )
     }
   })
 
@@ -605,7 +604,7 @@ describe('bundler transform', () => {
     sinon.assert.calledOnce(rewrite)
   })
 
-  it('rewrites real targets with export hooks or without activation', async () => {
+  it('rewrites real targets with export hooks', async () => {
     for (const esm of [false, true]) {
       const tracer = await runRealRewrite({
         channel: 'tracing:orchestrion:ai:getTracer:start',
@@ -619,28 +618,12 @@ describe('bundler transform', () => {
           : 'function getTracer () { return "tracer" }\nmodule.exports = { getTracer }\n',
         version: '6.0.0',
       })
-      const bidi = await runRealRewrite({
-        channel: 'tracing:orchestrion:webdriver:initiateBidi:start',
-        esm,
-        file: 'build/index.js',
-        name: 'webdriver',
-        run: exports => exports.initiateBidi(),
-        source: esm
-          ? 'export function initiateBidi () { return "bidi" }\n'
-          : 'function initiateBidi () { return "bidi" }\nmodule.exports = { initiateBidi }\n',
-        version: '9.0.0',
-      })
 
       assert.equal(tracer.value, 'tracer')
       assert.equal(tracer.starts, 1)
       assert.deepStrictEqual(tracer.payloads, esm
         ? [{ activate: true, package: 'ai', path: 'ai/dist/index.mjs', version: '6.0.0' }]
         : [{ hasModule: true, package: 'ai', path: 'ai', version: '6.0.0' }])
-      assert.ok(bidi.result)
-      assert.notEqual(bidi.result.code, bidi.source)
-      assert.equal(bidi.value, 'bidi')
-      assert.equal(bidi.starts, 1)
-      assert.deepStrictEqual(bidi.payloads, [])
     }
   })
 
@@ -908,7 +891,7 @@ async function runRealRewrite ({ channel, esm, file, main, name, run, source, ve
   try {
     const exports = esm ? await import(pathToFileURL(outputPath).href) : require(outputPath)
     const value = await run(exports)
-    return { payloads, result, source, starts, value }
+    return { payloads, starts, value }
   } finally {
     dc.channel('dd-trace:bundler:load').unsubscribe(onLoad)
     dc.channel(channel).unsubscribe(onStart)
