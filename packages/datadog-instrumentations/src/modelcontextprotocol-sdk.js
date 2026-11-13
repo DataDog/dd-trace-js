@@ -261,8 +261,4 @@ addHook({
   return exports
 })
 
-// SDK 2.x clients bundle Protocol into a chunk with a hashed name. The package entry re-exports it, so hook the entry.
-addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
-  wrapProtocolRequest(exports.Protocol)
-  return exports
-})
+module.exports = { wrapProtocolRequest }
