@@ -159,6 +159,131 @@ describe('integrations', () => {
     })
   })
 
+  for (const providerEnabled of [true, false]) {
+    const providerState = providerEnabled ? 'enabled' : 'disabled'
+    describe(`langchain structured output with OpenAI tracing ${providerState}`, () => {
+      const { getEvents } = useLlmObs({ plugin: 'langchain', tracerConfigOptions: {} })
+
+      before(() => {
+        require('../../../../../..').use('openai', { enabled: providerEnabled })
+      })
+
+      withVersions('langchain', ['langchain', '@langchain/classic'], (version, moduleName) => {
+        for (const type of ['json_object', 'json_schema']) {
+          for (const streaming of [false, true]) {
+            it(`emits one llm span for ${type} with streaming=${streaming}`, async () => {
+              const { ChatOpenAI } = require(`../../../../../../versions/${moduleName}@${version}`)
+                .get('@langchain/openai')
+              const responseFormat = type === 'json_object'
+                ? { type }
+                : {
+                    type,
+                    json_schema: {
+                      name: 'answer',
+                      strict: true,
+                      schema: {
+                        type: 'object',
+                        properties: { answer: { type: 'string' } },
+                        required: ['answer'],
+                        additionalProperties: false,
+                      },
+                    },
+                  }
+              const chatModel = new ChatOpenAI({
+                modelName: 'gpt-4o-mini',
+                streaming,
+                configuration: {
+                  fetch: async (url, options) => {
+                    assert.deepStrictEqual(JSON.parse(options.body).response_format, responseFormat)
+                    const response = {
+                      id: 'chatcmpl-structured',
+                      object: 'chat.completion',
+                      created: 1,
+                      model: 'gpt-4o-mini',
+                      choices: [{
+                        index: 0,
+                        finish_reason: 'stop',
+                        message: { role: 'assistant', content: '{"answer":"hello"}' },
+                      }],
+                      usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
+                    }
+                    if (!streaming) {
+                      return new Response(JSON.stringify(response), { headers: { 'content-type': 'application/json' } })
+                    }
+                    const chunks = [
+                      {
+                        ...response,
+                        object: 'chat.completion.chunk',
+                        usage: null,
+                        choices: [{
+                          index: 0,
+                          finish_reason: null,
+                          delta: response.choices[0].message,
+                        }],
+                      },
+                      {
+                        ...response,
+                        object: 'chat.completion.chunk',
+                        usage: null,
+                        choices: [{ index: 0, finish_reason: 'stop', delta: {} }],
+                      },
+                      { ...response, object: 'chat.completion.chunk', choices: [] },
+                    ]
+                    return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('') +
+                      'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } })
+                  },
+                },
+              })
+
+              const result = await chatModel.invoke('Return a JSON answer', { response_format: responseFormat })
+              assert.strictEqual(result.content, '{"answer":"hello"}')
+              const { llmobsSpans } = await getEvents(providerEnabled ? 2 : 1)
+              const modelSpans = llmobsSpans.filter(span => span.meta['span.kind'] === 'llm')
+              assert.strictEqual(modelSpans.length, 1)
+              // Usage on streamed generations varies between LangChain versions.
+              if (!streaming || providerEnabled) {
+                assert.strictEqual(modelSpans[0].metrics.input_tokens, 7)
+                assert.strictEqual(modelSpans[0].metrics.output_tokens, 3)
+              }
+              const langchainSpan = llmobsSpans.find(span => span.tags.includes('integration:langchain'))
+              if (providerEnabled) {
+                assert.ok(modelSpans[0].tags.includes('integration:openai'))
+                assert.strictEqual(langchainSpan.meta['span.kind'], 'workflow')
+                assert.strictEqual(langchainSpan.metrics.input_tokens, undefined)
+                assert.strictEqual(langchainSpan.metrics.output_tokens, undefined)
+                assert.strictEqual(modelSpans[0].parent_id, langchainSpan.span_id)
+              } else {
+                assert.strictEqual(langchainSpan, modelSpans[0])
+              }
+            })
+          }
+        }
+
+        it('preserves provider errors without promoting a workflow to llm', async () => {
+          const { ChatOpenAI } = require(`../../../../../../versions/${moduleName}@${version}`).get('@langchain/openai')
+          const chatModel = new ChatOpenAI({
+            modelName: 'gpt-4o-mini',
+            maxRetries: 0,
+            configuration: {
+              fetch: async () => new Response(JSON.stringify({
+                error: { message: 'structured output failed', type: 'invalid_request_error' },
+              }), { status: 400, headers: { 'content-type': 'application/json' } }),
+            },
+          })
+          await assert.rejects(
+            chatModel.invoke('Return a JSON answer', { response_format: { type: 'json_object' } }),
+            /structured output failed/
+          )
+          const { llmobsSpans } = await getEvents(providerEnabled ? 2 : 1)
+          assert.strictEqual(llmobsSpans.filter(span => span.meta['span.kind'] === 'llm').length, 1)
+          const langchainSpan = llmobsSpans.find(span => span.tags.includes('integration:langchain'))
+          assert.strictEqual(langchainSpan.meta['span.kind'], providerEnabled ? 'workflow' : 'llm')
+          assert.ok(llmobsSpans.every(span => span.status === 'error'))
+        })
+      })
+    })
+  }
+
   describe('langchain', () => {
     const { getEvents } = useLlmObs({ plugin: 'langchain' })
 
