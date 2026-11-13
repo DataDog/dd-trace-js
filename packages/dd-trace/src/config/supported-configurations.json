@@ -399,6 +399,15 @@
         ]
       }
     ],
+    "DD_APPSEC_AWS_ACCESS_KEY_ID_TAG_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "appsec",
+        "description": "Tags the aws.lambda span of each invocation that tracer AppSec monitors with the execution environment's AWS_ACCESS_KEY_ID, so that CADR can join App and API Protection signals to CloudTrail. Environment variable only."
+      }
+    ],
     "DD_APPSEC_COLLECT_ALL_HEADERS": [
       {
         "implementation": "A",
