@@ -107,8 +107,8 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   return true
 }
 
-function onNextRequestStart ({ req }) {
-  markToBlockOnDetection(req)
+function onNextRequestStart ({ req, ignoreError }) {
+  markToBlockOnDetection(req, ignoreError)
 }
 
 function enable (config) {

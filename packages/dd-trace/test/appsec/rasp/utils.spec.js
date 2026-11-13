@@ -249,6 +249,27 @@ describe('RASP - utils.js', () => {
       sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, true)
     })
 
+    it('should let the framework ignore the abort error before aborting', () => {
+      const ignoreError = sinon.stub()
+      utils.markToBlockOnDetection(req, ignoreError)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      const abortError = abortController.abort.firstCall.args[0]
+      assert.ok(abortError instanceof utils.DatadogRaspAbortError)
+      sinon.assert.calledOnceWithExactly(ignoreError, abortError)
+      sinon.assert.callOrder(ignoreError, abortController.abort)
+    })
+
+    it('should not ignore any error when the rule does not block', () => {
+      const ignoreError = sinon.stub()
+      utils.markToBlockOnDetection(req, ignoreError)
+
+      utils.handleResult({ events: result.events }, req, res, abortController, config, raspRule)
+
+      sinon.assert.notCalled(ignoreError)
+    })
+
     it('should report the rule match as not blocked when the blocking response fails', async () => {
       blocking.registerBlockDelegation.resolves(false)
 

@@ -332,14 +332,19 @@ describe('test suite', () => {
                 const span = getWebSpan(traces)
 
                 assert.strictEqual(span.meta['appsec.blocked'], 'true')
-                if (reportsStatusCode) {
-                  assert.strictEqual(span.meta['http.status_code'], '403')
-                }
                 assert.deepStrictEqual(
                   JSON.parse(span.meta['_dd.appsec.json']).triggers.map(trigger => trigger.rule.id),
                   [ruleId]
                 )
-                assert.strictEqual(span.meta['error.type'], undefined)
+
+                // The aborted outgoing request keeps its error; the request spans must report the block.
+                for (const span of traces.flat().filter(span => span.type === 'web')) {
+                  assert.strictEqual(span.meta['error.type'], undefined, `${span.name} span has an error`)
+                  if (reportsStatusCode) {
+                    assert.strictEqual(span.meta['http.status_code'], '403', `${span.name} span status code`)
+                  }
+                  assert.strictEqual(span.error, 0, `${span.name} span is flagged as an error`)
+                }
               }),
             ])
 

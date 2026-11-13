@@ -42,6 +42,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
  * @property {boolean} [responseFinished]
  * @property {unknown} [error]
  * @property {NextRequest} [nextRequest]
+ * @property {(error: object) => void} ignoreError
  *
  * @typedef {object} ResponseGeneratorContext
  * @property {boolean} [hasResolved]
@@ -67,6 +68,15 @@ const encounteredMiddleware = new WeakSet()
 
 const abortReasons = new WeakSet()
 const incomingRequests = new WeakSet()
+
+/**
+ * Keeps an error a subscriber raised to stop the request, such as a blocked request, out of the request errors.
+ *
+ * @param {object} error
+ */
+function ignoreError (error) {
+  abortReasons.add(error)
+}
 
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -225,7 +235,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
 
   requests.add(req)
 
-  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse, ignoreError } : { req, res, ignoreError }
   if (finishOnResponse) {
     const onResponseFinish = () => {
       res.removeListener('finish', onResponseFinish)

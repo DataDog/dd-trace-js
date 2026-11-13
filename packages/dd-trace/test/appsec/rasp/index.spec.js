@@ -98,11 +98,12 @@ describe('RASP', () => {
 
     it('should block Next.js requests on detection', () => {
       const req = {}
+      const ignoreError = sinon.stub()
 
       sinon.assert.calledOnce(channels.nextRequestStart.subscribe)
-      channels.nextRequestStart.subscribe.firstCall.args[0]({ req })
+      channels.nextRequestStart.subscribe.firstCall.args[0]({ req, ignoreError })
 
-      sinon.assert.calledOnceWithExactly(utils.markToBlockOnDetection, req)
+      sinon.assert.calledOnceWithExactly(utils.markToBlockOnDetection, req, ignoreError)
     })
 
     it('should unsubscribe from the Next.js request start channel', () => {

@@ -24,13 +24,16 @@ const ALLOWED_ROOTSPAN_NAMES = new Set([
   'fastify.request',
 ])
 
-const requestsToBlockOnDetection = new WeakSet()
+/** @type {WeakMap<import('http').IncomingMessage, ((error: Error) => void) | undefined>} */
+const requestsToBlockOnDetection = new WeakMap()
 
 /**
  * @param {import('http').IncomingMessage} req
+ * @param {(error: Error) => void} [ignoreError] Keeps the abort error of a blocked request out of the framework's
+ *   request errors.
  */
-function markToBlockOnDetection (req) {
-  requestsToBlockOnDetection.add(req)
+function markToBlockOnDetection (req, ignoreError) {
+  requestsToBlockOnDetection.set(req, ignoreError)
 }
 
 class DatadogRaspAbortError extends Error {
@@ -79,15 +82,18 @@ function handleResult (result, req, res, abortController, config, raspRule) {
     const shouldBlockOnDetection = requestsToBlockOnDetection.has(req)
 
     if (blockingAction && (shouldBlockOnDetection || ALLOWED_ROOTSPAN_NAMES.has(rootSpan?.context?.()?._name))) {
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
+
       if (shouldBlockOnDetection) {
         registerBlockDelegation(req, res, rootSpan, null, blockingAction).then(blocked => {
           if (ruleTriggered) {
             updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
           }
         })
+        const ignoreError = requestsToBlockOnDetection.get(req)
+        ignoreError?.(abortError)
       }
 
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
 
       return
