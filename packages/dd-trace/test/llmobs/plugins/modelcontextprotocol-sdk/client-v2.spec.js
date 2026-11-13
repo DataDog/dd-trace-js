@@ -94,8 +94,11 @@ describe('integrations', () => {
       })
 
       it('keeps tracing Client.listTools after a result that cannot be serialized', async () => {
-        // The SDK does not validate `_meta`, so a server can return one nested deeper than JSON.stringify supports.
-        const nested = JSON.parse('['.repeat(10_000) + ']'.repeat(10_000))
+        // The SDK does not validate `_meta`. Over the wire, a `_meta` nested deeper than the call stack makes
+        // JSON.stringify throw on older V8 versions; a cyclic value throws on every version, so the test does not
+        // depend on the stack size.
+        const cyclic = {}
+        cyclic.self = cyclic
         const [clientTransport, serverTransport] = clientModule.InMemoryTransport.createLinkedPair()
         let listCalls = 0
         serverTransport.onmessage = message => {
@@ -106,7 +109,7 @@ describe('integrations', () => {
                 capabilities: { tools: {} },
                 serverInfo: { name: 'deep-server', version: '1.0.0' },
               }
-            : { tools: [], ...(listCalls++ === 0 && { _meta: { nested } }) }
+            : { tools: [], ...(listCalls++ === 0 && { _meta: { cyclic } }) }
           serverTransport.send({ jsonrpc: '2.0', id: message.id, result })
         }
         await serverTransport.start()
