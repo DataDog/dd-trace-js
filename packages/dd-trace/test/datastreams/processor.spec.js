@@ -100,9 +100,9 @@ describe('StatsBucket', () => {
       const checkpoints = buckets.checkpoints
       assert.ok(bucket instanceof StatsPoint)
       assert.strictEqual(checkpoints.size, 1)
-      const [key, value] = Array.from(checkpoints.entries())[0]
-      assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
+      const [value] = checkpoints.values()
       assert.ok(value instanceof StatsPoint)
+      assert.strictEqual(value.hash, mockCheckpoint.hash.readBigUInt64LE())
     })
 
     it('should not add a new entry if matching key is found', () => {
@@ -503,6 +503,59 @@ describe('DataStreamsProcessor', () => {
       ['direction:in', 'group:g1', 'topic:t', 'type:kafka'],
       ['direction:in', 'group:g2', 'topic:t', 'type:kafka'],
     ])
+  })
+
+  describe('stats points', () => {
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    })
+
+    afterEach(() => {
+      clock.restore()
+    })
+
+    function bucketPoints () {
+      return [...processor.bucketFromTimestamp(DEFAULT_TIMESTAMP * 1e6).checkpoints.values()]
+    }
+
+    it('keeps one point per pathway and consumer group when more pathways repeat than the hash cache holds', () => {
+      const parents = Array.from({ length: 300 }, (_, index) => {
+        const hash = Buffer.alloc(8)
+        hash.writeUInt32LE(index + 1)
+        return { hash, pathwayStartNs: DEFAULT_TIMESTAMP * 1e6, edgeStartNs: DEFAULT_TIMESTAMP * 1e6 }
+      })
+
+      for (let round = 0; round < 4; round++) {
+        for (const parent of parents) {
+          processor.setCheckpoint(['direction:in', 'group:g1', 'topic:t', 'type:kafka'], null, parent)
+          processor.setCheckpoint(['direction:in', 'group:g2', 'topic:t', 'type:kafka'], null, parent)
+        }
+      }
+
+      const points = bucketPoints()
+      assert.strictEqual(points.length, 600)
+      assert.strictEqual(new Set(points.map(point => point.hash)).size, 300)
+      for (const point of points) {
+        assert.strictEqual(point.edgeLatency.count, 4)
+      }
+    })
+
+    for (const [name, tags] of [
+      ['has_routing_key', ['has_routing_key:true', 'has_routing_key:false']],
+      ['partition', ['partition:1', 'partition:2']],
+    ]) {
+      it(`aggregates checkpoints that differ only in ${name} into one point`, () => {
+        for (const tag of tags) {
+          processor.setCheckpoint(['direction:out', 'exchange:e', tag, 'type:rabbitmq'], null, null)
+        }
+
+        const points = bucketPoints()
+        assert.strictEqual(points.length, 1)
+        assert.strictEqual(points[0].edgeLatency.count, 2)
+      })
+    }
   })
 
   describe('process tags', () => {
