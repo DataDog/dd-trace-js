@@ -508,7 +508,7 @@ describe('TracerProxy', () => {
       })
 
       for (const enabled of ['false', 'true', undefined]) {
-        it(`keeps application products inactive with flags set to ${enabled ?? 'unset'}`, () => {
+        it(`keeps security and LLMObs products inactive with flags set to ${enabled ?? 'unset'}`, () => {
           const entrypoint = path.resolve(__dirname, '../../../ci/init')
           const modules = [
             require.resolve('../src/appsec'),
@@ -521,9 +521,6 @@ describe('TracerProxy', () => {
             require.resolve('../src/llmobs/sdk'),
             require.resolve('../src/aiguard'),
             require.resolve('../src/aiguard/sdk'),
-            require.resolve('../src/profiling'),
-            require.resolve('../src/datastreams/processor'),
-            require.resolve('../src/datastreams/manager'),
           ]
           const script = `
             const tracer = require(${JSON.stringify(entrypoint)})
@@ -533,31 +530,19 @@ describe('TracerProxy', () => {
             const result = tracer.trace('test-operation', span => {
               const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
               appsec.trackCustomEvent('test-event', {})
-              const profiling = tracer.profiling
-              profiling.setCustomLabelKeys(['test-label'])
-              const profilingResult = profiling.runWithLabels({ 'test-label': 'test-value' }, () => {
-                return tracer.scope().active() === span ? 43 : 0
-              })
-              const carrier = {}
-              tracer.dataStreamsCheckpointer.setProduceCheckpoint('kafka', 'test-topic', carrier)
-              tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kafka', 'test-topic', carrier)
-              tracer.dataStreamsCheckpointer.trackTransaction('transaction', 'checkpoint', span)
               const llmobsResult = llmobs.trace({ kind: 'workflow', name: 'test-workflow' }, () => {
                 return tracer.scope().active() === span ? 42 : 0
               })
               return {
                 sameTracer,
                 llmobsResult,
-                profilingResult,
-                dsmCarrierEmpty: Object.keys(carrier).length === 0,
                 userTagAbsent: span.context().getTag('usr.id') === undefined,
               }
             })
-            Promise.all([tracer.aiguard.evaluate([]), tracer.profilerStarted()]).then(([evaluation, started]) => {
+            tracer.aiguard.evaluate([]).then(evaluation => {
               process.stdout.write(JSON.stringify({
                 ...result,
                 aiGuardAction: evaluation.action,
-                profilingStarted: started,
                 sameAppsec: appsec === tracer.appsec,
                 sameLlmobs: llmobs === tracer.llmobs,
                 llmobsEnabled: llmobs.enabled,
@@ -578,8 +563,6 @@ describe('TracerProxy', () => {
               DD_LLMOBS_ENABLED: enabled,
               DD_LLMOBS_ML_APP: 'test-app',
               DD_AI_GUARD_ENABLED: enabled,
-              DD_PROFILING_ENABLED: enabled,
-              DD_DATA_STREAMS_ENABLED: enabled,
               DD_API_KEY: 'test-only-not-a-real-key',
               DD_APP_KEY: 'test-only-not-a-real-key',
               DD_AI_GUARD_ENDPOINT: 'http://127.0.0.1:1',
@@ -598,10 +581,7 @@ describe('TracerProxy', () => {
             sameLlmobs: true,
             llmobsEnabled: false,
             llmobsResult: 42,
-            profilingResult: 43,
-            dsmCarrierEmpty: true,
             aiGuardAction: 'ALLOW',
-            profilingStarted: false,
             loaded: modules.map(() => false),
           })
         })
@@ -1180,6 +1160,24 @@ describe('TracerProxy', () => {
         } finally {
           configUpdateChannel.unsubscribe(subscriber)
         }
+      })
+
+      it('should preserve profiling label APIs in Test Optimization', () => {
+        config.isCiVisibility = true
+        config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false }
+        proxy.init()
+
+        sinon.assert.notCalled(log.error)
+        const keys = ['test-label']
+        const labels = { 'test-label': 'test-value' }
+        const callback = sinon.stub().returns(42)
+
+        proxy.profiling.setCustomLabelKeys(keys)
+        assert.strictEqual(proxy.profiling.runWithLabels(labels, callback), 42)
+
+        sinon.assert.calledOnceWithExactly(profiler.setCustomLabelKeys, keys)
+        sinon.assert.calledOnceWithExactly(profiler.runWithLabels, labels, callback)
+        sinon.assert.calledOnce(callback)
       })
 
       it('should resolve profilerStarted() from the profiler module', async () => {

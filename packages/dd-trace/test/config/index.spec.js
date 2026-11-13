@@ -3890,16 +3890,12 @@ describe('Config', () => {
     assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
-  it('should preserve application products outside Test Optimization', () => {
+  it('should preserve AI Guard outside Test Optimization', () => {
     process.env.DD_AI_GUARD_ENABLED = 'true'
-    process.env.DD_PROFILING_ENABLED = 'true'
-    process.env.DD_DATA_STREAMS_ENABLED = 'true'
 
     const config = getConfig()
 
     assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, true)
-    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
-    assert.strictEqual(config.dsmEnabled, true)
   })
 
   it('should set telemetry default values', () => {
@@ -3925,13 +3921,11 @@ describe('Config', () => {
     exporters.PLAYWRIGHT_WORKER,
     exporters.VITEST_WORKER,
   ]) {
-    it(`should disable application products for the ${exporter} Test Optimization exporter`, () => {
+    it(`should disable security and LLMObs products for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       process.env.DD_IAST_ENABLED = 'true'
       process.env.DD_LLMOBS_ENABLED = 'true'
       process.env.DD_AI_GUARD_ENABLED = 'true'
-      process.env.DD_PROFILING_ENABLED = 'true'
-      process.env.DD_DATA_STREAMS_ENABLED = 'true'
 
       const config = getConfig({
         isCiVisibility: true,
@@ -3942,19 +3936,21 @@ describe('Config', () => {
       assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, false)
-      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
-      assert.strictEqual(config.dsmEnabled, false)
       assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
       assert.strictEqual(config.DD_TRACE_RESOURCE_RENAMING_ENABLED, false)
     })
 
-    it(`should disable automatic profiling for the ${exporter} Test Optimization exporter`, () => {
-      process.env.DD_PROFILING_ENABLED = 'auto'
+    for (const profiling of ['true', 'auto']) {
+      it(`should preserve profiling=${profiling} and DSM for the ${exporter} Test Optimization exporter`, () => {
+        process.env.DD_PROFILING_ENABLED = profiling
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
 
-      const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
+        const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
 
-      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
-    })
+        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, profiling)
+        assert.strictEqual(config.dsmEnabled, true)
+      })
+    }
 
     it(`should prevent implicit LLMObs enablement for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_LLMOBS_ML_APP = 'test-app'

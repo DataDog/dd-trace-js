@@ -174,14 +174,6 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
-      if (config.isCiVisibility) {
-        Reflect.defineProperty(this, 'profiling', {
-          value: super.profiling,
-          configurable: true,
-          enumerable: true,
-        })
-      }
-
       if (IS_AWS_LAMBDA_MICROVM) {
         this.#registerMicroVmRunHook(config)
       }
