@@ -78,7 +78,7 @@
         "@datadog/native-appsec": "11.0.3",
         "@datadog/native-iast-taint-tracking": "4.2.1",
         "@datadog/native-metrics": "4.0.0",
-        "@datadog/pprof": "5.20.0",
+        "@datadog/pprof": "5.20.1",
         "@datadog/wasm-js-rewriter": "5.0.4",
         "@opentelemetry/api": ">=1.4.1 <1.11.0",
         "@opentelemetry/api-logs": "<1.0.0",
@@ -158,7 +158,7 @@
 
     "@datadog/openfeature-node-server": ["@datadog/openfeature-node-server@2.7.0", "", { "dependencies": { "@datadog/flagging-core": "3.4.0" } }, "sha512-6F2pkZFD9iadI5E1QsTOHFA4RlrlnKRK9yxz+xSoD5TsV2BhLU3vSqpky7VMJT5Dn2+aMZlFUu75jvwXnw56Lw=="],
 
-    "@datadog/pprof": ["@datadog/pprof@5.20.0", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.3.2", "source-map": "^0.8.0" } }, "sha512-el72sY8ipZsA6dPFqNhXtXbA0e189U+eyYUWl2bBz4+qEIheIgmpLzDrF2F7gxu/Cn87pLLYnj+oNcySKBdylQ=="],
+    "@datadog/pprof": ["@datadog/pprof@5.20.1", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.3.2", "source-map": "^0.8.0" } }, "sha512-0mUaO8gSsX84cjWJ4VvJIDNj6tka5NnqQysg8emetQPYv5ClKdfiRFHWm2DzPBEhVnj4yWXzaOGMO1UNl9Av/Q=="],
 
     "@datadog/wasm-js-rewriter": ["@datadog/wasm-js-rewriter@5.0.4", "", { "dependencies": { "js-yaml": "^4.3.1", "lru-cache": "^7.14.0", "module-details-from-path": "^1.0.4", "node-gyp-build": "^4.8.4" } }, "sha512-tSjbk51dkNzFMM3P/7y82tyrBj/9CWnPzcVb1JB8TUea/PIholdXSPuGC5F975YvvGB8KDujfmJIacN+EmuXMg=="],
 
