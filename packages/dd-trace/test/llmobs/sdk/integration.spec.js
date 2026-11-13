@@ -309,7 +309,7 @@ describe('end to end sdk integration tests', () => {
       })
     })
 
-    it('propagates only the id across a boundary when the upstream agent name is unsafe', async () => {
+    it('propagates only the id in the tag carrier when the upstream agent name is unsafe', async () => {
       const carrier = {}
       let agentId
       llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, agentSpan => {
@@ -317,6 +317,8 @@ describe('end to end sdk integration tests', () => {
         tracer.inject(agentSpan, 'text_map', carrier)
       })
 
+      // Simulates an upstream SDK that only writes the legacy `_dd.p.llmobs_*` tags.
+      delete carrier.baggage
       const spanContext = tracer.extract('text_map', carrier)
       tracer.trace('new-service-root', { childOf: spanContext }, () => {
         llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
@@ -328,6 +330,34 @@ describe('end to end sdk integration tests', () => {
       // emitted as explicit null (matching dd-trace-py) and the backend resolves it from the id.
       assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
         pagent_name: null,
+        pagent_span_id: agentId,
+      })
+    })
+
+    it('links the trace through baggage when a hop drops the APM trace headers', async () => {
+      const carrier = {}
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2', mlApp: 'upstream-app' }, agentSpan => {
+        agentId = agentSpan.context().toSpanId()
+        tracer.inject(agentSpan, 'text_map', carrier)
+      })
+
+      // Only `baggage` survives the hop, so the downstream service starts a fresh APM trace.
+      const spanContext = tracer.extract('text_map', { baggage: carrier.baggage })
+      assert.equal(spanContext, null)
+      tracer.trace('new-service-root', () => {
+        llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      const agentEvent = llmobsSpans.find(event => event.name === 'Researcher, v2')
+      const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
+      assert.equal(toolEvent.parent_id, agentId)
+      assert.equal(toolEvent.trace_id, agentEvent.trace_id)
+      assert.equal(getTag(toolEvent, 'ml_app'), 'upstream-app')
+      // Unlike the tag carrier, baggage carries a name that is not tag-safe.
+      assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
+        pagent_name: 'Researcher, v2',
         pagent_span_id: agentId,
       })
     })

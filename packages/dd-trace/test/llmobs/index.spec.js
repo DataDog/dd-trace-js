@@ -8,6 +8,8 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { getAllBaggageItems, removeAllBaggageItems, setAllBaggageItems } = require('../../src/baggage')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
@@ -68,6 +70,15 @@ describe('module', () => {
    */
   function inject (carrier, propagatedTags, config = getConfigFresh()) {
     const propagator = new TextMapPropagator(config)
+    propagator.inject(extractSpanContext(propagator, propagatedTags), carrier)
+  }
+
+  /**
+   * Extraction resets the in-process baggage, so set any baggage items after calling this.
+   * @param {TextMapPropagator} propagator
+   * @param {string} [propagatedTags]
+   */
+  function extractSpanContext (propagator, propagatedTags) {
     const inboundCarrier = {
       'x-datadog-trace-id': '1234567890',
       'x-datadog-parent-id': '9876543210',
@@ -76,7 +87,16 @@ describe('module', () => {
 
     const spanContext = propagator.extract(inboundCarrier)
     assert.ok(spanContext)
-    propagator.inject(spanContext, carrier)
+    return spanContext
+  }
+
+  /** @param {Record<string, string>} carrier */
+  function parseBaggage (carrier) {
+    assert.ok(carrier.baggage)
+    return Object.fromEntries(carrier.baggage.split(',').map(item => {
+      const [key, value] = item.split('=')
+      return [key, decodeURIComponent(value)]
+    }))
   }
 
   beforeEach(() => {
@@ -384,9 +404,10 @@ describe('module', () => {
       const carrier = {}
       inject(carrier, propagatedTags)
 
+      // Without a local LLMObs span, the propagated ml_app wins over the configured one.
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=older-app'
       )
     })
 
@@ -421,7 +442,7 @@ describe('module', () => {
 
       assert.strictEqual(
         carrier['x-datadog-tags'],
-        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=test'
+        '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app'
       )
     })
 
@@ -506,7 +527,8 @@ describe('module', () => {
 
       const mlAppEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_ml_app='))
       assert.strictEqual(mlAppEntries.length, 1, `Expected exactly one _dd.p.llmobs_ml_app entry in: ${tags}`)
-      assert.strictEqual(mlAppEntries[0], '_dd.p.llmobs_ml_app=downstream-app')
+      // Without a local LLMObs span, the upstream ml_app wins over this service's own config.
+      assert.strictEqual(mlAppEntries[0], '_dd.p.llmobs_ml_app=upstream-app')
 
       const sidEntries = tags.split(',').filter(entry => entry.startsWith('_dd.p.llmobs_sid='))
       assert.strictEqual(sidEntries.length, 1, `Expected exactly one _dd.p.llmobs_sid entry in: ${tags}`)
@@ -532,6 +554,166 @@ describe('module', () => {
         inject(carrier, undefined, config)
 
         assert.ok(!('x-datadog-tags' in carrier))
+      })
+
+      it('still writes the LLMObs context to baggage', () => {
+        llmobsModule.enable(config)
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+
+        const carrier = {}
+        inject(carrier, undefined, config)
+
+        assert.ok(!('x-datadog-tags' in carrier))
+        assertObjectContains(parseBaggage(carrier), { 'llmobs.parent_id': 'parent-id', 'llmobs.ml_app': 'test' })
+      })
+    })
+
+    describe('baggage carrier', () => {
+      afterEach(() => {
+        removeAllBaggageItems()
+      })
+
+      it('writes the LLMObs context of the active span, with a hex trace id', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = {
+          context () {
+            return { _trace: { tags: {} }, toSpanId () { return 'parent-id' } }
+          },
+        }
+        LLMObsTagger.tagMap.set(store.span, {
+          [TRACE_ID]: '6a5f76e7000000001973227978d8110b',
+          [SESSION_ID]: 'my session',
+          [SAMPLE_RATE]: '0.5',
+          [SAMPLING_DECISION]: '0',
+          [PARENT_AGENT_NAME]: 'agent',
+          [PARENT_AGENT_SPAN_ID]: 'agent-id',
+        })
+
+        const carrier = {}
+        inject(carrier)
+
+        assert.deepStrictEqual(parseBaggage(carrier), {
+          'llmobs.parent_id': 'parent-id',
+          'llmobs.trace_id': '6a5f76e7000000001973227978d8110b',
+          'llmobs.ml_app': 'test',
+          'llmobs.session_id': 'my session',
+          'llmobs.sample_rate': '0.5',
+          'llmobs.sampling_decision': '0',
+          'llmobs.parent_agent_span_id': 'agent-id',
+          'llmobs.parent_agent_name': 'agent',
+        })
+        assert.match(carrier['x-datadog-tags'], /_dd\.p\.llmobs_trace_id=141393847380800662846519802803680448779/)
+      })
+
+      it('propagates an agent name that is not tag-safe, capped at 512 characters', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+        const agentName = 'agent, ' + 'a'.repeat(600)
+        LLMObsTagger.tagMap.set(store.span, {
+          [PARENT_AGENT_NAME]: agentName,
+          [PARENT_AGENT_SPAN_ID]: 'agent-id',
+        })
+
+        const carrier = {}
+        inject(carrier)
+
+        assert.strictEqual(parseBaggage(carrier)['llmobs.parent_agent_name'], agentName.slice(0, 512))
+        assert.doesNotMatch(carrier['x-datadog-tags'], /_dd\.p\.llmobs_pagent_name=/)
+      })
+
+      it('forwards the upstream tag context into baggage without a local LLMObs span', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+        const carrier = {}
+        inject(carrier, [
+          '_dd.p.llmobs_parent_id=upstream-parent',
+          '_dd.p.llmobs_ml_app=upstream-app',
+          '_dd.p.llmobs_trace_id=141393847380800662846519802803680448779',
+          '_dd.p.llmobs_pagent_span_id=agent-id',
+        ].join(','))
+
+        assert.deepStrictEqual(parseBaggage(carrier), {
+          'llmobs.parent_id': 'upstream-parent',
+          'llmobs.trace_id': '6a5f76e7000000001973227978d8110b',
+          'llmobs.ml_app': 'upstream-app',
+          'llmobs.parent_agent_span_id': 'agent-id',
+        })
+      })
+
+      it('forwards the upstream ml_app over its own configured ml_app without a local LLMObs span', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'forwarder-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+        const carrier = {}
+        inject(carrier, '_dd.p.llmobs_parent_id=upstream-parent,_dd.p.llmobs_ml_app=upstream-app')
+
+        assert.strictEqual(parseBaggage(carrier)['llmobs.ml_app'], 'upstream-app')
+        assert.match(carrier['x-datadog-tags'], /_dd\.p\.llmobs_ml_app=upstream-app/)
+        assert.doesNotMatch(carrier['x-datadog-tags'], /forwarder-app/)
+      })
+
+      it('uses its own configured ml_app without a local LLMObs span or an upstream ml_app', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'forwarder-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+        const carrier = {}
+        inject(carrier, '_dd.p.llmobs_parent_id=upstream-parent')
+
+        assert.strictEqual(parseBaggage(carrier)['llmobs.ml_app'], 'forwarder-app')
+        assert.match(carrier['x-datadog-tags'], /_dd\.p\.llmobs_ml_app=forwarder-app/)
+      })
+
+      it('replaces stale in-process LLMObs items after the user items without mutating them', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+        const propagator = new TextMapPropagator(getConfigFresh())
+        const spanContext = extractSpanContext(propagator)
+        const inProcessBaggage = { 'llmobs.parent_id': 'stale-parent', user: 'value' }
+        setAllBaggageItems(inProcessBaggage)
+
+        const carrier = {}
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.baggage, 'user=value,llmobs.parent_id=parent-id,llmobs.ml_app=test')
+        assert.deepStrictEqual(getAllBaggageItems(), inProcessBaggage)
+      })
+
+      it('truncates the LLMObs items before the user items', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+        const config = getConfigFresh()
+        config.baggageMaxItems = 3
+        const propagator = new TextMapPropagator(config)
+        const spanContext = extractSpanContext(propagator)
+        setAllBaggageItems({ first: '1', second: '2' })
+
+        const carrier = {}
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier.baggage, 'first=1,second=2,llmobs.parent_id=parent-id')
+      })
+
+      it('does not write baggage when the baggage propagation style is disabled', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+        const config = getConfigFresh()
+        config.tracePropagationStyle.inject = ['datadog']
+
+        const carrier = {}
+        inject(carrier, undefined, config)
+
+        assert.ok(!('baggage' in carrier))
+        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      })
+
+      it('writes baggage when only the baggage propagation style is enabled', () => {
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+        store.span = { context () { return { toSpanId () { return 'parent-id' } } } }
+        const config = getConfigFresh()
+        config.tracePropagationStyle.inject = ['baggage']
+
+        const carrier = {}
+        inject(carrier, undefined, config)
+
+        assert.deepStrictEqual(carrier, { baggage: 'llmobs.parent_id=parent-id,llmobs.ml_app=test' })
       })
     })
   })
