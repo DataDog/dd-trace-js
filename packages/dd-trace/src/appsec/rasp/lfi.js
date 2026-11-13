@@ -83,7 +83,7 @@ function analyzeLfiPath (path, req, res, abortController) {
 
   const raspRule = { type: RULE_TYPES.LFI }
 
-  const result = waf.runSubContext(subcontextData, raspRule)
+  const result = waf.runSubContext(subcontextData, raspRule, undefined, req)
   handleResult(result, req, res, abortController, config, raspRule)
 }
 

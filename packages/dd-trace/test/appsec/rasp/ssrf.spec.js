@@ -10,6 +10,8 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../datadog-core')
 const {
   httpClientRequestStart,
+  httpClientRequestError,
+  httpClientRequestFinish,
   httpClientResponseStart,
   httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
@@ -140,6 +142,8 @@ describe('RASP - ssrf.js', () => {
     assert.strictEqual(httpClientRequestStart.hasSubscribers, true)
     ssrf.disable()
     assert.strictEqual(httpClientRequestStart.hasSubscribers, false)
+    assert.strictEqual(httpClientRequestError.hasSubscribers, false)
+    assert.strictEqual(httpClientRequestFinish.hasSubscribers, false)
   })
 
   it('evaluates redirect headers immediately and disposes each hop independently', () => {
@@ -244,6 +248,52 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.calledOnce(secondScope.dispose)
     })
 
+    it('disposes an errored outgoing request without affecting another request', () => {
+      stubStore()
+      const first = makeCtx()
+      const second = makeCtx()
+      publishRequestStart({ ctx: first })
+      publishRequestStart({ ctx: second })
+      const firstScope = contexts.get(first)
+      const secondScope = contexts.get(second)
+      first.error = new Error('connection reset')
+      httpClientRequestError.publish(first)
+      httpClientRequestError.publish(first)
+      httpClientResponseFinish.publish({ ctx: first, res: createResponse(), body: null })
+      sinon.assert.calledOnce(firstScope.dispose)
+      sinon.assert.calledOnce(firstScope.run)
+      sinon.assert.notCalled(secondScope.dispose)
+    })
+
+    it('ignores errors for requests that have no subcontext', () => {
+      httpClientRequestError.publish(makeCtx())
+      sinon.assert.notCalled(run)
+    })
+
+    it('releases a request closed without a response, once', () => {
+      stubStore()
+      const ctx = makeCtx({ req: { destroyed: true } })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      httpClientRequestFinish.publish(ctx)
+      httpClientRequestFinish.publish(ctx)
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
+    it('retains the response context when request finish precedes response finish', () => {
+      stubStore()
+      const res = createResponse()
+      const ctx = makeCtx({ req: { destroyed: true }, res })
+      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      httpClientRequestFinish.publish(ctx)
+      sinon.assert.notCalled(scope.dispose)
+      httpClientResponseFinish.publish({ ctx, res, body: null })
+      sinon.assert.calledTwice(scope.run)
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
     it('retains the subcontext when a timeout is followed by a response', () => {
       stubStore()
       const ctx = makeCtx({ req: new EventEmitter() })
@@ -252,14 +302,20 @@ describe('RASP - ssrf.js', () => {
       const scope = contexts.get(ctx)
 
       ctx.req.emit('timeout')
+      ctx.error = undefined
+      httpClientRequestError.publish(ctx)
       // The HTTP instrumentation publishes request finish on timeout, before a possible response.
       dc.channel('apm:http:client:request:finish').publish(ctx)
+      assert.strictEqual(ctx.req.listenerCount('close'), 1)
       sinon.assert.notCalled(scope.dispose)
       httpClientResponseFinish.publish({ ctx, res: createResponse(), body: null })
 
       sinon.assert.calledTwice(scope.run)
       sinon.assert.calledWithExactly(scope.run.secondCall,
         { [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' }, { type: 'ssrf', variant: 'response' })
+      ctx.req.destroyed = true
+      ctx.req.emit('close')
+      assert.strictEqual(ctx.req.listenerCount('close'), 0)
       sinon.assert.calledOnce(scope.dispose)
     })
 

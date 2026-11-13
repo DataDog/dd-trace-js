@@ -118,7 +118,7 @@ describe('WAF Manager', () => {
       getActiveRequest.returns(req)
       assert.strictEqual(waf.run({ 'server.request.body': 'ordinary' }, req), undefined)
       waf.disposeContext(req)
-      sinon.assert.calledTwice(DDWAF.prototype.createContext)
+      sinon.assert.calledOnce(DDWAF.prototype.createContext)
       sinon.assert.notCalled(Reporter.reportMetrics)
     })
 
@@ -251,6 +251,26 @@ describe('WAF Manager', () => {
       assert.strictEqual(waf.getRequest(state), undefined)
     })
 
+    for (const activeReq of [undefined, {}]) {
+      it(`uses an explicit request when the active request is ${activeReq ? 'different' : 'absent'}`, () => {
+        const child = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
+        const parent = DDWAF.prototype.createContext()
+        parent.createSubcontext = sinon.stub().returns(child)
+        waf.init(rules, config.appsec)
+        const req = {}
+        getActiveRequest.returns(activeReq)
+        DDWAF.prototype.createContext.resetHistory()
+        const context = waf.wafManager.getWAFContext(req)
+        const create = sinon.spy(context, 'createSubcontext')
+        waf.runSubContext(data, { type: 'lfi' }, undefined, req)
+        sinon.assert.calledOnce(create)
+        sinon.assert.calledOnceWithExactly(child.run, data, config.appsec.DD_APPSEC_WAF_TIMEOUT)
+        sinon.assert.calledWith(Reporter.reportAttributes, undefined, req, undefined)
+        sinon.assert.calledOnce(child.dispose)
+        sinon.assert.calledOnce(DDWAF.prototype.createContext)
+      })
+    }
+
     it('keeps simultaneous outgoing evaluations in separate subcontexts', () => {
       const first = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
       const second = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
@@ -272,6 +292,32 @@ describe('WAF Manager', () => {
       sinon.assert.calledOnce(first.dispose)
       sinon.assert.notCalled(second.dispose)
       waf.disposeSubContext(secondState)
+    })
+
+    for (const input of [undefined, null, {}, { unknown: 'value' }]) {
+      it(`skips creating a standalone subcontext for irrelevant input ${JSON.stringify(input)}`, () => {
+        const parent = DDWAF.prototype.createContext()
+        parent.createSubcontext = sinon.stub()
+        waf.init(rules, config.appsec)
+        assert.strictEqual(waf.runSubContext(input), undefined)
+        sinon.assert.notCalled(parent.createSubcontext)
+        sinon.assert.notCalled(Reporter.reportMetrics)
+      })
+    }
+
+    it('retains a paired context when only the later evaluation has known inputs', () => {
+      const child = { run: sinon.stub().returns({ duration: 1000 }), dispose: sinon.spy() }
+      const parent = DDWAF.prototype.createContext()
+      parent.createSubcontext = sinon.stub().returns(child)
+      waf.init(rules, config.appsec)
+      const state = {}
+      waf.runSubContext({ unknown: 'value' }, undefined, state)
+      sinon.assert.notCalled(child.run)
+      getActiveRequest.returns(undefined)
+      waf.runSubContext(data, undefined, state)
+      sinon.assert.calledOnceWithExactly(child.run, data, config.appsec.DD_APPSEC_WAF_TIMEOUT)
+      waf.disposeSubContext(state)
+      sinon.assert.calledOnce(child.dispose)
     })
 
     it('skips isolated checks when there is no active ruleset', () => {
@@ -343,6 +389,23 @@ describe('WAF Manager', () => {
       sinon.assert.calledOnce(DDWAF.prototype.createContext)
       sinon.assert.calledOnce(context.ddwafContext.dispose)
       sinon.assert.notCalled(context.ddwafContext.run)
+    })
+
+    it('does not start evaluating a completed request when an empty ruleset is restored', () => {
+      const native = DDWAF.prototype.createContext()
+      DDWAF.prototype.createContext.resetHistory()
+      DDWAF.prototype.createContext.returns(null)
+      waf.init(rules, config.appsec)
+      const req = {}
+      assert.strictEqual(waf.run({ 'server.request.body': 'initial' }, req), undefined)
+      waf.disposeContext(req)
+      DDWAF.prototype.createContext.returns(native)
+      native.run.returns({ duration: 1000 })
+
+      assert.strictEqual(waf.run({ 'server.request.body': 'late' }, req), undefined)
+      sinon.assert.notCalled(native.run)
+      assert.ok(waf.run({ 'server.request.body': 'new request' }, {}))
+      sinon.assert.calledOnce(native.run)
     })
 
     it('preserves in-flight request contexts when the manager is replaced', () => {

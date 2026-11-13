@@ -52,7 +52,7 @@ function onGraphqlStartResolver (data) {
 
   const knownActions = fieldsWithoutArgumentsActions.get(req)
   if (knownActions === undefined &&
-    !waf.wafManager.getWAFContext(req).knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+    !waf.wafManager.getWAFContext(req)?.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
 
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return

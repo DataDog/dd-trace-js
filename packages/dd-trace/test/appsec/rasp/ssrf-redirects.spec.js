@@ -97,6 +97,11 @@ describe('SSRF redirect reporting', () => {
         '/attack': '/danger',
         '/broken': '/disconnect',
       }
+      if (path === '/stream') {
+        res.writeHead(200)
+        res.write('partial response')
+        return
+      }
       if (path === '/disconnect') {
         req.socket.destroy()
         return
@@ -107,6 +112,12 @@ describe('SSRF redirect reporting', () => {
         res.writeHead(302, { location: 'http://[' })
       }
       res.end('OK')
+    })
+    server.on('connect', (req, socket) => {
+      socket.end('HTTP/1.1 200 Connection Established\r\n\r\n')
+    })
+    server.on('upgrade', (req, socket) => {
+      socket.end('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n')
     })
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
@@ -253,12 +264,64 @@ describe('SSRF redirect reporting', () => {
     assert.strictEqual(span.context().getTag('api.security.redirection.move_target'), '/shared')
   })
 
-  it('cleans up an interrupted chain with the incoming request', async () => {
+  it('cleans up an interrupted outgoing request before the incoming request finishes', async () => {
     await assert.rejects(incoming(() => follow('/broken')), { code: 'ECONNRESET' })
     const context = waf.wafManager.getWAFContext(req)
-    assert.strictEqual(context.subcontexts.size, 1)
+    assert.strictEqual(context.subcontexts.size, 0)
+    assert.strictEqual(context.ddwafContext.disposed, false)
     waf.disposeContext(req)
     assert.strictEqual(context.subcontexts.size, 0)
+  })
+
+  it('evaluates a response after a non-terminal timeout', async () => {
+    await incoming(() => new Promise((resolve, reject) => {
+      const request = http.get(baseUrl + '/a', res => {
+        res.resume()
+        res.once('end', resolve)
+      }).on('error', reject)
+      request.emit('timeout')
+    }))
+    assert.strictEqual(span.context().getTag('api.security.redirection.move_target'), '/shared')
+    assert.strictEqual(waf.wafManager.getWAFContext(req).subcontexts.size, 0)
+  })
+
+  it('releases the subcontext when a response stream is destroyed before end', async () => {
+    await incoming(() => new Promise((resolve, reject) => {
+      http.get(baseUrl + '/stream', res => {
+        res.on('error', reject)
+        res.once('close', resolve)
+        res.once('data', () => res.destroy())
+      }).on('error', reject)
+    }))
+    assert.strictEqual(waf.wafManager.getWAFContext(req).subcontexts.size, 0)
+  })
+
+  it('releases the subcontext when HTTP upgrades after a non-terminal timeout', async () => {
+    await incoming(() => new Promise((resolve, reject) => {
+      const request = http.get(baseUrl + '/', { headers: { connection: 'Upgrade', upgrade: 'test' } })
+        .on('error', reject)
+        .once('upgrade', (res, socket) => {
+          assert.strictEqual(res.upgrade, true)
+          socket.destroy()
+          resolve()
+        })
+      request.emit('timeout')
+    }))
+    assert.strictEqual(waf.wafManager.getWAFContext(req).subcontexts.size, 0)
+  })
+
+  it('releases the subcontext when HTTP establishes a CONNECT tunnel', async () => {
+    await incoming(() => new Promise((resolve, reject) => {
+      const request = http.request(baseUrl, { method: 'CONNECT', path: 'example.com:443' })
+        .on('error', reject)
+        .once('connect', (res, socket) => {
+          assert.strictEqual(res.upgrade, true)
+          socket.destroy()
+          resolve()
+        })
+      request.end()
+    }))
+    assert.strictEqual(waf.wafManager.getWAFContext(req).subcontexts.size, 0)
   })
 
   it('ignores invalid Location values and completes cleanup', async () => {

@@ -172,15 +172,19 @@ function runContext (data, wafContext, raspRule, rootSpan) {
  * @param {object} data - Flat WAF address map.
  * @param {object} [raspRule] - RASP rule metadata.
  * @param {SubcontextState} [state] - Instrumentation context, released by calling disposeSubContext.
+ * @param {object} [req] - Explicit request when the publisher provides it.
  */
-function runSubContext (data, raspRule, state) {
+function runSubContext (data, raspRule, state, req) {
   let subcontext = state?.wafSubcontext
   if (!subcontext) {
-    const req = getActiveRequest()
+    req ||= getActiveRequest()
     if (!req) return
     const context = waf.wafManager.getWAFContext(req)
     if (!context) return
     if (context.ddwafContext.disposed) return runContext(data, context, raspRule)
+    // Stateful checks can need response inputs even when no request inputs are known.
+    if (!state && (data === null || typeof data !== 'object' ||
+      !Object.keys(data).some(key => context.knownAddresses.has(key)))) return
     subcontext = context.createSubcontext()
     if (!subcontext) return
     if (state) state.wafSubcontext = subcontext
@@ -206,11 +210,7 @@ function disposeSubContext (state) {
 }
 
 function disposeContext (req) {
-  const wafContext = waf.wafManager.getWAFContext(req)
-
-  if (wafContext && !wafContext.ddwafContext.disposed) {
-    wafContext.dispose()
-  }
+  waf.wafManager.disposeContext(req)
 }
 
 function noop () {}

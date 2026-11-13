@@ -161,6 +161,14 @@ describe('GraphQL', () => {
       sinon.assert.notCalled(message.createResolverInfo)
     })
 
+    it('Should skip resolver inputs when there is no active WAF context', () => {
+      waf.wafManager.getWAFContext.returns(undefined)
+      const message = createResolverMessage({ user: {} })
+      startGraphqlResolver.publish(message)
+      sinon.assert.notCalled(message.createResolverInfo)
+      sinon.assert.notCalled(waf.runSubContext)
+    })
+
     it('Should not materialize resolver inputs when the context does not use GraphQL data', () => {
       waf.wafManager.getWAFContext().knownAddresses.clear()
       const message = createResolverMessage({ user: {} })
