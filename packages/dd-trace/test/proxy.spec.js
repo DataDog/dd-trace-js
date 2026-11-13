@@ -507,6 +507,86 @@ describe('TracerProxy', () => {
         }
       })
 
+      for (const enabled of ['false', 'true', undefined]) {
+        it(`keeps security and LLMObs products inactive with flags set to ${enabled ?? 'unset'}`, () => {
+          const entrypoint = path.resolve(__dirname, '../../../ci/init')
+          const modules = [
+            require.resolve('../src/appsec'),
+            require.resolve('../src/appsec/sdk'),
+            require.resolve('../src/appsec/blocking'),
+            require.resolve('../src/appsec/iast'),
+            require.resolve('../src/appsec/iast/taint-tracking/rewriter'),
+            require.resolve('../src/otel-thread-ctx'),
+            require.resolve('../src/llmobs'),
+            require.resolve('../src/llmobs/sdk'),
+            require.resolve('../src/aiguard'),
+            require.resolve('../src/aiguard/sdk'),
+          ]
+          const script = `
+            const tracer = require(${JSON.stringify(entrypoint)})
+            const appsec = tracer.appsec
+            const llmobs = tracer.llmobs
+            llmobs.enable({ mlApp: 'test-app' })
+            const result = tracer.trace('test-operation', span => {
+              const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
+              appsec.trackCustomEvent('test-event', {})
+              const llmobsResult = llmobs.trace({ kind: 'workflow', name: 'test-workflow' }, () => {
+                return tracer.scope().active() === span ? 42 : 0
+              })
+              return {
+                sameTracer,
+                llmobsResult,
+                userTagAbsent: span.context().getTag('usr.id') === undefined,
+              }
+            })
+            tracer.aiguard.evaluate([]).then(evaluation => {
+              process.stdout.write(JSON.stringify({
+                ...result,
+                aiGuardAction: evaluation.action,
+                sameAppsec: appsec === tracer.appsec,
+                sameLlmobs: llmobs === tracer.llmobs,
+                llmobsEnabled: llmobs.enabled,
+                loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
+              }), () => process.exit(0))
+            }).catch(error => { console.error(error); process.exit(1) })
+          `
+          const inherited = Object.fromEntries(Object.entries(process.env)
+            .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
+          const result = spawnSync(process.execPath, ['--eval', script], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            env: {
+              ...inherited,
+              DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+              DD_APPSEC_ENABLED: enabled,
+              DD_IAST_ENABLED: enabled,
+              DD_LLMOBS_ENABLED: enabled,
+              DD_LLMOBS_ML_APP: 'test-app',
+              DD_AI_GUARD_ENABLED: enabled,
+              DD_API_KEY: 'test-only-not-a-real-key',
+              DD_APP_KEY: 'test-only-not-a-real-key',
+              DD_AI_GUARD_ENDPOINT: 'http://127.0.0.1:1',
+              DD_TRACE_AGENT_URL: 'http://127.0.0.1:1',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_CRASHTRACKING_ENABLED: 'false',
+              JEST_WORKER_ID: '1',
+            },
+          })
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), {
+            sameTracer: true,
+            userTagAbsent: true,
+            sameAppsec: true,
+            sameLlmobs: true,
+            llmobsEnabled: false,
+            llmobsResult: 42,
+            aiGuardAction: 'ALLOW',
+            loaded: modules.map(() => false),
+          })
+        })
+      }
+
       it('does not load Dynamic Instrumentation while disabled', () => {
         proxy.init()
 
@@ -1164,6 +1244,24 @@ describe('TracerProxy', () => {
         } finally {
           configUpdateChannel.unsubscribe(subscriber)
         }
+      })
+
+      it('should preserve profiling label APIs in Test Optimization', () => {
+        config.isCiVisibility = true
+        config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false }
+        proxy.init()
+
+        sinon.assert.notCalled(log.error)
+        const keys = ['test-label']
+        const labels = { 'test-label': 'test-value' }
+        const callback = sinon.stub().returns(42)
+
+        proxy.profiling.setCustomLabelKeys(keys)
+        assert.strictEqual(proxy.profiling.runWithLabels(labels, callback), 42)
+
+        sinon.assert.calledOnceWithExactly(profiler.setCustomLabelKeys, keys)
+        sinon.assert.calledOnceWithExactly(profiler.runWithLabels, labels, callback)
+        sinon.assert.calledOnce(callback)
       })
 
       it('should resolve profilerStarted() from the profiler module', async () => {
