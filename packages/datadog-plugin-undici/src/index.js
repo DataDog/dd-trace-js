@@ -8,12 +8,15 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
+const { isAwsSdkRequest, setHttpClientCheckpoint } = require('../../dd-trace/src/datastreams')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+
+const DSM_HEADER = 'dd-pathway-ctx-base64'
 
 const {
   HTTP_STATUS_CODE,
@@ -117,6 +120,17 @@ class UndiciPlugin extends HttpClientPlugin {
     if (this.config.propagationFilter(uri)) {
       const headers = {}
       this.tracer.inject(span, HTTP_HEADERS, headers)
+
+      // Native requests have no store of their own, so the context only travels in the header.
+      if (
+        this.config.dsmEnabled &&
+        this.config.DD_DATA_STREAMS_HTTP_ENABLED &&
+        allowed &&
+        !isAwsSdkRequest(store?.span, normalizeHeaders(request.headers)['amz-sdk-invocation-id'])
+      ) {
+        removeHeader(request, DSM_HEADER)
+        setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, headers)
+      }
 
       // Use addHeader if available (undici provides this on the request object)
       if (typeof request.addHeader === 'function') {
@@ -251,6 +265,28 @@ class UndiciPlugin extends HttpClientPlugin {
 
   configure (config) {
     return super.configure(normalizeConfig(config))
+  }
+}
+
+/**
+ * undici's addHeader appends, so a header the caller already set would reach the server twice.
+ *
+ * @param {{ headers?: string | unknown[] }} request
+ * @param {string} name Lowercase header name.
+ */
+function removeHeader (request, name) {
+  const { headers } = request
+  if (typeof headers === 'string') {
+    request.headers = headers.split('\r\n')
+      .filter(line => !line.toLowerCase().startsWith(`${name}:`))
+      .join('\r\n')
+  } else if (Array.isArray(headers)) {
+    for (let i = headers.length - 2; i >= 0; i -= 2) {
+      const key = headers[i]
+      if (typeof key === 'string' && key.toLowerCase() === name) {
+        headers.splice(i, 2)
+      }
+    }
   }
 }
 
