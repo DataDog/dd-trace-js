@@ -3895,6 +3895,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_OTEL_API_PATH": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "configurationNames": [
+          "otelApiPath"
+        ]
+      }
+    ],
     "DD_TRACE_OTEL_ENABLED": [
       {
         "implementation": "A",
