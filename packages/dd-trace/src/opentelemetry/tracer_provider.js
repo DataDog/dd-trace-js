@@ -3,7 +3,7 @@
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
-const { trace, context, propagation } = require('./api')
+const api = require('./api')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
@@ -65,16 +65,16 @@ class TracerProvider {
   // Not actually required by the SDK spec, but the official Node.js SDK does
   // this and the docs reflect that so we should do this too for familiarity.
   register (config = {}) {
-    context.setGlobalContextManager(this.#contextManager)
-    if (!trace.setGlobalTracerProvider(this)) {
-      trace.getTracerProvider().setDelegate(this)
+    api.context.setGlobalContextManager(this.#contextManager)
+    if (!api.trace.setGlobalTracerProvider(this)) {
+      api.trace.getTracerProvider().setDelegate(this)
     }
     // The default propagator used is the W3C Trace Context propagator, users should be able to pass in others
     // as needed
     if (config.propagator) {
-      propagation.setGlobalPropagator(config.propagator)
+      api.propagation.setGlobalPropagator(config.propagator)
     } else {
-      propagation.setGlobalPropagator(new W3CTraceContextPropagator())
+      api.propagation.setGlobalPropagator(new W3CTraceContextPropagator())
     }
   }
 

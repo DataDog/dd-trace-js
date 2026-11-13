@@ -1,7 +1,7 @@
 'use strict'
 
 const { execFile } = require('node:child_process')
-const { cp, mkdir, mkdtemp, rm, symlink, writeFile } = require('node:fs/promises')
+const { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { dirname, join, relative, resolve } = require('node:path')
 const { promisify } = require('node:util')
@@ -15,7 +15,7 @@ const extractPackageAndModulePath = require(
 const execFileAsync = promisify(execFile)
 const tracerDirectory = resolve(__dirname, '../../../..')
 const apiMain = require.resolve('@opentelemetry/api')
-const apiDirectory = dirname(extractPackageAndModulePath(apiMain.replaceAll('\\', '/')).pkgJson)
+const apiDirectory = dirname(/** @type {string} */ (extractPackageAndModulePath(apiMain.replaceAll('\\', '/')).pkgJson))
 const apiEntrypoint = relative(apiDirectory, apiMain)
 const nativeSpan = `
   tracer.trace('native', span => {
@@ -94,7 +94,7 @@ describe('OpenTelemetry application API selection', () => {
     })
   }
 
-  for (const mode of ['esm', 'eval']) {
+  for (const mode of /** @type {const} */ (['esm', 'eval'])) {
     it(`finds an application API without a CommonJS main module (${mode})`, async () => {
       await installApi()
       await run(`
@@ -129,7 +129,18 @@ describe('OpenTelemetry application API selection', () => {
     `)
   })
 
-  for (const mode of ['commonjs', 'esm', 'eval']) {
+  it('finds the version of an application API linked outside node_modules', async () => {
+    const applicationApi = await installApi('linked-api')
+    await mkdir(join(directory, 'node_modules/@opentelemetry'))
+    await symlink(applicationApi, join(directory, 'node_modules/@opentelemetry/api'), 'junction')
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      const applicationApi = '@opentelemetry/api'
+      ${recordingSpan}
+    `)
+  })
+
+  for (const mode of /** @type {const} */ (['commonjs', 'esm', 'eval'])) {
     it(`uses the entrypoint API ahead of an intercepted dependency API (${mode})`, async () => {
       const [, dependencyApi] = await Promise.all([
         installApi(),
@@ -158,6 +169,127 @@ describe('OpenTelemetry application API selection', () => {
       const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
       assert.equal(Object.keys(require.cache).some(filename =>
         filename.replaceAll('\\\\', '/').includes('/@opentelemetry/api/')), false)
+      ${nativeSpan}
+    `)
+  })
+
+  it('preserves the missing optional API error when no copy is available', async () => {
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      const Module = require('node:module')
+      const resolveFilename = Module._resolveFilename
+      Module._resolveFilename = function (request) {
+        if (request === '@opentelemetry/api') {
+          throw Object.assign(new Error("Cannot find module '@opentelemetry/api'"), { code: 'MODULE_NOT_FOUND' })
+        }
+        return resolveFilename.apply(this, arguments)
+      }
+      assert.throws(() => tracer.TracerProvider, { code: 'MODULE_NOT_FOUND' })
+      Module._resolveFilename = resolveFilename
+      ${nativeSpan}
+    `)
+  })
+
+  it('preserves registration through an API with an unsupported major', async () => {
+    const dependencyApi = await installApi()
+    const packageFile = join(dependencyApi, 'package.json')
+    const metadata = JSON.parse(await readFile(packageFile, 'utf8'))
+    await writeFile(packageFile, JSON.stringify({ ...metadata, version: '2.0.0' }))
+    for (const filename of ['version.cjs', 'internal/global-utils.cjs']) {
+      const versionFile = join(dependencyApi, dirname(apiEntrypoint), filename)
+      const versionSource = await readFile(versionFile, 'utf8')
+      await writeFile(versionFile, versionSource.replaceAll(metadata.version, '2.0.0'))
+    }
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      new tracer.TracerProvider().register()
+      const api = require(${JSON.stringify(dependencyApi)})
+      const provider = { getMeter () { return { marker: 'independent' } } }
+      assert.equal(api.metrics.setGlobalMeterProvider(provider), true)
+      assert.equal(api.metrics.getMeter('unsupported').marker, 'independent')
+      assert.equal(globalThis[Symbol.for('opentelemetry.js.api.1')]?.metrics, undefined)
+    `)
+  })
+
+  it('uses a configured propagator through the selected API', async () => {
+    await installApi()
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      const api = require('@opentelemetry/api')
+      const propagator = {
+        inject (context, carrier, setter) { setter.set(carrier, 'custom', 'value') },
+        extract (context) { return context },
+        fields () { return ['custom'] }
+      }
+      new tracer.TracerProvider().register({ propagator })
+      const carrier = {}
+      api.propagation.inject(api.context.active(), carrier)
+      assert.deepEqual(carrier, { custom: 'value' })
+    `)
+  })
+
+  it('refreshes baggage in a retained native span context', async () => {
+    await installApi()
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      new tracer.TracerProvider().register()
+      const api = require('@opentelemetry/api')
+      tracer.trace('native', span => {
+        const retained = api.context.active()
+        api.context.with(retained, () => {
+          assert.equal(api.context.active(), retained)
+          tracer.setBaggageItem('customer', 'value')
+          assert.equal(api.propagation.getActiveBaggage().getEntry('customer').value, 'value')
+          assert.equal(api.trace.getSpan(api.context.active()), api.trace.getSpan(retained))
+        })
+      })
+    `)
+  })
+
+  it('exposes native baggage before retaining an OpenTelemetry context', async () => {
+    await installApi()
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      new tracer.TracerProvider().register()
+      const api = require('@opentelemetry/api')
+      tracer.trace('native', () => {
+        tracer.setBaggageItem('customer', 'value')
+        assert.equal(api.propagation.getActiveBaggage().getEntry('customer').value, 'value')
+        assert.equal(api.trace.getActiveSpan().isRecording(), true)
+      })
+    `)
+  })
+
+  it('preserves a later explicit Datadog tracer provider registration', async () => {
+    await installApi()
+    await run(`
+      const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+      new tracer.TracerProvider().register()
+      let ended = 0
+      const provider = new tracer.TracerProvider({ spanProcessors: [{
+        onStart () {}, onEnd () { ended++ }, shutdown () {}, forceFlush () {}
+      }] })
+      provider.register()
+      require('@opentelemetry/api').trace.getTracer('replacement').startSpan('span').end()
+      assert.equal(ended, 1)
+    `)
+  })
+
+  it('does not load a configured API path for native tracing', async () => {
+    await run(`
+      const tracer = require('dd-trace').init({
+        plugins: false, runtimeMetrics: false, otelApiPath: '/missing/otel-api.cjs'
+      })
+      ${nativeSpan}
+    `)
+  })
+
+  it('preserves an explicit API path resolution failure', async () => {
+    await run(`
+      const tracer = require('dd-trace').init({
+        plugins: false, runtimeMetrics: false, otelApiPath: '/missing/otel-api.cjs'
+      })
+      assert.throws(() => tracer.TracerProvider, { code: 'MODULE_NOT_FOUND' })
       ${nativeSpan}
     `)
   })

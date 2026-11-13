@@ -229,6 +229,316 @@ describe('OpenTelemetry API version compatibility', function () {
   }
 })
 
+describe('OpenTelemetry API precedence', function () {
+  this.timeout(20_000)
+  let cwd
+
+  useSandbox(['@opentelemetry/api@1.4.1'], false)
+
+  before(async function () {
+    this.timeout(300_000)
+    cwd = sandboxCwd()
+    await Promise.all(['1.4.1', '1.9.0', '1.9.1', '1.10.0'].map(version => installApi(join(cwd, version), version)))
+  })
+
+  for (const [application, privateApi, dependency] of [
+    ['1.4.1', '1.10.0', '1.9.0'],
+    ['1.10.0', '1.4.1', '1.9.0'],
+    ['1.4.1', '1.9.0', '1.10.0'],
+    ['1.9.0', '1.9.1', '1.4.1'],
+    ['1.10.0', '1.10.0', '1.10.0'],
+  ]) {
+    for (const order of [
+      'api-first', 'tracer-first', 'cached-api-first', 'diag-first', 'dependency-diag-first', 'dependency-late',
+    ]) {
+      it(`records through ${application}/${privateApi}/${dependency} (${order})`, async () => {
+        const applicationPath = join(cwd, 'node_modules/@opentelemetry/api')
+        const privatePath = join(cwd, 'node_modules/dd-trace/node_modules/@opentelemetry/api')
+        const dependencyPath = join(cwd, 'dependency/node_modules/@opentelemetry/api')
+        await Promise.all([
+          [applicationPath, application], [privatePath, privateApi], [dependencyPath, dependency],
+        ].map(async ([destination, version]) => {
+          await rm(destination, { recursive: true, force: true })
+          await cp(join(cwd, version, 'node_modules/@opentelemetry/api'), destination, { recursive: true })
+        }))
+        const source = `
+          'use strict'
+          const assert = require('node:assert/strict')
+          const { createRequire } = require('node:module')
+          const order = ${JSON.stringify(order)}
+          const early = order === 'cached-api-first'
+            ? require('@opentelemetry/api').trace.getTracer('early') : undefined
+          const tracer = require('dd-trace').init({ plugins: false, runtimeMetrics: false })
+          const application = require('@opentelemetry/api')
+          const dependencyRequire = createRequire(${JSON.stringify(join(cwd, 'dependency/package.json'))})
+          const dependency = order === 'dependency-late' ? undefined : dependencyRequire('@opentelemetry/api')
+          const privateApi = createRequire(${JSON.stringify(join(cwd, 'node_modules/dd-trace/package.json'))})(
+            '@opentelemetry/api'
+          )
+          const apis = [application, privateApi]
+          if (dependency) apis.push(dependency)
+          const versions = ${JSON.stringify([application, privateApi, dependency])}
+          const registryVersion = order === 'diag-first' ? versions[0]
+            : order === 'dependency-diag-first' ? versions[2] : undefined
+          if (registryVersion) {
+            apis[order === 'diag-first' ? 0 : 2].diag.setLogger(console)
+          }
+          const pending = apis.map(api => api.trace.getTracer('pending'))
+          const ended = []
+          const provider = new tracer.TracerProvider({ spanProcessors: [{
+            onStart () {},
+            onEnd (span) { ended.push(span) },
+            shutdown () {},
+            forceFlush () {}
+          }] })
+          provider.register()
+          const selectedVersion = registryVersion ?? versions[0]
+          assert.equal(globalThis[Symbol.for('opentelemetry.js.api.1')].version, selectedVersion)
+          if (!dependency) {
+            const api = dependencyRequire('@opentelemetry/api')
+            apis.push(api)
+            pending.push(api.trace.getTracer('late-dependency'))
+          }
+          for (let i = 0; i < apis.length; i++) {
+            const api = apis[i]
+            const compatible = Number(versions[i].split('.')[1]) <= Number(selectedVersion.split('.')[1])
+            const recording = order !== 'dependency-late' || i !== 2 ||
+              Number(versions[i].split('.')[1]) <= Number(selectedVersion.split('.')[1])
+            const otelTracer = order === 'api-first' ? api.trace.getTracer('late') : pending[i]
+            otelTracer.startActiveSpan('span', span => {
+              assert.equal(span.isRecording(), recording, 'API ' + versions[i])
+              if (compatible && recording) {
+                assert.equal(api.trace.getActiveSpan() === span, true, 'active span for API ' + versions[i])
+                const carrier = {}
+                api.propagation.inject(api.context.active(), carrier)
+                assert.equal(carrier.traceparent.split('-')[1], span.spanContext().traceId)
+              }
+              span.end()
+              if (recording) assert.equal(ended.at(-1).spanContext().spanId, span.spanContext().spanId)
+            })
+          }
+          if (early) {
+            const span = early.startSpan('early')
+            assert.equal(span.isRecording(), true)
+            span.end()
+          }
+        `
+        const filename = join(cwd, 'multiple-apis.js')
+        await writeFile(filename, source)
+        await execFileAsync(process.execPath, [filename], {
+          cwd,
+          env: {
+            ...process.env,
+            DD_TRACE_AGENT_URL: 'http://127.0.0.1:1',
+            DD_TRACE_STARTUP_LOGS: 'false',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          },
+        })
+      })
+    }
+  }
+})
+
+describe('OpenTelemetry registration recovery', function () {
+  this.timeout(30_000)
+  let cwd
+
+  useSandbox([
+    '@opentelemetry/api@1.9.0',
+    '@opentelemetry/sdk-metrics@2.0.1',
+    '@opentelemetry/sdk-trace-base@2.0.1',
+    '@opentelemetry/context-async-hooks@2.0.1',
+  ], false, ['./integration-tests/opentelemetry/registration.js'])
+
+  before(async function () {
+    this.timeout(300_000)
+    cwd = sandboxCwd()
+    await Promise.all(['1.4.1', '1.9.0', '1.9.1', '1.10.0'].map(version => installApi(join(cwd, version), version)))
+  })
+
+  const metrics = [
+    {
+      application: '1.9.0',
+      privateApi: '1.9.0',
+      dependency: '1.10.0',
+      writer: 'application',
+      version: '1.9.0',
+      counts: [1, 1, 0],
+    },
+    {
+      application: '1.9.0',
+      privateApi: '1.10.0',
+      dependency: '1.10.0',
+      writer: 'dependency',
+      version: '1.9.0',
+      counts: [1, 0, 0],
+    },
+    {
+      application: '1.10.0',
+      privateApi: '1.9.0',
+      dependency: '1.9.0',
+      writer: 'dependency',
+      version: '1.10.0',
+      counts: [1, 1, 1],
+    },
+    {
+      application: '1.9.0',
+      privateApi: '1.9.1',
+      dependency: '1.9.0',
+      writer: 'private',
+      version: '1.9.0',
+      counts: [1, 1, 1],
+    },
+    {
+      application: '1.9.0',
+      privateApi: '1.9.0',
+      dependency: '1.10.0',
+      writer: 'application',
+      registry: 'dependency',
+      version: '1.10.0',
+      counts: [1, 1, 1],
+    },
+    {
+      application: '1.9.0',
+      privateApi: '1.9.0',
+      dependency: '1.10.0',
+      writer: 'application',
+      owner: 'dependency',
+      version: '1.10.0',
+      counts: [1, 1, 1],
+    },
+  ]
+  const cases = []
+  cases.push({
+    application: '1.9.0',
+    privateApi: '1.9.0',
+    dependency: '1.10.0',
+    writer: 'application',
+    registry: 'dependency',
+    version: '1.10.0',
+    signal: 'trace',
+    hiddenRegistry: true,
+    registerBridge: true,
+    recording: [true, false, false],
+  })
+  for (const native of [false, true]) {
+    for (const signal of ['metrics', 'trace']) {
+      cases.push({
+        application: '1.9.0',
+        privateApi: '1.9.0',
+        dependency: '1.9.0',
+        writer: 'application',
+        registry: 'application',
+        signal,
+        native,
+        afterWrite: true,
+      })
+    }
+  }
+  for (const scenario of metrics) {
+    const orders = ['tracer-first', 'cached-api-first', 'bridge-first']
+    if (!scenario.registry) orders.push('dependency-late')
+    for (const order of orders) cases.push({ ...scenario, signal: 'metrics', order, registered: true })
+  }
+  for (const signal of ['trace', 'context', 'propagation']) {
+    for (const order of ['tracer-first', 'cached-api-first', 'bridge-first']) {
+      cases.push({
+        application: '1.9.0',
+        privateApi: '1.9.1',
+        dependency: '1.10.0',
+        writer: 'application',
+        registry: 'dependency',
+        version: '1.10.0',
+        signal,
+        order,
+        registered: true,
+      })
+    }
+  }
+  for (const native of [false, true]) {
+    cases.push({
+      application: '1.9.0',
+      privateApi: '1.9.0',
+      dependency: '1.10.0',
+      writer: 'application',
+      registry: 'dependency',
+      version: '1.10.0',
+      signal: 'metrics',
+      active: false,
+      native,
+      registered: false,
+      counts: [0, 0, 0],
+    })
+  }
+  cases.push({ ...metrics[4], signal: 'metrics', duplicate: true, registered: false, counts: [0, 0, 0] })
+  cases.push({ ...metrics[5], signal: 'metrics', ownerEnv: true, registered: true })
+  cases.push({ ...metrics[4], signal: 'metrics', hiddenRegistry: true, registered: false, counts: [0, 0, 0] })
+  cases.push({
+    ...metrics[4],
+    signal: 'metrics',
+    duplicate: true,
+    throw: true,
+    registered: false,
+    counts: [0, 0, 0],
+  })
+  cases.push({
+    application: '1.10.0',
+    privateApi: '1.9.0',
+    dependency: '1.9.0',
+    writer: 'application',
+    registry: 'dependency',
+    version: '1.9.0',
+    signal: 'metrics',
+    order: 'bridge-first',
+    registered: true,
+    counts: [0, 1, 1],
+  })
+  for (const argument of ['absent', 'undefined', 'null', 'false', 'zero', 'empty', 'nan', 'string', 'true']) {
+    cases.push({ ...metrics[4], signal: 'metrics', argument, registered: false })
+  }
+  for (const signal of ['trace', 'context', 'propagation']) {
+    cases.push({ ...metrics[4], signal, argument: 'undefined', registered: false })
+  }
+  cases.push({
+    privateApi: '1.4.1',
+    dependency: '1.10.0',
+    writer: 'dependency',
+    version: '1.10.0',
+    signal: 'trace',
+    registered: true,
+  })
+
+  for (const [index, scenario] of cases.entries()) {
+    it(`preserves registration and output ${index}: ${JSON.stringify(scenario)}`, async () => {
+      const destinations = [
+        [join(cwd, 'node_modules/@opentelemetry/api'), scenario.application],
+        [join(cwd, 'node_modules/dd-trace/node_modules/@opentelemetry/api'), scenario.privateApi],
+        [join(cwd, 'dependency/node_modules/@opentelemetry/api'), scenario.dependency],
+      ]
+      await Promise.all(destinations.map(async ([destination, version]) => {
+        await rm(destination, { recursive: true, force: true })
+        if (version) await cp(join(cwd, version, 'node_modules/@opentelemetry/api'), destination, { recursive: true })
+      }))
+      const dependencyRequire = createRequire(join(cwd, 'dependency/package.json'))
+      await execFileAsync(process.execPath, [join(cwd, 'registration.js'), JSON.stringify(scenario)], {
+        cwd,
+        env: {
+          ...process.env,
+          DD_TRACE_AGENT_URL: 'http://127.0.0.1:1',
+          DD_TRACE_STARTUP_LOGS: 'false',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          DD_TRACE_OTEL_ENABLED: 'false',
+          DD_METRICS_OTEL_ENABLED: 'false',
+          DD_LOGS_OTEL_ENABLED: 'false',
+          DD_TRACE_OTEL_API_PATH: scenario.ownerEnv ? dependencyRequire.resolve('@opentelemetry/api') : '',
+        },
+      })
+    })
+  }
+})
+
 describe('OpenTelemetry bundled API', function () {
   this.timeout(60_000)
   let cwd
