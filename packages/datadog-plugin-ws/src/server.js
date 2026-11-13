@@ -44,13 +44,13 @@ class WSServerPlugin extends TracingPlugin {
     const host = options.headers.host
     const url = req.url
     const indexOfParam = url.indexOf('?')
-    const route = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
+    const path = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const requestTarget = otelSemantics
       ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, url)
-      : route
+      : path
     const uri = `${protocol}//${host}${requestTarget}`
-    const resourceName = otelSemantics ? otelHttpResourceName(options.method) : `${options.method} ${route}`
+    const resourceName = otelSemantics ? otelHttpResourceName(options.method) : `${options.method} ${path}`
 
     ctx.args = { options }
 
@@ -84,7 +84,7 @@ class WSServerPlugin extends TracingPlugin {
     ctx.span = span
 
     ctx.socket.spanTags = {
-      messageResource: `websocket ${route}`,
+      messageResource: `websocket ${path}`,
       'resource.name': resourceName,
       'service.name': service,
     }
