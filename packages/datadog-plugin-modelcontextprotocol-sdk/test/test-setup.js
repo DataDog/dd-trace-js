@@ -8,13 +8,8 @@ class ModelcontextprotocolSdkTestSetup {
 
   async setup (clientModule, versionMod) {
     this.#versionMod = versionMod
-    const path = require('path')
     const { Client } = clientModule
-    // Use versionMod.getPath to resolve the SDK root since the package exports map
-    // remaps @modelcontextprotocol/sdk/package.json to dist/cjs/package.json
-    const clientEntryPath = versionMod.getPath('@modelcontextprotocol/sdk/client')
-    const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
-    const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
+    const { McpServer } = versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
     const { InMemoryTransport } = versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
 
     this.#server = new McpServer({ name: 'test-server', version: '1.0.0' })
