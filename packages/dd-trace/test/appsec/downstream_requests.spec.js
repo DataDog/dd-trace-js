@@ -246,6 +246,32 @@ describe('appsec downstream_requests', () => {
     })
   })
 
+  describe('extractFetchRequestData', () => {
+    it('collects the method and headers of a fetch request', () => {
+      const request = new Request('http://example.com/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Custom': 'a',
+        },
+      })
+
+      assert.deepStrictEqual(downstream.extractFetchRequestData(request), {
+        [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+        [addresses.HTTP_OUTGOING_HEADERS]: {
+          'content-type': 'application/json',
+          'x-custom': 'a',
+        },
+      })
+    })
+
+    it('omits headers when the fetch request has none', () => {
+      assert.deepStrictEqual(downstream.extractFetchRequestData(new Request('http://example.com/')), {
+        [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+      })
+    })
+  })
+
   describe('extractResponseData', () => {
     let res
 

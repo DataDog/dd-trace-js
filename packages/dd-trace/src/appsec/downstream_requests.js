@@ -212,6 +212,26 @@ function extractRequestData (ctx) {
 }
 
 /**
+ * Extracts request data from an outgoing fetch request for WAF analysis.
+ * @param {Request} request outgoing fetch request.
+ * @returns {object} a map of addresses and request data.
+ */
+function extractFetchRequestData (request) {
+  /** @type {Record<string, unknown>} */
+  const addresses = {
+    [HTTP_OUTGOING_METHOD]: request.method,
+  }
+
+  // Header names of a fetch request are already lowercase.
+  const headers = Object.fromEntries(request.headers)
+  if (!isEmpty(headers)) {
+    addresses[HTTP_OUTGOING_HEADERS] = headers
+  }
+
+  return addresses
+}
+
+/**
  * Extracts response data for WAF analysis.
  * @param {import('http').IncomingMessage} res downstream response object.
  * @param {Buffer|string|object|null} responseBody response body.
@@ -341,5 +361,6 @@ module.exports = {
   incrementDownstreamAnalysisCount,
   extractMimeType,
   extractRequestData,
+  extractFetchRequestData,
   extractResponseData,
 }
