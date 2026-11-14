@@ -3586,6 +3586,7 @@ describe('Plugin', () => {
 
             assert.strictEqual(spans.length, 1)
             assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].resource, '{hello}')
             assert.strictEqual(spans[0].error, 1)
             assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
             sinon.assert.calledOnce(config.hooks.execute)
