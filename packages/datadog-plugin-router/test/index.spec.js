@@ -14,6 +14,16 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
+/** @param {string} version */
+function hasRequestLocalRoutes (version) {
+  try {
+    return typeof require(`../../../versions/router@${version}`).get('router/lib/symbols').matchedRoute === 'symbol'
+  } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND' || !error.message.includes("'router/lib/symbols'")) throw error
+    return false
+  }
+}
+
 describe('Plugin', () => {
   let Router
   let appListener
@@ -152,6 +162,98 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/parent/child/123`)
               .catch(done)
           })
+        })
+
+        for (const { childPaths, route } of [
+          { childPaths: ['/child/:id', '/kid/:id'], route: '/guardian/kid/:id' },
+          {
+            childPaths: [/^\/child\/([^/]+)/, /^\/kid\/([^/]+)/],
+            route: '/guardian(/^\\/kid\\/([^/]+)/)',
+          },
+        ]) {
+          it(`should add the matching route from ${childPaths} to the request span`, async () => {
+            const router = Router()
+            const childRouter = Router()
+            childRouter.use(childPaths, (req, res) => res.end('matched'))
+            router.use(['/parent', '/guardian'], childRouter)
+
+            appListener = server(router).listen(0, 'localhost')
+            await once(appListener, 'listening')
+            const [, response] = await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const root = sort(traces[0])[0]
+                assert.strictEqual(root.resource, `GET ${route}`)
+                assert.strictEqual(root.meta['http.route'], route)
+              }),
+              httpRequest.get(`http://localhost:${appListener.address().port}/guardian/kid/123`),
+            ])
+            assert.strictEqual(response.data, 'matched')
+          })
+        }
+
+        it('should keep matched routes local while parameter callbacks overlap', async function () {
+          if (!hasRequestLocalRoutes(version)) this.skip()
+
+          const router = Router()
+          const gates = new Map()
+          let allEntered
+          const entered = new Promise(resolve => { allEntered = resolve })
+          router.param('id', async (req, res, next, id) => {
+            await new Promise(resolve => {
+              gates.set(id, resolve)
+              if (gates.size === 2) allEntered()
+            })
+            next()
+          })
+          router.use(['/first/:id', '/second/:id'], (req, res) => res.end(req.params.id))
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const routes = new Set()
+          const traces = agent.assertSomeTraces(batch => {
+            for (const trace of batch) {
+              routes.add(sort(trace)[0].resource)
+            }
+            assert.deepStrictEqual(routes, new Set(['GET /first/:id', 'GET /second/:id']))
+          })
+          const responses = Promise.all([
+            httpRequest.get(`http://localhost:${appListener.address().port}/first/1`),
+            httpRequest.get(`http://localhost:${appListener.address().port}/second/2`),
+          ])
+          const [results] = await Promise.all([
+            responses,
+            traces,
+            (async () => {
+              await entered
+              for (const id of ['2', '1']) {
+                const resume = gates.get(id)
+                resume()
+              }
+            })(),
+          ])
+          assert.deepStrictEqual(results.map(response => response.data), [1, 2])
+        })
+
+        it('should use the native case-sensitive pattern for error handlers', async function () {
+          if (!hasRequestLocalRoutes(version)) this.skip()
+          const router = Router({ caseSensitive: true })
+          const failure = new Error('failure')
+          router.use((req, res, next) => next(failure))
+          router.use(['/KID/:id', '/kid/:id'], (error, req, res, next) => {
+            assert.strictEqual(error, failure)
+            res.end(error.message)
+          })
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const [, response] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const root = sort(traces[0])[0]
+              assert.strictEqual(root.resource, 'GET /kid/:id')
+              assert.strictEqual(root.meta['http.route'], '/kid/:id')
+            }),
+            httpRequest.get(`http://localhost:${appListener.address().port}/kid/123`),
+          ])
+          assert.strictEqual(response.data, 'failure')
         })
 
         it('should keep req.next equal to the next passed to middleware', async () => {
