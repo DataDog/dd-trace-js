@@ -6,7 +6,6 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
-const { getSegment } = require('../../dd-trace/src/util')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
@@ -30,12 +29,11 @@ class WSClosePlugin extends TracingPlugin {
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanTags
-    const path = getSegment(spanTags['resource.name'], ' ', 1)
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
       meta: {
-        'resource.name': `websocket ${path}`,
+        'resource.name': spanTags.messageResource,
         'span.type': 'websocket',
         'span.kind': spanKind,
         'websocket.close.code': code,
@@ -49,7 +47,7 @@ class WSClosePlugin extends TracingPlugin {
 
     if (isPeerClose && traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
       span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
-      span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
+      span.setTag('_dd.dm.resource', spanTags['resource.name'])
       span.setTag('_dd.dm.inherited', 1)
     }
 
