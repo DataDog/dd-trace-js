@@ -13,6 +13,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { storage } = require('../../datadog-core')
+const { cpuProfilingAvailable } = require('../src/profiling/runtime-capabilities')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -220,6 +221,7 @@ describe('TracerProxy', () => {
 
     profiler = {
       isStarted: sinon.stub().returns(true),
+      getRunningProfileTypes: sinon.stub().returns([]),
       start: sinon.stub().returns(true),
       stop: sinon.spy(),
       setCustomLabelKeys: sinon.spy(),
@@ -755,6 +757,39 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(runtimeMetrics.start)
+      })
+
+      it('should subscribe to the profiling remote config product even when profiling is disabled', () => {
+        proxy.init()
+
+        sinon.assert.calledWith(rc.subscribeProducts, 'APM_PROFILING')
+        const handleProfiling = handlers.get('APM_PROFILING')
+        handleProfiling({
+          toApply: [{
+            product: 'APM_PROFILING',
+            id: 'profiling-config',
+            path: 'datadog/2/APM_PROFILING/profiling-config/config',
+            file: { profilers: { heapSize: true } },
+          }],
+          toModify: [],
+          toUnapply: [],
+          ack: sinon.spy(),
+          error: sinon.spy(),
+        })
+
+        // Nothing runs locally, so only the requested profile type is turned on. CPU time isn't mapped
+        // where CPU profiling is unavailable, and allocations are turned off too where allocation
+        // profiling is available; the profiling remote config spec covers both.
+        sinon.assert.calledOnce(profiler.getRunningProfileTypes)
+        sinon.assert.calledWith(
+          config.setRemoteConfig,
+          sinon.match({
+            DD_PROFILING_WALLTIME_ENABLED: 'false',
+            DD_PROFILING_CPU_ENABLED: cpuProfilingAvailable ? 'false' : undefined,
+            DD_PROFILING_HEAP_ENABLED: 'true',
+            DD_PROFILING_ENABLED: 'true',
+          })
+        )
       })
 
       it('should support applying remote config', () => {

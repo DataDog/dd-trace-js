@@ -2,6 +2,7 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
+const applyRemoteConfig = require('./remote-config-layers')
 
 module.exports = {
   enable,
@@ -181,7 +182,7 @@ function enable (rc, config, onConfigUpdated) {
       transaction.ack(item.path)
     }
 
-    config.setRemoteConfig(sdkConfigManager.getMergedConfig())
+    applyRemoteConfig(config, 'APM_TRACING', sdkConfigManager.getMergedConfig())
 
     onConfigUpdated()
   })

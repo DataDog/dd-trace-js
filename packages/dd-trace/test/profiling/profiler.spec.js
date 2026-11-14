@@ -186,6 +186,30 @@ describe('profiler', function () {
       sinon.assert.calledOnce(spaceProfiler.stop)
     })
 
+    it('should report the types of the running profilers only while running', async () => {
+      assert.deepStrictEqual(profiler.getRunningTypes(), [])
+
+      await profiler.start(makeStartOptions())
+      assert.deepStrictEqual(profiler.getRunningTypes(), ['wall', 'space'])
+
+      profiler.stop()
+      assert.deepStrictEqual(profiler.getRunningTypes(), [])
+    })
+
+    it('should report allocations when the space profiler collects them', async () => {
+      spaceProfiler.collectsAllocations = true
+      await profiler.start(makeStartOptions())
+
+      assert.deepStrictEqual(profiler.getRunningTypes(), ['wall', 'space', 'allocations'])
+    })
+
+    it('should report CPU time when the wall profiler collects it', async () => {
+      wallProfiler.collectsCpuTime = true
+      await profiler.start(makeStartOptions())
+
+      assert.deepStrictEqual(profiler.getRunningTypes(), ['wall', 'cpu', 'space'])
+    })
+
     it('should propagate custom label keys to the started profilers', async () => {
       wallProfiler.setCustomLabelKeys = sinon.stub()
       await profiler.start(makeStartOptions())
