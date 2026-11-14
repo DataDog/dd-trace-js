@@ -407,6 +407,7 @@ Playback with missing per-response start events remains a live validation gap.
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -500,6 +501,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [trpc](./interfaces/plugins.trpc.html)
 * [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)
@@ -1030,8 +1032,8 @@ preserved in serial and parallel workers. Native Mocha retries remain available 
 
 ## Cucumber test automation exclusions
 
-Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
-`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+Use the native Gherkin tags `@datadog_prevent_failure_suppression` and
+`@datadog_no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
 to every example. These are tracer declaration annotations, resolved before
 Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
 settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,

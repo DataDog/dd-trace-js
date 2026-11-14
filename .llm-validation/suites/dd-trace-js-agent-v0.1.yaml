@@ -14,12 +14,12 @@ cases:
       Which package manager and commands should I use? Should I run the root test script too?
       Answer in at most 4 bullets.
     expected_criteria:
-      - Uses yarn install to install dependencies.
+      - Uses bun install to install dependencies.
       - Runs the changed spec with ./node_modules/.bin/mocha path/to/test.spec.js.
-      - Uses npm, not yarn, for any test script it recommends.
+      - Uses npm, not bun or yarn, for any test script it recommends.
       - Does not recommend root npm test because it is intentionally disabled.
     bad_signals:
-      - Uses yarn to run a test script.
+      - Uses bun or yarn to run a test script.
       - Recommends root npm test.
       - Runs a broad suite before the changed spec.
 

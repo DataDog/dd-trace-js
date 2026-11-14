@@ -651,12 +651,15 @@ for (const version of versions) {
               }
             }
 
-            it('submits correlated logs from supported loggers', async () => {
+            it('submits correlated logs from supported loggers and the global console', async () => {
               await runScenario('automaticLogSubmission', 1, payloads => {
                 const logRequests = getLogRequests(payloads)
-                const test = getEvents(payloads).find(event => event.type === 'test').content
+                const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+                assert.strictEqual(tests.length, 2)
+                const test = tests.find(test => test.meta[TEST_SUITE] === 'automatic-log-submission.e2e.js')
                 const expectedUrls = new Set(loggerNames.map(loggerName =>
                   `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
+                expectedUrls.add('/api/v2/logs?ddsource=nodejs&service=my-service')
 
                 assert.ok(logRequests.length > 0)
                 for (const logRequest of logRequests) {
@@ -688,6 +691,21 @@ for (const version of versions) {
                   assert.ok(afterHookLogMessage)
                   assert.strictEqual(afterHookLogMessage.level, expectedLevel)
                 }
+
+                const consoleLogRequests = logRequests.filter(({ url }) =>
+                  url === '/api/v2/logs?ddsource=nodejs&service=my-service')
+                const messages = consoleLogRequests.flatMap(({ logMessage }) => logMessage)
+                const message = messages.find(({ message }) =>
+                  message === 'WebdriverIO console warning: details')
+                const consoleTest = tests.find(test =>
+                  test.meta[TEST_SUITE] === 'automatic-console-log-submission.e2e.js')
+
+                assert.ok(message)
+                assert.strictEqual(message.status, 'warn')
+                assert.deepStrictEqual(Object.keys(message.dd).sort(), ['service', 'span_id', 'trace_id'])
+                assert.strictEqual(message.dd.service, 'my-service')
+                assert.strictEqual(message.dd.span_id, consoleTest.span_id.toString())
+                assert.strictEqual(message.dd.trace_id, consoleTest.trace_id.toString())
               }, {
                 DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
                 DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
@@ -695,28 +713,6 @@ for (const version of versions) {
               })
 
               assertLoggerOutput()
-            })
-
-            it('submits correlated logs from the global console', async () => {
-              await runScenario('automaticConsoleLogSubmission', 1, payloads => {
-                const logRequests = getLogRequests(payloads).filter(({ url }) =>
-                  url === '/api/v2/logs?ddsource=nodejs&service=my-service')
-                const messages = logRequests.flatMap(({ logMessage }) => logMessage)
-                const message = messages.find(({ message }) =>
-                  message === 'WebdriverIO console warning: details')
-                const test = getEvents(payloads).find(event => event.type === 'test').content
-
-                assert.ok(message)
-                assert.strictEqual(message.status, 'warn')
-                assert.deepStrictEqual(Object.keys(message.dd).sort(), ['service', 'span_id', 'trace_id'])
-                assert.strictEqual(message.dd.service, 'my-service')
-                assert.strictEqual(message.dd.span_id, test.span_id.toString())
-                assert.strictEqual(message.dd.trace_id, test.trace_id.toString())
-              }, {
-                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                DD_SERVICE: 'my-service',
-              })
             })
 
             it('does not submit logs when automatic submission is disabled', async () => {
@@ -903,13 +899,15 @@ for (const version of versions) {
           }, {}, 1)
         })
 
-        it('does not apply locally disabled EFD or Test Management policies', async () => {
+        it('does not apply locally disabled EFD, ATR or Test Management policies', async () => {
           receiver.setSettings({
             early_flake_detection: {
               enabled: true,
               faulty_session_threshold: 100,
               slow_test_retries: { '5s': 2 },
             },
+            flaky_test_retries_count: 2,
+            flaky_test_retries_enabled: true,
             known_tests_enabled: true,
             test_management: {
               attempt_to_fix_retries: 2,
@@ -941,12 +939,17 @@ for (const version of versions) {
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const atrTests = tests.filter(test => test.meta[TEST_SUITE] === 'atr-always-fail.e2e.js')
             const efdTests = tests.filter(test => test.meta[TEST_SUITE] === 'efd.e2e.js')
             const managedTests = tests.filter(test => test.meta[TEST_SUITE] === 'test-management.e2e.js')
 
             assert.strictEqual(session.meta[TEST_EARLY_FLAKE_ENABLED], undefined)
             assert.strictEqual(session.meta[TEST_MANAGEMENT_ENABLED], undefined)
             assert.strictEqual(countRequests(payloads, TEST_MANAGEMENT_PATH), 0)
+            assert.strictEqual(atrTests.length, 1)
+            assert.strictEqual(atrTests[0].meta[TEST_STATUS], 'fail')
+            assert.strictEqual(atrTests[0].meta[TEST_IS_RETRY], undefined)
+            assert.strictEqual(atrTests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
             assert.strictEqual(efdTests.length, 1)
             assert.strictEqual(efdTests[0].meta[TEST_IS_NEW], 'true')
             assert.strictEqual(efdTests[0].meta[TEST_IS_RETRY], undefined)
@@ -959,6 +962,7 @@ for (const version of versions) {
             }
           }, {
             DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
             DD_TEST_MANAGEMENT_ENABLED: '0',
           }, 1)
         })
@@ -1291,26 +1295,6 @@ for (const version of versions) {
             }, 1)
           })
         }
-
-        it('does not retry ATR failures when locally disabled', async () => {
-          receiver.setSettings({
-            flaky_test_retries_count: 2,
-            flaky_test_retries_enabled: true,
-          })
-
-          await runScenario('atrAlwaysFails', 1, payloads => {
-            const tests = getEvents(payloads)
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-
-            assert.strictEqual(tests.length, 1)
-            assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
-            assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
-            assert.strictEqual(tests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-          }, {
-            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-          }, 1)
-        })
 
         it('applies disabled, quarantined, and attempt-to-fix policies', async () => {
           receiver.setSettings({

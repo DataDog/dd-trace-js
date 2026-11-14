@@ -1,7 +1,8 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
+const { existsSync, readFileSync, writeFileSync } = require('fs')
+const { mkdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join } = require('path')
@@ -15,16 +16,14 @@ const {
   getInstrumentationNames,
 } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const { dependencies: latests, resolutions } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
-const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
 
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
-// descriptors (EMFILE). yarn install itself dominates the wall-clock, so a moderate cap costs nothing.
+// descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -32,6 +31,15 @@ const FS_CONCURRENCY = 50
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+// Names of every package the synthesized workspaces install, both directly (via
+// `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
+// Bun runs lifecycle scripts only for packages listed in the workspace root's
+// `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
+// `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
+// `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
+// Bun's `trustedDependencies` does not transitively allow nested packages; externals.js
+// declares any transitive native builders a sandbox needs.
+const trustedDependencies = new Set()
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
@@ -49,12 +57,17 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  // Bun reuses ABI-specific native builds after Node changes. Force their postinstalls before reusing this tree.
+  const nodeAbiFile = join(__dirname, '..', 'versions', '.node-abi')
+  const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : undefined
+  const force = recordedAbi !== undefined && recordedAbi !== process.versions.modules
   await assertPrerequisites()
-  install()
+  install(force)
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  // The second install only does something when peer-dependency patching actually changed a manifest. Targeted
+  // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
-  if (changed) install()
+  if (changed) install(force)
+  writeFileSync(nodeAbiFile, process.versions.modules)
 }
 
 async function assertPrerequisites () {
@@ -64,32 +77,62 @@ async function assertPrerequisites () {
 
   const packages = collectPackages(moduleNames)
 
-  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
-    assertPackage(name, version, range, external))
+  applyExternalConfiguration(moduleNames, packages)
+  await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
 }
 
 /**
+ * @param {string[]} moduleNames
+ * @param {Array<{ name: string }>} packages
+ */
+function applyExternalConfiguration (moduleNames, packages) {
+  // A plugin can install a differently named package (for example genai installs @google/genai).
+  // Apply declarations for both identities before writing the root manifest that owns Bun's lifecycle trust.
+  const activeNames = new Set(moduleNames)
+  for (const { name } of packages) activeNames.add(name)
+
+  for (const name of activeNames) {
+    const configurations = externals[name]
+    if (!configurations) continue
+
+    for (const external of configurations) {
+      if (external.dep) trustedDependencies.add(external.name)
+      if (external.trustedDependencies) {
+        for (const trustedDependency of external.trustedDependencies) {
+          trustedDependencies.add(trustedDependency)
+        }
+      }
+    }
+  }
+}
+
+/**
  * Build the ordered, de-duplicated set of workspace folders to generate. A version that is referenced under several
  * notations (or by both an internal and an external entry) is generated once; internal entries are processed first so
- * the nohoisted (isolated) variant wins for any shared folder.
+ * the instrumentation declaration wins for any shared folder.
  *
  * @param {string[]} moduleNames
- * @returns {Array<{ name: string, version: string|null, range: string, external: boolean }>}
+ * @returns {Array<{ name: string, version: string|null, range: string }>}
  */
 function collectPackages (moduleNames) {
   const seen = new Set()
-  /** @type {Array<{ name: string, version: string|null, range: string, external: boolean }>} */
+  /** @type {Array<{ name: string, version: string|null, range: string }>} */
   const packages = []
 
-  const addFolder = (name, version, range, external) => {
+  /**
+   * @param {string} name
+   * @param {string|null} version
+   * @param {string} range
+   */
+  const addFolder = (name, version, range) => {
     // File-path requires are resolved from disk; their non-path counterparts already cover them.
     if (isRelativeRequire(name)) return
     const key = basename(name, version)
     if (seen.has(key)) return
     seen.add(key)
-    packages.push({ name, version, range, external })
+    packages.push({ name, version, range })
   }
 
   /**
@@ -120,10 +163,10 @@ function collectPackages (moduleNames) {
 
       // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
       // setup and several plugin specs.
-      if (unversioned) addFolder(name, null, unversioned, external)
+      if (unversioned) addFolder(name, null, unversioned)
 
       for (const { versionKey } of versionList) {
-        addFolder(name, versionKey, versionKey, external)
+        addFolder(name, versionKey, versionKey)
       }
     }
   }
@@ -149,12 +192,10 @@ async function assertFolder (name, version) {
 }
 
 /**
- * @param {string} name
- * @param {string|null} version
- * @param {string} dependencyVersionRange
- * @param {boolean} external
+ * @param {{ name: string, version: string|null, range: string }} entry
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage ({ name, version, range: dependencyVersionRange }) {
+  trustedDependencies.add(name)
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange),
   }
@@ -164,16 +205,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-  }
-
-  if (name === 'aerospike') {
-    pkg.installConfig = {
-      hoistingLimits: 'workspaces',
-    }
-  } else if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**'],
-    }
   }
 
   addFolderToWorkspaces(name, version)
@@ -192,39 +223,14 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
  * @returns {Promise<boolean>} Whether any manifest changed (and therefore a second install is required).
  */
 async function assertPeerDependencies (rootFolder) {
-  const folders = await collectPeerDependencyFolders(rootFolder)
+  const folders = []
+  for (const workspace of workspaces) {
+    const versionStart = workspace.indexOf('@', 1)
+    const externalName = versionStart === -1 ? workspace : workspace.slice(0, versionStart)
+    if (externalDeps.has(externalName)) folders.push({ folder: join(rootFolder, workspace), externalName })
+  }
   const changes = await mapWithConcurrency(folders, FS_CONCURRENCY, patchPeerDependencies)
   return changes.some(Boolean)
-}
-
-/**
- * Walk the generated tree and return the leaf workspace folders that have external peer dependencies to patch.
- *
- * @param {string} rootFolder
- * @param {string} [parent]
- * @returns {Promise<Array<{ folder: string, externalName: string }>>}
- */
-async function collectPeerDependencyFolders (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
-  const folders = []
-
-  for (const entry of entries) {
-    const current = join(rootFolder, entry)
-
-    // eslint-disable-next-line no-await-in-loop
-    const folderStat = await lstat(current)
-    if (!folderStat.isDirectory() || entry === 'node_modules' || !isGeneratedWorkspace(entry, parent)) continue
-    if (entry.startsWith('@')) {
-      // eslint-disable-next-line no-await-in-loop
-      folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))
-      continue
-    }
-
-    const externalName = join(parent, entry.split('@', 1)[0])
-    if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
-  }
-
-  return folders
 }
 
 /**
@@ -237,39 +243,50 @@ async function patchPeerDependencies ({ folder, externalName }) {
   const versionPkgJson = JSON.parse(before)
 
   let pkgJson
+  const requireFromWorkspace = createRequire(join(folder, 'package.json'))
 
-  for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+  for (const { dep, name, node, forced, version, from } of externalDeps.get(externalName)) {
     if (node && !semver.satisfies(process.versions.node, node)) {
       continue
     }
     if (!pkgJson) {
-      const requireFromWorkspace = createRequire(join(folder, 'package.json'))
       const nodeModulesPaths = requireFromWorkspace.resolve.paths(externalName)
       pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
     }
 
-    for (const section of ['devDependencies', 'peerDependencies']) {
+    for (const section of ['peerDependencies', 'devDependencies']) {
       if (pkgJson[section]?.[name]) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
+        } else if (version) {
+          versionPkgJson.dependencies[name] = getCappedRange(name, version)
         } else {
           const declared = pkgJson[section][name]
-          versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
+          const range = declared.startsWith('workspace:')
             // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
             // cannot resolve outside the source repo, so fall back to the pinned compatible version.
-            ? (latests[name] ?? '*')
+            ? ''
             : declared.includes('||')
               // Use the first version in the list (as npm does by default)
               ? declared.split('||', 1)[0].trim()
               // Only one version available so use that.
               : declared
+          versionPkgJson.dependencies[name] = getCappedRange(name, range)
         }
         break
       }
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      versionPkgJson.dependencies[name] = latests[name]
+      let declaredRange = pkgJson.dependencies?.[name]
+      if (from) {
+        const requireFromPackage = createRequire(requireFromWorkspace.resolve(externalName))
+        const dependency = requirePackageJson(from, { paths: requireFromPackage.resolve.paths(from) })
+        declaredRange = dependency.dependencies?.[name]
+      }
+      // Preserve the client's dependency range so older SDKs do not receive incompatible transitive majors.
+      const range = version ?? declaredRange ?? ''
+      versionPkgJson.dependencies[name] = getCappedRange(name, range)
     }
   }
 
@@ -281,35 +298,31 @@ async function patchPeerDependencies ({ folder, externalName }) {
 }
 
 /**
- * Only inspect workspaces generated for the current install run.
- * This avoids stale folders in `versions/` from breaking targeted installs.
- *
- * @param {string} entry
- * @param {string} [parent]
- */
-function isGeneratedWorkspace (entry, parent = '') {
-  const workspaceName = parent ? join(parent, entry) : entry
-
-  if (entry.startsWith('@')) {
-    for (const workspace of workspaces) {
-      if (workspace.startsWith(`${workspaceName}/`)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  return workspaces.has(workspaceName)
-}
-
-/**
  * @param {string} name
  * @param {string|null} version
  */
 async function assertIndex (name, version) {
+  // `require.resolve('<name>/package.json')` works for the common case but
+  // throws `ERR_PACKAGE_PATH_NOT_EXPORTED` for packages that ship an `exports`
+  // map without a `./package.json` entry (moleculer, react, ...). Walking
+  // `module.paths` mirrors `requirePackageJson` and stays exports-blind.
   const index = `'use strict'
 
+const path = require('path')
+const fs = require('fs')
+
 const requirePackageJson = require('${requirePackageJsonPath}')
+
+/**
+ * @param {string} id
+ */
+function findPkgJsonPath (id) {
+  for (const modulePath of module.paths) {
+    const candidate = path.join(modulePath, id, 'package.json')
+    if (fs.existsSync(candidate)) return candidate
+  }
+  throw new Error('could not find ' + id + '/package.json')
+}
 
 module.exports = {
   /**
@@ -332,7 +345,7 @@ module.exports = {
    * @param {string} [id] The module id to resolve.
    * @returns {string | never} The resolved package.json path.
    */
-  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
+  pkgJsonPath (id) { return findPkgJsonPath(id || '${name}') },
   /**
    * Resolve the package's version for a module id.
    *
@@ -351,32 +364,26 @@ async function assertWorkspaces () {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    resolutions,
     workspaces: {
       packages: [...workspaces].sort(),
     },
+    trustedDependencies: [...trustedDependencies].sort(),
   }, null, 2) + '\n')
 }
 
 /**
- * Install the generated versions/ workspaces.
- *
- * Some workspaces download large prebuilt binaries at postinstall time (e.g. Electron pulls one archive per major
- * from GitHub's release CDN), which intermittently fail with 5xx gateway errors. Retry with backoff so a brief CDN
- * outage doesn't fail the whole job.
+ * @param {boolean} [force]
  */
-function install () {
+function install (force = false) {
   try {
-    retry(() => exec('yarn --ignore-engines', { cwd: folder() }), {
-      onRetry: (error, attempt, delayMs) => process.stderr.write(
-        `yarn install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
-      ),
-    })
+    exec(`bun install --trust${force ? ' --force' : ''}`, { cwd: folder() })
+    // Install can reuse an older transitive version for a workspace range. Update each workspace to its own ceiling.
+    if (workspaces.size) exec('bun update --recursive --trust', { cwd: folder() })
   } catch (error) {
-    // A failure that outlasts the retries is most often an unresolvable version: a declared range spans a major
-    // version that was never published. Point at the fix instead of leaving a bare yarn error.
+    // A failure is most often an unresolvable version: a declared range spans a major version that was never
+    // published. Point at the fix instead of leaving a bare bun error.
     throw new Error(
-      'yarn failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
+      'bun failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
       'major version that was never published (non-consecutive majors), add that package to ' +
       '`nonConsecutiveMajorPackages` in packages/dd-trace/test/plugins/versions/index.js (or split the range) so its ' +
       'in-between majors are not installed.\n' +

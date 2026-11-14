@@ -600,6 +600,7 @@ tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('supabase');
 tracer.use('tedious');
+tracer.use('trpc');
 tracer.use('typesafe');
 tracer.use('typesafe', { llmobs: false });
 tracer.use('undici');

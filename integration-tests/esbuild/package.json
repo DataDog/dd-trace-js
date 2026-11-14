@@ -10,7 +10,7 @@
     "built": "DD_TRACE_DEBUG=true node ./out.js",
     "built:esm": "DD_TRACE_DEBUG=true node ./out.mjs",
     "raw": "DD_TRACE_DEBUG=true node ./app.js",
-    "link": "pushd ../.. && yarn link && popd && yarn link dd-trace",
+    "link": "pushd ../.. && npm link && popd && npm link dd-trace",
     "request": "curl http://localhost:3000 | jq"
   },
   "keywords": [
@@ -22,8 +22,8 @@
   "dependencies": {
     "@apollo/server": "5.5.1",
     "@koa/router": "15.7.1",
-    "@langchain/core": "1.3.5",
-    "@langchain/langgraph": "1.7.2",
+    "@langchain/core": "1.3.6",
+    "@langchain/langgraph": "1.7.3",
     "@smithy/smithy-client": "4.15.2",
     "aws-sdk": "2.1693.0",
     "axios": "1.21.1",
