@@ -836,6 +836,21 @@ describe('Plugin Manager', () => {
       })
     })
 
+    it('passes the live dsmEnabled to already loaded plugins on every configure', () => {
+      const config = makeTracerConfig({ dsmEnabled: false })
+      pm.configure(config)
+      loadChannel.publish({ name: 'two' })
+      assert.strictEqual(Two.prototype.configure.lastCall.args[0].dsmEnabled, false)
+
+      config.dsmEnabled = true
+      pm.configure(config)
+      assert.strictEqual(Two.prototype.configure.lastCall.args[0].dsmEnabled, true)
+
+      config.dsmEnabled = false
+      pm.configure(config)
+      assert.strictEqual(Two.prototype.configure.lastCall.args[0].dsmEnabled, false)
+    })
+
     it('forwards graphql global options to the graphql plugin under their plugin-facing names', () => {
       pm.configure(makeTracerConfig({
         DD_TRACE_GRAPHQL_COLLAPSE: false,

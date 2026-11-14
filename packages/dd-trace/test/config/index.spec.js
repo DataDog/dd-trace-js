@@ -6218,6 +6218,50 @@ rules:
       ])
     })
 
+    describe('DD_DATA_STREAMS_ENABLED', () => {
+      const envValues = [undefined, 'true', 'false']
+      const rcValues = [undefined, 'true', 'false']
+
+      for (const envValue of envValues) {
+        for (const rcValue of rcValues) {
+          const expected = rcValue === undefined ? envValue === 'true' : rcValue === 'true'
+
+          it(`should resolve dsmEnabled to ${expected} with env ${envValue} and remote config ${rcValue}`, () => {
+            if (envValue !== undefined) process.env.DD_DATA_STREAMS_ENABLED = envValue
+            const config = getConfig()
+
+            config.setRemoteConfig(rcValue === undefined ? {} : { DD_DATA_STREAMS_ENABLED: rcValue })
+
+            assert.strictEqual(config.dsmEnabled, expected)
+            assert.strictEqual(
+              config.getOrigin('dsmEnabled'),
+              rcValue === undefined ? (envValue === undefined ? 'default' : 'env_var') : 'remote_config'
+            )
+          })
+
+          it(`should fall back to env ${envValue} when remote config ${rcValue} is removed`, () => {
+            if (envValue !== undefined) process.env.DD_DATA_STREAMS_ENABLED = envValue
+            const config = getConfig()
+
+            if (rcValue !== undefined) config.setRemoteConfig({ DD_DATA_STREAMS_ENABLED: rcValue })
+            config.setRemoteConfig(null)
+
+            assert.strictEqual(config.dsmEnabled, envValue === 'true')
+          })
+        }
+      }
+
+      it('should keep dsmEnabled false in agentless mode even when remote config enables it', () => {
+        process.env.DD_AGENTLESS_ENABLED = 'true'
+        process.env.DD_API_KEY = 'api-key'
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DATA_STREAMS_ENABLED: 'true' })
+
+        assert.strictEqual(config.dsmEnabled, false)
+      })
+    })
+
     it('should resolve env-var-keyed configs via configurationsTable', () => {
       const config = getConfig()
       assert.strictEqual(config.sampleRate, undefined)

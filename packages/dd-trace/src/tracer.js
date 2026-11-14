@@ -26,8 +26,12 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
+  // Last applied DSM state; lets configure() skip loading the lazy processor when nothing changed.
+  #dataStreamsEnabled
+
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
+    this.#dataStreamsEnabled = Boolean(config.dsmEnabled)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
@@ -52,6 +56,27 @@ class DatadogTracer extends Tracer {
   configure (config) {
     const { env, sampler } = config
     this._prioritySampler.configure(env, sampler, config)
+    this.#configureDataStreams(config.dsmEnabled)
+  }
+
+  /**
+   * Starts or stops the DSM processor when remote config flips `dsmEnabled`. Never throws.
+   *
+   * @param {boolean|undefined} dsmEnabled
+   */
+  #configureDataStreams (dsmEnabled) {
+    const enabled = Boolean(dsmEnabled)
+    if (enabled === this.#dataStreamsEnabled) return
+    this.#dataStreamsEnabled = enabled
+    try {
+      if (enabled) {
+        this._dataStreamsProcessor.start()
+      } else {
+        this._dataStreamsProcessor.stop()
+      }
+    } catch (error) {
+      log.error('Error %s Data Streams Monitoring', enabled ? 'starting' : 'stopping', error)
+    }
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.

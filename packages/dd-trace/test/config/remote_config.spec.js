@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -60,7 +62,16 @@ describe('Tracing Remote Config', () => {
         RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN,
         true
       )
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_DATA_STREAMS_ENABLED,
+        true
+      )
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.SDK_CONFIGURATION, true)
+    })
+
+    it('should report the DSM capability as bit 20', () => {
+      assert.strictEqual(RemoteConfigCapabilities.APM_TRACING_DATA_STREAMS_ENABLED, 1n << 20n)
     })
 
     it('should register a single APM_TRACING batch handler', () => {
@@ -190,6 +201,30 @@ describe('Tracing Remote Config', () => {
 
       // Service config should win
       sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.8' })
+    })
+
+    it('should let the more specific DD_DATA_STREAMS_ENABLED config override the less specific one', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
+
+      handler(createTransaction([
+        {
+          id: 'dsm-org',
+          file: {
+            service_target: { service: '*', env: '*' },
+            sdk_config: sdkConfigPayload({ DD_DATA_STREAMS_ENABLED: 'true' }),
+          },
+        },
+        {
+          id: 'dsm-service-env',
+          file: {
+            service_target: { service: 'test-service', env: 'test-env' },
+            sdk_config: sdkConfigPayload({ DD_DATA_STREAMS_ENABLED: 'false' }),
+          },
+        },
+      ]))
+
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_DATA_STREAMS_ENABLED: 'false' })
     })
 
     it('should handle config removal', () => {

@@ -159,6 +159,7 @@ function enable (rc, config, onConfigUpdated) {
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_DATA_STREAMS_ENABLED, true)
 
   // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
   rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)

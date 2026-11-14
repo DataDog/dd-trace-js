@@ -90,6 +90,8 @@ const DataStreamsManager = lazyClass(() => require('./manager').DataStreamsManag
  * @type {typeof import('./processor').DataStreamsProcessor}
  */
 const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsProcessor, [
+  'start',
+  'stop',
   'onInterval',
   'bucketFromTimestamp',
   'recordCheckpoint',
