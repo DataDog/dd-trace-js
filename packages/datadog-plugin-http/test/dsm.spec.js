@@ -125,9 +125,9 @@ describe('Plugin', () => {
       })
 
       describe('when enabled', () => {
-        async function load (service, pluginConfig = {}) {
+        async function load (service, pluginConfig = {}, plugins = 'http') {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = await agent.load('http', pluginConfig, { service, env: 'test' })
+          tracer = await agent.load(plugins, pluginConfig, { service, env: 'test' })
           http = require('node:http')
           recordCheckpoint = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
         }
@@ -332,6 +332,108 @@ describe('Plugin', () => {
             assert.strictEqual(downstreamIn.edgeLatencyNs, downstreamIn.currentTimestamp - out.currentTimestamp)
             assert.strictEqual(downstreamIn.pathwayLatencyNs, downstreamIn.currentTimestamp - pathwayStartNs)
             assert.ok(downstreamIn.edgeLatencyNs < downstreamIn.pathwayLatencyNs)
+          })
+        })
+
+        describe('on a keep-alive connection', () => {
+          let keepAliveAgent
+          let sockets
+
+          beforeEach(async () => {
+            await load('service-b', [{}, {}], ['http', 'express'])
+            keepAliveAgent = new http.Agent({ keepAlive: true, maxSockets: 1 })
+            sockets = []
+          })
+
+          afterEach(() => {
+            keepAliveAgent.destroy()
+          })
+
+          // Untraced, so only the server checkpoints. maxSockets 1 sends both requests over one connection.
+          function post (port, path, headers) {
+            return storage('legacy').run({ noop: true }, () => new Promise((resolve, reject) => {
+              http.request({
+                host: 'localhost',
+                port,
+                path,
+                method: 'POST',
+                agent: keepAliveAgent,
+                headers: { 'content-type': 'application/json', ...headers },
+              }, res => {
+                res.resume()
+                res.on('end', resolve)
+              }).on('error', reject).end('{"a":1}')
+            }))
+          }
+
+          async function sendTwoRequests (port) {
+            await post(port, '/first', { [DSM_HEADER]: JAVA_HEADER })
+            await post(port, '/second')
+            assert.strictEqual(sockets.length, 2)
+            assert.strictEqual(sockets[0], sockets[1], 'requests did not share a connection')
+          }
+
+          function produce (req) {
+            sockets.push(req.socket)
+            tracer.dataStreamsCheckpointer.setProduceCheckpoint('kafka', 'T', {})
+          }
+
+          function produced () {
+            const recorded = recordCheckpoint.args.map(([checkpoint]) => checkpoint)
+              .filter(checkpoint => checkpoint.edgeTags.includes('type:kafka'))
+            assert.strictEqual(recorded.length, 2, 'kafka checkpoints')
+            return recorded
+          }
+
+          it('never parents a checkpoint in a request body callback on an earlier request', async () => {
+            const port = await listen((req, res) => {
+              req.resume()
+              req.on('end', () => {
+                produce(req)
+                res.end()
+              })
+            })
+
+            await sendTwoRequests(port)
+
+            const [first, second] = checkpoints('in', 2)
+            assert.strictEqual(hashOf(second.hash), JAVA.serviceBHttpInRoot)
+            const [, secondProduce] = produced()
+            assert.notStrictEqual(hashOf(secondProduce.parentHash), hashOf(first.hash))
+            assert.ok(['0', hashOf(second.hash)].includes(hashOf(secondProduce.parentHash)),
+              `parent ${hashOf(secondProduce.parentHash)} is neither a new pathway nor the request's own checkpoint`)
+          })
+
+          it('parents a checkpoint in an express route after express.json() on its own request', async () => {
+            const express = require('express')
+            const app = express()
+            app.use(express.json())
+            app.post('/:name', (req, res) => {
+              produce(req)
+              res.end()
+            })
+            const port = await listen(app)
+
+            await sendTwoRequests(port)
+
+            const ins = checkpoints('in', 2)
+            const produces = produced()
+            assert.strictEqual(hashOf(produces[0].parentHash), JAVA.serviceBHttpInFromServiceA)
+            assert.strictEqual(hashOf(produces[1].parentHash), hashOf(ins[1].hash))
+          })
+
+          it('parents a checkpoint in a handler that reads no body on its own request', async () => {
+            const port = await listen((req, res) => {
+              produce(req)
+              res.end()
+            })
+
+            await sendTwoRequests(port)
+
+            const ins = checkpoints('in', 2)
+            const produces = produced()
+            assert.strictEqual(hashOf(produces[0].parentHash), JAVA.serviceBHttpInFromServiceA)
+            assert.strictEqual(hashOf(produces[1].parentHash), hashOf(ins[1].hash))
           })
         })
 
