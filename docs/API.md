@@ -275,8 +275,10 @@ tracer.use('openai', {
 <h5 id="aws-lambda"></h5>
 
 `dd-trace/lambda.wrap(handler, options)` accepts a `traceExtractor(event, context)` option.
-The extractor may return a promise and is awaited before the invocation span starts. Return
-`{ traceId, parentId, sampleMode, source: 'event' }`, where the IDs are decimal strings and
+The extractor receives the original event (of any shape) and AWS Lambda `Context`. Existing typed
+`datadog-lambda-js` extractors can be passed directly. The extractor may return a promise and is awaited
+before the invocation span starts. Return `{ traceId, parentId, sampleMode, source: 'event' }`,
+where the IDs are decimal strings and
 `sampleMode` is a Datadog sampling priority (`-1`, `0`, `1`, or `2`). If extraction fails, the
 standard event, Lambda client-context, and X-Ray extraction chain is used. The option can also
 be configured with `tracer.use('aws-lambda', { traceExtractor })`.

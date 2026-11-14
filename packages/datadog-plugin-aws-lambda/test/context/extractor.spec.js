@@ -167,6 +167,17 @@ describe('Lambda context extraction', () => {
     }
   }
 
+  it('passes the original event to custom extractors without restricting its shape', async () => {
+    for (const event of [null, 'payload', 42, ['payload']]) {
+      const custom = sinon.stub().returns(customContext)
+      const context = { awsRequestId: 'request-id' }
+      const result = await extract(event, context, { traceExtractor: custom })
+      sinon.assert.calledOnceWithExactly(custom, event, context)
+      assert.strictEqual(result.spanContext.toTraceId(), customContext.traceId)
+    }
+    sinon.assert.notCalled(tracer.extract)
+  })
+
   for (const value of [undefined, null, {}, { traceId: '123', sampleMode: 1 }, { parentId: '456', sampleMode: 1 }]) {
     it(`falls back after an invalid custom result: ${JSON.stringify(value)}`, async () => {
       const result = await extract({ headers }, {}, { traceExtractor: () => value })

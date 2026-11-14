@@ -1,5 +1,7 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
+
+import type { Handler as AwsLambdaHandler } from 'aws-lambda';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
@@ -2615,7 +2617,7 @@ declare namespace tracer {
     /** Configuration for AWS Lambda invocation instrumentation in Lambda runtimes. */
     interface aws_lambda extends Instrumentation {
       /** Extracted and awaited before the invocation span starts; falls back to standard extraction on failure. */
-      traceExtractor?: (event: Record<string, unknown>, context: Record<string, unknown>) =>
+      traceExtractor?: (event: Parameters<AwsLambdaHandler>[0], context: Parameters<AwsLambdaHandler>[1]) =>
         LambdaTraceContext | Promise<LambdaTraceContext>;
       /** @default true @env DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED */
       serviceRepresentationEnabled?: boolean;

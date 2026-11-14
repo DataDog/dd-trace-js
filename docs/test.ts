@@ -1,4 +1,7 @@
 import { performance } from 'perf_hooks'
+
+import type { Context as AwsLambdaContext } from 'aws-lambda'
+
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
 import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
@@ -392,9 +395,29 @@ lambdaHandler({ value: 'ok' }, { getRemainingTimeInMillis: () => 1000 });
 // Compile-only checks: wrappers require Lambda invocation arguments and preserve results and metadata.
 function checkLambdaWrapperTypes() {
   const context = { getRemainingTimeInMillis: () => 1000 };
-  const extractor: plugins.aws_lambda['traceExtractor'] = async (event, context) => ({
-    traceId: String(event.traceId), parentId: String(context.parentId), sampleMode: 2, source: 'event',
+  const extractor: plugins.aws_lambda['traceExtractor'] = async (event, context) => {
+    const requestId: string = context.awsRequestId;
+    const remaining: number = context.getRemainingTimeInMillis();
+    // @ts-expect-error AWS Lambda Context has no arbitrary parentId property.
+    context.parentId;
+    return { traceId: event.traceId, parentId: event.parentId, sampleMode: 2, source: 'event' };
+  };
+  // Existing shim extractors accept a customer-defined event and AWS Lambda Context.
+  const typedExtractor = (event: { traceId: string; parentId: string }, context: AwsLambdaContext):
+    plugins.LambdaTraceContext => ({
+      traceId: event.traceId, parentId: event.parentId, sampleMode: 2, source: 'event',
+    });
+  const asyncExtractor = async (event: string, context: AwsLambdaContext): Promise<plugins.LambdaTraceContext> => ({
+    traceID: event, parentID: context.awsRequestId, sampleMode: 0, source: 'event',
   });
+  tracer.use('aws-lambda', { traceExtractor: typedExtractor });
+  tracer.use('aws-lambda', { traceExtractor: asyncExtractor });
+  lambda.wrap(() => 'typed', { traceExtractor: typedExtractor });
+  lambda.wrap(() => 'async', { traceExtractor: asyncExtractor });
+  // @ts-expect-error Propagation headers are not an extractor's TraceContext result.
+  tracer.use('aws-lambda', { traceExtractor: () => ({ 'x-datadog-trace-id': '123' }) });
+  // @ts-expect-error Sampling priorities remain numeric.
+  lambda.wrap(() => 'invalid', { traceExtractor: () => ({ sampleMode: '2', source: 'event' }) });
   tracer.use('aws-lambda', { traceExtractor: extractor });
   lambda.wrap(() => 'custom', { traceExtractor: extractor, mergeDatadogXrayTraces: true })({}, context);
   lambda.wrap(() => 'legacy', { traceExtractor: () => ({

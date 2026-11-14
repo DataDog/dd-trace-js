@@ -45,6 +45,7 @@
 "@oxc-parser/binding-win32-x64-msvc","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-project/types","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@tybys/wasm-util","https://github.com/toyobayashi/wasm-util","['MIT']","['toyobayashi']"
+"@types/aws-lambda","https://github.com/DefinitelyTyped/DefinitelyTyped","['MIT']","['Microsoft Corporation']"
 "@types/estree","https://github.com/DefinitelyTyped/DefinitelyTyped","['MIT']","['DefinitelyTyped']"
 "agent-base","https://github.com/TooTallNate/proxy-agents","['MIT']","['Nathan Rajlich']"
 "argparse","https://github.com/nodeca/argparse","['Python-2.0']","['nodeca']"
