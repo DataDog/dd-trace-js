@@ -108,10 +108,11 @@ class HttpServerPlugin extends ServerPlugin {
 
   exit ({ req }) {
     const context = web.getContext(req)
-    const parentStore = context?.parentStore
 
-    const span = parentStore?.span
-    this.enter(span, parentStore)
+    // Restore exactly the store from before the request, including none. Without AsyncContextFrame, enterWith
+    // writes to the connection's async resource, so re-entering a copy of the current store would hand this
+    // request's context to the body callbacks and the next request of a keep-alive connection.
+    legacyStorage.enterWith(context?.parentStore)
 
     if (context) {
       context.parentStore = undefined
