@@ -15,6 +15,7 @@ const {
   cookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  fastifyRequestHandle,
   passportVerify,
   passportUser,
   expressSession,
@@ -253,6 +254,26 @@ describe('AppSec Index', function () {
       assert.strictEqual(responseWriteHead.hasSubscribers, true)
       assert.strictEqual(responseSetHeader.hasSubscribers, true)
       assert.strictEqual(informationalResponse.hasSubscribers, true)
+    })
+
+    it('subscribes route capture only while AppSec and API Security are enabled', () => {
+      config.appsec.DD_API_SECURITY_ENABLED = true
+      assert.equal(fastifyRequestHandle.hasSubscribers, false)
+      AppSec.enable(config)
+      AppSec.enable(config)
+      assert.equal(fastifyRequestHandle.hasSubscribers, true)
+      AppSec.disable()
+      assert.equal(fastifyRequestHandle.hasSubscribers, false)
+    })
+
+    it('does not subscribe route capture with API Security disabled, including after re-enabling AppSec', () => {
+      for (const enabled of [false, true, false]) {
+        config.appsec.DD_API_SECURITY_ENABLED = enabled
+        AppSec.enable(config)
+        assert.equal(fastifyRequestHandle.hasSubscribers, enabled)
+        AppSec.disable()
+        assert.equal(fastifyRequestHandle.hasSubscribers, false)
+      }
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
