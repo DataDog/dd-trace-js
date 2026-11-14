@@ -354,68 +354,84 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    over10It('does not modify the user support file and cleans up the injected wrapper', async () => {
-      const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')
-      const originalSupportContent = fs.readFileSync(supportFilePath, 'utf8')
-      const supportContentWithoutDdTrace = originalSupportContent
-        .split('\n')
-        .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
-        .join('\n')
+    for (const extension of type === 'commonJS' ? ['js', 'ts', 'tsx'] : ['js']) {
+      over10It(`does not modify the ${extension} support file and cleans up the injected wrapper`, async () => {
+        const supportFilePath = path.join(cwd, `cypress/support/e2e.${extension}`)
+        const originalSupportContent = fs.readFileSync(path.join(cwd, 'cypress/support/e2e.js'), 'utf8')
+        const supportContentWithoutDdTrace = originalSupportContent
+          .split('\n')
+          .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
+          .join('\n')
 
-      const getSupportWrappers = () => fs.readdirSync(path.dirname(supportFilePath))
-        .filter(filename => filename.startsWith('dd-cypress-support-'))
-        .sort()
+        const getSupportWrappers = () => fs.readdirSync(path.dirname(supportFilePath))
+          .filter(filename => filename.startsWith('dd-cypress-support-'))
+          .sort()
 
-      fs.writeFileSync(supportFilePath, supportContentWithoutDdTrace)
+        fs.writeFileSync(supportFilePath, supportContentWithoutDdTrace)
+        const tsconfigPath = path.join(cwd, 'tsconfig.json')
+        const originalTsconfig = fs.readFileSync(tsconfigPath, 'utf8')
+        if (extension !== 'js') {
+          // Playwright's output directory and source maps conflict with Cypress's in-memory transpilation.
+          fs.writeFileSync(tsconfigPath, JSON.stringify({
+            compilerOptions: { target: 'ES2020', module: 'commonjs', ignoreDeprecations: '6.0' },
+            include: ['cypress/support'],
+          }))
+        }
 
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-      const wrapperFilesBefore = getSupportWrappers()
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        const wrapperFilesBefore = getSupportWrappers()
 
-      try {
-        childProcess = exec(testCommand, {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const events = payloads
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.type === 'test')
-              const passedTest = events.find(event =>
-                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
-              )
-
-              assertObjectContains(passedTest?.content, {
-                meta: {
-                  [TEST_STATUS]: 'pass',
-                  [TEST_FRAMEWORK]: 'cypress',
-                },
-              })
+        try {
+          const command = type === 'commonJS' ? `${testCommand} --config supportFile=${supportFilePath}` : testCommand
+          childProcess = exec(command, {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
             },
-            { hardTimeout: 60000 }
-          )
+          })
 
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                const passedTest = events.find(event =>
+                  event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+                )
 
-        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
-        assert.strictEqual(fs.readFileSync(supportFilePath, 'utf8'), supportContentWithoutDdTrace)
-        assert.doesNotMatch(fs.readFileSync(supportFilePath, 'utf8'), /dd-trace\/ci\/cypress\/support/)
-        assert.deepStrictEqual(getSupportWrappers(), wrapperFilesBefore)
-      } finally {
-        fs.writeFileSync(supportFilePath, originalSupportContent)
-      }
-    })
+                assertObjectContains(passedTest?.content, {
+                  meta: {
+                    [TEST_STATUS]: 'pass',
+                    [TEST_FRAMEWORK]: 'cypress',
+                  },
+                })
+              },
+              { hardTimeout: 60000 }
+            )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+          assert.strictEqual(fs.readFileSync(supportFilePath, 'utf8'), supportContentWithoutDdTrace)
+          assert.doesNotMatch(fs.readFileSync(supportFilePath, 'utf8'), /dd-trace\/ci\/cypress\/support/)
+          assert.deepStrictEqual(getSupportWrappers(), wrapperFilesBefore)
+        } finally {
+          if (extension === 'js') fs.writeFileSync(supportFilePath, originalSupportContent)
+          else {
+            fs.rmSync(supportFilePath)
+            fs.writeFileSync(tsconfigPath, originalTsconfig)
+          }
+        }
+      })
+    }
 
     over10It('retries when dd:beforeEach returns no result once', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)

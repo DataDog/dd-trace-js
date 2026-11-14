@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const { tmpdir } = require('node:os')
-const { join } = require('node:path')
+const { extname, join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { createContext, runInContext } = require('node:vm')
 
@@ -399,48 +399,80 @@ describe('Cypress config', () => {
   })
 })
 
-describe('Cypress support initialization ownership', () => {
-  for (const manualFirst of [false, true]) {
-    it(`loads support once per Mocha root across automatic and manual entries (manual first=${manualFirst})`, () => {
-      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-owner-'))
-      const originalSupport = join(project, 'support.js')
-      const manualSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
-      const browserSupport = require.resolve('../../datadog-plugin-cypress/src/support')
-      const originalRead = fs.readFileSync
-      fs.writeFileSync(originalSupport, "require('dd-trace/ci/cypress/support')\n")
-      const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-        return filename === browserSupport ? 'globalThis.installations++' : originalRead(filename, ...args)
-      })
+describe('Cypress support preprocessors', () => {
+  for (const extension of ['js', 'mjs', 'ts', 'tsx']) {
+    it(`keeps generated support on the ${extension} preprocessor`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-language-'))
+      const supportFile = join(project, `support.${extension}`)
+      const source = "import 'dd-trace/ci/cypress/support'\n"
+      fs.writeFileSync(supportFile, source)
       try {
-        const config = { projectRoot: project, supportFile: originalSupport }
-        const files = installSupportFile(config)
-        assert.strictEqual(files.length, 2)
-        assert.notStrictEqual(config.supportFile, originalSupport)
-        assert.strictEqual(installSupportFile(config), undefined)
-        assert.strictEqual(fs.readdirSync(project).length, 3)
-        const generatedSource = fs.readFileSync(files[0], 'utf8')
-        let root = {}
-        const context = createContext({
-          Cypress: { mocha: { getRootSuite: () => root } },
-          installations: 0,
-          require: name => {
-            if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
-            context.installations++
-          },
-        })
-        const automatic = () => runInContext(`(function () {${generatedSource}\n})()`, context)
-        const manual = () => runInContext(`(function () {${manualSource}\n})()`, context)
-        for (let run = 1; run <= 2; run++) {
-          root = {}
-          for (const entry of manualFirst ? [manual, automatic, manual] : [automatic, manual, automatic]) entry()
-          assert.strictEqual(context.installations, run)
-        }
-        assert.strictEqual(fs.readFileSync(originalSupport, 'utf8'), "require('dd-trace/ci/cypress/support')\n")
+        const files = installSupportFile({ projectRoot: project, supportFile })
+        const expected = extension.startsWith('ts') ? `.${extension}` : '.mjs'
+        assert.deepStrictEqual(files.map(file => extname(file)), [expected, expected])
+        assert.ok(fs.readFileSync(files[1], 'utf8').includes(`import "./support.${extension}"`))
+        assert.strictEqual(fs.readFileSync(supportFile, 'utf8'), source)
       } finally {
-        read.restore()
         fs.rmSync(project, { recursive: true, force: true })
       }
     })
+  }
+})
+
+describe('Cypress support initialization ownership', () => {
+  for (const local of [false, true]) {
+    for (const manualFirst of [false, true]) {
+      it(`loads support once per Mocha root (manual first=${manualFirst}, local=${local})`, () => {
+        const project = fs.mkdtempSync(join(local ? __dirname : tmpdir(), 'dd-cypress-support-owner-'))
+        const originalSupport = join(project, 'support.js')
+        const manualSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
+        const browserSupport = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
+        const originalRead = fs.readFileSync
+        fs.writeFileSync(originalSupport, "require('dd-trace/ci/cypress/support')\n")
+        const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+          return filename === browserSupport
+            ? 'function initializeBrowserSupport () { globalThis.installations++ }'
+            : originalRead(filename, ...args)
+        })
+        try {
+          const config = { projectRoot: local ? join(__dirname, '../..') : project, supportFile: originalSupport }
+          const files = installSupportFile(config)
+          assert.strictEqual(files.length, 2)
+          assert.notStrictEqual(config.supportFile, originalSupport)
+          assert.strictEqual(installSupportFile(config), undefined)
+          assert.strictEqual(fs.readdirSync(project).length, 3)
+          let generatedSource = fs.readFileSync(files[0], 'utf8')
+          if (local) {
+            assert.match(generatedSource, /^import initializeBrowserSupport from /)
+            assert.ok(!generatedSource.includes('globalThis.installations++'))
+            generatedSource = generatedSource.slice(generatedSource.indexOf('\n') + 1)
+          } else {
+            assert.ok(generatedSource.includes('globalThis.installations++'))
+          }
+          let root = {}
+          const context = createContext({
+            Cypress: { mocha: { getRootSuite: () => root } },
+            installations: 0,
+            initializeBrowserSupport: () => { context.installations++ },
+            require: name => {
+              if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
+              return { default: () => { context.installations++ } }
+            },
+          })
+          const automatic = () => runInContext(`(function () {${generatedSource}\n})()`, context)
+          const manual = () => runInContext(`(function () {${manualSource}\n})()`, context)
+          for (let run = 1; run <= 2; run++) {
+            root = {}
+            for (const entry of manualFirst ? [manual, automatic, manual] : [automatic, manual, automatic]) entry()
+            assert.strictEqual(context.installations, run)
+          }
+          assert.strictEqual(fs.readFileSync(originalSupport, 'utf8'), "require('dd-trace/ci/cypress/support')\n")
+        } finally {
+          read.restore()
+          fs.rmSync(project, { recursive: true, force: true })
+        }
+      })
+    }
   }
 
   for (const { version, preload } of [
@@ -594,7 +626,7 @@ describe('Cypress observer and lifecycle phases', () => {
         ? '// user support\n'
         : `${mode === 'conditional' ? 'if (false) ' : ''}require('dd-trace/ci/cypress/support')\n`)
       const publicSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
-      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
       const raw = `globalThis.calls.push('observer')
 let active = false
 const root = Cypress.mocha.getRootSuite()
@@ -607,7 +639,9 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
 `
       const originalRead = fs.readFileSync
       const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-        return filename === hooksPath ? raw : originalRead(filename, ...args)
+        return filename === hooksPath
+          ? `function initializeBrowserSupport () { ${raw} }`
+          : originalRead(filename, ...args)
       })
       try {
         const config = { projectRoot: project, supportFile: support }
@@ -1192,7 +1226,7 @@ describe('Cypress legacy manual lifecycle ownership', () => {
         const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-legacy-owner-'))
         const support = join(project, 'support.js')
         fs.writeFileSync(support, "require('dd-trace/ci/cypress/support')\n")
-        const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+        const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
         const raw = `const root = Cypress.mocha.getRootSuite()
 let active = false
 root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
@@ -1213,7 +1247,9 @@ Cypress.on('test:before:run', () => { root.executions *= 3 })
 `
         const originalRead = fs.readFileSync
         const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-          return filename === hooksPath ? raw : originalRead(filename, ...args)
+          return filename === hooksPath
+            ? `function initializeBrowserSupport () { ${raw} }`
+            : originalRead(filename, ...args)
         })
         try {
           const files = installSupportFile({ projectRoot: project, supportFile: support })
@@ -1282,7 +1318,7 @@ describe('Cypress deferred automatic lifecycle positions', () => {
       const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-fallback-position-'))
       const support = join(project, 'support.js')
       fs.writeFileSync(support, '// user support without a direct SDK import\n')
-      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support.mjs')
       const raw = `const root = Cypress.mocha.getRootSuite()
 let active = false
 root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
@@ -1297,7 +1333,9 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
 `
       const originalRead = fs.readFileSync
       const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-        return filename === hooksPath ? raw : originalRead(filename, ...args)
+        return filename === hooksPath
+          ? `function initializeBrowserSupport () { ${raw} }`
+          : originalRead(filename, ...args)
       })
       try {
         const files = installSupportFile({ projectRoot: project, supportFile: support }, true)
