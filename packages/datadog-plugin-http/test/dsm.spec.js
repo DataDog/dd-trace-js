@@ -385,7 +385,7 @@ describe('Plugin', () => {
             return recorded
           }
 
-          it('never parents a checkpoint in a request body callback on an earlier request', async () => {
+          it('starts a new pathway for a checkpoint in a raw request body callback', async () => {
             const port = await listen((req, res) => {
               req.resume()
               req.on('end', () => {
@@ -399,9 +399,9 @@ describe('Plugin', () => {
             const [first, second] = checkpoints('in', 2)
             assert.strictEqual(hashOf(second.hash), JAVA.serviceBHttpInRoot)
             const [, secondProduce] = produced()
-            assert.notStrictEqual(hashOf(secondProduce.parentHash), hashOf(first.hash))
-            assert.ok(['0', hashOf(second.hash)].includes(hashOf(secondProduce.parentHash)),
-              `parent ${hashOf(secondProduce.parentHash)} is neither a new pathway nor the request's own checkpoint`)
+            assert.notStrictEqual(hashOf(secondProduce.parentHash), hashOf(first.hash), 'inherited the earlier request')
+            // Raw body callbacks run outside the request's store, so, as with APM spans, they get no request context.
+            assert.strictEqual(hashOf(secondProduce.parentHash), '0')
           })
 
           it('parents a checkpoint in an express route after express.json() on its own request', async () => {
