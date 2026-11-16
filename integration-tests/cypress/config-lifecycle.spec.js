@@ -407,7 +407,9 @@ describe('Cypress plugin run lifecycle', () => {
     })
   }
 
-  it('finalizes each spec execution once when both the plugin and a forwarding handler run', async () => {
+  // Run-mode duplicate finalization is covered against real Cypress in cypress-reporting-instrumentation.spec.js.
+  // Integration tests cannot drive open-mode reruns, so this covers a rerun that never reached dd:testSuiteStart.
+  it('finalizes an interactive rerun of a spec that aborts before the suite starts', async () => {
     const { createSpan } = prepareRunFinalization()
     const spec = { relative: 'cypress/e2e/skipped.js' }
     const results = {
@@ -415,19 +417,10 @@ describe('Cypress plugin run lifecycle', () => {
     }
     const getTestSpan = sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
     sinon.stub(cypressPlugin, 'getTestProperties').returns({})
-    const testSuiteSpan = createSpan()
-    cypressPlugin.testSuiteSpan = testSuiteSpan
+    cypressPlugin.testSuiteSpan = createSpan()
+    await cypressPlugin.afterSpec(spec, results)
 
-    const first = cypressPlugin.afterSpec(spec, results)
-    const second = cypressPlugin.afterSpec(spec, results)
-    await Promise.all([first, second])
-
-    assert.strictEqual(second, first)
-    sinon.assert.calledOnce(getTestSpan)
-    sinon.assert.calledOnce(getTestSpan.firstCall.returnValue.finish)
-    sinon.assert.calledOnce(testSuiteSpan.finish)
-
-    // An interactive rerun receives new results, even when a setup hook aborts before dd:testSuiteStart.
+    // Cypress delivers new results for the rerun, but no suite span was started for it.
     await cypressPlugin.afterSpec(spec, { ...results })
 
     sinon.assert.calledTwice(getTestSpan)
