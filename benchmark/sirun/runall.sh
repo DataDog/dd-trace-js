@@ -193,7 +193,7 @@ function print_cpu_contention {
   echo "  MHz of this pod's cores: $(grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
     | awk -v r="$(grep -oP 'Cpus_allowed_list:\s*\K\S+' /proc/self/status 2>/dev/null)" \
       'BEGIN { n = split(r, p, ","); for (i = 1; i <= n; i++) { split(p[i], b, "-"); lo[i] = b[1]; hi[i] = (b[2] == "" ? b[1] : b[2]) } }
-       { for (i = 1; i <= n; i++) if ($3 >= lo[i] && $3 <= hi[i]) { printf "%s=%.0f ", $3, $NF; break } }')" >&2 || true
+        { for (i = 1; i <= n; i++) if ($3 >= lo[i] && $3 <= hi[i]) { printf "%s=%.0f ", $3, $NF; break } }')" >&2 || true
 }
 
 # Run a variant from the suite root. Background calls get their own shell and
