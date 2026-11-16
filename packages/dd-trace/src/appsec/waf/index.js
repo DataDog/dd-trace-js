@@ -37,6 +37,9 @@ const waf = {
   removeConfig,
   checkAsmDdFallback,
   run: noop,
+  runSubContext: noop,
+  disposeSubContext,
+  getRequest,
   disposeContext: noop,
   WafUpdateError,
 }
@@ -55,6 +58,7 @@ function init (rules, config) {
 
   waf.wafManager = new WAFManager(rules, config)
 
+  waf.runSubContext = runSubContext
   waf.run = run
   waf.disposeContext = disposeContext
 }
@@ -65,6 +69,7 @@ function destroy () {
     waf.wafManager = null
   }
 
+  waf.runSubContext = noop
   waf.run = noop
   waf.disposeContext = noop
 }
@@ -116,7 +121,7 @@ function removeConfig (configPath) {
 // @see packages/dd-trace/test/appsec/lambda.spec.js
 
 /**
- * @param {object} data - WAF address data ({ persistent, ephemeral })
+ * @param {object} data - Flat WAF address map
  * @param {object} req - Request key for WAF context lookup. May be an HTTP
  *   IncomingMessage or a plain object (Lambda invocation key).
  * @param {string} [raspRule] - RASP rule identifier
@@ -132,7 +137,19 @@ function run (data, req, raspRule, rootSpan) {
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
-  const result = wafContext.run(data, raspRule, req, rootSpan)
+  if (!wafContext) return
+  return runContext(data, wafContext, raspRule, rootSpan)
+}
+
+/**
+ * @param {object} data - Flat WAF address map.
+ * @param {import('./waf_context_wrapper')} wafContext - Context selected for this evaluation.
+ * @param {object} [raspRule] - RASP rule metadata.
+ * @param {object} [rootSpan] - Explicit Lambda root span.
+ */
+function runContext (data, wafContext, raspRule, rootSpan) {
+  const req = wafContext.parent ? wafContext.parent.req : wafContext.req
+  const result = wafContext.run(data, raspRule, rootSpan)
 
   if (result?.keep) {
     if (limiter.isAllowed()) {
@@ -146,12 +163,54 @@ function run (data, req, raspRule, rootSpan) {
   return result
 }
 
-function disposeContext (req) {
-  const wafContext = waf.wafManager.getWAFContext(req)
+/**
+ * @typedef {{ wafSubcontext?: import('./waf_context_wrapper') }} SubcontextState
+ */
 
-  if (wafContext && !wafContext.ddwafContext.disposed) {
-    wafContext.dispose()
+/**
+ * Evaluate an isolated check, or reuse a subcontext across calls carrying the same state.
+ * @param {object} data - Flat WAF address map.
+ * @param {object} [raspRule] - RASP rule metadata.
+ * @param {SubcontextState} [state] - Instrumentation context, released by calling disposeSubContext.
+ * @param {object} [req] - Explicit request when the publisher provides it.
+ */
+function runSubContext (data, raspRule, state, req) {
+  let subcontext = state?.wafSubcontext
+  if (!subcontext) {
+    req ||= getActiveRequest()
+    if (!req) return
+    const context = waf.wafManager.getWAFContext(req)
+    if (!context) return
+    if (context.ddwafContext.disposed) return runContext(data, context, raspRule)
+    // Stateful checks can need response inputs even when no request inputs are known.
+    if (!state && (data === null || typeof data !== 'object' ||
+      !Object.keys(data).some(key => context.knownAddresses.has(key)))) return
+    subcontext = context.createSubcontext()
+    if (!subcontext) return
+    if (state) state.wafSubcontext = subcontext
   }
+  try {
+    return runContext(data, subcontext, raspRule)
+  } finally {
+    if (!state) subcontext.dispose()
+  }
+}
+
+/** @param {SubcontextState} state - Instrumentation context bound by runSubContext. */
+function getRequest (state) {
+  return state.wafSubcontext?.parent.req
+}
+
+/** @param {SubcontextState} state - Instrumentation context whose evaluation is complete. */
+function disposeSubContext (state) {
+  const subcontext = state.wafSubcontext
+  if (!subcontext) return
+  state.wafSubcontext = undefined
+  subcontext.dispose()
+}
+
+function disposeContext (req) {
+  waf.wafManager.disposeContext(req)
 }
 
 function noop () {}

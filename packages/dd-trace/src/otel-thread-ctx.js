@@ -51,19 +51,15 @@ const webTagsCache = require('./web-tags-cache')
  * @property {number} endpointIndex
  */
 
-// OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
-// correctly overwrite an earlier one — but an out-of-process reader sampling the
-// record mid-request would still see the interim value (e.g. a bare `GET`) as
-// the endpoint for whatever it was sampling. So a record is built without an
-// endpoint until finalEndpoint (profiling/webspan-utils.js) reports the value
-// settled, and gets one appended when webTagsCache announces that moment.
+// OTEP-4947 duplicates are last-wins, so later endpoint values refine existing
+// records. finalEndpoint excludes bare methods until routing supplies an endpoint.
 //
-// Records still waiting on that announcement, grouped by the web-server tag bag
-// they are waiting on. Every span under one request resolves to that same bag
+// Active records are grouped by their web-server tag bag.
+// Every span under one request resolves to that same bag
 // (webTagsCache maps a span to its nearest web-server ancestor's tags) and the
-// endpoint belongs to the request rather than to any one span, so a single
-// resolution fills in every record built before it — the request span's own and
-// each descendant's. Descendants are the reason this can't just live on the
+// endpoint belongs to the request rather than to any one span, so each change
+// updates the request span's record and each descendant's.
+// Descendants are the reason this cannot just live on the
 // per-span cache entry: the tags:update that carries the route is published for
 // the ancestor, which has no way to enumerate them.
 //
@@ -73,8 +69,11 @@ const webTagsCache = require('./web-tags-cache')
 // a bag, on already-expired spans under manual-GC debug mode — and webTagsCache
 // already depends on it, holding bags the wall profiler dereferences much later.
 //
-// Waiters leave on span finish, ancestry changes, or endpoint resolution.
+// Records rebuilt after finish have no second finish event, so cleanup follows the span's GC lifetime.
+/** @type {WeakMap<ReturnType<DatadogSpanContext['getTags']>, Array<CachedContext>>} */
 const pendingEndpoints = new WeakMap()
+/** @type {FinalizationRegistry<WeakRef<CachedContext>> | undefined} */
+let endpointCleanup
 const NOT_WAITING = -1
 const AWAITING_OWN_ENDPOINT = -2
 
@@ -219,12 +218,15 @@ function getOrBuildContext (span) {
   // built before the decision keeps reading as not sampled.
   cached.context = new ThreadContext(traceId, spanId, traceFlagsOf(spanContext), attrs)
   cached.webTags = webTags
-  if (endpoint === undefined) awaitEndpoint(span, webTags, cached)
+  awaitEndpoint(span, webTags, cached)
+  if (spanContext._isFinished) {
+    endpointCleanup ??= new FinalizationRegistry(onSpanCollected)
+    endpointCleanup.register(span, new WeakRef(cached))
+  }
   return cached.context
 }
 
-// Enlist a record built without an endpoint, so the resolution announcement for
-// its request fills it in.
+// Track the request's endpoint until this record finishes or changes ancestry.
 /**
  * @param {DatadogSpan} span
  * @param {CachedContext['webTags']} webTags
@@ -248,6 +250,12 @@ function awaitEndpoint (span, webTags, cached) {
     cached.endpointIndex = waiting.length
     waiting.push(cached)
   }
+}
+
+/** @param {WeakRef<CachedContext>} reference */
+function onSpanCollected (reference) {
+  const cached = reference.deref()
+  if (cached !== undefined) removePendingEndpoint(cached)
 }
 
 /** @param {CachedContext} cached */
@@ -325,9 +333,7 @@ function onSpanFinished (span) {
   // would strip trace and endpoint attribution off that work entirely.
 }
 
-// The endpoint of a request has settled: fill in every record built while it was
-// still unresolved. `span` is the web-server span, so its tag bag is the key its
-// descendants enlisted under.
+// Update the active records when a request's endpoint becomes available or changes.
 /** @param {DatadogSpan} span */
 function onEndpointResolved (span) {
   if (!started) return
@@ -337,16 +343,13 @@ function onEndpointResolved (span) {
   const waiting = pendingEndpoints.get(webTags)
   if (!ownWaits && waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
-  // webTagsCache only announces settled endpoints, so this is belt and braces.
+  // webTagsCache only announces available endpoints, so this is belt and braces.
   if (endpoint === undefined) return
   if (ownWaits) {
-    own.endpointIndex = NOT_WAITING
     appendEndpoint(own.context, endpoint)
   }
   if (waiting === undefined) return
-  pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
-    cached.endpointIndex = NOT_WAITING
     appendEndpoint(cached.context, endpoint)
   }
 }
@@ -366,15 +369,9 @@ function onWebTagsResolved (span) {
   removePendingEndpoint(cached)
   cached.webTags = webTags
   const endpoint = finalEndpoint(webTags)
-  if (endpoint === undefined) {
-    // A record that already shows the outer request's endpoint goes on showing
-    // it until the nearer one settles: the record buffer is append-only, so
-    // there is no way to take the attribute back, and rebuilding the
-    // ThreadContext would strand every async-context frame holding this one.
-    // The work is still nested in the outer request, which makes that the least
-    // wrong of the values available.
-    awaitEndpoint(span, webTags, cached)
-  } else {
+  awaitEndpoint(span, webTags, cached)
+  // Keep the outer endpoint until the nearer request supplies a replacement; records are append-only.
+  if (endpoint !== undefined) {
     appendEndpoint(cached.context, endpoint)
   }
 }

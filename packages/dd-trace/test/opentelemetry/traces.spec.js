@@ -17,7 +17,7 @@ const id = require('../../src/id')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
-const { applyHttpOtelSemantics } = require('../../src/plugins/util/http-otel-semantics')
+const { HTTP_STATUS_ERROR, applyHttpOtelSemantics } = require('../../src/plugins/util/http-otel-semantics')
 const processTags = require('../../src/process-tags')
 const { SpanBuckets } = require('../../src/span_stats')
 
@@ -676,7 +676,12 @@ describe('OpenTelemetry Traces', () => {
           const transformer = new OtlpTraceTransformer({}, true)
           const span = createMockSpan({
             error: 1,
-            meta: { 'span.kind': kind, 'http.method': 'GET', 'http.status_code': String(statusCode) },
+            meta: {
+              'span.kind': kind,
+              'http.method': 'GET',
+              'http.status_code': String(statusCode),
+              [HTTP_STATUS_ERROR]: String(statusCode),
+            },
             metrics: {},
           })
           applyHttpOtelSemantics(span)

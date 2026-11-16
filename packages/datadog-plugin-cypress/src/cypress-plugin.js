@@ -99,6 +99,8 @@ const {
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
+const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
+const { getUserProviderGitMetadata } = require('../../dd-trace/src/plugins/util/user-provided-git')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
@@ -134,7 +136,8 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_PROVIDER_NAME,
-  CI_WORKSPACE_PATH,
+  GIT_CHECKOUT_ROOT,
+  GIT_CHECKOUT_IS_CUSTOM,
   GIT_COMMIT_MESSAGE,
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
@@ -361,17 +364,20 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
-function getModifiedFiles (testEnvironmentMetadata) {
+function getModifiedFiles (testEnvironmentMetadata, gitRoot) {
+  const isCustomCheckout = testEnvironmentMetadata[GIT_CHECKOUT_IS_CUSTOM] === 'true'
+  const diffMetadata = isCustomCheckout ? getUserProviderGitMetadata() : testEnvironmentMetadata
   const {
     [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
     [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
     [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-  } = testEnvironmentMetadata
+  } = diffMetadata
+  const targetCommit = commitHeadSha || (isCustomCheckout ? testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
 
-  const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+  const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch, gitRoot)
 
   if (baseBranchSha) {
-    const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+    const diff = getPullRequestDiff(baseBranchSha, targetCommit, gitRoot)
     const modifiedFiles = getModifiedFilesFromDiff(diff)
     if (modifiedFiles) {
       return modifiedFiles
@@ -579,7 +585,8 @@ class CypressPlugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_CHECKOUT_ROOT]: gitRoot,
+      [GIT_CHECKOUT_IS_CUSTOM]: isCustomCheckout,
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
@@ -587,13 +594,14 @@ class CypressPlugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || process.cwd()
+    this.repositoryRoot = gitRoot || getRepositoryRoot() || process.cwd()
     this.ciProviderName = ciProviderName
-    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
+    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.testConfiguration = {
       repositoryUrl,
       sha,
+      gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,
       osArchitecture,
@@ -604,8 +612,11 @@ class CypressPlugin {
       commitMessage,
       tag,
       pullRequestBaseSha,
-      commitHeadSha,
-      commitHeadMessage,
+      // Only an explicit PR head can override the selected commit in a custom checkout.
+      commitHeadSha: isCustomCheckout === 'true'
+        ? getUserProviderGitMetadata()[GIT_COMMIT_HEAD_SHA]
+        : commitHeadSha,
+      commitHeadMessage: isCustomCheckout === 'true' ? undefined : commitHeadMessage,
     }
   }
 
@@ -1439,7 +1450,7 @@ class CypressPlugin {
 
     if (this.isImpactedTestsEnabled) {
       try {
-        this.modifiedFiles = getModifiedFiles(this.testEnvironmentMetadata)
+        this.modifiedFiles = getModifiedFiles(this.testEnvironmentMetadata, this.repositoryRoot)
       } catch (error) {
         log.error(error)
         this.isImpactedTestsEnabled = false

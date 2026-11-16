@@ -1,5 +1,10 @@
 [
   {
+    "name": "@modelcontextprotocol/server",
+    "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
+    "flags": ""
+  },
+  {
     "name": "react-router",
     "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
     "flags": "",

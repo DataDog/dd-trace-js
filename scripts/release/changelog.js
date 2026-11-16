@@ -27,7 +27,7 @@ const INTERNAL_PATH_PATTERNS = [
   /^scripts\//,
   /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
-  /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
+  /(^|\/)(?:bun\.lock|package-lock\.json)$/,
   /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
 ]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and

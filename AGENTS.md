@@ -8,7 +8,7 @@ precedence within their scope.
 ## Setup and Commands
 
 - Use a Node.js version satisfying `package.json#engines`; service-backed tests require Docker with Docker Compose.
-- Use yarn 1.x only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
+- Use Bun (pinned in `package.json`) for dependency installs and npm to run `npm run services`.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
 - Never run the root `npm test`; it is intentionally disabled. Use a targeted `test:<area>` script or spec below.
 
@@ -51,7 +51,7 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
+The `:ci` script runs `npm run services` to install versioned dependencies and check services before testing.
 After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
 For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
 Match its test action or script, `PLUGINS`, and any `SPEC` filter.
@@ -183,5 +183,5 @@ Validate new plugin registration and structure with
 
 Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
 
-For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
+For vendored rspack dependencies, run Bun from `vendor/`; generated bundles are written under
 `packages/node_modules/`.
