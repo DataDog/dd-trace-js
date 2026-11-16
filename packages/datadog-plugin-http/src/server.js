@@ -26,6 +26,10 @@ class HttpServerPlugin extends ServerPlugin {
   constructor (...args) {
     super(...args)
     this.addTraceSub('exit', message => this.exit(message))
+    if (process.versions.bun) {
+      this.addSub('apm:bun:server:request:error', ({ req, error }) => web.addError(req, error))
+      this.addSub('apm:bun:server:request:route', ({ req, route }) => web.setRoute(req, route))
+    }
   }
 
   start (ctx) {

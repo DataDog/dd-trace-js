@@ -13,18 +13,17 @@ const nextChannel = channel('apm:hono:middleware:next')
 const enterChannel = channel('apm:hono:middleware:enter')
 const exitChannel = channel('apm:hono:middleware:exit')
 const finishChannel = channel('apm:hono:middleware:finish')
+const bunRequests = process.versions.bun ? require('./helpers/bun') : undefined
 
 // Tracks handlers registered via `app.use()` so route-publishing wrappers
 // installed by `wrapRouterAdd` can skip middleware-only matches (a request
 // matching only middleware should keep the bare HTTP-method resource name).
 const middlewareHandlers = new WeakSet()
 
-// `app.request()` and non-node adapters call `app.fetch` without an `incoming`
-// IncomingMessage; the APM `web` helpers depend on one, so the wrappers below
-// skip publishing whenever it is missing.
+// Non-Node adapters only have a web context when they were dispatched by Bun.serve.
 function wrapFetch (fetch) {
   return function (request, env, executionCtx) {
-    const req = env?.incoming
+    const req = env?.incoming || bunRequests?.get(request)
     if (req) {
       handleChannel.publish({ req })
     }
@@ -60,7 +59,7 @@ function wrapRouterAdd (originalAdd) {
     if (typeof handler === 'function' && !middlewareHandlers.has(handler)) {
       const meta = handlerData[1]
       const wrappedHandler = function (context, next) {
-        const req = context.env?.incoming
+        const req = context.env?.incoming || bunRequests?.get(context.req.raw)
         if (req && routeChannel.hasSubscribers) {
           routeChannel.publish({ req, route: meta?.path })
         }
@@ -89,7 +88,7 @@ function wrapCompose (compose) {
 
     const instrumentedOnError = (...args) => {
       const [error, context] = args
-      const req = context.env?.incoming
+      const req = context.env?.incoming || bunRequests?.get(context.req.raw)
       if (req) {
         errorChannel.publish({ req, error })
       }
@@ -122,7 +121,7 @@ function wrapMiddleware (middleware, route) {
     middleware,
     (middleware) =>
       function (context, next) {
-        const req = context.env?.incoming
+        const req = context.env?.incoming || bunRequests?.get(context.req.raw)
         if (!req) {
           return middleware.apply(this, arguments)
         }

@@ -26,6 +26,10 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = getDisabledInstrumentations()
 
+if (process.versions.bun && !disabledInstrumentations.has('http')) {
+  require('../bun')
+}
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 const orchestrionLoadChannel = channel('dd-trace:instrumentation:load:orchestrion')
 
