@@ -12,7 +12,7 @@
     "cassandra-driver": "4.10.0",
     "express": "5.3.0",
     "fastify": "5.12.8",
-    "graphql": "17.1.0",
+    "graphql": "16.14.0",
     "ioredis": "6.0.0",
     "kafkajs": "2.2.4",
     "knex": "3.3.0",
