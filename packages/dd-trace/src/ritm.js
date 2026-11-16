@@ -26,6 +26,7 @@ let patching = Object.create(null)
 let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+const moduleHookedChannel = dc.channel('dd-trace:moduleHooked')
 
 /**
  * @overload
@@ -196,6 +197,10 @@ function Hook (modules, options, onrequire) {
 
     for (const hook of hooks) {
       cache[moduleId].exports = hook(cache[moduleId].exports, name, basedir)
+    }
+
+    if (moduleHookedChannel.hasSubscribers) {
+      moduleHookedChannel.publish({ filename, exports: cache[moduleId].exports })
     }
 
     return cache[moduleId].exports

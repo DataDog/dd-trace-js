@@ -246,4 +246,4 @@ function registerSyncLoaderHooks (data = {}) {
 }
 
 export { resolve } from 'import-in-the-middle/hook.mjs'
-export { initialize, load, registerSyncLoaderHooks }
+export { initialize, load, prepareImportInTheMiddleOptions, registerSyncLoaderHooks }

@@ -9,7 +9,10 @@ const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 const parentURL = pathToFileURL(__filename)
 let isSyncLoaderRegistered = false
 
-if (shouldRegisterSyncLoaderHooks()) {
+if (process.versions.bun) {
+  // Bun does not run Node.js loader hooks; a Bun plugin instruments ES modules instead.
+  require('./packages/datadog-instrumentations/src/helpers/bun-loader').register()
+} else if (shouldRegisterSyncLoaderHooks()) {
   let registerSyncLoaderHooks
   let syncRegistrationError
   try {
@@ -27,7 +30,7 @@ if (shouldRegisterSyncLoaderHooks()) {
 }
 
 // `module.register` is removed in Node.js 27+ (nodejs/node#67090).
-if (!isSyncLoaderRegistered && register) {
+if (!process.versions.bun && !isSyncLoaderRegistered && register) {
   const { getLoaderRegisterOptions } = require('./packages/dd-trace/src/esm-module-load')
   register('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
 }

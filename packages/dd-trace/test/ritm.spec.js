@@ -106,6 +106,26 @@ describe('Ritm', () => {
     }
   })
 
+  it('publishes the exports returned by the hooks once a module is hooked', () => {
+    const moduleHookedChannel = dc.channel('dd-trace:moduleHooked')
+    const onModuleHooked = sinon.spy()
+    const hook = Hook(['./ritm-tests/module-hooked'], exports => ({ ...exports, patched: true }))
+    moduleHookedChannel.subscribe(onModuleHooked)
+    try {
+      const hooked = require('./ritm-tests/module-hooked')
+      assert.deepEqual(hooked, { foo: 'foo', patched: true })
+      require('./ritm-tests/module-hooked')
+
+      sinon.assert.calledOnceWithExactly(onModuleHooked, {
+        filename: require.resolve('./ritm-tests/module-hooked'),
+        exports: hooked,
+      }, 'dd-trace:moduleHooked')
+    } finally {
+      moduleHookedChannel.unsubscribe(onModuleHooked)
+      hook.unhook()
+    }
+  })
+
   it('should shim util', () => {
     require('node:util')
     assert.equal(startListener.callCount, 1)
