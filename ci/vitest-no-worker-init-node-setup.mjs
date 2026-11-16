@@ -19,4 +19,5 @@ globalThis[Symbol.for('dd-trace.vitest.set-fn')] = vitestRunner.setTestFn || vit
 globalThis[Symbol.for('dd-trace.vitest.skip-task')] = skip => skip('Skipped by Datadog Test Optimization')
 captureDeclarations(vitest.test, vitestRunner.getCurrentSuite)
 
-await import('./vitest-no-worker-init-setup.mjs')
+const { setup } = await import('./vitest-no-worker-init-setup.mjs')
+setup()
