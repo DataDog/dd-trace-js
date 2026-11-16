@@ -294,6 +294,103 @@ describe('RASP - ssrf', () => {
           assert.strictEqual(response.data, 'TypeError')
           assert.strictEqual(targetRequests, 0)
         })
+
+        it('Should block a threat in the headers of the options of a Request', async () => {
+          app = async (req, res, next) => {
+            try {
+              await fetch(new Request(`http://${getTargetHost()}/`), {
+                // An incoming request without the header leaves its value undefined, which fetch sends as a string.
+                headers: { 'x-rasp-block': 'block', 'x-forwarded-for': req.headers['x-forwarded-for'] },
+              })
+              res.end('end')
+            } catch (error) {
+              next(error)
+            }
+          }
+
+          const [response] = await Promise.all([
+            httpRequest.get('/', { validateStatus: null }),
+            checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-headers-rule-id-6'),
+          ])
+
+          assert.strictEqual(response.status, 403)
+          assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          assert.strictEqual(targetRequests, 0)
+        })
+
+        it('Should not block a threat in the headers that the options of a Request replace', async () => {
+          app = async (req, res) => {
+            const request = new Request(`http://${getTargetHost()}/`, { headers: { 'x-rasp-block': 'block' } })
+            const response = await fetch(request, { headers: {} })
+            res.end(await response.text())
+          }
+
+          const [response] = await Promise.all([
+            httpRequest.get('/'),
+            checkRaspExecutedAndNotThreat(agent),
+          ])
+
+          assert.strictEqual(response.data, 'target')
+          assert.strictEqual(targetRequests, 1)
+        })
+
+        /**
+         * @template {object} T
+         * @param {T & Iterable<unknown>} target
+         * @returns {T} `target`, iterable only once.
+         */
+        function withOneShotIterator (target) {
+          const values = [...target]
+          let iterated = false
+          return Object.assign(target, {
+            [Symbol.iterator] () {
+              const iterator = iterated ? [][Symbol.iterator]() : values[Symbol.iterator]()
+              iterated = true
+              return iterator
+            },
+          })
+        }
+
+        const oneShotHeaders = {
+          'an array of headers': () => withOneShotIterator([['authorization', 'Bearer token']]),
+          'a header pair': () => [withOneShotIterator(['authorization', 'Bearer token'])],
+          'a Headers object': () => withOneShotIterator(new Headers({ authorization: 'Bearer token' })),
+        }
+
+        for (const [name, createHeaders] of Object.entries(oneShotHeaders)) {
+          it(`Should send the headers of ${name} with a one-shot iterator in the options of a Request`, async () => {
+            app = async (req, res) => {
+              try {
+                // @ts-expect-error fetch accepts any iterable of header pairs
+                const response = await fetch(new Request(`http://${getTargetHost()}/`), { headers: createHeaders() })
+                res.end(await response.text())
+              } catch (error) {
+                res.end(error.name)
+              }
+            }
+
+            const response = await httpRequest.get('/')
+
+            assert.strictEqual(response.data, 'target')
+            assert.deepStrictEqual(targetAuthorizations, ['Bearer token'])
+          })
+        }
+
+        it('Should keep the rejection of a Headers object without its state in the options of a Request', async () => {
+          app = async (req, res) => {
+            try {
+              await fetch(new Request(`http://${getTargetHost()}/`), { headers: Object.create(Headers.prototype) })
+              res.end('resolved')
+            } catch (error) {
+              res.end(error.name)
+            }
+          }
+
+          const response = await httpRequest.get('/')
+
+          assert.strictEqual(response.data, 'TypeError')
+          assert.strictEqual(targetRequests, 0)
+        })
       })
 
       describe('Test using axios', () => {

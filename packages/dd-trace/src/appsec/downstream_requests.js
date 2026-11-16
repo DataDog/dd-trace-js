@@ -32,6 +32,7 @@ const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_TOO_BIG =
 
 const HTTP_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~\dA-Za-z]+$/
 const FORBIDDEN_FETCH_METHODS = new Set(['connect', 'trace', 'track'])
+const ARRAY_ITERATOR = Array.prototype[Symbol.iterator]
 const NORMALIZED_FETCH_METHODS = new Map([
   ['delete', 'DELETE'],
   ['get', 'GET'],
@@ -266,26 +267,29 @@ function getFetchMethod (method) {
 }
 
 /**
- * Returns the headers that fetch sends for a headers option, or undefined when the option is not plain data. Other
- * iterables are left out because reading them could consume the values that fetch has to send.
+ * Returns the headers that fetch sends for a headers option, or undefined when the option is not plain data. Iterables
+ * other than plain arrays and Headers objects are left out: reading them could consume the values that fetch sends.
  * @param {unknown} headers headers option of a fetch call.
  * @returns {Record<string, string> | undefined}
  */
 function getFetchHeaders (headers) {
-  if (headers instanceof Headers) return Object.fromEntries(headers)
-
-  let entries
-  if (Array.isArray(headers)) {
-    if (!headers.every(isFetchHeaderEntry)) return
-    entries = headers
-  } else if (typeof headers === 'object' && headers !== null && !(Symbol.iterator in headers)) {
-    entries = Object.entries(headers)
-    if (!entries.every(([, value]) => isFetchHeaderValue(value))) return
-  } else {
-    return
-  }
+  if (typeof headers !== 'object' || headers === null) return
 
   try {
+    const iterator = headers[Symbol.iterator]
+    let entries
+    if (iterator == null) {
+      entries = Object.entries(headers)
+      if (!entries.every(([, value]) => isFetchHeaderPrimitive(value))) return
+    } else if (iterator === ARRAY_ITERATOR && Array.isArray(headers)) {
+      if (!headers.every(isFetchHeaderEntry)) return
+      entries = headers
+    } else if (headers instanceof Headers && iterator === Headers.prototype[Symbol.iterator]) {
+      return Object.fromEntries(headers)
+    } else {
+      return
+    }
+
     // Headers applies the normalization of fetch, and rejects the names and values that fetch rejects.
     return Object.fromEntries(new Headers(entries))
   } catch {}
@@ -295,14 +299,19 @@ function getFetchHeaders (headers) {
  * @param {unknown} entry entry of a headers option given as an array.
  */
 function isFetchHeaderEntry (entry) {
-  return Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string' && isFetchHeaderValue(entry[1])
+  return Array.isArray(entry) &&
+    entry[Symbol.iterator] === ARRAY_ITERATOR &&
+    entry.length === 2 &&
+    isFetchHeaderPrimitive(entry[0]) &&
+    isFetchHeaderPrimitive(entry[1])
 }
 
 /**
- * @param {unknown} value header value of a headers option.
+ * Tells whether fetch converts a header name or value to a string without calling code of the application.
+ * @param {unknown} value header name or value of a headers option.
  */
-function isFetchHeaderValue (value) {
-  return typeof value === 'string' || typeof value === 'number'
+function isFetchHeaderPrimitive (value) {
+  return value === null || (typeof value !== 'object' && typeof value !== 'function' && typeof value !== 'symbol')
 }
 
 /**

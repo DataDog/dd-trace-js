@@ -356,6 +356,36 @@ describe('appsec downstream_requests', () => {
         )
       })
 
+      it('converts the primitive header values of the options as fetch does', () => {
+        const headers = {
+          'x-string': 'a',
+          'x-number': 1,
+          'x-true': true,
+          'x-undefined': undefined,
+          'x-null': null,
+          'x-bigint': 2n,
+        }
+
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(postRequest, { headers })[addresses.HTTP_OUTGOING_HEADERS],
+          {
+            'x-string': 'a',
+            'x-number': '1',
+            'x-true': 'true',
+            'x-undefined': 'undefined',
+            'x-null': 'null',
+            'x-bigint': '2',
+          }
+        )
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(postRequest, { headers: [['x-undefined', undefined]] }),
+          {
+            [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+            [addresses.HTTP_OUTGOING_HEADERS]: { 'x-undefined': 'undefined' },
+          }
+        )
+      })
+
       it('omits the headers without consuming a one-shot iterator in the options', () => {
         const headers = new Map([['x-override', 'b']]).entries()
 
@@ -365,10 +395,46 @@ describe('appsec downstream_requests', () => {
         assert.deepStrictEqual(headers.next().value, ['x-override', 'b'])
       })
 
+      const ownIterators = {
+        'an array of headers': iterator => Object.assign([['x-override', 'b']], { [Symbol.iterator]: iterator }),
+        'a header pair': iterator => [Object.assign(['x-override', 'b'], { [Symbol.iterator]: iterator })],
+        'a Headers object': iterator => Object.assign(new Headers({ 'x-override': 'b' }), {
+          [Symbol.iterator]: iterator,
+        }),
+      }
+
+      for (const [name, createHeaders] of Object.entries(ownIterators)) {
+        it(`omits the headers without calling the own iterator of ${name} in the options`, () => {
+          const iterator = sinon.stub().returns([][Symbol.iterator]())
+
+          assert.deepStrictEqual(downstream.extractFetchRequestData(getRequest, { headers: createHeaders(iterator) }), {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+          })
+          sinon.assert.notCalled(iterator)
+        })
+      }
+
+      it('omits the headers of an object that has the prototype but not the state of Headers', () => {
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(getRequest, { headers: Object.create(Headers.prototype) }),
+          { [addresses.HTTP_OUTGOING_METHOD]: 'GET' }
+        )
+      })
+
+      it('does not throw for a proxy of Headers in the options', () => {
+        // Whether a proxy passes the brand checks of Headers depends on the Node.js version.
+        const headers = new Proxy(new Headers({ a: 'b' }), {})
+
+        const addressesMap = downstream.extractFetchRequestData(getRequest, { headers })
+
+        assert.strictEqual(addressesMap[addresses.HTTP_OUTGOING_METHOD], 'GET')
+      })
+
       for (const headers of [
         null,
         'x-override: b',
         { 'x-override': { toString: () => 'b' } },
+        { 'x-override': Symbol('b') },
         [['x-override', { toString: () => 'b' }]],
         [['x-override']],
         { 'bad name': 'b' },
