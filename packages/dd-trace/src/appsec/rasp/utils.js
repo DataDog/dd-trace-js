@@ -2,7 +2,7 @@
 
 const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
-const { getBlockingAction, registerBlockDelegation } = require('../blocking')
+const { block, getBlockingAction, isBlocked } = require('../blocking')
 const log = require('../../log')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
@@ -85,13 +85,19 @@ function handleResult (result, req, res, abortController, config, raspRule) {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
 
       if (shouldBlockOnDetection) {
-        registerBlockDelegation(req, res, rootSpan, null, blockingAction).then(blocked => {
-          if (ruleTriggered) {
-            updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
-          }
-        })
-        const ignoreError = requestsToBlockOnDetection.get(req)
-        ignoreError?.(abortError)
+        // The blocking response is sent before the abort: once the operation fails, the framework can destroy the
+        // response before writing anything, as Next.js does when a stream fails before its first chunk.
+        let blocked = false
+        if (res) {
+          blocked = isBlocked(res) || block(req, res, rootSpan, null, blockingAction)
+        }
+        if (blocked) {
+          const ignoreError = requestsToBlockOnDetection.get(req)
+          ignoreError?.(abortError)
+        }
+        if (ruleTriggered) {
+          updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+        }
       }
 
       abortController.abort(abortError)

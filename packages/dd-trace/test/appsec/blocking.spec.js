@@ -241,14 +241,6 @@ describe('blocking', () => {
       })
     })
 
-    it('should resolve a delegation without a response as not blocked', async () => {
-      const blocked = await registerBlockDelegation(req, undefined, rootSpan)
-
-      assert.strictEqual(blocked, false)
-      assert.strictEqual(callBlockDelegation(undefined), undefined)
-      sinon.assert.notCalled(rootSpan.setTag)
-    })
-
     it('should resolve a delegation as not blocked when the response was destroyed before it ran', async () => {
       const promise = registerBlockDelegation(req, res, rootSpan)
       res.destroyed = true

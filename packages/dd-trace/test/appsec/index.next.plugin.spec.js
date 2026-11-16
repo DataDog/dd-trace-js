@@ -326,6 +326,7 @@ describe('test suite', () => {
           }
 
           async function assertRaspBlocked (path, ruleId) {
+            const stderrStart = serverData.stderr.length
             const [response] = await Promise.all([
               httpRequest.get(`http://127.0.0.1:${serverData.port}${path}`, { validateStatus: false }),
               agent.assertSomeTraces(traces => {
@@ -350,6 +351,8 @@ describe('test suite', () => {
 
             assert.strictEqual(response.status, 403)
             assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+            // Next.js keeps running after the block; its later writes must be discarded, not fail.
+            assert.doesNotMatch(serverData.stderr.slice(stderrStart), /ERR_HTTP_HEADERS_SENT|ERR_STREAM_WRITE_AFTER_END/)
           }
 
           it('should not block an outgoing request without an SSRF', async () => {
@@ -393,36 +396,17 @@ describe('test suite', () => {
             return assertRaspBlocked('/api/rasp-lfi?file=/test.file&rethrow', 'rasp-lfi-rule-id-5')
           })
 
-          // Next.js 14+ destroys the response when the stream errors before its first chunk; older versions still
-          // let the blocking response through.
-          const streamDestroyedTest = appName === 'app-dir' && satisfies(realVersion, '>=14') ? it : it.skip
-          const streamBlockedTest = appName === 'app-dir' && satisfies(realVersion, '<14') ? it : it.skip
+          const pagesDirTest = appName === 'pages-dir' ? it : it.skip
+          const streamTest = appName === 'app-dir' ? it : it.skip
 
-          streamBlockedTest('should block an SSRF made before the first chunk of a streamed response', async () => {
-            await assertRaspBlocked(`/api/rasp-ssrf-stream?host=127.0.0.1:${getTargetPort()}`, 'rasp-ssrf-rule-id-1')
-
-            assert.strictEqual(targetHits, 0)
+          pagesDirTest('should block an LFI whose error is thrown by getServerSideProps', () => {
+            return assertRaspBlocked('/rasp-lfi-ssr?file=/test.file', 'rasp-lfi-rule-id-5')
           })
 
-          streamDestroyedTest('should not report a block when Next.js destroys the stream first', async () => {
-            const url = `http://127.0.0.1:${serverData.port}/api/rasp-ssrf-stream?host=127.0.0.1:${getTargetPort()}`
+          streamTest('should block an SSRF made before the first chunk of a streamed response', async () => {
+            await assertRaspBlocked(`/api/rasp-ssrf-stream?host=127.0.0.1:${getTargetPort()}`, 'rasp-ssrf-rule-id-1')
 
-            const [error] = await Promise.all([
-              httpRequest.get(url, { validateStatus: false }).then(() => {}, error => error),
-              agent.assertSomeTraces(traces => {
-                const span = getWebSpan(traces)
-
-                assert.deepStrictEqual(
-                  JSON.parse(span.meta['_dd.appsec.json']).triggers.map(trigger => trigger.rule.id),
-                  ['rasp-ssrf-rule-id-1']
-                )
-                assert.strictEqual(span.meta['appsec.blocked'], undefined)
-                assert.strictEqual(span.metrics['_dd.appsec.block.failed'], 1)
-              }),
-            ])
-
-            assert.strictEqual(error?.code, 'ECONNRESET')
-            assert.strictEqual(targetHits, 0)
+            assert.strictEqual(targetConnections, 0)
           })
         })
       })

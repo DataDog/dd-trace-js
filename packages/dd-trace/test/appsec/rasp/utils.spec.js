@@ -29,7 +29,8 @@ describe('RASP - utils.js', () => {
 
     blocking = {
       getBlockingAction: sinon.spy((actions) => actions?.blocking_action),
-      registerBlockDelegation: sinon.stub().resolves(true),
+      block: sinon.stub().returns(true),
+      isBlocked: sinon.stub().returns(false),
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
@@ -71,7 +72,7 @@ describe('RASP - utils.js', () => {
     assert.ok(abortError instanceof utils.DatadogRaspAbortError)
     assert.strictEqual(abortError.raspRule, raspRule)
     assert.strictEqual(abortError.blockingAction, result.actions.blocking_action)
-    sinon.assert.notCalled(blocking.registerBlockDelegation)
+    sinon.assert.notCalled(blocking.block)
   }
 
   describe('handleResult', () => {
@@ -213,7 +214,7 @@ describe('RASP - utils.js', () => {
       events: [{ a: [1] }],
     }
 
-    let rootSpan, abortController
+    let rootSpan, abortController, ignoreError
 
     beforeEach(() => {
       rootSpan = {
@@ -223,17 +224,18 @@ describe('RASP - utils.js', () => {
         abort: sinon.stub(),
         signal: {},
       }
+      ignoreError = sinon.stub()
 
       web.root.returns(rootSpan)
-      utils.markToBlockOnDetection(req)
+      utils.markToBlockOnDetection(req, ignoreError)
     })
 
-    it('should abort the operation and delegate the blocking response', async () => {
+    it('should block the request before aborting the operation', () => {
       utils.handleResult(result, req, res, abortController, config, raspRule)
 
-      sinon.assert.calledOnceWithExactly(blocking.registerBlockDelegation, req, res, rootSpan, null, blockingAction)
+      sinon.assert.calledOnceWithExactly(blocking.block, req, res, rootSpan, null, blockingAction)
       sinon.assert.calledOnce(abortController.abort)
-      sinon.assert.callOrder(blocking.registerBlockDelegation, abortController.abort)
+      sinon.assert.callOrder(blocking.block, abortController.abort)
 
       const abortError = abortController.abort.firstCall.args[0]
       assert.ok(abortError instanceof utils.DatadogRaspAbortError)
@@ -242,92 +244,96 @@ describe('RASP - utils.js', () => {
       assert.strictEqual(abortError.blockingAction, blockingAction)
       assert.strictEqual(abortError.raspRule, raspRule)
 
-      sinon.assert.notCalled(telemetry.updateRaspRuleMatchMetricTags)
-
-      await blocking.registerBlockDelegation.firstCall.returnValue
-
       sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, true)
     })
 
-    it('should let the framework ignore the abort error before aborting', () => {
-      const ignoreError = sinon.stub()
-      utils.markToBlockOnDetection(req, ignoreError)
-
+    it('should let the framework ignore the abort error of a blocked request before aborting', () => {
       utils.handleResult(result, req, res, abortController, config, raspRule)
 
       const abortError = abortController.abort.firstCall.args[0]
-      assert.ok(abortError instanceof utils.DatadogRaspAbortError)
       sinon.assert.calledOnceWithExactly(ignoreError, abortError)
-      sinon.assert.callOrder(ignoreError, abortController.abort)
+      sinon.assert.callOrder(blocking.block, ignoreError, abortController.abort)
+    })
+
+    it('should abort without ignoring the abort error when the blocking response fails', () => {
+      blocking.block.returns(false)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.calledOnce(blocking.block)
+      sinon.assert.calledOnce(abortController.abort)
+      sinon.assert.notCalled(ignoreError)
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, false)
+    })
+
+    it('should abort without blocking again a request that is already blocked', () => {
+      blocking.isBlocked.withArgs(res).returns(true)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.notCalled(blocking.block)
+      sinon.assert.calledOnce(abortController.abort)
+      sinon.assert.calledOnceWithExactly(ignoreError, abortController.abort.firstCall.args[0])
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, true)
+    })
+
+    it('should report every rule match of a request blocked by an earlier one', () => {
+      blocking.isBlocked.withArgs(res).onSecondCall().returns(true)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.calledOnce(blocking.block)
+      sinon.assert.calledTwice(abortController.abort)
+      sinon.assert.calledTwice(ignoreError)
+      sinon.assert.alwaysCalledWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, true)
+      sinon.assert.calledTwice(telemetry.updateRaspRuleMatchMetricTags)
+    })
+
+    it('should abort without blocking when there is no response to block', () => {
+      utils.handleResult(result, req, undefined, abortController, config, raspRule)
+
+      sinon.assert.notCalled(blocking.block)
+      sinon.assert.calledOnce(abortController.abort)
+      sinon.assert.notCalled(ignoreError)
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, false)
+    })
+
+    it('should block when the root span is an Express request', () => {
+      rootSpan.context.returns({ _name: 'express.request' })
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.calledOnceWithExactly(blocking.block, req, res, rootSpan, null, blockingAction)
+      sinon.assert.calledOnce(abortController.abort)
     })
 
     it('should not ignore any error when the rule does not block', () => {
-      const ignoreError = sinon.stub()
-      utils.markToBlockOnDetection(req, ignoreError)
-
       utils.handleResult({ events: result.events }, req, res, abortController, config, raspRule)
 
       sinon.assert.notCalled(ignoreError)
     })
 
-    it('should report the rule match as not blocked when the blocking response fails', async () => {
-      blocking.registerBlockDelegation.resolves(false)
-
-      utils.handleResult(result, req, res, abortController, config, raspRule)
-
-      await blocking.registerBlockDelegation.firstCall.returnValue
-
-      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, false)
-    })
-
-    it('should delegate the blocking response when the root span is an Express request', () => {
-      rootSpan.context.returns({ _name: 'express.request' })
-
-      utils.handleResult(result, req, res, abortController, config, raspRule)
-
-      sinon.assert.calledOnceWithExactly(blocking.registerBlockDelegation, req, res, rootSpan, null, blockingAction)
-      sinon.assert.calledOnce(abortController.abort)
-    })
-
-    it('should not abort or delegate without a blocking action', () => {
+    it('should not abort or block without a blocking action', () => {
       utils.handleResult({ events: result.events }, req, res, abortController, config, raspRule)
 
       sinon.assert.notCalled(abortController.abort)
-      sinon.assert.notCalled(blocking.registerBlockDelegation)
+      sinon.assert.notCalled(blocking.block)
       sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, false, false)
     })
 
-    it('should not delegate the blocking response without an abort controller', () => {
+    it('should not block without an abort controller', () => {
       utils.handleResult(result, req, res, undefined, config, raspRule)
 
-      sinon.assert.notCalled(blocking.registerBlockDelegation)
+      sinon.assert.notCalled(blocking.block)
       sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, false, false)
     })
 
-    it('should report a failed block when there is no response to block', async () => {
-      const { getBlockingAction } = blocking
-      const utilsWithRealDelegation = proxyquire('../../../src/appsec/rasp/utils', {
-        '../../plugins/util/web': web,
-        '../stack_trace': stackTrace,
-        '../telemetry': telemetry,
-        '../blocking': { getBlockingAction },
-      })
-      utilsWithRealDelegation.markToBlockOnDetection(req)
-
-      utilsWithRealDelegation.handleResult(result, req, undefined, abortController, config, raspRule)
-
-      sinon.assert.calledOnce(abortController.abort)
-
-      await new Promise(resolve => setImmediate(resolve))
-
-      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, true, false)
-    })
-
-    it('should not abort or delegate in a request that is not blocked on detection', () => {
+    it('should not abort or block in a request that is not blocked on detection', () => {
       utils.handleResult(result, {}, res, abortController, config, raspRule)
 
       sinon.assert.notCalled(abortController.abort)
-      sinon.assert.notCalled(blocking.registerBlockDelegation)
+      sinon.assert.notCalled(blocking.block)
     })
   })
 

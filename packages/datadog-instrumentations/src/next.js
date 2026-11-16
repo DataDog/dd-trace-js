@@ -227,7 +227,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
   const isMiddleware = req.headers[MIDDLEWARE_HEADER] || getRequestMeta(req, META_IS_MIDDLEWARE)
   if ((isMiddleware && !encounteredMiddleware.has(req)) || requests.has(req)) {
     encounteredMiddleware.add(req)
-    if (error) {
+    if (error && !isIgnoredError(error)) {
       errorChannel.publish({ error })
     }
     return handler()
@@ -325,9 +325,16 @@ function isNoFallbackError (error) {
   return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
 }
 
-/** @param {unknown} error */
+/**
+ * An error that wraps an abort reason as its direct cause, such as the "failed to pipe response" error of Next.js
+ * when a stream fails, comes from the same stop.
+ *
+ * @param {unknown} error
+ */
 function isIgnoredError (error) {
-  return abortReasons.has(/** @type {object} */ (error)) || isNoFallbackError(error)
+  return abortReasons.has(/** @type {object} */ (error)) ||
+    (isNativeError(error) && abortReasons.has(/** @type {object} */ (error.cause))) ||
+    isNoFallbackError(error)
 }
 
 /**

@@ -176,8 +176,6 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 }
 
 function registerBlockDelegation (req, res) {
-  if (!res) return Promise.resolve(false)
-
   const args = arguments
 
   return new Promise((resolve) => {
