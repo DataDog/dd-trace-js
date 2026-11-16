@@ -7,4 +7,5 @@ globalThis[Symbol.for('dd-trace.vitest.set-fn')] = vitestRunner.setTestFn || vit
 captureDeclarations(vitest.test, vitestRunner.getCurrentSuite)
 globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')] = () => import('@vitest/browser/context')
 
-await import('./vitest-no-worker-init-setup.mjs')
+const { setup } = await import('./vitest-no-worker-init-setup.mjs')
+setup()
