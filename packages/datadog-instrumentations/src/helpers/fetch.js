@@ -57,7 +57,13 @@ exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
         // override the method, headers and body of `input`, but not its URL.
         return traceFetch(fetch, this, input, init, init)
       }
-      const req = new Request(input, init)
+      let req
+      try {
+        req = new Request(input, init)
+      } catch {
+        // fetch rejects the arguments it can't build a request from, rather than throwing them synchronously.
+        return fetch.apply(this, arguments)
+      }
       const signal = init?.signal
 
       // The signal of `req` only weakly follows `init.signal` and is collected once `req` is unreachable, which

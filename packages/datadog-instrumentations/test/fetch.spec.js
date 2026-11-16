@@ -5,6 +5,7 @@ const http = require('node:http')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
+const sinon = require('sinon')
 
 describe('packages/datadog-instrumentations/src/fetch.js', () => {
   describe('globalThis.fetch identity', () => {
@@ -137,6 +138,26 @@ describe('packages/datadog-instrumentations/src/fetch.js', () => {
         await assert.rejects(call(body), error => error === abortReason)
 
         assert.strictEqual(await cancelled, abortReason)
+        assert.deepStrictEqual(receivedRequests, [])
+      })
+    }
+
+    const invalidCalls = {
+      'an invalid URL': () => globalThis.fetch('not a url'),
+      'a forbidden method': () => globalThis.fetch(url, { method: 'TRACE' }),
+      'a body in a GET request': () => globalThis.fetch(url, { method: 'GET', body: 'payload' }),
+    }
+
+    for (const [name, call] of Object.entries(invalidCalls)) {
+      it(`rejects ${name} as fetch does, without publishing it`, async () => {
+        const nativeError = await call().catch(error => error)
+        subscriber = sinon.spy()
+        startChannel.subscribe(subscriber)
+
+        const promise = call()
+
+        await assert.rejects(promise, { name: nativeError.name, message: nativeError.message })
+        sinon.assert.notCalled(subscriber)
         assert.deepStrictEqual(receivedRequests, [])
       })
     }
