@@ -297,6 +297,9 @@ describe('test suite', () => {
           const reportsStatusCode = appName === 'pages-dir' || satisfies(realVersion, '>=13.3')
 
           let target
+          // A blocked request is checked with targetHits: it never reaches the target, but depending on the platform
+          // it can still open a TCP connection to it, as the HTTP client instrumentation destroys an aborted request
+          // after creating it.
           let targetConnections
           let targetHits
 
@@ -376,7 +379,7 @@ describe('test suite', () => {
           it('should block an SSRF whose error is caught by the route handler', async () => {
             await assertRaspBlocked(`/api/rasp-ssrf?host=127.0.0.1:${getTargetPort()}`, 'rasp-ssrf-rule-id-1')
 
-            assert.strictEqual(targetConnections, 0)
+            assert.strictEqual(targetHits, 0)
           })
 
           it('should block an SSRF whose error is thrown by the route handler', async () => {
@@ -385,13 +388,13 @@ describe('test suite', () => {
               'rasp-ssrf-rule-id-1'
             )
 
-            assert.strictEqual(targetConnections, 0)
+            assert.strictEqual(targetHits, 0)
           })
 
           it('should block an SSRF whose error is wrapped by a non-native error', async () => {
             await assertRaspBlocked(`/api/rasp-ssrf?host=127.0.0.1:${getTargetPort()}&wrap`, 'rasp-ssrf-rule-id-1')
 
-            assert.strictEqual(targetConnections, 0)
+            assert.strictEqual(targetHits, 0)
           })
 
           it('should block an LFI whose error is caught by the route handler', () => {
@@ -412,7 +415,7 @@ describe('test suite', () => {
           streamTest('should block an SSRF made before the first chunk of a streamed response', async () => {
             await assertRaspBlocked(`/api/rasp-ssrf-stream?host=127.0.0.1:${getTargetPort()}`, 'rasp-ssrf-rule-id-1')
 
-            assert.strictEqual(targetConnections, 0)
+            assert.strictEqual(targetHits, 0)
           })
         })
       })
