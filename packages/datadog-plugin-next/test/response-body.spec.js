@@ -20,11 +20,8 @@ describe('Next.js JSON response hook', () => {
     Object.defineProperty(RuntimeResponse, 'json', { value: json, writable: true, configurable: true })
     sinon.replace(globalThis, 'Response', RuntimeResponse)
 
-    class RuntimeRequest {
-      async text () {}
-      async json () {}
-      async formData () {}
-    }
+    // The hook wraps the request methods NextRequest inherits from the runtime Request.
+    class RuntimeRequest extends Request {}
     NextRequest = class extends RuntimeRequest {}
     hook = instrumentations.next.find(hook => hook.file === 'dist/server/web/spec-extension/request.js').hook
     hook({ NextRequest })
