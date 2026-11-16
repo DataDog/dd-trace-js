@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const path = require('path')
 
 const agent = require('../plugins/agent')
@@ -65,7 +66,8 @@ describe('sequelize', () => {
         const express = require(`../../../../versions/express@${expressVersion}`).get()
 
         const app = express()
-        app.get('/users', async (req, res) => {
+        // Legacy Express GET freshness checks use Node's removed private _headers API.
+        app.post('/users', async (req, res) => {
           const users = await User.findAll()
           res.json(users)
         })
@@ -82,7 +84,10 @@ describe('sequelize', () => {
       })
 
       it('Should complete the request on time', async () => {
-        await httpRequest.get(`http://localhost:${port}/users`)
+        const response = await httpRequest.post(`http://localhost:${port}/users`)
+        assert.strictEqual(response.status, 200)
+        assert.strictEqual(response.data.length, 1)
+        assert.strictEqual(response.data[0].username, 'janedoe')
       })
     })
   })
