@@ -863,6 +863,76 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('applies execution changes to every browser file without isolation', async () => {
+    const suites = ['a', 'b'].map(suffix =>
+      `ci-visibility/vitest-browser-tests/browser-no-isolate-${suffix}.mjs`
+    )
+    receiver.setSettings({
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: { '5s': 2 },
+      },
+      known_tests_enabled: true,
+      test_management: {
+        enabled: true,
+        attempt_to_fix_retries: 2,
+      },
+    })
+    receiver.setKnownTests({
+      vitest: Object.fromEntries(suites.map(suite => [suite, [
+        'does not execute a disabled browser test',
+        'quarantines a failing browser test',
+      ]])),
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: Object.fromEntries(suites.map(suite => [suite, {
+          tests: {
+            'attempts to fix a browser test': { properties: { attempt_to_fix: true } },
+            'does not execute a disabled browser test': { properties: { disabled: true } },
+            'quarantines a failing browser test': { properties: { quarantined: true } },
+          },
+        }])),
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      for (const suite of suites) {
+        const suiteTests = tests.filter(test => test.meta[TEST_SOURCE_FILE] === suite)
+        assert.strictEqual(suiteTests.length, 8, suite)
+        for (const [name, reason] of [
+          ['repeats a new browser test', TEST_RETRY_REASON_TYPES.efd],
+          ['attempts to fix a browser test', TEST_RETRY_REASON_TYPES.atf],
+        ]) {
+          const attempts = suiteTests.filter(test => test.meta[TEST_NAME] === name)
+          assert.strictEqual(attempts.length, 3, `${suite}: ${name}`)
+          for (const [index, attempt] of attempts.entries()) {
+            assert.strictEqual(attempt.meta[TEST_STATUS], 'pass')
+            if (index === 0) {
+              assert.ok(!(TEST_IS_RETRY in attempt.meta))
+            } else {
+              assert.strictEqual(attempt.meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(attempt.meta[TEST_RETRY_REASON], reason)
+            }
+          }
+        }
+        const atfAttempts = suiteTests.filter(test => test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true')
+        assert.strictEqual(atfAttempts.at(-1).meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+        const disabled = getTestByName(suiteTests, 'does not execute a disabled browser test')
+        assert.strictEqual(disabled.meta[TEST_STATUS], 'skip')
+        const quarantined = getTestByName(suiteTests, 'quarantines a failing browser test')
+        assert.strictEqual(quarantined.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
+      }
+    })
+
+    await Promise.all([
+      runVitest('browser-no-isolate-*.mjs', { NO_ISOLATE: '1' }, 0, ['--maxWorkers=1']),
+      payloadsPromise,
+    ])
+  })
+
   runtimeEfdSuiteAdmissionIt('stops browser EFD retries when the new-suite threshold is exceeded', async () => {
     receiver.setSettings({
       early_flake_detection: {
