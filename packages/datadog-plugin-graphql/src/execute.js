@@ -61,6 +61,13 @@ const walkedTypes = new WeakMap()
 let depthDisabled = false
 let hasExecuteHook = false
 
+// The `GraphQLSchema` classes of the GraphQL 17 builds loaded, whose resolvers receive `{ sources, coerced }`
+// variable values.
+const graphql17Schemas = []
+dc.subscribe('apm:graphql:entry:load', ({ graphql }) => {
+  if (typeof graphql?.GraphQLSchema === 'function') graphql17Schemas.push(graphql.GraphQLSchema)
+})
+
 // Initial key for the per-operation variables-filter cache. A unique sentinel
 // so the first #filterVariables call never falsely matches, even when the
 // operation's variableValues is undefined.
@@ -658,7 +665,7 @@ function wrapResolve (resolve, isJit = false) {
 
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
-    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, coercedVariables(info.variableValues))
+    rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, coercedVariables(info))
 
     /**
      * @param {unknown} error
@@ -1108,16 +1115,20 @@ function wrapFieldType (field, schema) {
 }
 
 /**
- * GraphQL 17 exposes `info.variableValues` as `{ sources, coerced }` instead of
- * the coerced map itself.
+ * GraphQL 17 exposes `info.variableValues` as `{ sources, coerced }` instead of the coerced map itself. Operations
+ * on older versions may declare variables with those names, so the format follows the schema's GraphQL build, not
+ * the property names.
  *
- * @param {Record<string, unknown> | undefined} variableValues
+ * @param {{ schema?: object, variableValues?: Record<string, unknown> }} info
  * @returns {Record<string, unknown> | undefined}
  */
-function coercedVariables (variableValues) {
-  return variableValues && 'sources' in variableValues && 'coerced' in variableValues
-    ? /** @type {Record<string, unknown>} */ (variableValues.coerced)
-    : variableValues
+function coercedVariables (info) {
+  const variableValues = info.variableValues
+  if (!variableValues) return variableValues
+  for (const GraphQLSchema of graphql17Schemas) {
+    if (info.schema instanceof GraphQLSchema) return /** @type {Record<string, unknown>} */ (variableValues.coerced)
+  }
+  return variableValues
 }
 
 /**

@@ -2660,6 +2660,55 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with variables named like the GraphQL 17 wrapper', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { variables: variables => variables })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        it('should tag the resolve spans with both variables', () => {
+          const variableSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'VariableQuery',
+              fields: {
+                echo: {
+                  type: graphql.GraphQLString,
+                  args: {
+                    a: { type: graphql.GraphQLString },
+                    b: { type: graphql.GraphQLString },
+                  },
+                  resolve: () => 'echo',
+                },
+              },
+            }),
+          })
+          const source = 'query ($sources: String, $coerced: String) { echo(a: $sources, b: $coerced) }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const span = traces[0].find(span => span.name === 'graphql.resolve')
+
+            assert.ok(span, 'expected a graphql.resolve span')
+            assert.strictEqual(span.meta['graphql.variables.sources'], 'one')
+            assert.strictEqual(span.meta['graphql.variables.coerced'], 'two')
+          })
+
+          return Promise.all([assertion, graphql.graphql({
+            schema: variableSchema,
+            source,
+            variableValues: { sources: 'one', coerced: 'two' },
+          })])
+        })
+      })
+
       describe('with an array of variable names', () => {
         before(() => {
           tracer = require('../../dd-trace')

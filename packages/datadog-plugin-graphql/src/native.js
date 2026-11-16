@@ -27,6 +27,9 @@ const legacyStorage = storage('legacy')
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 
+/** @type {GraphQLNativeResolvePlugin | undefined} */
+let resolvePlugin
+
 /** Errors the resolve channel already attributed to their field. */
 const resolveErrors = new WeakSet()
 
@@ -62,6 +65,7 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
   static extraPrefixes = []
 
   bindStart (ctx) {
+    resolvePlugin?.enableIfNeeded()
     const { schema, document } = ctx
     // The `operationName` getter resolves the operation and throws on a malformed document.
     const operationName = Array.isArray(document?.definitions) ? ctx.operationName : undefined
@@ -131,6 +135,23 @@ class GraphQLNativeResolvePlugin extends TracingPlugin {
   static operation = 'resolve'
   static prefix = 'tracing:graphql:resolve'
 
+  constructor (...args) {
+    super(...args)
+    resolvePlugin = this
+  }
+
+  // GraphQL publishes this channel for every field once subscribed, which costs most when the plugin has nothing to
+  // trace. With `depth: 0` only IAST and AppSec read the channel, so subscribe once one of them listens.
+  configure (config) {
+    this.fullConfig = config
+    super.configure(needsResolveChannel(config) ? config : false)
+  }
+
+  enableIfNeeded () {
+    const config = this.fullConfig
+    if (!this._enabled && config?.enabled && needsResolveChannel(config)) super.configure(config)
+  }
+
   start (ctx) {
     startField(ctx)
   }
@@ -161,6 +182,13 @@ class GraphQLNativeResolvePlugin extends TracingPlugin {
       markRecorded(error)
     }
   }
+}
+
+/**
+ * @param {{ depth: number } | boolean} config
+ */
+function needsResolveChannel (config) {
+  return config !== false && (config.depth !== 0 || iastResolveCh.hasSubscribers || resolverStartCh.hasSubscribers)
 }
 
 /**
