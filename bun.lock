@@ -75,7 +75,7 @@
       "optionalDependencies": {
         "@datadog/libdatadog": "^0.21.0",
         "@datadog/libdatadog-extras": "^0.21.0",
-        "@datadog/native-appsec": "11.0.3",
+        "@datadog/native-appsec": "12.0.0",
         "@datadog/native-iast-taint-tracking": "4.2.1",
         "@datadog/native-metrics": "4.0.0",
         "@datadog/pprof": "5.20.1",
@@ -150,7 +150,7 @@
 
     "@datadog/libdatadog-wasm": ["@datadog/libdatadog-wasm@0.21.0", "", {}, "sha512-2wg5naOV+X7wyCNBJ/mRxE56fK22iz4ZwehzA/dSzuBO4/daNaVM6UgudRjkgXA9Pp0zEYcxmv4e1tNApQAEng=="],
 
-    "@datadog/native-appsec": ["@datadog/native-appsec@11.0.3", "", { "dependencies": { "node-gyp-build": "^3.9.0" } }, "sha512-IlB4IuL42rWVHmigMrWhtYW38Q7rQd5iH2Yf7HRkL51mP2ODiD52rwdrbTsJl9nt2msMR8/fsoySIs4d02xzEA=="],
+    "@datadog/native-appsec": ["@datadog/native-appsec@12.0.0", "", { "dependencies": { "node-gyp-build": "^3.9.0" } }, "sha512-VEu5sMZhJCBBEZ+DRJhQJLy5+iUX406/MjoskQ7eo1odAD0PR4b/CiHlWUyi+zoQwRJe4+2oy/7+Cobf9iM65Q=="],
 
     "@datadog/native-iast-taint-tracking": ["@datadog/native-iast-taint-tracking@4.2.1", "", { "dependencies": { "node-gyp-build": "^3.9.0" } }, "sha512-KRLu3aTXvyAusouAZGTw2w1Xo67cRTw93yG4C9vTMpIgN9FXiqhlcvtNHvUzaA/KRrwtNwbaUELubOtk/kxOFg=="],
 

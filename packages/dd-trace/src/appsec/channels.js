@@ -23,6 +23,8 @@ module.exports = {
   fetchRequestStart: dc.channel('tracing:apm:fetch:request:start'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),
+  httpClientRequestFinish: dc.channel('apm:http:client:request:finish'),
+  httpClientRequestError: dc.channel('apm:http:client:request:error'),
   httpClientRequestStart: dc.channel('apm:http:client:request:start'),
   httpClientResponseStart: dc.channel('apm:http:client:response:start'),
   httpClientResponseFinish: dc.channel('apm:http:client:response:finish'),

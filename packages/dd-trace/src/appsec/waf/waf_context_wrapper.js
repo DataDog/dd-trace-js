@@ -6,14 +6,16 @@ const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
 const { wafRunFinished } = require('../channels')
 
-// TODO: remove once ephemeral addresses are implemented
+// Some HTTP hooks can supply the same query more than once.
 const preventDuplicateAddresses = new Set([
   addresses.HTTP_INCOMING_QUERY,
 ])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
+  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses, req, parent) {
     this.ddwafContext = ddwafContext
+    this.parent = parent
+    this.req = req
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
@@ -36,7 +38,7 @@ class WAFContextWrapper {
     }
   }
 
-  run ({ persistent, ephemeral }, raspRule, req, rootSpan) {
+  run (data, raspRule, rootSpan) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       if (raspRule) {
@@ -46,9 +48,8 @@ class WAFContextWrapper {
       return
     }
 
-    // SPECIAL CASE FOR USER_ID
-    // TODO: make this universal
-    const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
+    const req = this.req
+    const userId = data?.[addresses.USER_ID]
     if (userId) {
       const cachedResults = this.cachedUserIdResults.get(userId)
       if (cachedResults) {
@@ -61,41 +62,16 @@ class WAFContextWrapper {
     // Cloned lazily; only the preventDuplicateAddresses branch below adds to it.
     let newAddressesToSkip
 
-    if (persistent !== null && typeof persistent === 'object') {
-      const persistentInputs = {}
-
-      let hasPersistentInputs = false
-      for (const key of Object.keys(persistent)) {
+    if (data !== null && typeof data === 'object') {
+      for (const key of Object.keys(data)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
-          hasPersistentInputs = true
-          persistentInputs[key] = persistent[key]
-          if (preventDuplicateAddresses.has(key)) {
+          payloadHasData = true
+          payload[key] = data[key]
+          if (!this.parent && preventDuplicateAddresses.has(key)) {
             newAddressesToSkip ??= new Set(this.addressesToSkip)
             newAddressesToSkip.add(key)
           }
         }
-      }
-
-      if (hasPersistentInputs) {
-        payload.persistent = persistentInputs
-        payloadHasData = true
-      }
-    }
-
-    if (ephemeral !== null && typeof ephemeral === 'object') {
-      const ephemeralInputs = {}
-
-      let hasEphemeral = false
-      for (const key of Object.keys(ephemeral)) {
-        if (this.knownAddresses.has(key)) {
-          hasEphemeral = true
-          ephemeralInputs[key] = ephemeral[key]
-        }
-      }
-
-      if (hasEphemeral) {
-        payload.ephemeral = ephemeralInputs
-        payloadHasData = true
       }
     }
 
@@ -168,7 +144,7 @@ class WAFContextWrapper {
       metrics.errorCode = err.errorCode ?? -127
     } finally {
       if (wafRunFinished.hasSubscribers) {
-        wafRunFinished.publish({ payload })
+        wafRunFinished.publish({ payload, req, isSubcontext: !!this.parent })
       }
 
       Reporter.reportMetrics(metrics, raspRule, req, rootSpan)
@@ -195,8 +171,27 @@ class WAFContextWrapper {
     }
   }
 
+  createSubcontext () {
+    if (this.parent || this.ddwafContext.disposed) return
+    try {
+      const subcontext = new WAFContextWrapper(
+        this.ddwafContext.createSubcontext(), this.wafTimeout, this.wafVersion,
+        this.rulesVersion, this.knownAddresses, this.req, this
+      )
+      this.subcontexts ??= new Set()
+      this.subcontexts.add(subcontext)
+      return subcontext
+    } catch (error) {
+      log.error('[ASM] Error creating an AppSec WAF subcontext', error)
+    }
+  }
+
   dispose () {
-    this.ddwafContext.dispose()
+    this.parent?.subcontexts.delete(this)
+    if (this.subcontexts) {
+      for (const subcontext of this.subcontexts) subcontext.dispose()
+    }
+    if (!this.ddwafContext.disposed) this.ddwafContext.dispose()
   }
 }
 

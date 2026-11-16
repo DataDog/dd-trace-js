@@ -39,15 +39,13 @@
   "request": [
     {
       "payload": {
-        "persistent": {
-          "server.request.uri.raw": "/",
-          "server.request.headers.no_cookies": {
-            "host": "127.0.0.1:<port>",
-            "connection": "keep-alive"
-          },
-          "server.request.method": "GET",
-          "http.client_ip": "<loopback>"
-        }
+        "server.request.uri.raw": "/",
+        "server.request.headers.no_cookies": {
+          "host": "127.0.0.1:<port>",
+          "connection": "keep-alive"
+        },
+        "server.request.method": "GET",
+        "http.client_ip": "<loopback>"
       },
       "result": {
         "metrics": {},
@@ -63,10 +61,8 @@
     },
     {
       "payload": {
-        "persistent": {
-          "server.response.status": "404",
-          "server.response.headers.no_cookies": {}
-        }
+        "server.response.status": "404",
+        "server.response.headers.no_cookies": {}
       },
       "result": {
         "metrics": {},
@@ -79,16 +75,14 @@
   "attack": [
     {
       "payload": {
-        "persistent": {
-          "server.request.uri.raw": "/../../../secret.txt?k=<script>alert()</script>",
-          "server.request.headers.no_cookies": {
-            "user-agent": "Arachni/v1",
-            "host": "127.0.0.1:<port>",
-            "connection": "keep-alive"
-          },
-          "server.request.method": "GET",
-          "http.client_ip": "<loopback>"
-        }
+        "server.request.uri.raw": "/../../../secret.txt?k=<script>alert()</script>",
+        "server.request.headers.no_cookies": {
+          "user-agent": "Arachni/v1",
+          "host": "127.0.0.1:<port>",
+          "connection": "keep-alive"
+        },
+        "server.request.method": "GET",
+        "http.client_ip": "<loopback>"
       },
       "result": {
         "metrics": {},
@@ -168,10 +162,8 @@
     },
     {
       "payload": {
-        "persistent": {
-          "server.response.status": "404",
-          "server.response.headers.no_cookies": {}
-        }
+        "server.response.status": "404",
+        "server.response.headers.no_cookies": {}
       },
       "result": {
         "metrics": {},
