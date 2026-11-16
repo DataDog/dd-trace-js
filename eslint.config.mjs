@@ -1016,7 +1016,7 @@ export default [
       n: eslintPluginN,
     },
     files: [
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
     settings: {
       node: {
@@ -1052,7 +1052,7 @@ export default [
     ...eslintPluginCypress.configs.recommended,
     files: [
       'integration-tests/cypress/**/*.jsx',
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
   },
   {
