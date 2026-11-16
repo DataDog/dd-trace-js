@@ -522,6 +522,9 @@ function reconcileNativeRetries (native, baseline, configured, actual) {
 
 class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
+  // Cypress 16.3.0+ runs every after:spec handler, including user handlers that forward to the
+  // legacy helper after the plugin's own handler, so each spec execution is finalized once.
+  #specFinalizations = new Map()
 
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
@@ -627,6 +630,7 @@ class CypressPlugin {
    */
   resetRunState () {
     this.#pendingTestSuiteSpans.clear()
+    this.#specFinalizations.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
     this.resolvedCypressRetries = undefined
@@ -1719,6 +1723,16 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error, finishTime) {
+    // Without a started suite, a repeated call belongs to an execution that was already finalized.
+    if (!this.testSuiteSpan && this.#specFinalizations.has(spec.relative)) {
+      return this.#specFinalizations.get(spec.relative)
+    }
+    const finalization = this.#afterSpec(spec, results, error, finishTime)
+    this.#specFinalizations.set(spec.relative, finalization)
+    return finalization
+  }
+
+  #afterSpec (spec, results, error, finishTime) {
     const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
     if (cypressTests.length > 0 || stats?.tests > 0) this.hasTestsReported = true

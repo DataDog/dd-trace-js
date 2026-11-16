@@ -407,6 +407,35 @@ describe('Cypress plugin run lifecycle', () => {
     })
   }
 
+  it('finalizes each spec execution once when both the plugin and a forwarding handler run', async () => {
+    const { createSpan } = prepareRunFinalization()
+    const spec = { relative: 'cypress/e2e/skipped.js' }
+    const results = {
+      tests: [{ title: ['skipped'], state: 'pending', attempts: [] }], stats: { tests: 1, pending: 1 },
+    }
+    const getTestSpan = sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+    sinon.stub(cypressPlugin, 'getTestProperties').returns({})
+    const testSuiteSpan = createSpan()
+    cypressPlugin.testSuiteSpan = testSuiteSpan
+
+    const first = cypressPlugin.afterSpec(spec, results)
+    const second = cypressPlugin.afterSpec(spec, results)
+    await Promise.all([first, second])
+
+    assert.strictEqual(second, first)
+    sinon.assert.calledOnce(getTestSpan)
+    sinon.assert.calledOnce(getTestSpan.firstCall.returnValue.finish)
+    sinon.assert.calledOnce(testSuiteSpan.finish)
+
+    // A suite started for the same spec, such as an interactive rerun, is a new execution.
+    const rerunSuiteSpan = createSpan()
+    cypressPlugin.testSuiteSpan = rerunSuiteSpan
+    await cypressPlugin.afterSpec(spec, results)
+
+    sinon.assert.calledTwice(getTestSpan)
+    sinon.assert.calledOnce(rerunSuiteSpan.finish)
+  })
+
   it('starts a suite video upload from after:run after Cypress video processing', async () => {
     const testSuiteSpan = {
       context: () => ({ toSpanId: () => '456' }),
