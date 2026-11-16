@@ -247,7 +247,7 @@ jobs:
       fail-fast: false
       matrix:
         # Keep the regular, failure video, and Test Optimization suites in separate lanes; together they exceed the
-        # CI time budget. The oldest Test Optimization suite also runs each adapter in its own lane.
+        # CI time budget. Both Test Optimization versions also run each adapter in its own lane.
         # The shared "latest" resolves to Node 26.2.0; WebdriverIO 10.2 requires >=26.12.1 on Node 26.
         # Use its supported Node 22 runtime here to avoid changing Node versions for unrelated jobs.
         include:
@@ -274,6 +274,11 @@ jobs:
           - node-version: '22.23.4'
             webdriverio-version: latest
             spec: webdriverio.test-optimization
+            adapter: mocha
+          - node-version: '22.23.4'
+            webdriverio-version: latest
+            spec: webdriverio.test-optimization
+            adapter: jasmine
     name: >-
       integration-webdriverio (${{ matrix.webdriverio-version }},
       node-${{ matrix.node-version }}, ${{ matrix.spec }}${{ matrix.adapter && format(', {0}', matrix.adapter) || '' }})
@@ -561,7 +566,6 @@ jobs:
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
-      - run: yarn config set ignore-engines true
       - run: npm run test:integration:cypress:coverage
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}

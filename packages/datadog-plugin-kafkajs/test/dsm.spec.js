@@ -14,6 +14,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createTopicWithRetry } = require('./helpers')
@@ -26,7 +27,10 @@ const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
     : ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
   edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
   edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash, propagationHash.getHash())
+  const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+  return computePathwayHash(
+    'test', 'tester', edgeTags, parentHash, processTagsForHash, propagationHash.getContainerTagsHash()
+  )
 }
 
 describe('Plugin', () => {

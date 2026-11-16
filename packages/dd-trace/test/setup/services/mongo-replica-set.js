@@ -45,12 +45,14 @@ function commandMongoCore (server, command) {
 }
 
 /**
- * @param {boolean} isSandbox load `mongodb-core` from the sandbox instead of the version folder
+ * @param {ReturnType<typeof import('node:module').createRequire>} [requireFromSandbox]
  * @returns {Promise<void>}
  */
-function waitForMongoReplicaSet (isSandbox) {
+function waitForMongoReplicaSet (requireFromSandbox) {
   return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-    const mongoCore = isSandbox ? require('mongodb-core') : require('../../../../../versions/mongodb-core').get()
+    const mongoCore = requireFromSandbox
+      ? requireFromSandbox('mongodb-core')
+      : require('../../../../../versions/mongodb-core').get()
 
     const operation = new RetryOperation('mongo-replset')
 

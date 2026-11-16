@@ -53,21 +53,31 @@ describe('get-library-configuration', () => {
     nock.cleanAll()
   })
 
-  it('fetches library configuration with an API key', (done) => {
-    nock('https://api.datadoghq.com')
-      .post('/api/v2/libraries/tests/services/setting')
-      .reply(200, { data: { attributes: COMPLETE_SETTINGS_ATTRIBUTES } })
+  for (const [description, branch, tag, expectedBranch] of [
+    ['a branch', 'feature', 'v1.0.0', 'feature'],
+    ['a detached tag', undefined, 'v1.0.0', 'v1.0.0'],
+    ['an untagged detached checkout', undefined, undefined, undefined],
+  ]) {
+    it(`fetches library configuration with an API key for ${description}`, (done) => {
+      nock('https://api.datadoghq.com')
+        .post('/api/v2/libraries/tests/services/setting', body => expectedBranch === undefined
+          ? !Object.hasOwn(body.data.attributes, 'branch')
+          : body.data.attributes.branch === expectedBranch)
+        .reply(200, { data: { attributes: COMPLETE_SETTINGS_ATTRIBUTES } })
 
-    getLibraryConfiguration({
-      url: new URL('https://api.datadoghq.com'),
-      isEvpProxy: false,
-      evpProxyPrefix: '',
-    }, (error, settings) => {
-      assert.strictEqual(error, null)
-      assert.strictEqual(settings.isCodeCoverageEnabled, true)
-      done()
+      getLibraryConfiguration({
+        url: new URL('https://api.datadoghq.com'),
+        isEvpProxy: false,
+        evpProxyPrefix: '',
+        branch,
+        tag,
+      }, (error, settings) => {
+        assert.strictEqual(error, null)
+        assert.strictEqual(settings.isCodeCoverageEnabled, true)
+        done()
+      })
     })
-  })
+  }
 
   it('does not fetch library configuration without an API key', (done) => {
     getConfig().DD_API_KEY = undefined

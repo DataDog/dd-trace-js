@@ -5,6 +5,7 @@ const { existsSync, readFileSync } = require('node:fs')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
+const { parse } = require('jsonc-parser')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -232,13 +233,15 @@ describe('OpenFeature flag selection', () => {
 
     it('pins flagging-core to the version the vendored provider depends on', () => {
       const { dependencies } = require('../../../../vendor/package.json')
-      const { packages } = require('../../../../vendor/package-lock.json')
+      const { packages } = parse(readFileSync(path.join(__dirname, '../../../../vendor/bun.lock'), 'utf8'))
 
-      const installed = packages['node_modules/@datadog/flagging-core'].version
-      assert.strictEqual(dependencies['@datadog/flagging-core'], installed)
       assert.strictEqual(
-        packages['node_modules/@datadog/openfeature-node-server/node_modules/@datadog/flagging-core'],
+        packages['@datadog/openfeature-node-server/@datadog/flagging-core'],
         undefined
+      )
+      assert.strictEqual(
+        packages['@datadog/flagging-core'][0],
+        `@datadog/flagging-core@${dependencies['@datadog/flagging-core']}`
       )
     })
 

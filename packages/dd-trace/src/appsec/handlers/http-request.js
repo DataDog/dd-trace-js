@@ -32,6 +32,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   if (!req) {
     req = getActiveRequest()
+    res ??= web.getContext(req)?.res
   }
 
   const rootSpan = web.root(req)

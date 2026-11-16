@@ -338,6 +338,16 @@ class Tracer extends NoopProxy {
       log.error(BUNDLED_OPENSSL_WARNING)
     }
 
+    // Load code before the image snapshot; identity and metadata storage stay in /run.
+    const storeTracerMetadata = require('./tracer_metadata')
+    if (config.DD_TRACE_ENABLED) {
+      try {
+        require('@datadog/libdatadog-extras').maybeLoad('process-discovery')
+      } catch {
+        // Native metadata is optional; /run retains its existing availability handling.
+      }
+    }
+
     const ch = channel('http.server.request.start')
 
     const onHttpRequest = ({ request }) => {
@@ -347,7 +357,6 @@ class Tracer extends NoopProxy {
         reseed()
         channel('datadog:identity:update').publish(config)
         if (this._tracingInitialized) {
-          const storeTracerMetadata = require('./tracer_metadata')
           const metadata = storeTracerMetadata(config)
           if (metadata === undefined) {
             log.warn('Could not store tracer configuration for service discovery')
@@ -422,9 +431,11 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
-          () => this.openfeature)
+        if (!config.isCiVisibility) {
+          lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+          lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+            () => this.openfeature)
+        }
 
         if (aiguardEnabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
