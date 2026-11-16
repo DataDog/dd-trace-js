@@ -60,9 +60,9 @@ exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
       let req
       try {
         req = new Request(input, init)
-      } catch {
-        // fetch rejects the arguments it can't build a request from, rather than throwing them synchronously.
-        return fetch.apply(this, arguments)
+      } catch (error) {
+        // fetch rejects the arguments it can't build a request from, rather than throwing them synchronously
+        return Promise.reject(error)
       }
       const signal = init?.signal
 

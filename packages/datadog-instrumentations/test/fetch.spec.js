@@ -146,6 +146,15 @@ describe('packages/datadog-instrumentations/src/fetch.js', () => {
       'an invalid URL': () => globalThis.fetch('not a url'),
       'a forbidden method': () => globalThis.fetch(url, { method: 'TRACE' }),
       'a body in a GET request': () => globalThis.fetch(url, { method: 'GET', body: 'payload' }),
+      'an invalid header in a one-shot iterator': () => {
+        function * headers () {
+          yield ['x-policy', 'safe']
+          yield ['bad name', 'value']
+        }
+
+        // @ts-expect-error fetch accepts any iterable of header pairs
+        return globalThis.fetch(url, { headers: headers() })
+      },
     }
 
     for (const [name, call] of Object.entries(invalidCalls)) {
