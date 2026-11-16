@@ -336,8 +336,12 @@ function isTaskRequired (client, params) {
   }
 }
 
-// Shimmer, not Orchestrion: the call must wait for an asynchronous check before tools/call is sent,
-// and a rejected check must cancel it. Subscribers of the Orchestrion channels cannot hold the call.
+// Shimmer, not Orchestrion, like the other AI Guard interceptors. The call waits for an asynchronous
+// check before tools/call is sent. A rejected check must cancel the call, and the original must get
+// the params that the subscriber put in ctx.arguments. The awaitContextCallback rewriter transform
+// can hold a call, but it ignores a rejection and cannot replace the arguments. Orchestrion also
+// cannot find the Client class of MCP v2, because the chunk file names of that bundle change between
+// releases. So this check runs before the Orchestrion span of Client_callTool starts.
 /**
  * @param {Function} callTool
  */
