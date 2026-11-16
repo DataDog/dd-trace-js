@@ -99,6 +99,21 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
 
+    it('should still abort the blocked operation when the response has been destroyed', () => {
+      res.destroyed = true
+      const abortController = new AbortController()
+
+      const blocked = block(req, res, rootSpan, abortController)
+
+      assert.strictEqual(blocked, false)
+      assert.strictEqual(abortController.signal.aborted, true)
+      assert.strictEqual(abortController.signal.reason.name, 'BlockedRequestError')
+      sinon.assert.notCalled(res.writeHead)
+      sinon.assert.notCalled(res.constructor.prototype.end)
+      sinon.assert.neverCalledWith(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+    })
+
     it('should send blocking response with html type if present in the headers', () => {
       req.headers.accept = 'text/html'
       const blocked = block(req, res, rootSpan)
