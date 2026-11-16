@@ -437,6 +437,13 @@ class Config extends ConfigBase {
         this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
+    // OTEL_SDK_DISABLED disables every OpenTelemetry signal, so unlike the other OTel settings it
+    // overrides an explicit Datadog opt-in. Tracing is handled at the entry point (src/index.js),
+    // where an explicit DD_TRACE_ENABLED takes precedence.
+    if (this.OTEL_SDK_DISABLED) {
+      deactivateForOtelSdkDisabled(this, 'DD_METRICS_OTEL_ENABLED')
+      deactivateForOtelSdkDisabled(this, 'DD_LOGS_OTEL_ENABLED')
+    }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
@@ -885,6 +892,17 @@ function deactivateIfEnabledAndWarnOnWindows (config, envVar) {
   }
 }
 
+/**
+ * @param {Config} config
+ * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED'} name
+ */
+function deactivateForOtelSdkDisabled (config, name) {
+  if (config[name]) {
+    log.warn('OTEL_SDK_DISABLED=true overrides %s=true', name)
+    setAndTrack(config, name, false)
+  }
+}
+
 function increaseCounter (event, ddVar, otelVar) {
   const tags = []
   if (ddVar) {
@@ -936,7 +954,7 @@ function warnWrongOtelSettings () {
     ['OTEL_TRACES_EXPORTER', 'DD_TRACE_ENABLED'],
     ['OTEL_METRICS_EXPORTER', 'DD_RUNTIME_METRICS_ENABLED'],
     ['OTEL_RESOURCE_ATTRIBUTES', 'DD_TAGS'],
-    ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
+    ['OTEL_SDK_DISABLED', 'DD_TRACE_ENABLED'],
     ['OTEL_LOGS_EXPORTER'],
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env

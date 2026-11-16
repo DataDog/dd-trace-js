@@ -291,7 +291,7 @@ describe('opentelemetry', function () {
         ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter'],
         ['config_datadog:dd_runtime_metrics_enabled', 'config_opentelemetry:otel_metrics_exporter'],
         ['config_datadog:dd_tags', 'config_opentelemetry:otel_resource_attributes'],
-        ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'],
+        ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'],
       ]))
 
       assert.deepStrictEqual(sortMetricTags(otelInvalid), [])
@@ -333,9 +333,7 @@ describe('opentelemetry', function () {
       const otelHiding = metrics.series.filter(({ metric }) => metric === 'otel.env.hiding')
       const otelInvalid = metrics.series.filter(({ metric }) => metric === 'otel.env.invalid')
 
-      assert.deepStrictEqual(sortMetricTags(otelHiding), sortMetricTags([
-        ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'],
-      ]))
+      assert.deepStrictEqual(sortMetricTags(otelHiding), [])
 
       assert.deepStrictEqual(sortMetricTags(otelInvalid), sortMetricTags([
         ['config_datadog:dd_trace_log_level', 'config_opentelemetry:otel_log_level'],
@@ -345,7 +343,7 @@ describe('opentelemetry', function () {
         ['config_datadog:dd_trace_sample_rate', 'config_opentelemetry:otel_traces_sampler_arg'],
         ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_traces_exporter'],
         ['config_datadog:dd_runtime_metrics_enabled', 'config_opentelemetry:otel_metrics_exporter'],
-        ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'],
+        ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'],
       ]))
 
       for (const metric of otelInvalid) {

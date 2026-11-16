@@ -774,6 +774,11 @@ The following attributes are available to override Datadog-specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
+Set `OTEL_SDK_DISABLED=true` to disable the SDK. Unless `DD_TRACE_ENABLED` is set, it has the same effect as
+`DD_TRACE_ENABLED=false`, including in agentless mode and with `OTEL_TRACES_EXPORTER`. It also disables OpenTelemetry
+logs and metrics, even when `DD_LOGS_OTEL_ENABLED` or `DD_METRICS_OTEL_ENABLED` is `true`. An unset or empty value
+leaves the SDK enabled.
+
 <h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
 
 dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:

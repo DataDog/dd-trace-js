@@ -771,6 +771,106 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
+  describe('OTEL_SDK_DISABLED', () => {
+    function loadEntryPoint () {
+      delete require.cache[require.resolve('../../src/index')]
+      return require('../../src/index')
+    }
+
+    for (const value of ['true', 'TRUE', '1']) {
+      it(`should select the no-op proxy with OTEL_SDK_DISABLED=${value}`, () => {
+        process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    for (const value of [undefined, '', 'false', '0', 'foo']) {
+      it(`should select the real proxy with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+      })
+    }
+
+    it('should let an explicit DD_TRACE_ENABLED take precedence', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+    })
+
+    it('should take precedence over OTEL_TRACES_EXPORTER=otlp', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    it('should still honor OTEL_TRACES_EXPORTER=none when set to false', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.OTEL_TRACES_EXPORTER = 'none'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should select the no-op proxy when ${name} is set`, () => {
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env[name] = 'true'
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    it('should be unset by default', () => {
+      assert.strictEqual(getConfig().OTEL_SDK_DISABLED, undefined)
+    })
+
+    for (const ddTraceEnabled of [undefined, 'true']) {
+      it(`should disable explicitly enabled OTel metrics and logs with DD_TRACE_ENABLED=${ddTraceEnabled}`, () => {
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        if (ddTraceEnabled !== undefined) process.env.DD_TRACE_ENABLED = ddTraceEnabled
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+        assert.strictEqual(config.getOrigin('DD_METRICS_OTEL_ENABLED'), 'calculated')
+        assert.strictEqual(config.getOrigin('DD_LOGS_OTEL_ENABLED'), 'calculated')
+        // Disabled OTel logs no longer displace Datadog log injection.
+        assert.strictEqual(config.logInjection, true)
+        sinon.assert.calledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'DD_METRICS_OTEL_ENABLED')
+        sinon.assert.calledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'DD_LOGS_OTEL_ENABLED')
+      })
+    }
+
+    it('should not warn when OTel metrics and logs are not enabled', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.neverCalledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true')
+    })
+
+    for (const value of [undefined, '', 'false']) {
+      it(`should keep explicitly enabled OTel metrics and logs with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+      })
+    }
+  })
+
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
