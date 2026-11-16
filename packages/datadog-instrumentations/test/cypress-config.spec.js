@@ -10,6 +10,7 @@ const { createContext, runInContext } = require('node:vm')
 const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const ts = require('typescript')
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const log = require('../../dd-trace/src/log')
@@ -416,6 +417,42 @@ describe('Cypress support preprocessors', () => {
         fs.rmSync(project, { recursive: true, force: true })
       }
     })
+  }
+})
+
+describe('Cypress support type checking', () => {
+  for (const local of [false, true]) {
+    for (const extension of ['ts', 'tsx']) {
+      it(`keeps user type checking with generated ${extension} support (local=${local})`, () => {
+        const project = fs.mkdtempSync(join(local ? __dirname : tmpdir(), 'dd-cypress-support-types-'))
+        const supportFile = join(project, `support.${extension}`)
+        // This error must remain visible even when generated SDK code is exempted.
+        fs.writeFileSync(supportFile, 'export function userSupport (value) { return value }\n')
+        try {
+          const files = installSupportFile({
+            projectRoot: local ? join(__dirname, '../..') : project,
+            supportFile,
+          })
+          const program = ts.createProgram([...files, supportFile], {
+            strict: true,
+            noEmit: true,
+            types: [],
+            skipLibCheck: true,
+            allowImportingTsExtensions: true,
+            target: ts.ScriptTarget.ES2020,
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            jsx: ts.JsxEmit.Preserve,
+          })
+          const diagnostics = ts.getPreEmitDiagnostics(program)
+          assert.deepStrictEqual(diagnostics.map(({ code, file }) => ({ code, file: file?.fileName })), [
+            { code: 7006, file: supportFile },
+          ])
+        } finally {
+          fs.rmSync(project, { recursive: true, force: true })
+        }
+      })
+    }
   }
 })
 

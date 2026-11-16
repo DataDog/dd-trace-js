@@ -310,6 +310,8 @@ function createSupportWrapper (
   const suffix = `${process.pid}-${randomUUID()}`
   // Stay on the project's TypeScript preprocessor instead of loading Babel for an injected .mjs entry.
   const extension = /\.tsx?$/.test(originalSupportFile) ? path.extname(originalSupportFile) : '.mjs'
+  // These generated entries contain JavaScript; leave type checking to the user's support file.
+  const typeCheckDirective = extension === '.mjs' ? '' : '// @ts-nocheck\n'
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}${extension}`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}${extension}`)
   const wrapperImports = [
@@ -344,7 +346,7 @@ initializeBrowserSupport()
 ddSupportRoot[ddSupportKey] = true
 }
 `
-    writeExclusiveFile(browserHooksFile, guardedSource)
+    writeExclusiveFile(browserHooksFile, `${typeCheckDirective}${guardedSource}`)
     generatedFiles.push(browserHooksFile)
     const finalize = `const root = Cypress.mocha.getRootSuite()
 const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
@@ -365,7 +367,7 @@ if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) {
   }
 }
 `
-    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
+    writeExclusiveFile(wrapperFile, `${typeCheckDirective}${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
   } catch (error) {
     for (const generatedFile of generatedFiles) removeGeneratedFile(generatedFile)
