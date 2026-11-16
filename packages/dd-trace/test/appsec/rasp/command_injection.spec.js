@@ -20,7 +20,7 @@ describe('RASP - command_injection.js', () => {
 
   beforeEach(() => {
     waf = {
-      run: sinon.stub(),
+      runSubContext: sinon.stub(),
     }
 
     utils = {
@@ -60,7 +60,7 @@ describe('RASP - command_injection.js', () => {
 
       start.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze command_injection if no store', () => {
@@ -71,7 +71,7 @@ describe('RASP - command_injection.js', () => {
 
       start.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze command_injection if no req', () => {
@@ -82,7 +82,7 @@ describe('RASP - command_injection.js', () => {
 
       start.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze command_injection if no file', () => {
@@ -94,7 +94,7 @@ describe('RASP - command_injection.js', () => {
 
       start.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     describe('command_injection with shell', () => {
@@ -108,9 +108,9 @@ describe('RASP - command_injection.js', () => {
 
         start.publish(ctx)
 
-        const ephemeral = { [addresses.SHELL_COMMAND]: 'cmd' }
+        const subcontextData = { [addresses.SHELL_COMMAND]: 'cmd' }
         sinon.assert.calledOnceWithExactly(
-          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'shell' }
+          waf.runSubContext, subcontextData, { type: 'command_injection', variant: 'shell' }
         )
       })
 
@@ -125,9 +125,9 @@ describe('RASP - command_injection.js', () => {
 
         start.publish(ctx)
 
-        const ephemeral = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'] }
+        const subcontextData = { [addresses.SHELL_COMMAND]: ['cmd', 'arg0', 'arg1'] }
         sinon.assert.calledOnceWithExactly(
-          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'shell' }
+          waf.runSubContext, subcontextData, { type: 'command_injection', variant: 'shell' }
         )
       })
 
@@ -138,7 +138,7 @@ describe('RASP - command_injection.js', () => {
         const req = { req: 'req' }
         const res = { res: 'res' }
         const raspRule = { type: 'command_injection', variant: 'shell' }
-        waf.run.returns(wafResult)
+        waf.runSubContext.returns(wafResult)
         web.patch(req).res = res
         enterStore(withRequest(undefined, req))
 
@@ -159,9 +159,9 @@ describe('RASP - command_injection.js', () => {
 
         start.publish(ctx)
 
-        const ephemeral = { [addresses.EXEC_COMMAND]: ['ls'] }
+        const subcontextData = { [addresses.EXEC_COMMAND]: ['ls'] }
         sinon.assert.calledOnceWithExactly(
-          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'exec' }
+          waf.runSubContext, subcontextData, { type: 'command_injection', variant: 'exec' }
         )
       })
 
@@ -176,9 +176,9 @@ describe('RASP - command_injection.js', () => {
 
         start.publish(ctx)
 
-        const ephemeral = { [addresses.EXEC_COMMAND]: ['ls', '-la', '/tmp'] }
+        const subcontextData = { [addresses.EXEC_COMMAND]: ['ls', '-la', '/tmp'] }
         sinon.assert.calledOnceWithExactly(
-          waf.run, { ephemeral }, req, { type: 'command_injection', variant: 'exec' }
+          waf.runSubContext, subcontextData, { type: 'command_injection', variant: 'exec' }
         )
       })
 
@@ -189,7 +189,7 @@ describe('RASP - command_injection.js', () => {
         const req = { req: 'req' }
         const res = { res: 'res' }
         const raspRule = { type: 'command_injection', variant: 'exec' }
-        waf.run.returns(wafResult)
+        waf.runSubContext.returns(wafResult)
         web.patch(req).res = res
         enterStore(withRequest(undefined, req))
 

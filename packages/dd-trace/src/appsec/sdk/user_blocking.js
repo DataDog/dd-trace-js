@@ -10,7 +10,7 @@ const { setUserTags } = require('./set_user')
 const { getRootSpan } = require('./utils')
 
 function isUserBlocked (user) {
-  const results = waf.run({ persistent: { [USER_ID]: user.id } })
+  const results = waf.run({ [USER_ID]: user.id })
   return !!getBlockingAction(results?.actions)
 }
 

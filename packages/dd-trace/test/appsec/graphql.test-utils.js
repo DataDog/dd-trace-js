@@ -125,7 +125,7 @@ function postGraphqlQuery (port, query, variables) {
  */
 function countFieldRuns (wafRun, fieldName) {
   return wafRun.getCalls().filter(call => {
-    const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
+    const resolverInfo = call.args[0]?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
     return resolverInfo?.[fieldName] !== undefined
   }).length
 }
@@ -276,8 +276,8 @@ function graphqlCommonTests (config) {
     function enableAppsecWithWafSpy (rules) {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, rules) } }))
       setTestBlockingTemplates()
-      // Enabling AppSec replaces `waf.run`, so the spy goes on afterwards.
-      wafRun = sinon.spy(waf, 'run')
+      // Enabling AppSec replaces `waf.runSubContext`, so the spy goes on afterwards.
+      wafRun = sinon.spy(waf, 'runSubContext')
     }
 
     afterEach(() => {
@@ -360,13 +360,13 @@ function graphqlCommonTests (config) {
       })
 
       const calls = wafRun.getCalls().filter(call => {
-        return call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]?.author !== undefined
+        return call.args[0]?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]?.author !== undefined
       })
       assert.strictEqual(calls.length, 2)
-      assert.deepStrictEqual(calls[0].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+      assert.deepStrictEqual(calls[0].args[0][addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
         author: { include: { if: undefined } },
       })
-      assert.deepStrictEqual(calls[1].args[0].ephemeral[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
+      assert.deepStrictEqual(calls[1].args[0][addresses.HTTP_INCOMING_GRAPHQL_RESOLVER], {
         author: { include: { if: true } },
       })
     })
