@@ -36,6 +36,7 @@ module.exports = {
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
   nextResponseBody: dc.channel('tracing:orchestrion:next:responseBody:start'),
   nextJsonResponse: dc.channel('apm:next:response:json'),
+  nextAppRouteResponse: dc.channel('tracing:orchestrion:next:appRouteResponse:asyncEnd'),
   passportUser: dc.channel('datadog:passport:deserializeUser:finish'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
   pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),

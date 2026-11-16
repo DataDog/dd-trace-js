@@ -38,11 +38,11 @@ describe('Next.js JSON response hook', () => {
     sinon.restore()
   })
 
-  it('publishes the original object with the response status and preserves the result', async () => {
+  it('publishes the original object with the response stream and preserves the result', async () => {
     const body = { value: 'café' }
     const response = Response.json(body, { status: 201, headers: { 'x-test': 'preserved' } })
 
-    sinon.assert.calledOnceWithExactly(onBody, { body, statusCode: 201 }, channel.name)
+    sinon.assert.calledOnceWithExactly(onBody, { body, stream: response.body }, channel.name)
     assert.strictEqual(onBody.firstCall.args[0].body, body)
     assert.strictEqual(response, json.firstCall.returnValue)
     assert.strictEqual(response.status, 201)

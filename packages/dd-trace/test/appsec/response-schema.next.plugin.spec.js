@@ -30,7 +30,9 @@ describe('Next.js response schemas', () => {
         initApp(appName, version, realVersion)
         const serverData = startServer(appName, serverPath, version, '../datadog-api-security.js')
 
-        const modes = appName === 'pages-dir' ? ['json', 'send'] : ['json']
+        const modes = appName === 'pages-dir'
+          ? ['json', 'send']
+          : ['json', 'selected-json', 'discarded-first-json'].flatMap(mode => [mode, `native-${mode}`])
         for (const mode of modes) {
           it(`extracts the response schema for ${mode} without changing the body or status`, async () => {
             const [response] = await Promise.all([
@@ -48,7 +50,9 @@ describe('Next.js response schemas', () => {
           })
         }
 
-        for (const mode of ['text', 'empty', 'scalar']) {
+        const nonJsonModes = ['text', 'empty', 'scalar']
+        if (appName === 'app-dir') nonJsonModes.push('discarded-json', 'native-discarded-json', 'streamed-json')
+        for (const mode of nonJsonModes) {
           it(`omits the response body schema for ${mode} responses`, async () => {
             const [response] = await Promise.all([
               httpRequest.get(`http://127.0.0.1:${serverData.port}/api/response-schema?mode=${mode}`),
@@ -59,6 +63,7 @@ describe('Next.js response schemas', () => {
               }),
             ])
             assert.strictEqual(response.status, mode === 'empty' ? 204 : 201)
+            if (mode === 'discarded-json') assert.strictEqual(response.data, 'text response')
           })
         }
       })

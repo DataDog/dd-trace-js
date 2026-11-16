@@ -8,6 +8,14 @@ const astQuery = 'MethodDefinition[key.name="handleNextImageRequest"] > Function
 
 module.exports = [
   ...[
+    'dist/server/future/route-handler-managers/route-handler-manager.js',
+    /^dist\/compiled\/next-server\/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$/,
+  ].map(filePath => ({
+    module: { name: 'next', versionRange: '>=13.3', filePath },
+    functionQuery: { methodName: 'handle', kind: 'Async' },
+    channelName: 'appRouteResponse',
+  })),
+  ...[
     'dist/next-server/server/api-utils.js',
     'dist/server/api-utils.js',
     'dist/server/api-utils/node.js',

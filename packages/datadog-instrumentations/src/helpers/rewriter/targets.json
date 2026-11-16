@@ -101,6 +101,7 @@
   "next/dist/server/api-utils.js": "next",
   "next/dist/server/api-utils/node.js": "next",
   "next/dist/server/api-utils/node/api-resolver.js": "next",
+  "next/dist/server/future/route-handler-managers/route-handler-manager.js": "next",
   "next/dist/server/next-server.js": "next",
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/common/config.js": "playwright",

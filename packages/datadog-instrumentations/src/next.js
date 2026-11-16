@@ -655,7 +655,7 @@ addHook({
     shimmer.wrap(Response, 'json', json => function (body) {
       const response = json.apply(this, arguments)
       if (responseJsonChannel.hasSubscribers) {
-        responseJsonChannel.publish({ body, statusCode: response.status })
+        responseJsonChannel.publish({ body, stream: response.body })
       }
       return response
     })
