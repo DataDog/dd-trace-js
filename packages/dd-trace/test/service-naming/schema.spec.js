@@ -14,6 +14,22 @@ const v1 = require('../../src/service-naming/schemas/v1')
 describe('Service naming', () => {
   let singleton
 
+  describe('Bun SQL', () => {
+    for (const system of ['postgres', 'mysql', 'sqlite']) {
+      it(`names ${system} queries using the selected schema`, () => {
+        const opts = { tracerService: 'app', pluginConfig: {}, system }
+        assert.equal(v0.getOpName('storage', 'client', 'bun-sql', opts), 'bun-sql.query')
+        assert.equal(v0.getServiceName('storage', 'client', 'bun-sql', opts).name, `app-${system}`)
+        assert.equal(v1.getOpName('storage', 'client', 'bun-sql', opts),
+          `${system === 'postgres' ? 'postgresql' : system}.query`)
+        assert.equal(v1.getServiceName('storage', 'client', 'bun-sql', opts).name, 'app')
+        opts.pluginConfig.service = 'custom-db'
+        assert.equal(v0.getServiceName('storage', 'client', 'bun-sql', opts).name, 'custom-db')
+        assert.equal(v1.getServiceName('storage', 'client', 'bun-sql', opts).name, 'custom-db')
+      })
+    }
+  })
+
   describe('Version selection', () => {
     beforeEach(() => {
       singleton = require('../../src/service-naming')

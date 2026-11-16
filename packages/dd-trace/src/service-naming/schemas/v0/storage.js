@@ -64,6 +64,12 @@ const valkeyConfig = {
 
 const storage = {
   client: {
+    'bun-sql': {
+      opName: () => 'bun-sql.query',
+      serviceName: ({ tracerService, pluginConfig, system }) =>
+        pluginConfig.service || fromSystem(tracerService, system),
+      serviceSource: ({ pluginConfig }) => pluginConfig.service ? 'opt.plugin' : 'bun-sql',
+    },
     aerospike: {
       opName: () => 'aerospike.command',
       serviceName: ({ tracerService, pluginConfig }) =>

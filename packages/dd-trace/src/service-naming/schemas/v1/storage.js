@@ -28,6 +28,11 @@ function withFunction ({ tracerService, pluginConfig, params }) {
 
 const storage = {
   client: {
+    'bun-sql': {
+      opName: ({ system }) => `${system === 'postgres' ? 'postgresql' : system}.query`,
+      serviceName: configWithFallback,
+      serviceSource: optionServiceSource,
+    },
     aerospike: {
       opName: () => 'aerospike.command',
       serviceName: configWithFallback,

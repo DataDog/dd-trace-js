@@ -3974,6 +3974,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BUN_SQL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_PG_ENABLED": [
       {
         "implementation": "A",

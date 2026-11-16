@@ -577,6 +577,8 @@ tracer.use('pg', { truncate: true });
 tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
 tracer.use('postgres');
+tracer.use('bun-sql');
+tracer.use('bun-sql', { service: 'sql-service', dbmPropagationMode: 'full', appendComment: true });
 tracer.use('postgres', { service: 'postgres-service' });
 tracer.use('postgres', { appendComment: true, dbmPropagationMode: 'full' });
 // @ts-expect-error Postgres DBM propagation accepts only the configured modes.

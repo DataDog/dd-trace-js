@@ -285,6 +285,15 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="azure-durable-functions"></h5>
 <h5 id="browser-bunyan"></h5>
 <h5 id="bullmq"></h5>
+<h5 id="bun-sql"></h5>
+
+The `bun-sql` plugin instruments Bun's built-in SQL client on the Bun runtime, including PostgreSQL,
+MySQL, and SQLite queries. Configure it with `tracer.use('bun-sql', options)`.
+Options include `service`, `truncate`, `dbmPropagationMode`, and `appendComment`.
+Database Monitoring comments are supported for PostgreSQL and MySQL, not SQLite.
+Prepared queries use service-level propagation even when full propagation is configured.
+COPY streams and listen/notify operations are not supported.
+
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
 <h5 id="child_process"></h5>
@@ -435,6 +444,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [azure-durable-functions](./interfaces/plugins.azure_durable_functions.html)
 * [browser-bunyan](./interfaces/plugins.browser_bunyan.html)
 * [bullmq](./interfaces/plugins.bullmq.html)
+* [bun-sql](./interfaces/plugins.bun_sql.html)
 * [bunyan](./interfaces/plugins.bunyan.html)
 * [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
 * [child_process](./interfaces/plugins.child_process.html)

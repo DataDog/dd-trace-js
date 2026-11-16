@@ -30,6 +30,10 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 const orchestrionLoadChannel = channel('dd-trace:instrumentation:load:orchestrion')
 
 // Globals
+if (process.versions.bun && !disabledInstrumentations.has('bun-sql')) {
+  require('../bun-sql')
+}
+
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
