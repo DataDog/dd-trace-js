@@ -92,6 +92,9 @@ echo "  CPU_START_ID: ${CPU_START_ID:-<unset>}"
 echo "  CPUSET_START: ${CPUSET_START}"
 echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
 echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
+echo "  SMT active: $(cat /sys/devices/system/cpu/smt/active 2>/dev/null || echo 'unreadable')"
+echo "  cpu${CPUSET_START} thread siblings: $(cat "/sys/devices/system/cpu/cpu${CPUSET_START}/topology/thread_siblings_list" 2>/dev/null || echo 'unreadable')"
+lscpu 2>/dev/null | grep -E '^(Model name|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)|CPU max MHz|CPU min MHz):' | sed 's/^/  /' || true
 
 # MAJOR_VERSION is provided by each benchmark stage. The exact patch is pinned once
 # in the plugin versions manifest (node-<major>); read it so a Node bump there is the
@@ -186,6 +189,11 @@ function print_cpu_contention {
     <(echo "${TICKS_BEFORE}") <(cpu_ticks ${CPUS}) >&2 || true
   grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
     | awk -v l=" ${CPUS}" '{ if (index(l, " " $3 " ")) printf "    cpu%s: %s MHz\n", $3, $NF }' >&2 || true
+  # The other cores of this pod, to compare the slow core's frequency with its neighbours'.
+  echo "  MHz of this pod's cores: $(grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
+    | awk -v r="$(grep -oP 'Cpus_allowed_list:\s*\K\S+' /proc/self/status 2>/dev/null)" \
+      'BEGIN { n = split(r, p, ","); for (i = 1; i <= n; i++) { split(p[i], b, "-"); lo[i] = b[1]; hi[i] = (b[2] == "" ? b[1] : b[2]) } }
+       { for (i = 1; i <= n; i++) if ($3 >= lo[i] && $3 <= hi[i]) { printf "%s=%.0f ", $3, $NF; break } }')" >&2 || true
 }
 
 # Run a variant from the suite root. Background calls get their own shell and
