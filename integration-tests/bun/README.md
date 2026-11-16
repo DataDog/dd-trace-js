@@ -44,7 +44,7 @@ remain failures. Explicit skips remain skips, not proof that a known failure is 
 To regenerate the baseline, run the complete `PLUGINS` list above, without `SPEC`:
 
 ```sh
-npm run test:integration:plugins:bun:generate
+npm run generate:bun-plugin-failures
 ```
 
 Generation disables expected-failure inversion and replaces entries for exercised

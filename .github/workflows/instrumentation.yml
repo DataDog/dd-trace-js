@@ -54,7 +54,12 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run services
       - run: npm run test:integration:bun:harness
-      - run: npm run test:integration:plugins:bun -- --grep "$BUN_TEST_GREP" $BUN_TEST_INVERT
+      - run: |
+          args=(--grep "$BUN_TEST_GREP")
+          if [[ -n "$BUN_TEST_INVERT" ]]; then
+            args+=("$BUN_TEST_INVERT")
+          fi
+          npm run test:integration:plugins:bun -- "${args[@]}"
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
