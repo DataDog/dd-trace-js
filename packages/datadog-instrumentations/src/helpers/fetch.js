@@ -38,7 +38,7 @@ exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
       if (signal.aborted) return rejectAborted(req, init, signal.reason)
 
       return fetch.call(thisArg, req, options)
-    }, { req, abortController })
+    }, { req, init, abortController })
   }
 
   return function wrapFetch (fetch) {

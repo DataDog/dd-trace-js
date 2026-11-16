@@ -151,8 +151,8 @@ describe('packages/datadog-instrumentations/src/fetch.js', () => {
       assert.deepStrictEqual(receivedRequests, ['GET x-policy=undefined'])
     })
 
-    it('publishes a Request input as given and leaves its options to fetch', async () => {
-      /** @type {{ req: Request } | undefined} */
+    it('publishes a Request input as given with the options that fetch applies over it', async () => {
+      /** @type {{ req: Request, init: import('undici-types').RequestInit | undefined } | undefined} */
       let startContext
       subscriber = ctx => { startContext = ctx }
       startChannel.subscribe(subscriber)
@@ -164,11 +164,12 @@ describe('packages/datadog-instrumentations/src/fetch.js', () => {
 
       assert.ok(startContext)
       assert.strictEqual(startContext.req, request)
+      assert.strictEqual(startContext.init, init)
       assert.deepStrictEqual(receivedRequests, ['PUT x-policy=dangerous'])
     })
 
     it('publishes a URL input as the request that fetch sends', async () => {
-      /** @type {{ req: Request } | undefined} */
+      /** @type {{ req: Request, init: import('undici-types').RequestInit | undefined } | undefined} */
       let startContext
       subscriber = ctx => { startContext = ctx }
       startChannel.subscribe(subscriber)
@@ -179,6 +180,7 @@ describe('packages/datadog-instrumentations/src/fetch.js', () => {
       assert.ok(startContext)
       assert.strictEqual(startContext.req.method, 'PUT')
       assert.strictEqual(startContext.req.headers.get('x-policy'), 'dangerous')
+      assert.strictEqual(startContext.init, undefined)
       assert.deepStrictEqual(receivedRequests, ['PUT x-policy=dangerous'])
     })
   })

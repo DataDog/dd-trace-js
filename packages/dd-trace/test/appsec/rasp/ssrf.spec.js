@@ -399,7 +399,7 @@ describe('RASP - ssrf.js', () => {
 
       fetchRequestStart.publish({ req: request, abortController: new AbortController() })
 
-      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request)
+      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request, undefined)
       sinon.assert.calledOnceWithExactly(
         waf.run,
         {
@@ -412,6 +412,16 @@ describe('RASP - ssrf.js', () => {
         { type: 'ssrf', variant: 'request' }
       )
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+    })
+
+    it('should analyze the options that fetch applies over an outgoing fetch request', () => {
+      const request = new Request(fetchUrl)
+      const init = { method: 'POST' }
+      stubStore({}, {})
+
+      fetchRequestStart.publish({ req: request, init, abortController: new AbortController() })
+
+      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request, init)
     })
 
     it('should not analyze an outgoing fetch request without an incoming request', () => {

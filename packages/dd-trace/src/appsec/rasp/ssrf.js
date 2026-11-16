@@ -48,13 +48,14 @@ function analyzeSsrf (ctx) {
 
 /**
  * Evaluates an outgoing request of the global fetch before it is sent.
- * @param {{ req: Request, abortController: AbortController }} ctx fetch instrumentation context.
+ * @param {{ req: Request, init?: import('undici-types').RequestInit, abortController: AbortController }} ctx fetch
+ *   instrumentation context, where `init` holds the options that fetch applies over `req`.
  */
-function analyzeFetchSsrf ({ req: request, abortController }) {
+function analyzeFetchSsrf ({ req: request, init, abortController }) {
   const req = getActiveRequest()
   if (!req) return
 
-  runRequestEvaluation(req, request.url, downstream.extractFetchRequestData(request), abortController)
+  runRequestEvaluation(req, request.url, downstream.extractFetchRequestData(request, init), abortController)
 }
 
 /**

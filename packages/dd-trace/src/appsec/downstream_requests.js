@@ -1,5 +1,8 @@
 'use strict'
 
+// Headers is only used for requests of the global fetch, which comes with it.
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['Headers'] }] */
+
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { isEmpty } = require('../util')
@@ -26,6 +29,17 @@ const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_MISSING =
   '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
 const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_TOO_BIG =
   '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
+
+const HTTP_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~\dA-Za-z]+$/
+const FORBIDDEN_FETCH_METHODS = new Set(['connect', 'trace', 'track'])
+const NORMALIZED_FETCH_METHODS = new Map([
+  ['delete', 'DELETE'],
+  ['get', 'GET'],
+  ['head', 'HEAD'],
+  ['options', 'OPTIONS'],
+  ['post', 'POST'],
+  ['put', 'PUT'],
+])
 
 let config
 let samplingRate
@@ -214,21 +228,81 @@ function extractRequestData (ctx) {
 /**
  * Extracts request data from an outgoing fetch request for WAF analysis.
  * @param {Request} request outgoing fetch request.
+ * @param {import('undici-types').RequestInit} [init] options that fetch applies over `request`.
  * @returns {object} a map of addresses and request data.
  */
-function extractFetchRequestData (request) {
+function extractFetchRequestData (request, init) {
   /** @type {Record<string, unknown>} */
-  const addresses = {
-    [HTTP_OUTGOING_METHOD]: request.method,
+  const addresses = {}
+
+  // An override that can't be read as plain data is left out rather than reported with the value it replaces.
+  const method = init?.method === undefined ? request.method : getFetchMethod(init.method)
+  if (method !== undefined) {
+    addresses[HTTP_OUTGOING_METHOD] = method
   }
 
   // Header names of a fetch request are already lowercase.
-  const headers = Object.fromEntries(request.headers)
-  if (!isEmpty(headers)) {
+  const headers = init?.headers === undefined ? Object.fromEntries(request.headers) : getFetchHeaders(init.headers)
+  if (headers !== undefined && !isEmpty(headers)) {
     addresses[HTTP_OUTGOING_HEADERS] = headers
   }
 
   return addresses
+}
+
+/**
+ * Returns the method that fetch sends for a method option, or undefined when fetch would reject it or would have to
+ * convert it to a string.
+ * @param {unknown} method method option of a fetch call.
+ * @returns {string | undefined}
+ */
+function getFetchMethod (method) {
+  if (typeof method !== 'string' || !HTTP_TOKEN_PATTERN.test(method)) return
+
+  const lowercaseMethod = method.toLowerCase()
+  if (FORBIDDEN_FETCH_METHODS.has(lowercaseMethod)) return
+
+  return NORMALIZED_FETCH_METHODS.get(lowercaseMethod) ?? method
+}
+
+/**
+ * Returns the headers that fetch sends for a headers option, or undefined when the option is not plain data. Other
+ * iterables are left out because reading them could consume the values that fetch has to send.
+ * @param {unknown} headers headers option of a fetch call.
+ * @returns {Record<string, string> | undefined}
+ */
+function getFetchHeaders (headers) {
+  if (headers instanceof Headers) return Object.fromEntries(headers)
+
+  let entries
+  if (Array.isArray(headers)) {
+    if (!headers.every(isFetchHeaderEntry)) return
+    entries = headers
+  } else if (typeof headers === 'object' && headers !== null && !(Symbol.iterator in headers)) {
+    entries = Object.entries(headers)
+    if (!entries.every(([, value]) => isFetchHeaderValue(value))) return
+  } else {
+    return
+  }
+
+  try {
+    // Headers applies the normalization of fetch, and rejects the names and values that fetch rejects.
+    return Object.fromEntries(new Headers(entries))
+  } catch {}
+}
+
+/**
+ * @param {unknown} entry entry of a headers option given as an array.
+ */
+function isFetchHeaderEntry (entry) {
+  return Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string' && isFetchHeaderValue(entry[1])
+}
+
+/**
+ * @param {unknown} value header value of a headers option.
+ */
+function isFetchHeaderValue (value) {
+  return typeof value === 'string' || typeof value === 'number'
 }
 
 /**
