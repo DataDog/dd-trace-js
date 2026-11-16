@@ -13,7 +13,8 @@ env:
   # intentionally absent: they ship to customers and stay on manual review. Production
   # *security* fixes still auto-merge (see `security-production`), but only below a major.
   GROUPS: >-
-    ["dev-minor-and-patch-dependencies", "gh-actions-packages", "docker-images", "test-versions",
+    ["dev-minor-and-patch-dependencies", "gh-actions-packages", "docker-images",
+    "ai-cloud-and-observability", "data-and-messaging", "web-and-services", "test-versions",
     "security-production", "security-non-production"]
 
 jobs:
