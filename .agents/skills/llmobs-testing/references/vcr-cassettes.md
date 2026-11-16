@@ -79,7 +79,7 @@ npm run test:llmobs:sdk                      # everything except the plugin spec
 `packages/dd-trace/test/llmobs/plugins/@(${PLUGINS})/*.spec.js`.
 
 `Cannot find module '…/versions/<package>@<version>'` is a missing version fixture, not a broken spec:
-`PLUGINS=<integration> yarn services` installs it. The error names the npm package while `PLUGINS` takes
+`PLUGINS=<integration> npm run services` installs it. The error names the npm package while `PLUGINS` takes
 the integration key, which is the file name under `packages/datadog-instrumentations/src/` — so
 `@anthropic-ai/sdk` is `anthropic` and `@google/genai` is `google-genai`. The fixtures live in a gitignored
 `versions/` directory at the repo root, so a fresh worktree has none of them.

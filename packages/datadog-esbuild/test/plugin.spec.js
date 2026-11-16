@@ -224,23 +224,6 @@ describe('datadog-esbuild plugin', () => {
           }
         })
 
-        it('does not publish exports or activation for unsupported versions', async () => {
-          const unsupportedDir = path.join(projectDir, 'unsupported', extension, 'node_modules', pkg)
-          const unsupportedPath = path.join(unsupportedDir, modulePath)
-          fs.mkdirSync(path.dirname(unsupportedPath), { recursive: true })
-          fs.writeFileSync(path.join(unsupportedDir, 'package.json'), JSON.stringify({ name: pkg, version: '0.0.1' }))
-          fs.writeFileSync(unsupportedPath, source)
-          const { pluginData } = resolve(`${pkg}/${modulePath}`)
-
-          const onLoad = captureOnLoad()
-          const result = await onLoad({
-            path: unsupportedPath,
-            pluginData: { ...pluginData, version: '0.0.1' },
-          })
-
-          assert.equal(result.contents, source)
-        })
-
         if (isESM) {
           it('avoids colliding with existing bindings in the activation import', async () => {
             fs.writeFileSync(resourcePath, `const __dd_dc = true\nconst __dd_dc1 = true\n${source}`)

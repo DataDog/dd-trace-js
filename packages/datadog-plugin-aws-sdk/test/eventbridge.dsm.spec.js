@@ -7,6 +7,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -38,7 +39,8 @@ describe('EventBridge', function () {
       const tracer = require('../../dd-trace')
       tracer.use('aws-sdk', DSM_CONFIG)
 
-      const phash = propagationHash.getHash()
+      const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+      const containerTagsHash = propagationHash.getContainerTagsHash()
       producerHashes = new Map(['invoice.created', 'invoice.paid'].map(detailType => [
         detailType,
         computePathwayHash(
@@ -46,7 +48,8 @@ describe('EventBridge', function () {
           'tester',
           ['direction:out', 'exchange:default', `topic:${detailType}`, 'type:eventbridge'],
           ENTRY_PARENT_HASH,
-          phash
+          processTagsForHash,
+          containerTagsHash
         ),
       ]))
       expectedHashes = new Map([...producerHashes].map(([detailType, hash]) => [
@@ -163,7 +166,8 @@ describe('EventBridge', function () {
           'tester',
           ['direction:in', `topic:${queueName}`, 'type:sqs'],
           producerHashes.get(detailType),
-          propagationHash.getHash()
+          propagationHash.isEnabled() ? processTags.serialized : undefined,
+          propagationHash.getContainerTagsHash()
         ).readBigUInt64LE(0).toString()
 
         const statsPromise = agent.expectPipelineStats(() => {

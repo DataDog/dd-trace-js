@@ -7,7 +7,7 @@ const TEST_DATABASE_ENV_NAME = 'PRISMA_TEST_DATABASE_URL'
 const FALLBACK_DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/fallback'
 const TEST_MARIADB_DATABASE_URL = 'mysql://root@localhost:3306/db'
 const TEST_MONGODB_DATABASE_URL = 'mongodb://localhost:27017/prisma?replicaSet=rs0'
-const PRISMA_CLIENT_OUTPUT_RELATIVE = '../generated/prisma'
+const PRISMA_CLIENT_OUTPUT_RELATIVE = './generated/prisma'
 
 const SCHEMA_FIXTURES = {
   clientJs: 'provider-prisma-client-js/schema.prisma',
