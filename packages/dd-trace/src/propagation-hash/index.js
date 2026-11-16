@@ -48,6 +48,13 @@ class PropagationHashManager {
   }
 
   /**
+   * @returns {string | null} The container tags hash the agent last reported, if any
+   */
+  getContainerTagsHash () {
+    return this._containerTagsHash
+  }
+
+  /**
    * Get the propagation hash as a BigInt
    * @returns {bigint | null} The propagation hash or null if disabled/unavailable
    */
