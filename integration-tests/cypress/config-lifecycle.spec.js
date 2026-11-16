@@ -427,13 +427,12 @@ describe('Cypress plugin run lifecycle', () => {
     sinon.assert.calledOnce(getTestSpan.firstCall.returnValue.finish)
     sinon.assert.calledOnce(testSuiteSpan.finish)
 
-    // A suite started for the same spec, such as an interactive rerun, is a new execution.
-    const rerunSuiteSpan = createSpan()
-    cypressPlugin.testSuiteSpan = rerunSuiteSpan
-    await cypressPlugin.afterSpec(spec, results)
+    // An interactive rerun receives new results, even when a setup hook aborts before dd:testSuiteStart.
+    await cypressPlugin.afterSpec(spec, { ...results })
 
     sinon.assert.calledTwice(getTestSpan)
-    sinon.assert.calledOnce(rerunSuiteSpan.finish)
+    sinon.assert.calledOnceWithMatch(cypressPlugin.tracer.startSpan, 'cypress.test_suite')
+    sinon.assert.calledOnce(cypressPlugin.tracer.startSpan.firstCall.returnValue.finish)
   })
 
   it('starts a suite video upload from after:run after Cypress video processing', async () => {

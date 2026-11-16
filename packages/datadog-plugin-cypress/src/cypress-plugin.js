@@ -524,7 +524,7 @@ class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
   // Cypress 16.3.0+ runs every after:spec handler, including user handlers that forward to the
   // legacy helper after the plugin's own handler, so each spec execution is finalized once.
-  #specFinalizations = new Map()
+  #specFinalizations = new WeakMap()
 
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
@@ -630,7 +630,6 @@ class CypressPlugin {
    */
   resetRunState () {
     this.#pendingTestSuiteSpans.clear()
-    this.#specFinalizations.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
     this.resolvedCypressRetries = undefined
@@ -1723,12 +1722,13 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error, finishTime) {
-    // Without a started suite, a repeated call belongs to an execution that was already finalized.
-    if (!this.testSuiteSpan && this.#specFinalizations.has(spec.relative)) {
-      return this.#specFinalizations.get(spec.relative)
+    // Cypress passes the same results object to every chained handler for one spec execution,
+    // while each execution, including an interactive rerun, receives a new one.
+    if (results && this.#specFinalizations.has(results)) {
+      return this.#specFinalizations.get(results)
     }
     const finalization = this.#afterSpec(spec, results, error, finishTime)
-    this.#specFinalizations.set(spec.relative, finalization)
+    if (results) this.#specFinalizations.set(results, finalization)
     return finalization
   }
 
