@@ -105,6 +105,8 @@ function enable (_config) {
 
     httpRequest.setConfig(_config)
 
+    lambda.enable(_config)
+
     for (const [channel, handler] of channelHandlers) {
       channel.subscribe(handler)
     }
@@ -135,6 +137,8 @@ function disable () {
   apiSecurity.disable()
 
   httpRequest.setConfig(undefined)
+
+  lambda.disable()
 
   // Channel#unsubscribe() is undefined for non active channels
   for (const [channel, handler] of channelHandlers) {
