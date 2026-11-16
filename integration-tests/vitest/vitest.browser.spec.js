@@ -863,7 +863,8 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  it('applies execution changes to every browser file without isolation', async () => {
+  // Vitest 3 also caches the outer setup file, so per-file registration cannot run on a reused page.
+  runtimeEfdSuiteAdmissionIt('applies execution changes to every browser file without isolation', async () => {
     const suites = ['a', 'b'].map(suffix =>
       `ci-visibility/vitest-browser-tests/browser-no-isolate-${suffix}.mjs`
     )

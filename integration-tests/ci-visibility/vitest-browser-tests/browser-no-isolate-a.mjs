@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest'
 
 test('repeats a new browser test', () => {
-  expect(true).toBe(true)
+  const setupImports = performance.getEntriesByType('resource')
+    .filter(entry => entry.name.includes('/vitest-no-worker-init-setup.mjs'))
+  expect(setupImports).toHaveLength(1)
 })
 
 test('attempts to fix a browser test', () => {
