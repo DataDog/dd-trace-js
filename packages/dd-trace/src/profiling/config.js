@@ -140,6 +140,12 @@ function selectProfilerTypes ({
     }
   }
 
+  // Bun's pprof binding cannot start the heap profiler. Starting it would also
+  // prevent the supported profilers from running.
+  if (process.versions.bun !== undefined && profilers.delete('space')) {
+    log.warn('Heap profiling is disabled, because it is not supported on Bun.')
+  }
+
   const profilersArray = [...profilers]
   // If space was added through DD_PROFILING_HEAP_ENABLED, ensure it is in the
   // first position. Basically, the only way for it not to be in the first

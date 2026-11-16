@@ -59,7 +59,9 @@ module.exports = {
     // When per-iteration sampling is available we prefer it over the native
     // addon: it provides accurate event loop delay measurements and lets us
     // collect CPU/GC/heap metrics entirely from JS APIs.
-    const useNative = NATIVE_METRICS_REQUIRED && config.runtimeMetrics.native !== false
+    // Bun cannot run the native addon's libuv watchers; use the JS collectors instead.
+    const useNative = process.versions.bun === undefined &&
+      NATIVE_METRICS_REQUIRED && config.runtimeMetrics.native !== false
 
     if (useNative) {
       // Using no-gc prevents the native gc metrics from being tracked. Not
@@ -288,10 +290,13 @@ function captureELU () {
 
   const idle = elu.idle - lastElu.idle
   const active = elu.active - lastElu.active
-  const utilization = active / (idle + active)
 
   lastElu = elu
 
+  // Bun currently returns zero counters for this API, which would produce NaN.
+  if (process.versions.bun !== undefined && idle + active === 0) return
+
+  const utilization = active / (idle + active)
   client.gauge('runtime.node.event_loop.utilization', utilization)
 }
 

@@ -615,6 +615,34 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           localRuntimeMetrics.stop()
         })
 
+        it('should use JS metrics on Bun even when native metrics are explicitly enabled', () => {
+          runtimeMetrics.stop()
+          const versions = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+          const start = sinon.spy()
+
+          try {
+            runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+              './client': proxyMetricsClient(Client),
+              '../../../../version': { NODE_MAJOR: 22, NODE_MINOR: 0 },
+              '@datadog/native-metrics': { start, '@noCallThru': true },
+            })
+            runtimeMetrics.start({
+              ...config,
+              runtimeMetrics: { ...config.runtimeMetrics, native: true },
+            })
+
+            clock.tick(10000)
+
+            sinon.assert.notCalled(start)
+            sinon.assert.calledWith(client.gauge, 'runtime.node.mem.rss')
+            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user')
+            sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.utilization')
+            sinon.assert.called(client.flush)
+          } finally {
+            versions.restore()
+          }
+        })
+
         it('should not require native metrics when samplePerIteration is available, even if native is true', () => {
           // Stop the default runtimeMetrics instance started in beforeEach
           runtimeMetrics.stop()
@@ -663,6 +691,26 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       })
 
       describe('Event Loop Utilization', () => {
+        it('should omit unavailable Bun utilization counters while collecting other metrics', () => {
+          const versions = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+          const elu = sinon.stub(performance, 'eventLoopUtilization').returns({ idle: 0, active: 0, utilization: 0 })
+          client.gauge.resetHistory()
+
+          try {
+            clock.tick(10000)
+
+            sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.utilization')
+            sinon.assert.calledWith(client.gauge, 'runtime.node.mem.rss')
+
+            elu.returns({ idle: 80, active: 20, utilization: 0.2 })
+            clock.tick(10000)
+            sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.utilization', 0.2)
+          } finally {
+            elu.restore()
+            versions.restore()
+          }
+        })
+
         it('should calculate utilization correctly with delta values', () => {
           const firstElu = { idle: 80000000, active: 20000000, utilization: 0.2 }
           const secondElu = { idle: 100000000, active: 80000000, utilization: 0.4444444444444444 }

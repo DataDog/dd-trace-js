@@ -7,6 +7,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const satisfies = require('semifies')
+const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
@@ -121,6 +122,53 @@ describe('config', () => {
       samplingContextsAvailable
     )
     assert.deepStrictEqual(config.exporters.map(exporter => exporter.constructor), [AgentExporter])
+  })
+
+  describe('on Bun', () => {
+    let versionsStub
+    let subscriber
+    let warnings
+    const { warnChannel } = require('../../src/log/channels')
+    const diagnostic = 'Heap profiling is disabled, because it is not supported on Bun.'
+
+    beforeEach(() => {
+      versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+      warnings = []
+      subscriber = msg => warnings.push(msg)
+      warnChannel.subscribe(subscriber)
+    })
+
+    afterEach(() => {
+      versionsStub.restore()
+      warnChannel.unsubscribe(subscriber)
+    })
+
+    for (const env of [
+      {},
+      { DD_PROFILING_HEAP_ENABLED: 'true' },
+      { DD_PROFILING_PROFILERS: 'wall,space,space' },
+      { DD_PROFILING_PROFILERS: 'wall', DD_PROFILING_HEAP_ENABLED: 'true' },
+    ]) {
+      it(`should omit heap profiling and retain wall and timeline profiling with ${JSON.stringify(env)}`, () => {
+        process.env = { ...env, DD_PROFILING_TIMELINE_ENABLED: 'true' }
+        const { config } = getProfilerConfig()
+
+        assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), samplingContextsAvailable
+          ? [WallProfiler, EventsProfiler]
+          : [WallProfiler])
+        assert.deepStrictEqual(config.profilerTypes, samplingContextsAvailable ? ['wall', 'events'] : ['wall'])
+        assert.strictEqual(warnings.filter(msg => msg === diagnostic).length, 1)
+      })
+    }
+
+    it('should not warn when heap profiling is disabled', () => {
+      process.env.DD_PROFILING_HEAP_ENABLED = 'false'
+
+      const { config } = getProfilerConfig()
+
+      assert.ok(config.profilers.every(profiler => !(profiler instanceof SpaceProfiler)))
+      assert.ok(!warnings.includes(diagnostic))
+    })
   })
 
   it('should support configuration options', () => {

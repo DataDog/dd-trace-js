@@ -6957,6 +6957,66 @@ rules:
     })
   }
 
+  context('IAST on Bun', () => {
+    const diagnostic = 'DATADOG TRACER DIAGNOSTIC - IAST is disabled, because it is not supported on Bun.'
+    let versionsStub
+
+    beforeEach(() => {
+      versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    })
+
+    afterEach(() => {
+      versionsStub.restore()
+    })
+
+    it('should disable IAST enabled by an environment variable and report the effective configuration', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.getOrigin('iast.DD_IAST_ENABLED'), 'calculated')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_IAST_ENABLED', value: false, origin: 'calculated' },
+      ])
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST enabled programmatically', () => {
+      const config = getConfig({ iast: { enabled: true } })
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should keep IAST disabled and explain only once across configuration updates', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST without a diagnostic when startup logs are disabled', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should not warn when IAST is disabled', () => {
+      process.env.DD_IAST_ENABLED = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+  })
+
   context('Feature Flagging configuration source', () => {
     it('enables Datadog exposure logging by default', () => {
       assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'], true)

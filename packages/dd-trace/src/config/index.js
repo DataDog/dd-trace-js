@@ -832,6 +832,13 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
     }
 
+    if (process.versions.bun !== undefined) {
+      this.#deactivateOnUnsupportedRuntime(
+        'iast.DD_IAST_ENABLED',
+        'IAST is disabled, because it is not supported on Bun.'
+      )
+    }
+
     const unsupportedRuntime = getUnsupportedRuntime()
     if (unsupportedRuntime !== undefined) {
       this.#deactivateOnUnsupportedRuntime(
