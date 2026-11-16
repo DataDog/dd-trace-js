@@ -12,6 +12,14 @@ function get (url) {
   })
 }
 
+function wrapInNonNativeError (error) {
+  const wrapped = Object.create(Error.prototype)
+  wrapped.name = 'WrappedError'
+  wrapped.message = error.message
+  wrapped.cause = error
+  return wrapped
+}
+
 export async function GET (request) {
   const { searchParams } = request.nextUrl
   const host = searchParams.get('host') ?? `127.0.0.1:${searchParams.get('port')}`
@@ -20,6 +28,7 @@ export async function GET (request) {
     return NextResponse.json({ status: await get(`http://${host}/`) })
   } catch (error) {
     if (searchParams.has('rethrow')) throw error
+    if (searchParams.has('wrap')) throw wrapInNonNativeError(error)
 
     return NextResponse.json({ error: error.name })
   }

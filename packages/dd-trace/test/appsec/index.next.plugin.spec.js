@@ -388,6 +388,12 @@ describe('test suite', () => {
             assert.strictEqual(targetConnections, 0)
           })
 
+          it('should block an SSRF whose error is wrapped by a non-native error', async () => {
+            await assertRaspBlocked(`/api/rasp-ssrf?host=127.0.0.1:${getTargetPort()}&wrap`, 'rasp-ssrf-rule-id-1')
+
+            assert.strictEqual(targetConnections, 0)
+          })
+
           it('should block an LFI whose error is caught by the route handler', () => {
             return assertRaspBlocked('/api/rasp-lfi?file=/test.file', 'rasp-lfi-rule-id-5')
           })

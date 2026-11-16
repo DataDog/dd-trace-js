@@ -326,14 +326,16 @@ function isNoFallbackError (error) {
 }
 
 /**
- * An error that wraps an abort reason as its direct cause, such as the "failed to pipe response" error of Next.js
- * when a stream fails, comes from the same stop.
+ * An error that keeps an abort reason as its own `cause`, whether it is a native error or not, comes from the same
+ * stop. Reading the own data property runs no getter of the application.
  *
  * @param {unknown} error
  */
 function isIgnoredError (error) {
-  return abortReasons.has(/** @type {object} */ (error)) ||
-    (isNativeError(error) && abortReasons.has(/** @type {object} */ (error.cause))) ||
+  if (typeof error !== 'object' || error === null) return false
+
+  return abortReasons.has(error) ||
+    abortReasons.has(Object.getOwnPropertyDescriptor(error, 'cause')?.value) ||
     isNoFallbackError(error)
 }
 
