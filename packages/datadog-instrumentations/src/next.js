@@ -568,6 +568,7 @@ function wrapPagesApiRender (render) {
 function instrumentPagesApiRuntime (runtime, version) {
   const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
   const wrappers = [['render', wrapPagesApiRenderBody]]
+  // Keep wrapPagesApiRender on its previous >=15.4.1 range; the hook is widened only for the body wrapper.
   if (satisfies(version, '>=15.4.1')) wrappers.push(['render', wrapPagesApiRender])
   instrumentRouteModule(PagesAPIRouteModule, wrappers, false)
   return runtime
@@ -626,7 +627,8 @@ function getBlockableApiModule (apiModule) {
 
   blockableModule = Object.create(apiModule, { default: { value: wrapApiHandler(handler) } })
   blockableApiModules.set(apiModule, blockableModule)
-  // A route module keeps the replacement, so it must resolve to itself on the next render.
+  // wrapPagesApiRenderBody stores the replacement as `userland`, so later renders pass it back here: resolve it to
+  // itself instead of nesting another handler wrapper.
   blockableApiModules.set(blockableModule, blockableModule)
   return blockableModule
 }
