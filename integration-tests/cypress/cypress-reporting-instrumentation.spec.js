@@ -257,6 +257,41 @@ moduleTypes.forEach(({
         over10It('does not duplicate specs already finalized by after:spec', async () => {
           await runLateManual({ afterSpec: 'forwarded' })
         })
+
+        over10It('uploads a screenshot renamed by a later after:screenshot handler once', async () => {
+          receiver.setMediaResponseDelay(100)
+          let output = ''
+          const configFile = 'ci-visibility/cypress-late-manual-screenshot/config.js'
+          childProcess = exec(`./node_modules/.bin/cypress run --config-file ${configFile}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            },
+          })
+          childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
+          let messages
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'close'),
+            receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url, media }) => url.endsWith('/api/v2/citestcycle') || !!media,
+              payloads => { messages = payloads }
+            ),
+          ])
+          const tests = messages.flatMap(({ payload }) => payload?.events ?? [])
+            .filter(event => event.type === 'test')
+            .map(({ content }) => content)
+          const uploads = messages.filter(({ media }) => media).map(({ media }) => media)
+
+          assert.strictEqual(exitCode, 1, output)
+          assert.strictEqual(tests.length, 1, output)
+          assert.strictEqual(tests[0].meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+          assert.deepStrictEqual(uploads.map(media => media.contentType), ['image/png'], output)
+          assert.strictEqual(uploads[0].traceId, String(tests[0].trace_id))
+        })
       })
 
       for (const { manual, reject } of [
