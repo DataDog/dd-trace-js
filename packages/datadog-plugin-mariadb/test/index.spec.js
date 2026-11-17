@@ -3,9 +3,10 @@
 const assert = require('node:assert/strict')
 const dc = require('node:diagnostics_channel')
 const net = require('node:net')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const { version: ddpv } = require('mocha/package.json')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -651,6 +652,189 @@ describe('Plugin', () => {
           })
         })
       }
+
+      describe('with DBM propagation enabled', () => {
+        let connection
+        let mariadb
+
+        /**
+         * Reads back the statement the server actually received, comment included, from the general log.
+         * The driver has no public hook on the encoded packet, so the server log is the source of truth.
+         *
+         * @param {string} marker
+         * @returns {Promise<string>}
+         */
+        async function receivedQuery (marker) {
+          const rows = await connection.query(
+            'SELECT argument FROM mysql.general_log ' +
+            "WHERE command_type = 'Query' AND argument LIKE ? AND argument NOT LIKE '%general_log%' " +
+            'ORDER BY event_time DESC LIMIT 1',
+            [`%${marker}%`]
+          )
+
+          return rows[0].argument.toString()
+        }
+
+        async function connect (config) {
+          await agent.load('mariadb', config)
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+          connection = await mariadb.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db',
+          })
+
+          await connection.query("SET GLOBAL log_output = 'TABLE'")
+          await connection.query("SET GLOBAL general_log = 'ON'")
+        }
+
+        afterEach(async () => {
+          await connection.query("SET GLOBAL general_log = 'OFF'")
+          await connection.end()
+          await agent.close()
+        })
+
+        describe('with service mode using plugin configurations', () => {
+          beforeEach(() => connect({ dbmPropagationMode: 'service', service: 'serviced' }))
+
+          /**
+           * @param {(connection: import('mariadb/callback').Connection) => Promise<void>} run
+           */
+          async function withCallbackConnection (run) {
+            const callbackDriver = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+            const callbackConnection = callbackDriver.createConnection({
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+            const connect = promisify(callbackConnection.connect).bind(callbackConnection)
+            const end = promisify(callbackConnection.end).bind(callbackConnection)
+
+            await connect()
+            try {
+              await run(callbackConnection)
+            } finally {
+              await end()
+            }
+          }
+
+          it('should send the comment to the server in the query text', async () => {
+            const marker = `dbm_service_${Date.now()}`
+
+            await connection.query(`SELECT 1 + 1 AS ${marker}`)
+
+            assert.strictEqual(
+              await receivedQuery(marker),
+              `/*dddb='db',dddbs='serviced',dde='tester',ddh='localhost',ddps='test',ddpv='${ddpv}'*/ ` +
+              `SELECT 1 + 1 AS ${marker}`
+            )
+          })
+
+          it('should send the comment when the query is an object', async () => {
+            const marker = `dbm_object_${Date.now()}`
+
+            await connection.query({ sql: `SELECT 1 + 1 AS ${marker}` })
+
+            assert.strictEqual(
+              await receivedQuery(marker),
+              `/*dddb='db',dddbs='serviced',dde='tester',ddh='localhost',ddps='test',ddpv='${ddpv}'*/ ` +
+              `SELECT 1 + 1 AS ${marker}`
+            )
+          })
+
+          it('should keep placeholders working after the comment', async () => {
+            const marker = `dbm_params_${Date.now()}`
+
+            const rows = await connection.query(`SELECT ? AS ${marker}`, [42])
+
+            assert.strictEqual(Number(rows[0][marker]), 42)
+            assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
+          })
+
+          it('should send the comment through the callback API', async () => {
+            await withCallbackConnection(async callbackConnection => {
+              const query = promisify(callbackConnection.query).bind(callbackConnection)
+              for (const object of [false, true]) {
+                const marker = `dbm_callback_${object}_${Date.now()}`
+                const sql = `SELECT ? AS ${marker}`
+                const command = object ? { sql } : sql
+                const rows = await query(command, [42])
+
+                assert.strictEqual(Number(rows[0][marker]), 42)
+                assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
+                if (object) assert.strictEqual(command.sql, sql)
+              }
+            })
+          })
+
+          it('should preserve native callback errors for invalid SQL', async () => {
+            for (const sql of [undefined, null, 0, false, NaN]) {
+              await withCallbackConnection(async callbackConnection => {
+                assert.throws(() => callbackConnection.query(sql, () => {}), TypeError)
+              })
+            }
+            await withCallbackConnection(async callbackConnection => {
+              const query = promisify(callbackConnection.query).bind(callbackConnection)
+              await assert.rejects(query(''), { errno: 1065 })
+            })
+          })
+
+          it('should preserve native errors for invalid SQL', async () => {
+            assert.throws(() => connection.query(null), TypeError)
+
+            const legacy = semver.intersects(version, '<3')
+            for (const sql of [undefined, 0, false, NaN]) {
+              await assert.rejects(connection.query(sql), legacy ? TypeError : { errno: 45049 })
+            }
+            await assert.rejects(connection.query(''), { errno: legacy ? 1065 : 45049 })
+          })
+
+          it('should not change the span resource', async () => {
+            const marker = `dbm_resource_${Date.now()}`
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: `SELECT 1 + 1 AS ${marker}` }, {
+                spanResourceMatch: new RegExp(marker),
+              }),
+              connection.query(`SELECT 1 + 1 AS ${marker}`),
+            ])
+          })
+        })
+
+        describe('with full mode using tracer configurations', () => {
+          beforeEach(async () => {
+            await connect({ dbmPropagationMode: 'full', service: 'post' })
+            global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          })
+
+          it('should send the trace context to the server in the query text', async () => {
+            const marker = `dbm_full_${Date.now()}`
+
+            await connection.query(`SELECT 1 + 1 AS ${marker}`)
+
+            const received = await receivedQuery(marker)
+            const [, traceparent] = received.match(/traceparent='([^']+)'/) ?? []
+
+            assert.ok(traceparent, `traceparent missing from ${inspect(received)}`)
+            assert.match(traceparent, /^00-[\da-f]{32}-[\da-f]{16}-01$/)
+            assert.strictEqual(
+              received,
+              `/*dddb='db',dddbs='post',dde='tester',ddh='localhost',ddps='test',ddpv='${ddpv}',` +
+              `traceparent='${traceparent}'*/ SELECT 1 + 1 AS ${marker}`
+            )
+          })
+
+          it('should tag the span with _dd.dbm_trace_injected', async () => {
+            const marker = `dbm_injected_${Date.now()}`
+            await Promise.all([
+              agent.assertFirstTraceSpan({ meta: { '_dd.dbm_trace_injected': 'true' } }, {
+                spanResourceMatch: new RegExp(marker),
+              }),
+              connection.query(`SELECT 1 + 1 AS ${marker}`),
+            ])
+          })
+        })
+      })
 
       describe('with a connection pool - callbacks', () => {
         let pool

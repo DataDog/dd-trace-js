@@ -242,7 +242,11 @@ describe('instrumentation registry', () => {
     const source = readFileSync(require.resolve('../../../src/helpers/rewriter/targets'), 'utf8')
     runInNewContext(source, {
       module: targetModule,
-      require: name => name === './targets.json' ? { 'example/index.js': 'example' } : registry,
+      require (name) {
+        if (name === './targets.json') return { 'example/index.js': 'example' }
+        if (name === './target-patterns.json') return []
+        return registry
+      },
     })
     const target = targetModule.exports.getRewriteTarget('/app/node_modules/example/index.js')
 

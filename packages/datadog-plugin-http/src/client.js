@@ -8,6 +8,11 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
@@ -40,21 +45,36 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    let otelUrl = uri
+    if (otelSemantics) {
+      const otelHostname = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
+      const otelHost = options.port ? `${otelHostname}:${options.port}` : otelHostname
+      const auth = typeof options.auth === 'string' && options.auth ? 'REDACTED:REDACTED@' : ''
+      const otelBase = `${protocol}//${auth}${otelHost}`
+      otelUrl = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
+    }
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
+    const meta = {
+      [COMPONENT]: this.component,
+      'span.kind': 'client',
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': otelUrl,
+      'out.host': hostname,
+    }
+    if (otelSemantics) {
+      const resource = otelHttpResourceName(method)
+      meta['resource.name'] = resource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.component,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
-      meta: {
-        [COMPONENT]: this.component,
-        'span.kind': 'client',
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
-        'out.host': hostname,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(options.port, 10),
       },
@@ -99,6 +119,9 @@ class HttpClientPlugin extends ClientPlugin {
 
       if (!this.config.validateStatus(status)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, String(status))
+        }
       }
 
       addResponseHeaders(res, span, this.config)

@@ -23,12 +23,17 @@
 /** @satisfies {InstrumentationRegistryEntry[]} */
 const registry = [
   { instrumentations: require('./instrumentations/ai') },
+  { activate: true, instrumentations: require('./instrumentations/async-mutex') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
   { activate: true, instrumentations: require('./instrumentations/bullmq') },
   {
     activate: { setup: () => require('../../claude-agent-sdk') },
     instrumentations: require('./instrumentations/claude-agent-sdk'),
+  },
+  {
+    activate: { setup: () => require('../../elevenlabs') },
+    instrumentations: require('./instrumentations/elevenlabs'),
   },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
@@ -37,11 +42,30 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
+  {
+    activate: { setup: () => require('../../modelcontextprotocol-server') },
+    instrumentations: require('./instrumentations/modelcontextprotocol-server'),
+  },
+  { instrumentations: require('./instrumentations/next') },
   { instrumentations: require('./instrumentations/openai-agents') },
+  {
+    activate: { setup: () => require('../../openai-agents-realtime') },
+    instrumentations: require('./instrumentations/openai-agents-realtime'),
+  },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
+  {
+    activate: /** @type {ActivationConfig} */ ({ setup: () => require('../../react-router') }),
+    instrumentations: require('./instrumentations/react-router'),
+  },
   { instrumentations: require('./instrumentations/vitest') },
-  { instrumentations: require('./instrumentations/webdriverio') },
+  {
+    activate: {
+      modules: ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils', 'webdriverio'],
+      setup: activation => require('../../webdriverio').recordLocalRunnerVersion(activation),
+    },
+    instrumentations: require('./instrumentations/webdriverio'),
+  },
   {
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
@@ -51,6 +75,7 @@ const registry = [
     activate: { setup: () => require('../../typesafe') },
     instrumentations: require('./instrumentations/typesafe'),
   },
+  { activate: true, instrumentations: require('./instrumentations/trpc') },
 ]
 
 const activatedModules = new Set()

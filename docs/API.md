@@ -181,6 +181,45 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
+<h3 id="feature-flag-selection">Flag Selection</h3>
+
+Load only the flags a service needs by passing a flag selection before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    flagSelection: {
+      tags: ['checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
+Tags and key patterns are case-sensitive. Tags match exactly. A key pattern matches the whole key: `*` matches any run
+of characters, including none, and every other character, including `?`, is literal.
+Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
+Without a selection, the provider loads every flag.
+
+Values are trimmed, deduplicated and sorted before they are sent. Each list accepts at most 31 values, each value is
+at most 200 UTF-8 bytes, and the request URL is at most 8192 bytes. A selection over these limits, or one that is not an
+object with optional `tags` and `keyPatterns` string arrays, is not sent: the provider logs an error and loads every
+flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
+logs, these errors are written only when `DD_TRACE_DEBUG=true`.
+
+Flag selection has no environment variable. `node --require dd-trace/init` and `node --import dd-trace/initialize.mjs`
+call `init()` without options, and later `init()` calls are ignored, so they cannot set a selection; call `init()` with
+the option in your application or in your own preload file instead. With Single Step Instrumentation, an application
+that installs `dd-trace` and calls `init()` with the option can set a selection, because the injected tracer then skips
+its own `init()`. An application that relies only on the injected tracer cannot set one.
+
+Flag selection applies to agentless delivery only. When flags are delivered through Remote Config
+(`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, or `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true` without a
+configuration source), the provider logs a warning and loads every flag.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -230,8 +269,10 @@ tracer.use('openai', {
 <h5 id="anthropic"></h5>
 <h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
+<h5 id="async-mutex"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
+<h5 id="aws-lambda"></h5>
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the
@@ -291,6 +332,63 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+
+OpenAI Realtime tracing also recognizes `@openai/agents-realtime` >=0.20.0
+(WebSocket and SIP/`call_id` sideband connections), including URLs supplied to
+the transport constructor or connect options. It uses the `openai` plugin
+configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
+`realtime audio turn` / `user speech` / `OpenAI.createRealtimeResponse` /
+`agent speech` span contract. Server playback events determine speech windows;
+`response.done` ends generation, not playback.
+
+Realtime LLM spans preserve provider-reported input/output/total token counts and
+available text, audio, image, and cached-token breakdowns. Counts must be
+nonnegative safe integers; explicit zeros are preserved and absent or invalid
+counts are omitted. Modality and cache counts remain subsets of inclusive totals.
+Datadog calculates model costs and aggregate cost/token metrics server-side.
+
+When LLM Observability consumes audio, Agents SDK sideband connections using
+`call_id` can request stored conversation items to retrieve audio carried over SIP
+or WebRTC. `DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED` defaults to
+`true`. Set it to `false` before connecting to disable these tracer-issued
+sideband retrievals. The switch is resolved from environment and
+stable configuration when connecting; existing connections keep their setting. This setting preserves streamed audio capture on ordinary
+Realtime WebSocket connections, passive capture of audio already received, and
+SDK/application retrieval requests. Realtime timing, transcripts, tools, and usage
+also remain enabled. Errors linked to tracer-owned request IDs stay internal; SDK
+and application request errors retain their normal behavior. Retrieval is bounded
+and falls back to transcripts when unavailable, incomplete, or too large.
+The shared decoded retrieval cache is limited to 12 MiB per connection, with at
+most 16 tracked playback turns and a 3 MiB limit per input/output clip. The cache
+budget includes retained backing allocations of shortened clips; SDK history,
+encoded messages, conversion buffers, and emitted consumers have separate ownership.
+Transcribed input gives the SDK its first retrieval opportunity, with a bounded
+fallback when transcription is delayed or fails. Completed cached snapshots are
+reused; missing or unfinished content can still require a fresh request.
+Interrupted items honor the server truncation boundary. Successful retrievals use
+the SDK's shared transport, so application listeners can receive additional
+`conversation.item.retrieved` and SDK history-update events, including the retrieved
+audio payload. Only errors belonging to tracer-owned requests are intercepted.
+If a formatless retrieval could use a different codec from the captured item,
+the recording is omitted and any available transcript is retained.
+Input clips use paired VAD offsets to include prefix padding at the correct start,
+with wall-clock precision limited by sideband event delivery.
+Manually committed sideband input without a VAD onset can use complete retrieved
+audio to derive its start from the commit boundary and clip duration.
+Response-specific playback starts preserve boundaries across a shared output
+buffer. When a normally drained buffer spans responses without every start event,
+complete retrieved audio durations can reconstruct the missing boundaries; those
+responses include metadata `agent_speech_timing: audio_duration`. Trailing clips
+are placed backward from the drain event, so gaps within an unanchored sequence
+cannot be resolved individually. Missing, incomplete, unsupported, or inconsistent
+recordings retain the timing fallback. Interrupted windows without per-response
+boundaries are not reconstructed. ESM applications must register the tracer loader
+before importing the SDK. This path is tested with SDK 0.20.0 and 0.21.0 using
+CJS/ESM protocol replays, plus live WebRTC/SIP sideband calls on SDK 0.20.0.
+The dependency test matrix includes the supported floor and latest pinned SDK
+versions, so automated pin updates exercise hook matching and request observation.
+Playback with missing per-response start events remains a live validation gap.
+
 <h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
@@ -300,6 +398,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -308,6 +407,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -323,8 +423,10 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [anthropic](./interfaces/plugins.anthropic.html)
 * [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/plugins.apollo.html)
+* [async-mutex](./interfaces/plugins.async_mutex.html)
 * [avsc](./interfaces/plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-lambda](./interfaces/plugins.aws_lambda.html)
 * [aws-sdk](./interfaces/plugins.aws_sdk.html)
 * [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)
@@ -344,6 +446,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [dns](./interfaces/plugins.dns.html)
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [electron](./interfaces/plugins.electron.html)
+* [elevenlabs](#elevenlabs)
 * [express](./interfaces/plugins.express.html)
 * [fastify](./interfaces/plugins.fastify.html)
 * [fetch](./interfaces/plugins.fetch.html)
@@ -389,6 +492,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [postgres](./interfaces/plugins.postgres.html)
 * [prisma](./interfaces/plugins.prisma.html)
 * [protobufjs](./interfaces/plugins.protobufjs.html)
+* [react-router](./interfaces/plugins.react_router.html)
 * [redis](./interfaces/plugins.redis.html)
 * [restify](./interfaces/plugins.restify.html)
 * [rhea](./interfaces/plugins.rhea.html)
@@ -397,12 +501,43 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [trpc](./interfaces/plugins.trpc.html)
 * [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)
 * [web](./interfaces/plugins.web.html)
 * [winston](./interfaces/plugins.winston.html)
 * [ws](./interfaces/plugins.ws.html)
+
+<h5 id="elevenlabs"></h5>
+
+#### ElevenLabs
+
+Automatically instruments Node.js Agents WebSocket conversations from `@elevenlabs/elevenlabs-js` 2.75.0 and later
+2.x versions. Initialize `dd-trace` before importing the SDK and enable LLM Observability to record conversation
+turns, transcripts, client tools, and input/output audio. Both the default and custom SDK audio interfaces are supported.
+The SDK exposes `Conversation` and `ClientTools` at
+`@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation`.
+Browser/WebRTC conversations (`@elevenlabs/client`), telephony, and standalone speech APIs are outside this integration.
+
+Negotiated PCM16 input and output are exported as WAV using their respective sample rates. Audio shares one bounded
+budget per LLM span; unsupported or oversized clips fall back to text with omission metadata. Phase timing and playback
+are estimated, and these spans explicitly opt out of time-to-first-audio metrics.
+Tool capture retains up to 64 calls per turn with IDs and names limited to 1,024 characters. Oversized names are
+truncated; omitted calls and truncated arguments, names, or results are marked in span metadata. SDK handlers still
+receive their original input and execute normally.
+
+For optional speaker activity colors, open the ElevenLabs agent's **Advanced → Client Events** settings and enable
+**VAD score (`vad_score`)**, preserving the other events your application uses. The tracer observes this event without
+changing your agent configuration or subscriptions. Without VAD events, audio playback and phase-based colors continue
+to work. VAD estimates change activity metadata only, never the captured audio or interruption cuts.
+
+Audio capture follows delivery through the SDK's output interface. When the SDK delivers a replacement response
+at the interruption ID, the tracer assigns its audio to that response and rejects older stale audio. The tested
+2.75.0 SDK artifact instead drops audio at that boundary; full playback requires the upstream correction. Tests
+also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
+
+Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
@@ -680,6 +815,9 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
+When exporting traces over OTLP, the tracing library delegates span metrics computation
+to the OpenTelemetry Collector or Datadog intake by default.
+
 dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
 
 ```javascript
@@ -883,3 +1021,115 @@ function handle () {
   })
 }
 ```
+
+## Mocha test automation exclusions
+
+Mocha supports the same `preventFailureSuppression` and `noAutoRetry` callback annotations
+from `dd-trace/ci/test-annotations` shown below for Jest. Apply them to `it`, `test`, and
+parameterized callbacks, including `only` and `skip` declarations. The annotations are
+preserved in serial and parallel workers. Native Mocha retries remain available when
+`noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.
+
+## Cucumber test automation exclusions
+
+Use the native Gherkin tags `@datadog_prevent_failure_suppression` and
+`@datadog_no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.
+
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/ci/test-annotations`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
+
+## Jest test automation exclusions
+
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/ci/test-annotations`:
+
+```javascript
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
+
+test('critical check', preventFailureSuppression(noAutoRetry(() => {
+  expect(check()).toBe(true)
+})))
+
+test.each(cases)('critical case %s', preventFailureSuppression(value => {
+  expect(check(value)).toBe(true)
+}))
+```
+
+`preventFailureSuppression(callback)` prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.
+
+`noAutoRetry(callback)` prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit `jest.retryTimes(...)` calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.
+
+Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding test framework instrumentation.
+
+Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
+as `true` when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
+
+Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.
+
+## Vitest test automation exclusions
+
+Annotate callbacks with `preventFailureSuppression` and `noAutoRetry` from
+`dd-trace/ci/test-annotations`. These declarations apply to all generated `test.each`
+cases and work with Vitest's test modifiers, worker processes and supported
+browser/no-worker modes. Annotation flags travel with test task metadata before
+Vitest replaces callbacks for fixtures or parameterization.
+
+Protection overrides Datadog quarantine/disabling; retry exclusion blocks Datadog
+ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
+available and are reported as framework retries. Developer skips and TIA retain
+their ordinary selection semantics. Backend-assigned property tags remain visible
+when the execution policy is overridden; observed annotation tags are true-only.
+
+## Cypress test automation exclusions
+
+With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. `noAutoRetry` excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.
+
+Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.
+
+
+## WebdriverIO test automation exclusions
+
+With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
+to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
+They apply to every declaration generated in a loop and retain annotation tags
+on explicit skips and permitted native retries.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling without
+blocking retries. `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix;
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
+Both helpers preserve ordinary selection and expected-failure behavior. Management
+property tags retain backend assignments even when their execution policy is overridden.

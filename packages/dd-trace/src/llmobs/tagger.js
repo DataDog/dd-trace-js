@@ -8,9 +8,11 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
+  EXPERIMENT_TAGS,
   SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
+  EXPERIMENT_EXPECTED_OUTPUT,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
   INPUT_VALUE,
@@ -121,6 +123,7 @@ class LLMObsTagger {
     integration,
     agentVersion,
     _decorator,
+    _experimentTags,
   } = {}) {
     // Do not register it in the map if it does not have an LLMObs span kind.
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED || !kind) return
@@ -187,6 +190,15 @@ class LLMObsTagger {
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // Experiment context flows down the span tree, matching Python, which carries it on the span context.
+    // It stays out of annotationContext and is applied after its tags, so a user's nested
+    // annotationContext({ tags }) can neither replace it nor reassign the span to another run.
+    const experimentTags = _experimentTags ?? registry.get(parent)?.[EXPERIMENT_TAGS]
+    if (experimentTags) {
+      this._setTag(span, EXPERIMENT_TAGS, experimentTags)
+      this.tagSpanTags(span, experimentTags)
+    }
 
     // apply after tags so only keys present at span start are accepted.
     if (annotationContext?.costTags != null) {
@@ -340,6 +352,16 @@ class LLMObsTagger {
   tagExperimentIO (span, inputData, outputData) {
     this.#tagExperimentValue(span, inputData, EXPERIMENT_INPUT, 'input')
     this.#tagExperimentValue(span, outputData, EXPERIMENT_OUTPUT, 'output')
+  }
+
+  /**
+   * Stores the expected output for an experiment span.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} expectedOutput
+   */
+  tagExperimentExpectedOutput (span, expectedOutput) {
+    this.#tagExperimentValue(span, expectedOutput, EXPERIMENT_EXPECTED_OUTPUT, 'expected output')
   }
 
   tagTextIO (span, inputData, outputData) {

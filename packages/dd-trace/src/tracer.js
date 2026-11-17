@@ -11,7 +11,6 @@ const shimmer = require('../../datadog-shimmer')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
-const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
 const { flushServerlessTelemetry } = require('./flush')
@@ -33,7 +32,6 @@ class DatadogTracer extends Tracer {
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
-    setStartupLogConfig(config)
     flushStartupLogs(log)
     // Curated frameworks (e.g. Next.js) silently no-op when loaded first and their users enable
     // no logging (#5430 / #5432), so surface those unconditionally.

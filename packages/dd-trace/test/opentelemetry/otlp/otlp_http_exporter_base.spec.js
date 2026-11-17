@@ -43,6 +43,18 @@ describe('OtlpHttpExporterBase', () => {
     }
   })
 
+  it('captures startup resource values independently of later source changes', () => {
+    const resource = { 'service.name': 'initial-service', list: ['initial'] }
+    const exporter = new OtlpHttpExporterBase('http://collector/v1/logs', {}, 1000, 'http/json', 'logs', resource)
+    const snapshot = exporter.getStartupResourceAttributes()
+
+    resource['service.name'] = 'changed-service'
+    resource.list.push('changed')
+
+    assert.deepEqual(snapshot, { 'service.name': 'initial-service', list: ['initial'] })
+    assert.strictEqual(exporter.getStartupResourceAttributes(), snapshot)
+  })
+
   it('sends a User-Agent header identifying the tracer version', () => {
     const exporter = new OtlpHttpExporterBase('https://intake.example/path', undefined, 1000, 'http/protobuf', 'traces')
 

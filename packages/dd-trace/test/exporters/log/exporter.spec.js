@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -51,5 +53,66 @@ describe('LogExporter', () => {
       log.restore()
       sinon.assert.notCalled(log)
     })
+
+    for (const [name, character] of [['two-byte', 'é'], ['three-byte', '漢'], ['four-byte', '😀']]) {
+      describe(`with ${name} UTF-8 characters`, () => {
+        it('should split batches by byte size without losing spans', () => {
+          const spans = Array.from({ length: 3 }, () => ({ tag: character.repeat(12000) }))
+          log = sinon.stub(process.stdout, 'write')
+          try {
+            exporter.export(spans)
+          } finally {
+            log.restore()
+          }
+
+          const lines = log.args.map(([line]) => line)
+          assert.ok(lines.length > 1)
+          for (const line of lines) {
+            assert.ok(Buffer.byteLength(line, 'utf8') <= 64 * 1024)
+          }
+          assert.deepEqual(lines.flatMap(line => JSON.parse(line).traces[0]), spans)
+        })
+
+        it('should accept a span whose framed payload is exactly the byte limit', () => {
+          const overhead = Buffer.byteLength('{"traces":[[{"tag":""}]]}\n', 'utf8')
+          const budget = 64 * 1024 - overhead
+          const characterSize = Buffer.byteLength(character, 'utf8')
+          const count = Math.floor(budget / characterSize)
+          const padding = budget - count * characterSize
+          span.tag = character.repeat(count) + 'a'.repeat(padding)
+          log = sinon.stub(process.stdout, 'write')
+          try {
+            exporter.export([span, span])
+          } finally {
+            log.restore()
+          }
+
+          sinon.assert.calledTwice(log)
+          for (const [line] of log.args) {
+            assert.equal(Buffer.byteLength(line, 'utf8'), 64 * 1024)
+            assert.deepEqual(JSON.parse(line).traces[0], [span])
+          }
+        })
+
+        it('should drop a span one byte over the limit without dropping surrounding spans', () => {
+          const overhead = Buffer.byteLength('{"traces":[[{"tag":""}]]}\n', 'utf8')
+          const budget = 64 * 1024 - overhead
+          const characterSize = Buffer.byteLength(character, 'utf8')
+          const count = Math.floor(budget / characterSize)
+          const padding = budget - count * characterSize
+          const oversized = { tag: character.repeat(count) + 'a'.repeat(padding + 1) }
+          const small = { tag: 'small' }
+          log = sinon.stub(process.stdout, 'write')
+          try {
+            exporter.export([small, oversized, small])
+          } finally {
+            log.restore()
+          }
+
+          sinon.assert.calledOnce(log)
+          assert.deepEqual(JSON.parse(log.firstCall.args[0]).traces[0], [small, small])
+        })
+      })
+    }
   })
 })

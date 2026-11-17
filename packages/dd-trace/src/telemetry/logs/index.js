@@ -7,6 +7,12 @@ const logCollector = require('./log-collector')
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error:record')
 
+/**
+ * @typedef {object} TelemetryLogOptions
+ * @property {string} [tags] Default tags appended to every outgoing log.
+ */
+
+let logOptions
 let enabled = false
 
 /**
@@ -68,10 +74,15 @@ function getErrorType (cause) {
   }
 }
 
-function start (config) {
+/**
+ * @param {import('../../config/config-base')} config
+ * @param {TelemetryLogOptions} [options]
+ */
+function start (config, options) {
   if (!config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED || enabled) return
 
   enabled = true
+  logOptions = options
 
   telemetryLog.subscribe(onLog)
 
@@ -80,6 +91,7 @@ function start (config) {
 
 function stop () {
   enabled = false
+  logOptions = undefined
 
   if (telemetryLog.hasSubscribers) {
     telemetryLog.unsubscribe(onLog)
@@ -91,8 +103,15 @@ function stop () {
 function send (config, application, host) {
   if (!enabled) return
 
-  const logs = logCollector.drain()
+  let logs = logCollector.drain()
   if (logs) {
+    const tags = logOptions?.tags
+    if (tags) {
+      logs = logs.map(entry => ({
+        ...entry,
+        tags: entry.tags ? `${entry.tags},${tags}` : tags,
+      }))
+    }
     sendData(config, application, host, 'logs', { logs })
   }
 }

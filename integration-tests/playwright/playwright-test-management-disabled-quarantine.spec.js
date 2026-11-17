@@ -28,6 +28,7 @@ const { assertObjectContains, getCiVisAgentlessConfig } = require('../helpers')
 const {
   PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT,
   describePlaywrightTestManagement,
+  getUniqueOutputDir,
 } = require('./playwright-test-management')
 
 const DISABLED_MANAGEMENT_TESTS = {
@@ -117,9 +118,9 @@ const QUARANTINE_WITH_DISABLED_ATF_MANAGEMENT_TESTS = {
 describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, version }) => {
   contextNewVersions('test management', () => {
     context('disabled', () => {
-      const getTestAssertions = (receiver, isDisabling) =>
+      const getTestAssertions = (receiver, proc, isDisabling) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const resourceNames = events.filter(event => event.type === 'test').map(event => event.content.resource)
@@ -160,10 +161,9 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
                 assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in test.meta))
               }
             })
-          }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
+          }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
       const runDisableTest = async (receiver, isDisabling, extraEnvVars) => {
-        const testAssertionsPromise = getTestAssertions(receiver, isDisabling)
         let testOutput = ''
         let proc
         try {
@@ -173,12 +173,15 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
               },
             }
           )
+
+          const testAssertionsPromise = getTestAssertions(receiver, proc, isDisabling)
 
           proc.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
@@ -230,6 +233,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
               PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
             },
@@ -267,8 +271,20 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
           receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
 
+          const proc = run(
+            './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
+            {
+              cwd: runtime.cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              },
+            }
+          )
+
           const testAssertionsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const disabledTestName = 'disabled serial retry should not run disabled sibling'
               const events = payloads.flatMap(({ payload }) => payload.events)
               const disabledTests = events
@@ -279,18 +295,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               assert.strictEqual(disabledTests.length, 1)
               assert.strictEqual(disabledTests[0].meta[TEST_STATUS], 'skip')
               assert.strictEqual(disabledTests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-            }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
-
-          const proc = run(
-            './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
-            {
-              cwd: runtime.cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-              },
-            }
-          )
+            }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
           let testOutput = ''
           proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
           proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
@@ -316,6 +321,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
                 FAIL_AFTER_DISABLED: 'true',
                 PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
@@ -364,13 +370,13 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
     })
 
     context('quarantine', () => {
-      const getTestAssertions = (receiver, {
+      const getTestAssertions = (receiver, proc, {
         isQuarantining,
         hasFlakyTests,
         expectedQuarantinedTestCount,
       }) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
@@ -416,7 +422,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTests[0].meta))
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
-          }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
+          }, { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT })
 
       /**
        * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
@@ -435,11 +441,6 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         hasFlakyTests = false,
         expectedQuarantinedTestCount = 1,
       }) => {
-        const testAssertionsPromise = getTestAssertions(receiver, {
-          isQuarantining,
-          hasFlakyTests,
-          expectedQuarantinedTestCount,
-        })
         let testOutput = ''
         let proc
         try {
@@ -449,12 +450,19 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
               },
             }
           )
+
+          const testAssertionsPromise = getTestAssertions(receiver, proc, {
+            isQuarantining,
+            hasFlakyTests,
+            expectedQuarantinedTestCount,
+          })
           proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
           proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
@@ -533,6 +541,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...extraEnvVars,
@@ -632,6 +641,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 ...(shouldUseCustomReporter ? { PLAYWRIGHT_FROZEN_REPORTER: '1' } : {}),
                 ...(shouldFailGlobalTeardown ? { FAIL_GLOBAL_TEARDOWN: '1' } : {}),
                 ...(shouldReachMaxFailures ? { MAX_FAILURES: '1', PLAYWRIGHT_WORKERS: '1' } : {}),
@@ -762,6 +772,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
               },
@@ -798,6 +809,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-disabled-quarantine'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 SHOULD_PASS_NATIVE_RETRIES: '1',
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',

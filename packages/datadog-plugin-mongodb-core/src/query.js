@@ -3,6 +3,7 @@
 const { isMap, isRegExp } = require('node:util').types
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { storage } = require('../../datadog-core')
 
 class MongodbCoreQueryPlugin extends DatabasePlugin {
   static id = 'mongodb-core'
@@ -31,7 +32,8 @@ class MongodbCoreQueryPlugin extends DatabasePlugin {
     const { ns, ops, options = {}, name } = ctx
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
-      return
+      ctx.parentStore = storage('legacy').getStore()
+      return ctx.parentStore
     }
     const query = getQuery(ops, this.config.obfuscateQuery)
     const resource = truncate(getResource(this, ns, query, name))
@@ -55,6 +57,20 @@ class MongodbCoreQueryPlugin extends DatabasePlugin {
     }
 
     return ctx.currentStore
+  }
+
+  /**
+   * @param {{ currentStore?: { span: import('../../..').Span } }} ctx
+   */
+  finish (ctx) {
+    if (ctx.currentStore) super.finish(ctx)
+  }
+
+  /**
+   * @param {{ currentStore?: { span: import('../../..').Span }, error?: unknown }} ctx
+   */
+  error (ctx) {
+    if (ctx.currentStore) super.error(ctx)
   }
 
   /**

@@ -16,6 +16,7 @@ const {
   SPAN_KIND,
   MODEL_NAME,
   MODEL_PROVIDER,
+  EXPERIMENT_EXPECTED_OUTPUT,
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
@@ -267,6 +268,11 @@ class LLMObsSpanProcessor {
     const isExperiment = spanKind === 'experiment'
     const hasExperimentInput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)
     const hasExperimentOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)
+    const hasExperimentExpectedOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_EXPECTED_OUTPUT)
+
+    if (hasExperimentExpectedOutput) {
+      llmObsSpan.expectedOutput = mlObsTags[EXPERIMENT_EXPECTED_OUTPUT]
+    }
 
     if (hasExperimentInput) {
       llmObsSpan.input = [{ role: '', content: mlObsTags[EXPERIMENT_INPUT] }]
@@ -318,6 +324,9 @@ class LLMObsSpanProcessor {
       const [processedOutput] = processedSpan.output
       if (hasExperimentInput && processedInput !== undefined) meta.input = processedInput.content
       if (hasExperimentOutput && processedOutput !== undefined) meta.output = processedOutput.content
+      if (Object.hasOwn(processedSpan, 'expectedOutput') && processedSpan.expectedOutput !== undefined) {
+        meta.expected_output = processedSpan.expectedOutput
+      }
     } else {
       if (processedSpan.input) {
         if (inputType === 'messages') {

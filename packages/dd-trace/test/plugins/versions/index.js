@@ -1,10 +1,8 @@
 'use strict'
 
-const { clean, coerce, intersects, satisfies, subset, validRange } = require('semver')
+const { Range, clean, coerce, intersects, satisfies, subset, validRange } = require('semver')
 
 const latests = require('./package.json').dependencies
-
-const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
 // Exclude majors without stable releases so published releases on either side of a gap retain test coverage.
 const nonConsecutiveMajorPackages = new Map([
@@ -13,11 +11,15 @@ const nonConsecutiveMajorPackages = new Map([
   ['oracledb', '>=8 <26'],
 ])
 
-// Versions the matrix installs but must not run, keyed by module name. `withVersions()` skips any resolved
-// version matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason
-// a TODO so a fixed version drops the entry instead of rotting, and scope the range as narrowly as the break warrants.
-/** @type {Record<string, Array<{ range: string, reason: string }>>} */
+/** @typedef {Record<string, Array<{ range: string, reason: string, node?: string }>>} BrokenVersions */
+const hapiBrokenVersions = [{ range: '>=17 <21', node: '>=15', reason: 'Hapi >=17 <21 is not tested on Node.js >=15' }]
+/** @type {BrokenVersions} */
 const brokenVersions = {
+  hapi: hapiBrokenVersions,
+  '@hapi/hapi': hapiBrokenVersions,
+  avsc: [{ range: '5.0.0', node: '>=25', reason: 'avsc 5.0.0 is not tested on Node.js >=25' }],
+  '@grpc/grpc-js': [{ range: '<1.3.0', node: '>=25', reason: 'grpc-js <1.3.0 is not tested on Node.js >=25' }],
+  undici: [{ range: '>=7.11.0', node: '<20', reason: 'undici >=7.11.0 is not tested on Node.js <20' }],
   // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
   // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
   ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],
@@ -45,7 +47,7 @@ function getCappedRange (name, range) {
  * @param {string} subrange
  */
 function capSubrange (name, subrange) {
-  if (exactVersionExp.test(subrange)) return subrange
+  if (clean(subrange)) return subrange
 
   if (!latests[name]) {
     throw new Error(
@@ -54,14 +56,7 @@ function capSubrange (name, subrange) {
   }
 
   if (!subrange || subrange === 'latest') return latests[name]
-  if (subset(subrange, `<=${latests[name]}`)) return subrange
-  if (subrange.includes(' - ')) {
-    const minRange = subrange.split(' - ')[0].trim()
-
-    return `${minRange} - ${latests[name]}`
-  }
-
-  return `${subrange} <=${latests[name]}`
+  return `${new Range(subrange).range} <=${latests[name]}`.trim()
 }
 
 /**
@@ -270,12 +265,12 @@ function resolvePluginVersions ({
  *
  * @param {string} name
  * @param {string} version A concrete, resolved version.
- * @param {Record<string, Array<{ range: string, reason: string }>>} [broken] Injectable for testing.
- * @returns {string|undefined}
+ * @param {string} [nodeVersion]
+ * @param {BrokenVersions} [broken]
  */
-function brokenVersionReason (name, version, broken = brokenVersions) {
-  for (const { range, reason } of broken[name] ?? []) {
-    if (satisfies(version, range)) return reason
+function brokenVersionReason (name, version, nodeVersion = process.versions.node, broken = brokenVersions) {
+  for (const { range, reason, node } of broken[name] ?? []) {
+    if (satisfies(version, range) && (!node || satisfies(coerce(nodeVersion), node))) return reason
   }
 }
 

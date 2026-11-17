@@ -155,7 +155,7 @@ function parseJsonResponse (rawJson) {
 function parseLibraryConfigurationResponse (rawJson, config = getConfig(), options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateSettingsResponse(parsedResponse, options)
+    validateSettingsResponse(parsedResponse)
   }
   const parsedAttributes = parsedResponse?.data?.attributes ?? parsedResponse
   if (!isRecord(parsedAttributes)) {

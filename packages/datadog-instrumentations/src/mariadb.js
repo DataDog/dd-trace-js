@@ -15,7 +15,7 @@ const {
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
-const { wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
+const { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -72,7 +72,12 @@ function wrapCommandStart (start, ctx) {
       }
     })
 
-    return startCh.runStores(ctx, start, this, ...args)
+    // Subscribers may rewrite `ctx.sql` (DBM propagation comment). The command encodes `this.sql` when it
+    // starts, so copy the rewritten text back first, as the mysql and mysql2 instrumentations do.
+    return startCh.runStores(ctx, function (...startArgs) {
+      if (typeof this.sql === 'string' && this.sql && typeof ctx.sql === 'string') this.sql = ctx.sql
+      return start.apply(this, startArgs)
+    }, this, ...args)
   })
 }
 
@@ -97,11 +102,12 @@ function createWrapQuery (options) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const ctx = { sql, conf: options }
+      const originalSql = normalizeSql(sql)
+      const ctx = { sql: originalSql, conf: options }
       const poolWaitTime = takePoolWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
         .then(result => {
           ctx.result = result
           finishCh.publish(ctx)
@@ -122,7 +128,8 @@ function createWrapQueryCallback (options) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const cb = arguments[arguments.length - 1]
-      const ctx = { sql, conf: options }
+      const originalSql = normalizeSql(sql)
+      const ctx = { sql: originalSql, conf: options }
       const wrapper = (cb) => function (err) {
         if (err) {
           ctx.error = err
@@ -141,7 +148,7 @@ function createWrapQueryCallback (options) {
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
     }
   }
 }

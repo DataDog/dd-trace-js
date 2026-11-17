@@ -38,12 +38,11 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
 } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
-const { NODE_MAJOR } = require('../../version')
+const { getVitestVersions } = require('./versions')
 
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
 
-// vitest@4.x requires Node.js >= 20
-const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = getVitestVersions()
 const requestedVersion = process.env.VITEST_VERSION
 const versions = requestedVersion && requestedVersion !== 'all'
   ? [requestedVersion === 'oldest' ? supportedVersions[0] : supportedVersions.at(-1)]

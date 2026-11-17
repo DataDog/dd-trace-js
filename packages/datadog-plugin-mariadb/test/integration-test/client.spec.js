@@ -72,9 +72,11 @@ describe('esm', () => {
           assert.deepStrictEqual(resources.sort(), expectedResources)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
-
-        await res
+        const completion = spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(), variants[variant], agent.port, { DD_DBM_PROPAGATION_MODE: 'service' }
+        )
+        proc = completion.proc
+        await Promise.all([res, completion])
       }).timeout(20000)
     }
   })

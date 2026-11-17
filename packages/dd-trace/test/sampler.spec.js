@@ -69,6 +69,18 @@ describe('Sampler', () => {
       assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) })), false)
     })
 
+    it('should base sampling on the lower 64 bits of 128-bit IDs', () => {
+      for (const rate of [0, 0.1, 1]) {
+        const sampler = new Sampler(rate)
+        for (const upper of ['0000000000000000', '6af1eb9300000000', 'ffffffffffffffff']) {
+          for (const [lower, kept] of [['0000000000000001', true], ['0000000000000002', false]]) {
+            const context = new SpanContext({ traceId: id(upper + lower, 16) })
+            assert.strictEqual(sampler.isSampled(context), rate === 1 || (rate !== 0 && kept))
+          }
+        }
+      }
+    })
+
     it('should sample according to different rates', () => {
       const idsAndRates = [
         [id('9223372036854775808', 10), 0.5, true],

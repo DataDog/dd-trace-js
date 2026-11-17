@@ -59,18 +59,14 @@ const SRC_FILES = [
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   '.mochamultireporterrc.js',
-  'ci/diagnose.js',
   'ci/init.js',
-  'ci/test-optimization-validation/command-runner.js',
   'ci/vitest-no-worker-init-setup.mjs',
   'nyc.config.js',
   'packages/datadog-esbuild/index.js',
-  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/helpers/bundler-log.js',
   'packages/datadog-instrumentations/src/cypress-config.js',
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
-  'packages/datadog-webpack/src/log.js',
-  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
   'packages/dd-trace/src/config/helper.js',
@@ -354,6 +350,11 @@ export default [
           {
             pattern: 'dd-trace',
             group: 'builtin',
+            position: 'before',
+          },
+          {
+            pattern: '@actions/**',
+            group: 'external',
             position: 'before',
           },
         ],
@@ -808,6 +809,9 @@ export default [
       'unicorn/no-declarations-before-early-exit': 'off', // many
       'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
+      // Enable when Map and Set initialization can be excluded.
+      // https://github.com/sindresorhus/eslint-plugin-unicorn/issues/3992
+      'unicorn/no-immediate-mutation': 'off',
       'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
@@ -1011,7 +1015,7 @@ export default [
       n: eslintPluginN,
     },
     files: [
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
     settings: {
       node: {
@@ -1047,7 +1051,7 @@ export default [
     ...eslintPluginCypress.configs.recommended,
     files: [
       'integration-tests/cypress/**/*.jsx',
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
   },
   {
@@ -1248,8 +1252,8 @@ export default [
     },
   },
   {
-    name: 'dd-trace/datadog-esbuild/cyclic-star-fixtures',
-    files: ['packages/datadog-esbuild/test/resources/export-cycle-*.mjs'],
+    name: 'dd-trace/bundler-esm-exports/cyclic-star-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-cycle-*.mjs'],
     rules: {
       'import/export': 'off',
       'import/no-cycle': 'off',
@@ -1259,7 +1263,7 @@ export default [
     // These fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`), so dd-trace never appears in their own manifest.
     // Both extraneous-require rules must be off; otherwise the rule fires
-    // whenever dd-trace happens to be resolvable locally (e.g. `yarn link`),
+    // whenever dd-trace happens to be resolvable through a local package link,
     // even though CI's clean install keeps it unresolvable.
     name: 'dd-trace/tests/integration-and-resources',
     plugins: {

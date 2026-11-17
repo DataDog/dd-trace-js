@@ -2,6 +2,8 @@
 
 const id = require('../../dd-trace/src/id')
 
+const STREAM_POLL_INTERVAL = 100
+
 const dataBuffer = Buffer.from(JSON.stringify({
   custom: 'data',
   for: 'my users',
@@ -80,11 +82,8 @@ function waitForActiveStream (kinesis, streamName, cb) {
   kinesis.describeStream({
     StreamName: streamName,
   }, (err, data) => {
-    if (err) {
-      return waitForActiveStream(kinesis, streamName, cb)
-    }
-    if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
-      return waitForActiveStream(kinesis, streamName, cb)
+    if (err || data.StreamDescription.StreamStatus !== 'ACTIVE') {
+      return setTimeout(waitForActiveStream, STREAM_POLL_INTERVAL, kinesis, streamName, cb)
     }
 
     cb()
@@ -95,7 +94,7 @@ function waitForDeletedStream (kinesis, streamName, cb) {
   kinesis.describeStream({
     StreamName: streamName,
   }, (err, data) => {
-    if (!err) return waitForDeletedStream(kinesis, streamName, cb)
+    if (!err) return setTimeout(waitForDeletedStream, STREAM_POLL_INTERVAL, kinesis, streamName, cb)
     cb()
   })
 }

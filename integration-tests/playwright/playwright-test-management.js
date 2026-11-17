@@ -18,6 +18,15 @@ const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
+let outputDirId = 0
+
+/**
+ * @param {string} prefix
+ */
+function getUniqueOutputDir (prefix) {
+  return `./test-results-${prefix}-${++outputDirId}`
+}
+
 /**
  * @callback ContextNewVersions
  * @param {string} name
@@ -81,4 +90,5 @@ function describePlaywrightTestManagement (registerTests) {
 module.exports = {
   PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT,
   describePlaywrightTestManagement,
+  getUniqueOutputDir,
 }

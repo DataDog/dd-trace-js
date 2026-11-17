@@ -87,7 +87,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
 
   let newTags
 
-  const persistent = {
+  const requestData = {
     [addresses.USER_LOGIN]: login,
   }
 
@@ -116,11 +116,11 @@ function trackLogin (framework, login, user, success, rootSpan) {
 
       if (shouldSetTag('usr.id')) {
         newTags['usr.id'] = userId
-        persistent[addresses.USER_ID] = userId
+        requestData[addresses.USER_ID] = userId
       }
     }
 
-    persistent[addresses.LOGIN_SUCCESS] = null
+    requestData[addresses.LOGIN_SUCCESS] = null
   } else {
     newTags = {
       'appsec.events.users.login.failure.track': 'true',
@@ -146,14 +146,14 @@ function trackLogin (framework, login, user, success, rootSpan) {
     }
     */
 
-    persistent[addresses.LOGIN_FAILURE] = null
+    requestData[addresses.LOGIN_FAILURE] = null
   }
 
   keepTrace(rootSpan, ASM)
 
   rootSpan.addTags(newTags)
 
-  return waf.run({ persistent })
+  return waf.run(requestData)
 }
 
 function trackUser (user, rootSpan) {
@@ -177,9 +177,7 @@ function trackUser (user, rootSpan) {
     })
 
     return waf.run({
-      persistent: {
-        [addresses.USER_ID]: userId,
-      },
+      [addresses.USER_ID]: userId,
     })
   }
 }

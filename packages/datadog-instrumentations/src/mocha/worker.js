@@ -484,7 +484,7 @@ addHook({
         }
       })
     }
-    this.on('test', getOnTestHandler(false))
+    this.on('test', getOnTestHandler(false, config))
 
     this.on('test end', getOnTestEndHandler(config))
 

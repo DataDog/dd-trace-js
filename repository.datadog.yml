@@ -8,16 +8,22 @@ branches:
   master:
     enable: true
 
-# PRs A, B -> A, A+B workflows being generated
-workflow_type: speculative
+# Process pull requests independently to match the existing workflow and avoid
+# speculative CI duplication.
+workflow_type: noqueue
+# The repository ruleset permits only squash merges.
 merge_method: squash
+# Prevent users from overriding the repository's squash-only policy.
+allowed_merge_methods:
+  - squash
+# Always reuse existing checks instead of creating a merge queue working branch.
+# Ten years comfortably exceeds the age of any realistic merge base.
+noqueue_use_current_commit_tests_threshold_in_minutes: 5256000
+# Always wait for GitLab CI instead of relying on automatic detection.
 gitlab_check_enable: true
+# Retry supported GitLab jobs to recover from transient infrastructure failures.
 gitlab_jobs_retry_enable: true
-# Wait for the full pipeline to complete before checking the status (we have some jobs which auto-retry)
+# Let the full pipeline finish so automatic job retries can recover transient failures.
 gitlab_fail_fast: false
-# Do not add merge queue status labels on the PR, they will trigger required status checks and block the PR from the MQ
-skip_labels: true
-# Validate up to 5 PRs from the queue at once
-speculative_max_depth: 5
-# Run CI for A, A+B, and B such that if A or A+B fail, but B passes, we can still merge B
-speculative_fallback_enable: true
+# Expose merge queue status labels for GitHub-side automation and controls.
+skip_labels: false

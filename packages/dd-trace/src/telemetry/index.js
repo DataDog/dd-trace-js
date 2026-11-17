@@ -22,4 +22,7 @@ module.exports = {
   appClosing () {
     telemetry?.appClosing()
   },
+  flush () {
+    telemetry?.flush()
+  },
 }

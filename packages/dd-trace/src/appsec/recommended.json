@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.18.0"
+    "rules_version": "1.19.0"
   },
   "rules": [
     {
@@ -352,6 +352,12 @@
               },
               {
                 "address": "server.request.body"
+              },
+              {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
               },
               {
                 "address": "server.request.path_params"
@@ -3116,6 +3122,12 @@
                 "address": "server.request.body"
               },
               {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
+              },
+              {
                 "address": "server.request.path_params"
               },
               {
@@ -3174,6 +3186,13 @@
                 "address": "server.request.body"
               },
               {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode",
+                  "removeNulls"
+                ]
+              },
+              {
                 "address": "server.request.path_params"
               },
               {
@@ -3188,6 +3207,7 @@
             ],
             "regex": "\\bon(?:abort|afterprint|afterscriptexecute|animationcancel|animationend|animationiteration|animationstart|auxclick|beforeinput|beforematch|beforeprint|beforescriptexecute|beforeunload|beforexrselect|blur|canplay|canplaythrough|change|click|compositionend|compositionstart|compositionupdate|contentvisibilityautostatechange|contextmenu|copy|cut|dblclick|DOMActivate|DOMMouseScroll|drag|dragend|dragenter|dragleave|dragover|dragstart|drop|durationchange|ended|error|focus|focusin|focusout|fullscreenchange|fullscreenerror|gesturechange|gestureend|gesturestart|gotpointercapture|hashchange|input|invalid|keydown|keypress|keyup|load|loadeddata|loadedmetadata|loadstart|lostpointercapture|message|mousedown|mouseenter|mouseleave|mousemove|mouseout|mouseover|mouseup|mousewheel|MozMousePixelScroll|offline|online|pagehide|pageshow|paste|pause|play|playing|pointercancel|pointerdown|pointerenter|pointerleave|pointermove|pointerout|pointerover|pointerrawupdate|pointerup|progress|ratechange|reset|resize|scroll|scrollend|scrollsnapchange|scrollsnapchanging|search|securitypolicyviolation|seeked|seeking|select|show|stalled|submit|suspend|timeupdate|toggle|touchcancel|touchend|touchmove|touchstart|transitioncancel|transitionend|transitionrun|transitionstart|unload|volumechange|waiting|webkitmouseforcechanged|webkitmouseforcedown|webkitmouseforceup|webkitmouseforcewillbegin|wheel)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
             "options": {
+              "case_sensitive": false,
               "min_length": 8
             }
           },
@@ -4418,7 +4438,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "\\bjava\\.lang\\.(?:runtime|processbuilder)\\b",
+            "regex": "\\b(?:java\\.lang\\.(?:runtime|processbuilder)|javax\\.script\\.scriptenginemanager)\\b",
             "options": {
               "case_sensitive": true,
               "min_length": 17
@@ -4941,7 +4961,7 @@
       "id": "dog-000-007",
       "name": "Server side template injection: Velocity & Freemarker",
       "tags": {
-        "type": "java_code_injection",
+        "type": "server_side_template_injection",
         "category": "attack_attempt",
         "cwe": "1336",
         "capec": "1000/152/242/19",
@@ -4974,7 +4994,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "#(?:set|foreach|macro|parse|if)\\(.*\\)|<#assign.*>"
+            "regex": "#(?:set|foreach|macro|parse|if)\\s*\\(.*\\)|<#assign.*>"
           },
           "operator": "match_regex"
         }
@@ -5032,6 +5052,12 @@
               },
               {
                 "address": "server.request.body"
+              },
+              {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
               },
               {
                 "address": "server.request.path_params"
@@ -5300,6 +5326,12 @@
               },
               {
                 "address": "server.request.body"
+              },
+              {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
               },
               {
                 "address": "server.request.path_params"
@@ -5682,88 +5714,14 @@
       "transformers": []
     },
     {
-      "id": "dog-920-100",
-      "name": "File upload with double extension",
-      "tags": {
-        "type": "http_protocol_violation",
-        "category": "attack_attempt",
-        "cwe": "434",
-        "capec": "1000/255/153/267/71",
-        "confidence": "0",
-        "module": "waf"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.body.filenames"
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "x-filename"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "x_filename"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "x.filename"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "x-file-name"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "content-disposition"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "upload-filename"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "filename"
-                ]
-              }
-            ],
-            "regex": "\\w\\.[a-zA-Z0-9]{2,6}\\.[a-zA-Z0-9]+\\.?$",
-            "options": {
-              "case_sensitive": true,
-              "min_length": 6
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": [
-        "removeNulls"
-      ]
-    },
-    {
       "id": "dog-920-110",
       "name": "Zipslip Attack - Unsafe Zip extraction",
       "tags": {
-        "type": "http_protocol_violation",
+        "type": "zipslip",
         "category": "attack_attempt",
         "cwe": "23",
         "capec": "1000/152/586",
-        "confidence": "0",
+        "confidence": "1",
         "module": "waf"
       },
       "conditions": [
@@ -5843,6 +5801,218 @@
       "transformers": []
     },
     {
+      "id": "dog-920-111",
+      "name": "Zipslip Attack - Extraction of code files",
+      "tags": {
+        "type": "zipslip",
+        "category": "attack_attempt",
+        "cwe": "23",
+        "capec": "1000/152/586",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x_filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x.filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-file-name"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-disposition"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "upload-filename"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "filename"
+                ]
+              }
+            ],
+            "regex": "\\.(?:zip|(?:(?:tar\\.)?gz|bz2|7z|xz)|rar|tar)$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.fs.file_write"
+              }
+            ],
+            "regex": ".\\.(?:jsp|php|py|rb|sh|pl|cgi|action|tagx?|tld|js[fv]|js)$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-920-121",
+      "name": "Zipslip Attack - Write to relative path",
+      "tags": {
+        "type": "zipslip",
+        "category": "attack_attempt",
+        "cwe": "23",
+        "capec": "1000/152/586",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.fs.file_write"
+              }
+            ],
+            "regex": "(?:^|[/\\\\])\\.\\.[/\\\\]",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-920-122",
+      "name": "Zipslip Attack - Write code files",
+      "tags": {
+        "type": "zipslip",
+        "category": "attack_attempt",
+        "cwe": "23",
+        "capec": "1000/152/586",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.fs.file_write"
+              }
+            ],
+            "regex": ".\\.(?:jsp|php|py|rb|sh|pl|cgi|action|tagx?|tld|js[fv]|js)$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 4
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-920-200",
+      "name": "Exploit Scanner: Multipart Content-Type Header (PHP2Shell)",
+      "enabled": false,
+      "tags": {
+        "type": "http_protocol_violation",
+        "category": "attack_attempt",
+        "cwe": "436",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "content-type"
+                ]
+              }
+            ],
+            "regex": "^multipart/form-data;\\s*boundary=(?:$|[^,-]+)",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 29
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-920-201",
+      "name": "PHP2Shell - Attempts to exploit PHP session upload progress (CVE-2026-109619)",
+      "tags": {
+        "type": "exploit_detection",
+        "category": "attack_attempt",
+        "cwe": "416",
+        "capec": "1000/152/242",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "regex": "^php_session_upload_progress$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 27
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "keys_only"
+      ]
+    },
+    {
       "id": "dog-931-001",
       "name": "RFI: URL Payload to well known RFI target",
       "tags": {
@@ -5909,6 +6079,12 @@
                 "address": "server.request.body"
               },
               {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
+              },
+              {
                 "address": "server.request.path_params"
               },
               {
@@ -5970,10 +6146,10 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "(?s)\\bsubprocess\\b.*\\b(?:check_output|run|Popen|call|check_call)\\b",
+            "regex": "(?s)(?:\\bsubprocess\\b.*\\b(?:check_output|run|Popen|call|check_call)\\b)|(?:\\bos\\s*\\.\\s*(?:popen|system)\\s*\\()",
             "options": {
               "case_sensitive": true,
-              "min_length": 14
+              "min_length": 9
             }
           },
           "operator": "match_regex"
@@ -6000,6 +6176,9 @@
                 "address": "server.request.body"
               },
               {
+                "address": "server.request.body.files_content"
+              },
+              {
                 "address": "grpc.server.request.message"
               },
               {
@@ -6009,10 +6188,619 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "<!DOCTYPE\\b.*<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
+            "regex": "(?s)<!DOCTYPE\\b.*<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
             "options": {
               "case_sensitive": false,
               "min_length": 24
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-100",
+      "name": "Server-side Template Injection: Jinja template injection",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "94",
+        "module": "waf",
+        "capec": "1000/152/242/63/591/243",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "{[{%]-?(?:(?:\\s*\\d+\\s*[*+-]\\s*\\d+\\s*)|(?:[\\s\\S]*__(?:init|class|globals|builtins|import|mro|bases?|subclasses|dict|getitem|getattribute)__[\\s\\S]*)|(?:[\\s\\S]*\\|\\s*(?:reverse|join|format|attr)\\b[\\s\\S]*))-?[}%]}",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-103",
+      "name": "Server-side Template Injection: FreeMarker expert built-ins",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:\\${[^}]*\\?\\s*(?:new\\s*\\(|api\\b|eval\\b|interpret\\b)[^}]*})|(?:<#[^>]*\\?\\s*(?:new\\s*\\(|api\\b|eval\\b|interpret\\b)[^>]*>)|(?:\\[#[^\\]]*\\?\\s*(?:new\\s*\\(|api\\b|eval\\b|interpret\\b)[^\\]]*\\])",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-105",
+      "name": "Server-side Template Injection: Twig dangerous quoted callbacks",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:{{(?:[^}]|}[^}])*}?\\|\\s*(?:map|filter|sort|reduce)\\s*\\(\\s*['\"](?i:system|exec|shell_exec|passthru|popen|proc_open|file_get_contents|file_put_contents|assert)['\"](?:[^}]|}[^}])*}})|(?:{%(?:[^%]|%+[^%}])*\\|\\s*(?:map|filter|sort|reduce)\\s*\\(\\s*['\"](?i:system|exec|shell_exec|passthru|popen|proc_open|file_get_contents|file_put_contents|assert)['\"](?:[^%]|%+[^%}])*%+})",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 17
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-106",
+      "name": "Server-side Template Injection: Twig legacy callback registration",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:{{(?:[^}]|}[^}])*\\b(?i:registerUndefinedFilterCallback|registerUndefinedFunctionCallback)\\s*\\((?:[^}]|}[^}])*}})|(?:{%(?:[^%]|%+[^%}])*\\b(?i:registerUndefinedFilterCallback|registerUndefinedFunctionCallback)\\s*\\((?:[^%]|%+[^%}])*%+})",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 36
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-107",
+      "name": "Server-side Template Injection: Smarty dangerous functions and modifiers",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "{[^}]*(?:\\b(?i:system|exec|shell_exec|passthru|popen|proc_open|file_get_contents|file_put_contents)\\s*\\(|\\|\\s*(?i:system|exec|shell_exec|passthru|file_get_contents|file_put_contents)\\b)[^}]*}",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-108",
+      "name": "Server-side Template Injection: Smarty legacy PHP constructs",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:{\\s*php\\s*}[\\s\\S]*?{/php\\s*})|(?:{\\s*include_php\\b[^}]*})",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 11
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-109",
+      "name": "Server-side Template Injection: EJS Node.js capabilities",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "<%(?:[^#%](?:[^%]|%+[^%>])*%*)?(?:\\bprocess\\s*\\.\\s*(?:mainModule|binding|env)\\b|\\brequire\\s*\\(\\s*['\"](?:node:)?(?:child_process|fs)['\"]|\\b(?:execSync|execFileSync|spawnSync|readFileSync)\\s*\\()(?:[^%]|%+[^%>])*%+>",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 13
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-110",
+      "name": "Server-side Template Injection: Pug and Jade Node.js capabilities",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:[#!]{[^}\\r\\n]*(?:\\bprocess\\s*\\.\\s*(?:mainModule|binding|env)\\b|\\brequire\\s*\\(\\s*['\"](?:node:)?(?:child_process|fs)['\"]|\\b(?:execSync|execFileSync|spawnSync|readFileSync)\\s*\\()[^}\\r\\n]*})|(?m:^[\\t ]*[-=][^\\r\\n]*(?:\\bprocess\\s*\\.\\s*(?:mainModule|binding|env)\\b|\\brequire\\s*\\(\\s*['\"](?:node:)?(?:child_process|fs)['\"]|\\b(?:execSync|execFileSync|spawnSync|readFileSync)\\s*\\())",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 10
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-111",
+      "name": "Server-side Template Injection: Nunjucks constructor invocation",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:{{(?:[^}]|}[^}])*}?(?:\\.\\s*constructor|\\[\\s*['\"]constructor['\"]\\s*\\])\\s*\\((?:[^}]|}[^}])*}})|(?:{%(?:[^%]|%+[^%}])*(?:\\.\\s*constructor|\\[\\s*['\"]constructor['\"]\\s*\\])\\s*\\((?:[^%]|%+[^%}])*%+})",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 17
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-112",
+      "name": "Server-side Template Injection: Handlebars internal property lookup",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\A(?:[^{]|{[^{]|{{(?:[^!~]|~[^!])|{{~?!--[\\s\\S]*?--~?}}|{{~?!(?:-?(?:[^-}]|}[^}])(?:[^}]|}[^}])*|-?)}})*{{(?:[^!~}](?:[^}]|}[^}])*|~(?:[^!}](?:[^}]|}[^}])*)?)?\\blookup\\s+(?:[^}]|}[^}])*['\"](?:constructor|__proto__|__defineGetter__|__lookupGetter__)['\"](?:[^}]|}[^}])*}}",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 22
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-113",
+      "name": "Server-side Template Injection: ERB Ruby execution and file access",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "<%(?:[^#%](?:[^%]|%+[^%>])*%*)?(?:\\b(?:system|exec|spawn|eval)(?:\\s*\\(|[\\t ]+(?:['\"a-zA-Z_@$*{\\[]|%[qQ]?[({\\[<]))|\\b(?:IO|Open3|Kernel|File)\\s*\\.\\s*(?:popen|popen2|popen3|capture2|capture3|read|binread|sysread|system|exec|spawn)\\b|`[^`]+`|%x[({\\[])(?:[^%]|%+[^%>])*%+>",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-115",
+      "name": "Server-side Template Injection: Mako Python imports and capabilities",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:<%(?:[^%]|%+[^%>])*%*(?:\\b(?:__import__|eval|exec|open)\\s*\\(|\\b(?:import\\s+(?:os|subprocess)|from\\s+(?:os|subprocess)\\s+import)\\b|\\bos\\s*\\.\\s*(?:popen|system)\\s*\\()(?:[^%]|%+[^%>])*%+>)|(?:\\${[^}]*(?:\\b(?:__import__|eval|exec|open)\\s*\\(|\\b(?:import\\s+(?:os|subprocess)|from\\s+(?:os|subprocess)\\s+import)\\b|\\bos\\s*\\.\\s*(?:popen|system)\\s*\\()[^}]*})",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 8
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-116",
+      "name": "Server-side Template Injection: Tornado Python imports and capabilities",
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?:{{(?:[^}]|}[^}])*(?:\\b(?:import\\s+(?:os|subprocess)|from\\s+(?:os|subprocess)\\s+import)\\b|\\b(?:__import__|eval|exec|open)\\s*\\(|\\bos\\s*\\.\\s*(?:popen|system)\\s*\\()(?:[^}]|}[^}])*}})|(?:{%(?:[^%]|%+[^%}])*%*(?:\\b(?:import\\s+(?:os|subprocess)|from\\s+(?:os|subprocess)\\s+import)\\b|\\b(?:__import__|eval|exec|open)\\s*\\(|\\bos\\s*\\.\\s*(?:popen|system)\\s*\\()(?:[^%]|%+[^%}])*%+})",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 9
             }
           },
           "operator": "match_regex"
@@ -6080,7 +6868,7 @@
       ]
     },
     {
-      "id": "dog-942-001",
+      "id": "dog-941-002",
       "name": "Blind XSS callback domains",
       "tags": {
         "type": "xss",
@@ -6119,6 +6907,100 @@
             "regex": "https?:\\/\\/(?:.*\\.)?(?:bxss\\.(?:in|me)|xss\\.ht|js\\.rip)",
             "options": {
               "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-942-100",
+      "name": "Postgres exploit through SQL Injection (CVE-2026-2005)",
+      "tags": {
+        "type": "sql_injection",
+        "category": "attack_attempt",
+        "cwe": "83",
+        "capec": "1000/152/248/66",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\bpgp_pub_decrypt_bytea\\(",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-944-100",
+      "name": "Java expression injection: SpEL unqualified dangerous type references",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt",
+        "cwe": "94",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "\\bT\\s*\\(\\s*(?:Runtime|ProcessBuilder)\\s*\\)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 10
             }
           },
           "operator": "match_regex"
@@ -7035,6 +7917,12 @@
                 "address": "server.request.body"
               },
               {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
+              },
+              {
                 "address": "server.request.path_params"
               },
               {
@@ -7388,6 +8276,12 @@
               },
               {
                 "address": "server.request.body"
+              },
+              {
+                "address": "server.request.body",
+                "transformers": [
+                  "base64_decode"
+                ]
               },
               {
                 "address": "server.request.path_params"
@@ -9106,6 +10000,36 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-69x",
+      "name": "RedTail",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "redtail",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\blibredtail-http\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "ua0-600-6xx",
       "name": "Stealthy scanner",
       "tags": {
@@ -9130,6 +10054,40 @@
             "regex": "mozilla/4\\.0 \\(compatible(; msie (?:6\\.0; (?:win32|Windows NT 5\\.0)|4\\.0; Windows NT))?\\)",
             "options": {
               "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-70x",
+      "name": "PHP2Shell",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "PHP2Shell",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bphp2shell\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 8
             }
           },
           "operator": "match_regex"
@@ -9191,6 +10149,54 @@
               }
             ],
             "regex": "(?i)mozilla/5\\.0 sf/"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-935-114",
+      "name": "Server-side Template Injection: Slim and Haml Ruby execution and file access",
+      "enabled": false,
+      "tags": {
+        "type": "server_side_template_injection",
+        "category": "attack_attempt",
+        "cwe": "1336",
+        "module": "waf",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?m)^[\\t ]*[-=~][\\t ]*(?:[^\\t #\\r\\n][^\\r\\n]*)?(?:\\b(?:system|exec|spawn|eval)(?:\\s*\\(|[\\t ]+(?:['\"a-zA-Z_@$*{\\[]|%[qQ]?[({\\[<]))|\\b(?:IO|Open3|Kernel|File)\\s*\\.\\s*(?:popen|popen2|popen3|capture2|capture3|read|binread|sysread|system|exec|spawn)\\b|`[^`]+`|%x[({\\[])",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 4
+            }
           },
           "operator": "match_regex"
         }
@@ -9271,6 +10277,54 @@
       ],
       "transformers": [
         "lowercase"
+      ]
+    },
+    {
+      "id": "strc-920-100",
+      "name": "File upload with double extension",
+      "enabled": false,
+      "tags": {
+        "type": "http_protocol_violation",
+        "category": "attack_attempt",
+        "cwe": "434",
+        "capec": "1000/255/153/267/71",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              }
+            ],
+            "regex": "\\w\\.[a-zA-Z0-9]{2,6}\\.[a-zA-Z0-9]+\\.?$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body.filenames"
+              }
+            ],
+            "regex": "\\.(?:jpe?g|png|gif|bmp|tiff|ico|webp|svg|hei[cf]|pdf\\.pdf)\\.?$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 6
+            }
+          },
+          "operator": "!match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls"
       ]
     },
     {
@@ -10962,6 +12016,20 @@
             ]
           },
           "operator": "!exists"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^[23][0-9]{2}$",
+            "options": {
+              "case_sensitive": true
+            }
+          },
+          "operator": "match_regex"
         }
       ],
       "transformers": [],
@@ -10999,6 +12067,20 @@
             ]
           },
           "operator": "exists"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^[23][0-9]{2}$",
+            "options": {
+              "case_sensitive": true
+            }
+          },
+          "operator": "match_regex"
         }
       ],
       "transformers": [],
@@ -11040,6 +12122,20 @@
             ]
           },
           "operator": "!exists"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^[23][0-9]{2}$",
+            "options": {
+              "case_sensitive": true
+            }
+          },
+          "operator": "match_regex"
         }
       ],
       "transformers": [],
@@ -11095,6 +12191,20 @@
             ]
           },
           "operator": "exact_match"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^[23][0-9]{2}$",
+            "options": {
+              "case_sensitive": true
+            }
+          },
+          "operator": "match_regex"
         }
       ],
       "transformers": [],
@@ -11694,6 +12804,46 @@
       }
     },
     {
+      "id": "dog-920-120",
+      "name": "Zipslip Attack - Read local archive file",
+      "tags": {
+        "type": "zipslip_trace_tagging",
+        "category": "attack_attempt",
+        "cwe": "23",
+        "capec": "1000/152/586",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.fs.file"
+              }
+            ],
+            "regex": "\\.(?:zip|(?:(?:tar\\.)?gz|bz2|7z|xz)|rar|tar)$",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "appsec.events.zipslip.local_file_read": {
+            "value": true
+          }
+        }
+      }
+    },
+    {
       "id": "llm-001-000",
       "name": "LLM call",
       "tags": {
@@ -11870,6 +13020,53 @@
         ]
       },
       "evaluate": true,
+      "output": true
+    },
+    {
+      "id": "extract-auth",
+      "generator": "extract_schema",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.processor",
+                "key_path": [
+                  "extract-schema"
+                ]
+              }
+            ],
+            "type": "boolean",
+            "value": true
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.jwt"
+              }
+            ],
+            "output": "_dd.appsec.s.req.jwt"
+          }
+        ],
+        "scanners": [
+          {
+            "tags": {
+              "category": "credentials"
+            }
+          },
+          {
+            "tags": {
+              "category": "pii"
+            }
+          }
+        ]
+      },
+      "evaluate": false,
       "output": true
     },
     {

@@ -32,6 +32,10 @@ const UNSUPPORTED_CONFIGURATION_ROOTS = new Set([
   'lookup',
   'plugins',
 ])
+// Programmatic-only options nested under a namespace that also holds environment-backed options.
+const UNSUPPORTED_CONFIGURATION_PATHS = [
+  'featureFlags.flagSelection',
+]
 
 /**
  * @typedef {{
@@ -368,7 +372,8 @@ function inspectMembers (members, namespaceKey, pathPrefix) {
  * @returns {TypeInspectionResult}
  */
 function inspectProperty (property, namespaceKey, fullPath) {
-  if (UNSUPPORTED_CONFIGURATION_ROOTS.has(fullPath.split('.', 1)[0])) {
+  if (UNSUPPORTED_CONFIGURATION_ROOTS.has(fullPath.split('.', 1)[0]) ||
+      UNSUPPORTED_CONFIGURATION_PATHS.some(path => fullPath === path || fullPath.startsWith(`${path}.`))) {
     return createInspectionResult()
   }
 

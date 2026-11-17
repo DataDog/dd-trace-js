@@ -27,7 +27,42 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishTrpcRequestInfo (state, node, _parent, ancestry) {
+  let insertionBlock
+  let insertionIndex = -1
+  for (const block of query(node, 'TryStatement > BlockStatement')) {
+    for (let index = 0; index < block.body.length; index++) {
+      const statement = block.body[index]
+      if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression' ||
+        statement.expression.left.name !== 'paths') continue
+
+      assert.strictEqual(insertionBlock, undefined, 'publishTrpcRequestInfo: multiple paths assignments')
+      insertionBlock = block
+      insertionIndex = index
+    }
+  }
+  assert(insertionBlock, 'publishTrpcRequestInfo: paths assignment not found')
+
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  insertionBlock.body.splice(insertionIndex + 1, 0, ...parse(`
+    if (${channelVariable}.asyncEnd.hasSubscribers) {
+      ${channelVariable}.asyncEnd.publish({ result: {
+        isBatchCall,
+        path: paths.length === 1 ? paths[0] : undefined
+      } })
+    }
+  `).body)
 }
 
 /**
@@ -243,8 +278,10 @@ function createAwaitedContextCallback (state, insertionTarget, ancestry) {
 /**
  * @param {object} _state
  * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
  */
-function configureGraphqlJitCompileObject (_state, node) {
+function configureGraphqlJitCompileObject (_state, node, _parent, ancestry) {
   const resolverConditions = query(node, 'IfStatement[test.name="resolver"]')
   const compileTypeCalls = query(node, 'CallExpression[callee.name="compileType"]')
 
@@ -284,7 +321,7 @@ function configureGraphqlJitCompileObject (_state, node) {
         DD_FIELD_NODES,
         originPaths,
         ddTraceArguments,
-        objectStringify,
+        DD_STRINGIFY,
         DD_COMPILED
       )
       : undefined
@@ -292,6 +329,26 @@ function configureGraphqlJitCompileObject (_state, node) {
   replaceIdentifier(inlineField, 'DD_PATH', clone(compileTypeCall.arguments[6]))
   replaceIdentifier(inlineField, 'DD_FIELD_NODES', clone(compileTypeCall.arguments[3]))
   replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
+
+  const program = ancestry.find(ancestor => ancestor.type === 'Program')
+  let stringify = parse('objectStringify').body[0].expression
+  if (query(program, 'FunctionDeclaration[id.name="objectStringify"]').length === 0) {
+    const values = queryOne(
+      program,
+      'FunctionDeclaration[id.name="compileArguments"][params.1.name="args"]' +
+      ':has(VariableDeclarator[id.name="bind"]) VariableDeclarator[id.name="valuesExpression"]'
+    )
+    assert(values?.init, 'configureGraphqlJitCompileObject: argument serializer not found')
+    stringify = parse(`
+      (values, hoist) => {
+        const args = { values, types: ddTraceArguments.types }
+        const bind = value => '__context.literals.' + hoist(value)
+        return DD_VALUES
+      }
+    `).body[0].expression
+    replaceIdentifier(stringify, 'DD_VALUES', values.init)
+  }
+  replaceIdentifier(inlineField, 'DD_STRINGIFY', stringify)
 
   assert(
     insertBeforeStatement(node.body, resolverCondition, [...defaultSetup, inlineField]),

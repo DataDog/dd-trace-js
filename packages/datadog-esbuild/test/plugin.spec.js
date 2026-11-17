@@ -9,7 +9,10 @@ const path = require('node:path')
 const { after, before, describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
-const transformTypeScript = require('./helpers/transform-typescript')
+const transformTypeScript =
+  require('../../datadog-instrumentations/test/helpers/bundler-esm-exports/transform-typescript')
+
+const FIXTURES = path.join(__dirname, '../../datadog-instrumentations/test/helpers/bundler-esm-exports')
 
 /**
  * @param {object} [initialOptions]
@@ -221,23 +224,6 @@ describe('datadog-esbuild plugin', () => {
           }
         })
 
-        it('does not publish exports or activation for unsupported versions', async () => {
-          const unsupportedDir = path.join(projectDir, 'unsupported', extension, 'node_modules', pkg)
-          const unsupportedPath = path.join(unsupportedDir, modulePath)
-          fs.mkdirSync(path.dirname(unsupportedPath), { recursive: true })
-          fs.writeFileSync(path.join(unsupportedDir, 'package.json'), JSON.stringify({ name: pkg, version: '0.0.1' }))
-          fs.writeFileSync(unsupportedPath, source)
-          const { pluginData } = resolve(`${pkg}/${modulePath}`)
-
-          const onLoad = captureOnLoad()
-          const result = await onLoad({
-            path: unsupportedPath,
-            pluginData: { ...pluginData, version: '0.0.1' },
-          })
-
-          assert.equal(result.contents, source)
-        })
-
         if (isESM) {
           it('avoids colliding with existing bindings in the activation import', async () => {
             fs.writeFileSync(resourcePath, `const __dd_dc = true\nconst __dd_dc1 = true\n${source}`)
@@ -373,7 +359,7 @@ describe('datadog-esbuild plugin', () => {
 
     it('uses the module directory to resolve imports in package wrappers', async () => {
       const onLoad = captureOnLoad()
-      const modulePath = path.join(__dirname, 'resources/export-method.mjs')
+      const modulePath = path.join(FIXTURES, 'export-method.mjs')
 
       const result = await onLoad({
         path: `${modulePath}._dd_esbuild_intercepted`,
@@ -391,7 +377,7 @@ describe('datadog-esbuild plugin', () => {
 
     it('generates setters for cyclic star exports', async () => {
       const onLoad = captureOnLoad()
-      const modulePath = path.join(__dirname, 'resources/export-cycle-a.mjs')
+      const modulePath = path.join(FIXTURES, 'export-cycle-a.mjs')
 
       const result = await onLoad({
         path: `${modulePath}._dd_esbuild_intercepted`,
@@ -410,7 +396,7 @@ describe('datadog-esbuild plugin', () => {
 
     it('generates setters for TypeScript module exports', async () => {
       const onLoad = captureOnLoad()
-      const modulePath = path.join(__dirname, 'resources/typescript-export.mts')
+      const modulePath = path.join(FIXTURES, 'typescript-export.mts')
 
       const result = await onLoad({
         path: `${modulePath}._dd_esbuild_intercepted`,

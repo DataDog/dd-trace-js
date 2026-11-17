@@ -171,8 +171,8 @@ describe('FlagEvalEVPHook', () => {
     dependencyTelemetrySidecar.associateDependencyEvaluations.throws(new Error('association failed'))
     dependencyTelemetrySidecar.takeDependencyEvaluations.throws(new Error('drain failed'))
 
-    assert.doesNotThrow(() => hook.after(hookContext, result))
-    assert.doesNotThrow(() => hook.finally(hookContext, result))
+    hook.after(hookContext, result)
+    hook.finally(hookContext, result)
 
     sinon.assert.calledOnce(writer.enqueue)
     assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'root')

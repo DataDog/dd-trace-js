@@ -7,19 +7,17 @@ function onStripeCheckoutSessionCreate (payload) {
   if (payload?.mode !== 'payment') return
 
   waf.run({
-    persistent: {
-      [addresses.PAYMENT_CREATION]: {
-        integration: 'stripe',
-        id: payload.id,
-        amount_total: payload.amount_total,
-        client_reference_id: payload.client_reference_id,
-        currency: payload.currency,
-        'discounts.coupon': payload.discounts?.[0]?.coupon,
-        'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
-        livemode: payload.livemode,
-        'total_details.amount_discount': payload.total_details?.amount_discount,
-        'total_details.amount_shipping': payload.total_details?.amount_shipping,
-      },
+    [addresses.PAYMENT_CREATION]: {
+      integration: 'stripe',
+      id: payload.id,
+      amount_total: payload.amount_total,
+      client_reference_id: payload.client_reference_id,
+      currency: payload.currency,
+      'discounts.coupon': payload.discounts?.[0]?.coupon,
+      'discounts.promotion_code': payload.discounts?.[0]?.promotion_code,
+      livemode: payload.livemode,
+      'total_details.amount_discount': payload.total_details?.amount_discount,
+      'total_details.amount_shipping': payload.total_details?.amount_shipping,
     },
   })
 }
@@ -28,15 +26,13 @@ function onStripePaymentIntentCreate (payload) {
   if (payload === null || typeof payload !== 'object') return
 
   waf.run({
-    persistent: {
-      [addresses.PAYMENT_CREATION]: {
-        integration: 'stripe',
-        id: payload.id,
-        amount: payload.amount,
-        currency: payload.currency,
-        livemode: payload.livemode,
-        payment_method: payload.payment_method,
-      },
+    [addresses.PAYMENT_CREATION]: {
+      integration: 'stripe',
+      id: payload.id,
+      amount: payload.amount,
+      currency: payload.currency,
+      livemode: payload.livemode,
+      payment_method: payload.payment_method,
     },
   })
 }
@@ -45,11 +41,11 @@ function onStripeConstructEvent (payload) {
   const object = payload?.data?.object
   if (object === null || typeof object !== 'object') return
 
-  let persistent
+  let requestData
 
   switch (payload.type) {
     case 'payment_intent.succeeded':
-      persistent = {
+      requestData = {
         [addresses.PAYMENT_SUCCESS]: {
           integration: 'stripe',
           id: object.id,
@@ -62,7 +58,7 @@ function onStripeConstructEvent (payload) {
       break
 
     case 'payment_intent.payment_failed':
-      persistent = {
+      requestData = {
         [addresses.PAYMENT_FAILURE]: {
           integration: 'stripe',
           id: object.id,
@@ -78,7 +74,7 @@ function onStripeConstructEvent (payload) {
       break
 
     case 'payment_intent.canceled':
-      persistent = {
+      requestData = {
         [addresses.PAYMENT_CANCELLATION]: {
           integration: 'stripe',
           id: object.id,
@@ -94,7 +90,7 @@ function onStripeConstructEvent (payload) {
       return
   }
 
-  waf.run({ persistent })
+  waf.run(requestData)
 }
 
 module.exports = {

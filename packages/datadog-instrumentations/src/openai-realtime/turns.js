@@ -80,13 +80,27 @@ class InputTurn {
   itemId = undefined
 
   /**
-   * Wall clock (epoch ms) when the user actually started speaking, from the VAD speech-onset event.
-   * This is the start of the user-speech window; the first buffered frame is not, because a
+   * Start of the VAD-selected input clip on the wall clock (epoch ms), including prefix padding.
+   * This anchors the user-speech window; an arbitrary first buffered frame does not, because a
    * server-VAD client streams the microphone continuously.
    *
    * @type {number | undefined}
    */
   speechStartTime = undefined
+
+  /**
+   * Start of this VAD clip on the provider's input-buffer clock, including prefix padding.
+   * Paired with speech_stopped.audio_end_ms to place retrieved sideband audio.
+   *
+   * @type {number | undefined}
+   */
+  speechStartOffsetMs = undefined
+
+  /** @type {string | undefined} */
+  speechItemId = undefined
+
+  /** @type {number | undefined} */
+  speechEndOffsetMs = undefined
 
   /**
    * Wall clock (epoch ms) when the input audio was committed (roughly the end of user speech). Lets
@@ -111,6 +125,15 @@ class InputTurn {
    */
   toolResults = []
 
+  /** Retire a superseded clip without discarding pending text or tool results. */
+  resetSpeech () {
+    this.discardAudio()
+    this.transcript = ''
+    this.speechItemId = undefined
+    this.speechEndOffsetMs = undefined
+    this.speechEndTime = undefined
+  }
+
   /**
    * The input audio buffer was cleared: drop the buffered audio and the speech onset derived from
    * it, so neither can be attributed to the next response. A commit that already happened is left
@@ -119,6 +142,7 @@ class InputTurn {
   discardAudio () {
     this.audio.clear()
     this.speechStartTime = undefined
+    this.speechStartOffsetMs = undefined
     this.audioBaseMs = undefined
   }
 }
@@ -137,6 +161,9 @@ class ResponseTurn {
     this.createdTime = createdTime
     this.audio = new AudioAccumulator(retainAudio)
   }
+
+  /** @type {{ startTime?: number, finishTime?: number, derived?: boolean } | undefined} */
+  serverSpeech = undefined
 
   transcript = new ItemText()
 

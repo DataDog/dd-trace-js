@@ -70,6 +70,7 @@ describe('metrics', () => {
       localMetrics.manager.namespace('test').distribution('other.duration').track(1)
       sinon.assert.calledOnce(loadSketchConstructor)
       sinon.assert.calledTwice(Sketch)
+      sinon.assert.alwaysCalledWithExactly(Sketch, { relativeAccuracy: 1 / 129 })
     })
 
     it('should make namespaces', () => {
@@ -592,6 +593,7 @@ describe('metrics', () => {
         'baz:buz',
       ])
       assert.strictEqual(sketch.count, 2)
+      assert.strictEqual(sketch.mapping.gamma, 1.015625)
     })
   })
 

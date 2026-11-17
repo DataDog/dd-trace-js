@@ -143,7 +143,14 @@ class BaseFFEWriter {
         continue
       }
 
-      const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      let eventSizeBytes
+      try {
+        eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      } catch {
+        log.warn('%s could not serialize an event, dropping event', this.constructor.name)
+        this._droppedEvents++
+        continue
+      }
 
       // Check individual event size limit if configured
       if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
@@ -175,7 +182,14 @@ class BaseFFEWriter {
     this._buffer = []
     this._bufferSize = 0
 
-    const payload = this._encode(this.makePayload(events))
+    let payload
+    try {
+      payload = this._encode(this.makePayload(events))
+    } catch {
+      log.warn('%s could not encode %d events, dropping batch', this.constructor.name, events.length)
+      this._droppedEvents += events.length
+      return
+    }
 
     // Keep byte counting behind the debug callback because payloads can be several megabytes.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -206,7 +220,11 @@ class BaseFFEWriter {
       this.#destroyer = undefined
 
       if (this._droppedEvents > 0) {
-        log.warn('%s dropped %d events due to buffer overflow', this.constructor.name, this._droppedEvents)
+        log.warn(
+          '%s dropped %d events (buffer capacity, size limits, serialization or delivery failures)',
+          this.constructor.name,
+          this._droppedEvents
+        )
       }
     }
   }
@@ -311,9 +329,7 @@ class BaseFFEWriter {
    * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
   #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
-    // The request helper mutates headers. Concurrent envelopes must not share them.
-    const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
-    request(payload, requestOptions, (error, response, statusCode) => {
+    request(payload, route.requestOptions, (error, response, statusCode) => {
       const errorMessage = error && (this.#formatError
         ? this.#formatError(error, statusCode)
         : error.message)

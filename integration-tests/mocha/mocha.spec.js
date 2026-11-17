@@ -72,7 +72,7 @@ const {
   ERROR_TYPE,
 } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, VERSION: ddTraceVersion } = require('../../version')
-const { getLatestMochaSpecifier } = require('./versions')
+const { getLatestMochaSpecifier, oldest: oldestMochaVersion } = require('./versions')
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -96,7 +96,6 @@ const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
 
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
-const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
 const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : requestedMochaVersion
 const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecifier() : MOCHA_VERSION
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)

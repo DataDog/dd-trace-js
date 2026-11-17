@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module'
+
 import { describe, expect, it } from 'vitest'
 
 function wait (ms) {
@@ -20,8 +22,16 @@ describe('vitest worker env', () => {
       expect(process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBeUndefined()
     }
 
+    if (process.env.EXPECT_DD_TRACE_INIT) {
+      expect(globalThis._ddtrace).toBeDefined()
+    }
+
     if (process.env.EXPECT_NO_DD_TRACE_INIT) {
       expect(globalThis._ddtrace).toBeUndefined()
+      const require = createRequire(import.meta.url)
+      expect(Object.keys(require.cache).some(id => /[/\\]import-in-the-middle[/\\]/.test(id))).toBe(false)
+      expect(Object.keys(require.cache).some(id => id.endsWith('vitest-test-annotations.js'))).toBe(false)
+      expect(process.env.NODE_OPTIONS || '').not.toContain('vitest-annotations-register')
     }
 
     if (process.env.EXPECT_DD_NODE_OPTIONS_STRIPPED) {

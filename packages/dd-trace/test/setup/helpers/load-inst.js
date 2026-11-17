@@ -10,6 +10,9 @@ const INSTRUMENT_HELPER_PATH = path.join(
 const REWRITER_INSTRUMENTATIONS_PATH = path.join(
   INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentations'
 )
+const REWRITER_REGISTRY_PATH = path.join(
+  INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentation-registry'
+)
 const subscriberOnlyFiles = new Set()
 
 function loadInstFile (file, instrumentations, cacheSubscribers = false) {
@@ -76,7 +79,13 @@ function loadOneInst (name) {
     }
 
     const definitions = require(rewriterFile)
-    const names = new Set(definitions.map(definition => definition.module.name))
+    const moduleNames = definitions.map(definition => definition.module.name)
+    // An entry that narrows activation is entered through those packages only; the rest of its rewrite
+    // targets are internal files of the same project and are never installed as fixtures on their own.
+    // Entries that opt out of activation keep reporting every rewrite target.
+    const { isRewriteActivationEnabled } = require(REWRITER_REGISTRY_PATH)
+    const activated = moduleNames.filter(isRewriteActivationEnabled)
+    const names = new Set(activated.length > 0 ? activated : moduleNames)
     instrumentations.push(...require(INSTRUMENT_HELPER_PATH).getHooks([...names]).values())
   }
 

@@ -1055,6 +1055,15 @@ function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
+      // Tag retries are resolved during declaration, after the callback's own options were captured.
+      if (config.tags) {
+        config.tags = config.tags.map(tag => tag.retry === undefined
+          ? tag
+          : {
+              ...tag,
+              meta: { ...tag.meta, __ddTestOptHasFrameworkRetry: true },
+            })
+      }
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
       config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
@@ -1280,6 +1289,13 @@ function getFinishWrapper (exitOrClose) {
 function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
     return function (...args) {
+      const entrypoint = oldCliOrStartVitest.name
+      if (testSessionStartCh.hasSubscribers && (entrypoint === 'createVitest' || entrypoint === 'startVitest')) {
+        const isCreate = entrypoint === 'createVitest'
+        const isLegacySignature = typeof args[0] === 'string'
+        const overridesIndex = isCreate ? (isLegacySignature ? 2 : 1) : (isLegacySignature ? 3 : 2)
+        args[overridesIndex] = noWorkerInit.addBrowserAnnotationPlugin(args[overridesIndex])
+      }
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
         return oldCliOrStartVitest.apply(this, args)
       }
@@ -2077,6 +2093,16 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const createVitestExport = findExportByName(cliApiPackage, 'createVitest')
   if (createVitestExport) {
     shimmer.wrap(cliApiPackage, createVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  }
+  // Newer CLI chunks call the bundled namespace instead of the direct function exports.
+  for (const [key, value] of Object.entries(cliApiPackage)) {
+    if (value && typeof value === 'object' && typeof value.startVitest === 'function') {
+      cliApiPackage[key] = {
+        ...value,
+        startVitest: cliApiPackage[startVitestExport.key],
+      }
+      if (createVitestExport) cliApiPackage[key].createVitest = cliApiPackage[createVitestExport.key]
+    }
   }
   wrapMessagePortOn()
 

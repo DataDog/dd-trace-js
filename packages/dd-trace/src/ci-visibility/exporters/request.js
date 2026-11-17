@@ -430,13 +430,12 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
         (attemptTimedOut || isRetriableNetworkError(error) || isUnknownNetworkError ||
           isRetriableHttpStatusCode(responseStatus))
       const retryUntilDeadline = options.deadline !== undefined && options.retryUntilDeadline !== false
-      const reachedAttemptLimit = !retryUntilDeadline && attemptIndex >= getMaxAttempts(attemptOptions)
       const reachedUnknownNetworkAttemptLimit = isUnknownNetworkError && attemptIndex >= 2
       if (
         options.retry === false ||
         !isRetriableError ||
-        reachedAttemptLimit ||
-        reachedUnknownNetworkAttemptLimit
+        reachedUnknownNetworkAttemptLimit ||
+        (!retryUntilDeadline && attemptIndex >= getMaxAttempts(attemptOptions))
       ) {
         complete(requestError, result, statusCode, headers)
         return

@@ -33,12 +33,13 @@ async function handleMessage (message) {
   try {
     if (message.command === 'access') {
       const provider = tracer.openfeature
+      // Created first so evaluations still run after a failed initialization.
+      client = OpenFeature.getClient()
       if (message.waitForReady) {
         await OpenFeature.setProviderAndWait(provider)
       } else {
         OpenFeature.setProvider(provider)
       }
-      client = OpenFeature.getClient()
       send({ accessed: true })
       return
     }

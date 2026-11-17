@@ -295,7 +295,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (errorType && errorMessage) {
       message = `${errorType}: ${errorMessage}`
     } else if (errorType) {
-      message = errorType
+      const kind = span.meta?.['span.kind']
+      // The HTTP response status already explains a status-only error.
+      const isHttpStatusError = this.#otelTraceSemanticsEnabled &&
+        (kind === 'server' || kind === 'client') &&
+        !span.meta?.['error.stack'] &&
+        errorType === span.metrics?.['http.response.status_code']?.toString()
+      if (!isHttpStatusError) message = errorType
     } else if (errorMessage) {
       message = errorMessage
     }

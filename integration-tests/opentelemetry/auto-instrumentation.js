@@ -19,9 +19,8 @@ registerInstrumentations({
         req.path === '/telemetry/proxy/api/v2/apmtelemetry'
       },
       ignoreOutgoingRequestHook (req) {
-        // Ignore spans from static assets.
-        return req.path === '/v0.4/traces' || req.path === '/v0.7/config' ||
-        req.path === '/telemetry/proxy/api/v2/apmtelemetry'
+        return req.path === '/v0.4/traces' || req.path === '/v1/traces' || req.path === '/v0.7/config' ||
+        req.path === '/telemetry/proxy/api/v2/apmtelemetry' || req.path === '/dogstatsd/v2/proxy'
       },
     }),
     new ExpressInstrumentation(),

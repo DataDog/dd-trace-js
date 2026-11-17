@@ -10,12 +10,14 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const instrumentations = require('../../../datadog-instrumentations/src/helpers/instrumentations')
+const { WRAPPED } = require('../../../datadog-instrumentations/src/aws-lambda')
 const log = require('../../src/log')
 
 const oldEnv = process.env
 const hookedModules = new Set()
 
-function loadLambdaWithHookSpy () {
+/** @param {boolean} [activate] Whether to initialize after importing the module. */
+function loadLambdaWithHookSpy (activate = true) {
   /** @type {Array<{ modules: string[], onrequire: Function }>} */
   const hookCalls = []
   /**
@@ -26,16 +28,18 @@ function loadLambdaWithHookSpy () {
     hookCalls.push({ modules, onrequire })
     for (const name of modules) hookedModules.add(name)
   }
-  proxyquire('../../src/lambda', {
+  const initialize = proxyquire('../../src/lambda', {
     '../../../datadog-instrumentations/src/helpers/hook': HookSpy,
   })
-  return { hookCalls }
+  if (activate) initialize()
+  return { hookCalls, initialize }
 }
 
 describe('lambda', () => {
   describe('registerLambdaHook', () => {
     beforeEach(() => {
-      process.env = { ...oldEnv }
+      process.env = { ...oldEnv, AWS_LAMBDA_FUNCTION_NAME: 'registration-test' }
+      delete process.env.DD_TRACE_DISABLED_PLUGINS
       delete process.env.DD_LAMBDA_HANDLER
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
       // Drop cached `runtime/patch` so its module-level `addHook` calls run
@@ -48,6 +52,33 @@ describe('lambda', () => {
       process.env = oldEnv
       for (const name of hookedModules) delete instrumentations[name]
       hookedModules.clear()
+      delete require.cache[require.resolve('../../src/lambda/runtime/patch')]
+    })
+
+    it('defers hook registration until initialization', () => {
+      const { hookCalls, initialize } = loadLambdaWithHookSpy(false)
+
+      assert.strictEqual(hookCalls.length, 0)
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
+    })
+
+    it('can initialize after an earlier call outside Lambda', () => {
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      const { hookCalls, initialize } = loadLambdaWithHookSpy()
+
+      assert.strictEqual(hookCalls.length, 0)
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'late-lambda'
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
+    })
+
+    it('registers hooks only once across repeated initialization', () => {
+      const { hookCalls, initialize } = loadLambdaWithHookSpy()
+
+      initialize()
+      initialize()
+      assert.strictEqual(hookCalls.length, 1)
     })
 
     it('registers a hook on the resolved handler file paths', () => {
@@ -98,15 +129,33 @@ describe('lambda', () => {
       assert.throws(loadLambdaWithHookSpy, { message: 'Malformed handler name: handler' })
     })
 
-    it('does not register a hook when lambda is in DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
-      process.env.LAMBDA_TASK_ROOT = '/var/task'
-      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,lambda,fs'
+    // Both spellings disable Lambda. Trim entries locally without changing shared configuration parsing.
+    for (const value of [
+      'http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ', 'fs,\tlambda', ', aws-lambda,,',
+    ]) {
+      it(`does not register a hook for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
 
-      const { hookCalls } = loadLambdaWithHookSpy()
+        const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 0)
-    })
+        assert.strictEqual(hookCalls.length, 0)
+      })
+    }
+
+    for (const value of ['', 'http,express', 'aws-sdk', 'lambda-something', 'not-lambda', 'aws-lambda-extra']) {
+      it(`still registers both hooks for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+
+        const { hookCalls } = loadLambdaWithHookSpy()
+
+        assert.strictEqual(hookCalls.length, 2)
+        assert.deepStrictEqual(hookCalls[1].modules, ['datadog-lambda-js'])
+      })
+    }
 
     it('wraps the registered handler key when the lambda Hook callback fires', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
@@ -349,9 +398,80 @@ describe('lambda', () => {
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
     })
 
+    it('adds timeout monitoring without an invocation span', () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      // Two independent concerns. Timeout monitoring always applies - it is what dd-trace's
+      // Lambda support did before the migration, and dropping it would delete the feature.
+      // The released shim owns the invocation span; the automatic hook only monitors timeouts.
+      const instrumented = fakeModule.datadog(userHandler)
+      assert.notStrictEqual(instrumented, userHandler, 'timeout monitor must still wrap')
+      assert.strictEqual(instrumented[WRAPPED], undefined, 'no span-creating wrapper')
+    })
+
+    it('is idempotent across repeated patching', () => {
+      // Repeated hooks reuse one monitor without stacking wrappers on the customer handler.
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      const first = fakeModule.datadog(userHandler)
+      const second = fakeModule.datadog(userHandler)
+      assert.strictEqual(first, second)
+      assert.strictEqual(fakeModule.datadog(first), first)
+    })
+
+    it('preserves npm wrapper configuration, receiver, and extra arguments', () => {
+      const { hookCalls } = loadLambdaWithHookSpy()
+      const userHandler = () => 'user'
+      const config = { traceExtractor: () => ({}), enhancedMetrics: false }
+      const extra = {}
+      const receiver = {}
+      const fakeModule = {
+        datadog (handler, actualConfig, actualExtra) {
+          assert.strictEqual(this, receiver)
+          assert.notStrictEqual(handler, userHandler)
+          assert.strictEqual(actualConfig, config)
+          assert.strictEqual(actualExtra, extra)
+          return handler
+        },
+      }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+      assert.strictEqual(typeof fakeModule.datadog.call(receiver, userHandler, config, extra), 'function')
+    })
+
+    it('monitors timeouts on the DD_LAMBDA_HANDLER path too, not just the shim module path', () => {
+      // Both automatic hook paths monitor timeouts while the shim owns the invocation span.
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+      const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+
+      const userHandler = () => 'original'
+      const fakeModule = { myEntry: userHandler }
+      hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
+
+      assert.notStrictEqual(fakeModule.myEntry, userHandler, 'timeout monitor must wrap')
+      assert.strictEqual(fakeModule.myEntry[WRAPPED], undefined, 'no span-creating wrapper')
+      delete instrumentations[fixturePath]
+    })
+
     for (const file of ['dist/utils/handler.js', 'utils/handler.js']) {
-      for (const pending of [false, true]) {
-        it(`${pending ? 'monitors pending' : 'clears completed'} datadog-lambda-js handlers via ${file}`, async () => {
+      for (const [pending, disabled] of [[false, ''], [true, ''], [true, 'lambda'], [true, 'aws-lambda']]) {
+        const description = `${pending ? 'monitors pending' : 'clears completed'} shim handlers via ${file}`
+        it(`${description} with DD_TRACE_DISABLED_PLUGINS=${disabled}`, async () => {
+          process.env.DD_TRACE_DISABLED_PLUGINS = disabled
           process.env.LAMBDA_TASK_ROOT = '/var/task'
           process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
           const { hookCalls } = loadLambdaWithHookSpy()

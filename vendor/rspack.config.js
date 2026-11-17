@@ -41,6 +41,9 @@ module.exports = {
     // ESM-only default exports being wrapped in a namespace by rspack's interop,
     // which would break patterns like `require('esquery').parse`.
     mainFields: ['main', 'module'],
+    // Prefer the CommonJS export condition. Some vendored ESM entrypoints use
+    // transitive star exports that Rspack cannot statically link reliably.
+    conditionNames: ['require', 'node', 'default'],
   },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
@@ -71,8 +74,18 @@ module.exports = {
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
-      excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      handleMissingLicenseText: (packageName, licenseType) => licenseType,
+      // Module order depends on the installer's layout, so the first module does not identify the entry package.
+      renderLicenses: modules => modules
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(licenseModule => {
+          if (!licenseModule.licenseText) {
+            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+          }
+          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+        })
+        .join(`\n${'-'.repeat(78)}\n\n`),
       stats: {
         warnings: false,
       },

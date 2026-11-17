@@ -265,17 +265,23 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         await loadTest({})
 
         await httpClient.get(`http://127.0.0.1:${port}/`, {
-          headers: config.headers,
+          headers: { ...config.headers, 'x-dd-proxy-httpmethod': 'PROPFIND' },
         })
 
         await agent.assertSomeTraces(traces => {
           const proxySpan = traces[0][0]
 
-          assert.strictEqual(proxySpan.name, config.expectedSpanName)
+          assert.strictEqual(proxySpan.type, undefined)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'operation.name'), false)
+          assert.strictEqual(Object.hasOwn(proxySpan.meta, 'span.type'), false)
           assertObjectContains(proxySpan, {
+            name: 'HTTP',
+            resource: 'HTTP',
+            service: 'aws-server',
             meta: {
               'span.kind': 'server',
-              'http.request.method': 'GET',
+              'http.request.method': '_OTHER',
+              'http.request.method_original': 'PROPFIND',
               'url.path': '/test',
               'url.scheme': 'https',
               'server.address': config.expectedService,
@@ -287,6 +293,23 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assert.ok(!Object.hasOwn(proxySpan.meta, 'http.url'))
           assert.ok(!Object.hasOwn(proxySpan.meta, 'http.method'))
           assert.ok(!Object.hasOwn(proxySpan.meta, 'http.status_code'))
+        })
+      })
+
+      it('sets error.type from a failing proxy response', async () => {
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/error`, {
+          headers: config.headers,
+          validateStatus: () => true,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          assertObjectContains(traces[0][0], {
+            error: 1,
+            meta: { 'error.type': '500' },
+            metrics: { 'http.response.status_code': 500 },
+          })
         })
       })
     })
