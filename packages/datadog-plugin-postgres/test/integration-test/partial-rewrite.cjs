@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-require('dd-trace').init() // eslint-disable-line n/no-missing-require
+require('dd-trace').init() // eslint-disable-line n/no-missing-require, import/no-extraneous-dependencies
 const postgres = require('postgres') // eslint-disable-line n/no-missing-require
 
 const sql = postgres({
