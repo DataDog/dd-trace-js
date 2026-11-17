@@ -58,8 +58,8 @@ const LEAVE = 3
 /**
  * @typedef {object} PreparedCall
  * @property {string} args The JSON arguments to evaluate.
- * @property {object|undefined} params The copy of the params that the SDK sends. Without a copy, the
- *   SDK sends the params of the application.
+ * @property {object} params The copy of the params that the SDK sends instead of the params of the
+ *   application.
  */
 
 /**
@@ -237,7 +237,7 @@ function evaluateToolCall (ctx) {
 
   // The SDK sends the copy, also for a call that starts at once. Then a change to the params of
   // the application after callTool returns cannot reach the server.
-  if (call.params) ctx.arguments[0] = call.params
+  ctx.arguments[0] = call.params
 
   if (consumeMark(activeTrace(), ctx.client, name, call.args)) return
 
@@ -304,13 +304,17 @@ function failingJson (error) {
 
 /**
  * Returns a copy of the params with the tool name and the arguments that the check read. It reads
- * each other value of the params once and keeps the order of the keys. It returns undefined when a
- * read throws. Then the SDK sends the params of the application.
+ * each other value of the params once and keeps the order of the keys. The SDK always gets the copy,
+ * so the params of the application never reach the server after the check.
+ *
+ * A value whose read throws becomes a value that throws the same error when it is read. Without the
+ * check, that read is the first one, of the SDK or of an in-process server, and it fails the same
+ * way. When the keys cannot be listed, the serialization of the copy throws the error.
  *
  * @param {object} params
  * @param {unknown} toolName
  * @param {unknown} [args] The arguments to send. Without them, the copy has no arguments.
- * @returns {object|undefined}
+ * @returns {object}
  */
 function copyParams (params, toolName, args) {
   // Only the name and the arguments are snapshots. The check does not read the other keys, for
@@ -318,24 +322,50 @@ function copyParams (params, toolName, args) {
   const source = /** @type {Record<string, unknown>} */ (params)
   /** @type {Record<string, unknown>} */
   const copy = {}
+  let keys
   try {
-    for (const key of Object.keys(source)) {
-      if (key === 'name') {
-        copy.name = toolName
-      } else if (key === 'arguments') {
-        if (args !== undefined) copy.arguments = args
-      } else {
-        setValue(copy, key, source[key])
-      }
+    keys = Object.keys(source)
+  } catch (error) {
+    keys = []
+    copy.toJSON = failingJson(error).toJSON
+  }
+  for (const key of keys) {
+    if (key === 'name') {
+      copy.name = toolName
+    } else if (key === 'arguments') {
+      if (args !== undefined) copy.arguments = args
+    } else {
+      copyValue(copy, source, key)
     }
-  } catch {
-    // A getter of the params throws. The SDK meets the same getter.
-    return
   }
   // The params can inherit the name or the arguments.
   copy.name = toolName
   if (args !== undefined) copy.arguments = args
   return copy
+}
+
+/**
+ * Copies one value of the params. A value whose read throws becomes a getter that throws the error.
+ *
+ * @param {Record<string, unknown>} copy
+ * @param {Record<string, unknown>} source
+ * @param {string} key
+ */
+function copyValue (copy, source, key) {
+  let value
+  try {
+    value = source[key]
+  } catch (error) {
+    Object.defineProperty(copy, key, {
+      get () {
+        throw error
+      },
+      enumerable: true,
+      configurable: true,
+    })
+    return
+  }
+  setValue(copy, key, value)
 }
 
 /**

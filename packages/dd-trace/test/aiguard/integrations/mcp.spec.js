@@ -1071,6 +1071,53 @@ describe('AIGuard MCP integration', () => {
           assert.strictEqual(nameReads, 1)
           assert.strictEqual(argumentReads, 1)
         })
+
+        it(`sends the checked arguments when another value of the params throws once for ${description}`, async () => {
+          const notReady = new Error('not ready')
+          let metaReads = 0
+          const values = [{ command: 'checked' }, { command: 'executed' }]
+          const params = {
+            name: 'search',
+            arguments: { toJSON: () => values.shift() },
+            get _meta () {
+              if (metaReads++ === 0) throw notReady
+              return { progressToken: 1 }
+            },
+          }
+          const ctx = publishCallTool(mcpClient(), params)
+
+          await ctx.beforeCall?.()
+
+          assert.strictEqual(evaluatedArguments(), '{"command":"checked"}')
+          // A boolean: the failure message of the params would read their getters.
+          assert.strictEqual(ctx.arguments[0] === params, false)
+          assert.deepStrictEqual(sentArguments(ctx), { command: 'checked' })
+          // Without the check, the first read of _meta is the one of the SDK or of the server, and it fails.
+          assert.throws(() => /** @type {{ _meta?: unknown }} */ (ctx.arguments[0])._meta, notReady)
+          assert.throws(() => JSON.stringify(ctx.arguments[0]), notReady)
+          assert.strictEqual(metaReads, 1)
+          assert.deepStrictEqual(values, [{ command: 'executed' }])
+        })
+
+        it(`sends the checked arguments when the keys of the params cannot be listed for ${description}`, async () => {
+          const closed = new Error('closed')
+          const target = { name: 'search', arguments: { command: 'checked' } }
+          const params = new Proxy(target, {
+            ownKeys () {
+              throw closed
+            },
+          })
+          const ctx = publishCallTool(mcpClient(), params)
+
+          await ctx.beforeCall?.()
+
+          assert.strictEqual(evaluatedArguments(), '{"command":"checked"}')
+          // A boolean: the failure message of the params would read their getters.
+          assert.strictEqual(ctx.arguments[0] === params, false)
+          target.arguments.command = 'executed'
+          assert.deepStrictEqual(sentArguments(ctx), { command: 'checked' })
+          assert.throws(() => JSON.stringify(ctx.arguments[0]), closed)
+        })
       }
 
       it('evaluates a name that is not a string as a string', async () => {
