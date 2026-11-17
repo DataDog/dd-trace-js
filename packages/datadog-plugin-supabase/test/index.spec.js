@@ -451,6 +451,20 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
   })
 
   describe('FunctionsClient.invoke() - supabase.http.invoke', () => {
+    it('omits the query and fragment from the legacy URL', async () => {
+      const assertion = agent.assertFirstTraceSpan({
+        name: 'supabase.http.invoke',
+        resource: 'POST /functions/v1/hello',
+        meta: { 'http.url': 'https://project.supabase.co/functions/v1/hello' },
+      })
+
+      const [, result] = await Promise.all([
+        assertion,
+        testSetup.createSupabaseClient().functions.invoke('hello?name=test#fragment', { region: 'us-east-1' }),
+      ])
+      assert.ifError(result.error)
+    })
+
     it('should satisfy the serverless ownership contract (happy path)', async () => {
       return runServerlessContract({
         agent,
@@ -1050,6 +1064,103 @@ describe('with OpenTelemetry HTTP semantics', () => {
 
         try {
           const [, result] = await Promise.all([assertion, otelTestSetup.storageFileDownloadWithTransform()])
+          assert.ifError(result.error)
+        } finally {
+          meta.tracer.use('supabase')
+        }
+      })
+    }
+
+    it('preserves Functions invalid URL errors', async () => {
+      const { FunctionsClient } = meta.versionMod.get('@supabase/functions-js')
+      const fetch = sinon.stub()
+      const client = new FunctionsClient('invalid', { customFetch: fetch })
+      const assertion = meta.agent.assertFirstTraceSpan({
+        name: 'POST',
+        resource: 'POST',
+        error: 1,
+        meta: { 'url.full': 'invalid/hello' },
+      })
+
+      const [, result] = await Promise.all([assertion, client.invoke('hello')])
+      assert.strictEqual(fetch.called, false)
+      assert.strictEqual(result.error.code, 'ERR_INVALID_URL')
+      assert.strictEqual(result.data, null)
+    })
+
+    for (const {
+      description, functionName = 'hello', region, clientRegion, query = '', requestQuery = query,
+      queryStringObfuscation,
+    } of [
+        { description: 'invocation region', region: 'us-east-1', query: '?forceFunctionRegion=us-east-1' },
+        { description: 'client region', clientRegion: 'eu-west-1', query: '?forceFunctionRegion=eu-west-1' },
+        {
+          description: 'invocation region override',
+          clientRegion: 'eu-west-1',
+          region: 'us-east-1',
+          query: '?forceFunctionRegion=us-east-1',
+        },
+        { description: 'any region override', clientRegion: 'eu-west-1', region: 'any' },
+        { description: 'default region' },
+        {
+          description: 'existing query and fragment',
+          functionName: 'hello?name=test#fragment',
+          region: 'us-east-1',
+          query: '?name=test&forceFunctionRegion=us-east-1',
+          requestQuery: '?name=test&forceFunctionRegion=us-east-1#fragment',
+        },
+        {
+          description: 'existing region replacement',
+          functionName: 'hello?forceFunctionRegion=eu-west-1',
+          region: 'us-east-1',
+          query: '?forceFunctionRegion=us-east-1',
+        },
+        {
+          description: 'query without a region',
+          functionName: 'hello?name=test#fragment',
+          query: '?name=test',
+          requestQuery: '?name=test#fragment',
+        },
+        {
+          description: 'custom query obfuscation',
+          region: 'us-east-1',
+          queryStringObfuscation: 'forceFunctionRegion=[^&]*',
+          query: '?<redacted>',
+          requestQuery: '?forceFunctionRegion=us-east-1',
+        },
+        {
+          description: 'disabled query obfuscation',
+          region: 'us-east-1',
+          queryStringObfuscation: '',
+          query: '?forceFunctionRegion=us-east-1',
+        },
+        {
+          description: 'full query obfuscation',
+          region: 'us-east-1',
+          queryStringObfuscation: '.*',
+          requestQuery: '?forceFunctionRegion=us-east-1',
+        },
+      ]) {
+      it(`uses the Functions ${description} in url.full`, async () => {
+        const { FunctionsClient } = meta.versionMod.get('@supabase/functions-js')
+        const fetch = sinon.stub().resolves(new Response('{"ok":true}', {
+          headers: { 'content-type': 'application/json' },
+        }))
+        const client = new FunctionsClient('https://project.supabase.co/functions/v1', {
+          customFetch: fetch,
+          region: clientRegion,
+        })
+        meta.tracer.use('supabase', queryStringObfuscation === undefined ? {} : { queryStringObfuscation })
+        const assertion = meta.agent.assertFirstTraceSpan({
+          name: 'POST',
+          resource: 'POST',
+          meta: { 'url.full': 'https://project.supabase.co/functions/v1/hello' + query },
+        })
+
+        try {
+          const [, result] = await Promise.all([assertion, client.invoke(functionName, { region })])
+          assert.strictEqual(fetch.firstCall.args[0], 'https://project.supabase.co/functions/v1/hello' + requestQuery)
+          assert.deepStrictEqual(result.data, { ok: true })
           assert.ifError(result.error)
         } finally {
           meta.tracer.use('supabase')

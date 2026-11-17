@@ -1,19 +1,22 @@
 'use strict'
 
+const { URL } = require('node:url')
+
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const {
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
+const log = require('../../dd-trace/src/log')
 const normalizeError = require('./error')
 const getHostname = require('./url')
 
 /**
  * @typedef {{
- *   arguments: { [index: number]: unknown, length: number, 0?: string, 1?: { method?: string } },
- *   self: { url: string },
+ *   arguments: { [index: number]: unknown, length: number, 0?: string, 1?: { method?: string, region?: string } },
+ *   self: { url: string, region?: string },
  *   currentStore?: { span: import('../../..').Span },
  *   result?: { error?: Error | { message?: string } | null, response?: { status?: number } },
  *   error?: unknown
@@ -28,14 +31,29 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
   bindStart (ctx) {
     const functionName = ctx.arguments?.[0]
     const method = String(ctx.arguments?.[1]?.method || 'POST').toUpperCase()
-    const url = stripQueryAndFragment(`${ctx.self?.url}/${functionName}`)
+    const rawUrl = `${ctx.self?.url}/${functionName}`
+    const url = stripQueryAndFragment(rawUrl)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const resource = otelSemantics ? otelHttpResourceName(method) : `${method} ${extractPathFromUrl(url)}`
+    let httpUrl = url
+    if (otelSemantics) {
+      try {
+        const requestUrl = new URL(rawUrl)
+        const region = ctx.arguments?.[1]?.region || ctx.self?.region
+        if (region && region !== 'any') {
+          requestUrl.searchParams.set('forceFunctionRegion', region)
+        }
+        requestUrl.hash = ''
+        httpUrl = buildClientHttpUrl(this.config, '', requestUrl.href, url)
+      } catch (error) {
+        log.debug('Could not build Supabase function request URL: %s', error.message)
+      }
+    }
     const meta = {
       component: 'supabase',
       'span.kind': 'client',
       'http.method': method,
-      'http.url': url,
+      'http.url': httpUrl,
       'out.host': getHostname(url),
       'faas.invoked_name': functionName,
     }
