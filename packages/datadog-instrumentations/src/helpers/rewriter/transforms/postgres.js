@@ -12,10 +12,132 @@ const POSTGRES_SIMPLE_DBM_QUERIES = '__ddTracePostgresSimpleDbmQueries'
 const POSTGRES_STATEMENT = 'this.string ?? (this.tagged && this.strings?.length !== 1 ? undefined : this.strings?.[0])'
 
 module.exports = {
+  postgresNativeCopy,
+  postgresNativePreparation,
+  postgresNativeTransactionEnd,
   postgresQueryAcquire,
   postgresQueryHandlers,
   postgresQueryLifecycle,
   postgresQueryPreparation,
+}
+
+/**
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresNativeCopy (state, program) {
+  const channelVariable = injectPostgresTracingChannel(state, program)
+  const writable = query(program, 'FunctionDeclaration[id.name="writable"] Property[key.name="destroy"]')
+  const abandoned = query(program, 'FunctionDeclaration[id.name="abandoned"] > BlockStatement > ReturnStatement')
+  assert(writable.length === 1 && abandoned.length <= 1, 'postgresNativeCopy: stream destruction changed')
+
+  const publish = `
+    if (item.trace && ${channelVariable}.start.hasSubscribers) {
+      ${channelVariable}.start.publish({ query: item.trace, error });
+    }
+  `
+  writable[0].value.body.body.unshift(...parse(publish).body)
+
+  if (abandoned.length) {
+    abandoned[0].argument.body.body.unshift(...parse(publish).body)
+  } else {
+    const streams = query(program, 'FunctionDeclaration[id.name="CopyOutResponse"] NewExpression')
+    assert(streams.length === 1, 'postgresNativeCopy: readable construction changed')
+    streams[0].arguments[0].properties.push(...parse(`({
+      destroy(error, callback) {
+        ${publish}
+        callback(error);
+      }
+    })`).body[0].expression.properties)
+  }
+}
+
+/**
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresNativeTransactionEnd (state, program) {
+  // Leading DBM comments must not hide transaction endings from the cursor fence.
+  for (const name of ['send', 'simple', 'batch']) {
+    const functions = query(program, `FunctionDeclaration[id.name="${name}"]`)
+    if (name === 'batch' && functions.length === 0) continue
+    assert(functions.length === 1, 'postgresNativeTransactionEnd: connection method changed')
+    const tests = query(functions[0], 'CallExpression[callee.object.name="ending"][callee.property.name="test"]')
+    assert(tests.length === 1, 'postgresNativeTransactionEnd: transaction classifier changed')
+    const original = name === 'batch' ? 'part.built.text' : 'query.built?.text'
+    const text = parse(original).body[0].expression
+    tests[0].arguments[0] = name === 'batch'
+      ? text
+      : {
+          type: 'LogicalExpression',
+          operator: '??',
+          left: text,
+          right: tests[0].arguments[0],
+        }
+  }
+}
+
+/**
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresNativePreparation (state, program) {
+  const channelVariable = injectPostgresTracingChannel(state, program)
+  const pools = query(program, 'FunctionDeclaration[id.name="Pool"]')
+  const queries = query(program, 'FunctionDeclaration[id.name="query"]')
+  assert(pools.length === 1 && queries.length === 1, 'postgresNativePreparation: pool query changed')
+
+  const body = queries[0].body.body
+  const buildIndex = body.findIndex(statement => statement.type === 'TryStatement')
+  assert(buildIndex !== -1, 'postgresNativePreparation: query build changed')
+  body.splice(buildIndex + 1, 0, ...parse(`
+    if (q.trace && ${channelVariable}.start.hasSubscribers) {
+      built = __ddTracePostgresPrepare(q.trace, built,
+        Boolean(options.prepare && q.options.prepare !== false && !(q.options.simple && !built.values.length)));
+    }
+  `).body)
+
+  pools[0].body.body.push(...parse(`
+    function __ddTracePostgresPrepare(trace, built, prepared, resource) {
+      const singleHost = options.host.length === 1 && !options.path;
+      const ctx = {
+        query: trace,
+        statement: built.text,
+        resource: resource ?? built.text,
+        prepared,
+        host: singleHost ? options.host[0] : undefined,
+        port: singleHost ? options.port[0] : undefined
+      };
+      ${channelVariable}.start.publish(ctx);
+      if (ctx.statement === built.text) return built;
+      return { ...built, text: ctx.statement, dynamic: true };
+    }
+  `).body)
+
+  const batches = query(program, 'FunctionDeclaration[id.name="batch"]')
+  assert(batches.length <= 1, 'postgresNativePreparation: batch changed')
+  if (batches.length === 0) return
+
+  const loops = query(batches[0], 'CallExpression[callee.object.name="parts"][callee.property.name="forEach"]')
+  assert(loops.length === 1, 'postgresNativePreparation: batch preparation changed')
+  const callback = loops[0].arguments[0]
+  const declaration = callback.body.body[0]
+  assert(declaration.type === 'VariableDeclaration' && declaration.declarations[0].id.name === 'built',
+    'postgresNativePreparation: batch build changed')
+  declaration.kind = 'let'
+  callback.body.body.splice(1, 0, ...parse(`
+    if (q.trace && ${channelVariable}.start.hasSubscribers) {
+      built = __ddTracePostgresPrepare(q.trace, built,
+        Boolean(options.prepare && x.options.prepare !== false), q.trace.query);
+    }
+  `).body)
+  const batchBody = batches[0].body.body
+  const loopIndex = batchBody.findIndex(statement => statement.type === 'ExpressionStatement' &&
+    statement.expression === loops[0])
+  assert(loopIndex !== -1, 'postgresNativePreparation: batch loop changed')
+  batchBody.splice(loopIndex, 0, ...parse(`
+    if (q.trace) q.trace.query = parts.map(part => part.built.text).join('; ');
+  `).body)
 }
 
 /**
