@@ -1,14 +1,22 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const path = require('node:path')
 
 const semver = require('semver')
 
-const { sandboxCwd } = require('../helpers')
+const {
+  FakeAgent,
+  checkSpansForServiceName,
+  sandboxCwd,
+  spawnProc,
+  stopProc,
+} = require('../helpers')
+const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
-// 6.0.0 is the oldest supported version, 7 the last one bundling with Rollup and latest bundles with Rolldown.
-const viteVersions = process.env.VITE_VERSION ? [process.env.VITE_VERSION] : ['6.0.0', '7', 'latest']
+const fixtureDependencies = ['@hono/node-server', 'express', 'graphql', 'hono']
+const formats = { cjs: 'cjs', es: 'mjs' }
 
 /**
  * @param {string} name
@@ -31,24 +39,63 @@ function supportsNode (names) {
 }
 
 /**
- * Runs an executable installed in the sandbox, unless given as an absolute path.
- *
  * @param {string} cwd
  * @param {string} command
- * @param {string[]} args
- * @param {Record<string, string | undefined>} [env]
- * @param {number} [timeout] Synchronous commands block mocha's own timeouts, so they need their own.
+ * @param {keyof formats} format
+ * @param {Record<string, string>} [env]
  */
-function run (cwd, command, args, env, timeout = 180_000) {
-  const { NODE_OPTIONS, ...processEnv } = process.env
-  const file = path.isAbsolute(command) ? command : path.join(sandboxCwd(), 'node_modules', '.bin', command)
-  execFileSync(file, args, {
+function build (cwd, command, format, env) {
+  const file = path.join(sandboxCwd(), 'node_modules', '.bin', command)
+  execFileSync(file, ['build'], {
     cwd,
-    env: { ...processEnv, ...env },
+    env: { ...process.env, ...env, NODE_OPTIONS: '', VITE_OUTPUT_FORMAT: format },
     killSignal: 'SIGKILL',
     stdio: 'inherit',
-    timeout,
+    timeout: 120_000,
   })
 }
 
-module.exports = { readPackageJson, run, supportsNode, viteVersions }
+/**
+ * @param {string} entry
+ * @param {import('node:child_process').ForkOptions} [options]
+ */
+async function assertAppTraces (entry, options) {
+  const agent = await new FakeAgent().start()
+  let proc
+  try {
+    proc = await spawnProc(entry, {
+      ...options,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: '',
+        DD_TRACE_AGENT_PORT: String(agent.port),
+        DD_TRACE_FLUSH_INTERVAL: '0',
+      },
+    })
+    // Express uses a CommonJS hook; the GraphQL execution span requires an Orchestrion rewrite.
+    await assertRoute('/graphql', { data: { hello: 'ok' } }, ['express.request', 'graphql.execute'])
+    // Hono's ESM class export has to be intercepted before its constructor is called.
+    await assertRoute('/hono', { hello: 'ok' }, ['hono.request'])
+  } finally {
+    await Promise.all([stopProc(proc), agent.stop()])
+  }
+
+  /**
+   * @param {string} route
+   * @param {object} expected
+   * @param {string[]} spans
+   */
+  async function assertRoute (route, expected, spans) {
+    const [response] = await Promise.all([
+      httpRequest.get(`${proc.url}${route}`),
+      agent.assertMessageReceived(({ payload }) => {
+        for (const span of spans) {
+          assert.ok(checkSpansForServiceName(payload, span), `${span} span not found`)
+        }
+      }, 10_000, 1, true),
+    ])
+    assert.deepStrictEqual(response.data, expected)
+  }
+}
+
+module.exports = { assertAppTraces, build, fixtureDependencies, formats, supportsNode }

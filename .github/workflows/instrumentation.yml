@@ -762,10 +762,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The suites skip Node.js versions outside the engines range of the installed Vite version.
-        version: [oldest, maintenance, active, latest]
-        vite_version: ['6.0.0', '7', 'latest']
-    name: ${{ github.workflow }} / integration-vite (node-${{ matrix.version }}, vite-${{ matrix.vite_version }})
+        # Vite 8 requires Node.js ^20.19.0 || >=22.12.0.
+        include:
+          - version: maintenance
+          - version: active
+          - version: latest
+          # Exercise the plugin's Rollup path once in addition to the default Rolldown builds.
+          - version: active
+            vite_version: '6.0.0'
+    name: ${{ github.workflow }} / integration-vite (node-${{ matrix.version }}${{ matrix.vite_version && ', rollup' || '' }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -778,7 +783,7 @@ jobs:
       # Vite bundles dd-trace into a single file with the application, like webpack, so coverage is not collected.
       - run: npm run test:integration:vite
         env:
-          VITE_VERSION: ${{ matrix.vite_version }}
+          VITE_PLUGIN_TEST_VERSION: ${{ matrix.vite_version }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:

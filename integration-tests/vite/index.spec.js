@@ -15,13 +15,8 @@ const {
   useSandbox,
 } = require('../helpers')
 const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
-const { viteVersions } = require('./helpers')
 
-// Only Rolldown (Vite 8+) binds `require` in ES module output without the plugin, so other versions are left to the
-// plugin suite.
-const describeLatest = viteVersions.includes('latest') ? describe : describe.skip
-
-describeLatest('Vite integration with dd-trace bundled without a plugin', () => {
+describe('Vite integration with dd-trace bundled without a plugin', () => {
   useSandbox(['vite'], false, [__dirname])
 
   let applicationDirectory
