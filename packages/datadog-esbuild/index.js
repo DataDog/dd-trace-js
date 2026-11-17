@@ -208,7 +208,8 @@ ${build.initialOptions.banner.js}`
       !internal &&
       packagesWithHookedFile.has(extracted?.pkg) &&
       !args.path.startsWith('.') &&
-      !path.isAbsolute(args.path)
+      !path.isAbsolute(args.path) &&
+      !isExternalSpecifier(args.path, externalModules)
     ) {
       return { path: fullPathToModule }
     }
@@ -447,6 +448,19 @@ ${fileCode}
       }
     }
   })
+}
+
+// Mirrors esbuild's `external` matching: an entry also excludes the subpaths of a package, and `*` is a wildcard.
+function isExternalSpecifier (specifier, externals) {
+  for (const external of externals) {
+    if (external.includes('*')) {
+      const pattern = external.replaceAll(/[$()+.?[\\\]^{|}]/g, String.raw`\$&`).replaceAll('*', '.*')
+      if (new RegExp(`^${pattern}$`).test(specifier)) return true
+    } else if (specifier === external || specifier.startsWith(`${external}/`)) {
+      return true
+    }
+  }
+  return false
 }
 
 // @see https://github.com/nodejs/node/issues/47000
