@@ -877,7 +877,7 @@ describe('AIGuard MCP integration', () => {
         assert.ok(evaluated.length < 20_000_000)
       })
 
-      it('evaluates a value 100,000 levels deep that JSON.stringify cannot write for a JSON transport', async () => {
+      it('evaluates a value 100,000 levels deep for a JSON transport', async () => {
         const depth = 100_000
         const root = {}
         let node = root
@@ -886,14 +886,29 @@ describe('AIGuard MCP integration', () => {
           node = node.next
         }
         const params = { name: 'search', arguments: root }
-        assert.throws(() => JSON.stringify(root), RangeError)
+        const expected = `${'{"next":'.repeat(depth)}{}${'}'.repeat(depth)}`
+        // Some V8 versions overflow the stack in JSON.stringify at this depth, and newer ones write the value.
+        let written
+        try {
+          written = JSON.stringify(root)
+        } catch (error) {
+          assert.ok(error instanceof RangeError)
+        }
         const ctx = publishCallTool(remote(), params)
 
         await ctx.beforeCall?.()
 
-        assert.strictEqual(evaluatedArguments(), `${'{"next":'.repeat(depth)}{}${'}'.repeat(depth)}`)
-        // The SDK cannot send these arguments either, so the params stay as they are.
-        assert.strictEqual(ctx.arguments[0], params)
+        assert.strictEqual(evaluatedArguments(), expected)
+        // The identities are compared as booleans: a failure cannot write a diff of such a deep value.
+        if (written === undefined) {
+          // The SDK cannot send these arguments either, so the params stay as they are.
+          assert.strictEqual(ctx.arguments[0] === params, true)
+        } else {
+          // The SDK sends the JSON form, so the server gets a copy of that form.
+          assert.strictEqual(ctx.arguments[0] === params, false)
+          assert.strictEqual(sentArguments(ctx) === root, false)
+          assert.strictEqual(JSON.stringify(sentArguments(ctx)), expected)
+        }
       })
 
       it('sends the nested values that the check read when the application changes them in the check', async () => {
