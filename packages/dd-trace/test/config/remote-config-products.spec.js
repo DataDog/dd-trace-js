@@ -105,7 +105,8 @@ describe('Remote config product composition', () => {
         const second = first === 'APM_TRACING' ? 'APM_PROFILING' : 'APM_TRACING'
         update(first, files[first])
         update(second, files[second])
-        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, second === 'APM_PROFILING' ? 'true' : 'false')
+        // APM_PROFILING takes precedence whatever the order of updates.
+        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
 
         update(removed, null)
 
@@ -142,18 +143,35 @@ describe('Remote config product composition', () => {
     update('APM_PROFILING', { profilers: { wallTime: true } })
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
 
-    update('APM_TRACING', { sdk_config: { config: { DD_EXPERIMENTAL_PROFILING_ENABLED: 'false' } } })
+    update('APM_PROFILING', null)
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
-
-    update('APM_TRACING', null)
-    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
 
     const entries = updateConfig.lastCall.args[0]
     const latest = entries.filter(entry => entry.name === 'DD_PROFILING_ENABLED')
       .reduce((previous, entry) => previous.seq_id > entry.seq_id ? previous : entry)
     assert.strictEqual(latest.origin, 'remote_config')
-    assert.strictEqual(latest.value, 'true')
+    assert.strictEqual(latest.value, 'false')
   })
+
+  for (const first of ['APM_TRACING', 'APM_PROFILING']) {
+    it(`keeps APM_PROFILING settings over later APM_TRACING updates when ${first} arrives first`, () => {
+      const tracing = (sampleRate) => ({
+        sdk_config: { config: { DD_PROFILING_ENABLED: 'false', DD_TRACE_SAMPLE_RATE: sampleRate } },
+      })
+      if (first === 'APM_TRACING') update('APM_TRACING', tracing('0.5'))
+      update('APM_PROFILING', { profilers: { wallTime: true } })
+      if (first === 'APM_PROFILING') update('APM_TRACING', tracing('0.5'))
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+
+      // Neither resending the same APM_TRACING payload nor changing an unrelated setting in it
+      // changes the precedence.
+      update('APM_TRACING', tracing('0.5'))
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      update('APM_TRACING', tracing('0.75'))
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.strictEqual(config.sampleRate, 0.75)
+    })
+  }
 
   it('restores a tracing setting omitted by the replacement profiling payload', () => {
     update('APM_TRACING', { sdk_config: { config: { DD_PROFILING_WALLTIME_ENABLED: 'false' } } })

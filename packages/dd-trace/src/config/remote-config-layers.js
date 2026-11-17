@@ -12,33 +12,27 @@ const { getEnvironmentVariables } = require('./helper')
 const layersByConfig = new WeakMap()
 
 /**
- * Replace a product's settings, preserving other products in last-update-wins order.
+ * Replace a product's settings and apply the settings of every active product. For a setting
+ * both products supply, APM_PROFILING takes precedence over the broader APM_TRACING, whatever the
+ * order of updates.
  *
  * @param {Config} config
  * @param {Product} product
  * @param {Settings | null} settings
  */
 module.exports = function applyRemoteConfig (config, product, settings) {
-  const layers = layersByConfig.get(config)
+  let layers = layersByConfig.get(config)
   if (layers === undefined) {
-    if (settings !== null) {
-      layersByConfig.set(config, { APM_TRACING: null, APM_PROFILING: null, [product]: settings })
-    }
-    config.setRemoteConfig(settings)
-    return
+    layers = { APM_TRACING: null, APM_PROFILING: null }
+    layersByConfig.set(config, layers)
   }
-
-  const previous = layers[product]
-  const otherProduct = product === 'APM_TRACING' ? 'APM_PROFILING' : 'APM_TRACING'
-  const other = layers[otherProduct]
   layers[product] = settings
 
-  if (settings !== null && other !== null) {
-    // Normalize both layers on their first overlap, then reuse the other layer's canonical keys.
-    const base = previous === null ? getEnvironmentVariables(other, true) : other
-    layers[otherProduct] = base
-    layers[product] = getEnvironmentVariables(settings, true)
-    settings = { ...base, ...layers[product] }
+  const { APM_TRACING: tracing, APM_PROFILING: profiling } = layers
+  if (tracing === null || profiling === null) {
+    config.setRemoteConfig(tracing ?? profiling)
+    return
   }
-  config.setRemoteConfig(settings ?? other)
+  // Resolve aliases first, so that each setting has a single key across products.
+  config.setRemoteConfig({ ...getEnvironmentVariables(tracing, true), ...getEnvironmentVariables(profiling, true) })
 }
