@@ -458,8 +458,8 @@ describe('Plugin', function () {
         })
       }
 
-      it('should preserve validation of primitive init', () => {
-        assert.throws(() => fetch('http://localhost/', 1), { name: 'TypeError' })
+      it('should preserve validation of primitive init', async () => {
+        await assert.rejects(fetch('http://localhost/', 1), { name: 'TypeError' })
       })
 
       it('should reject with AbortError when the signal is already aborted', async () => {
