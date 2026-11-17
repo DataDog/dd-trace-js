@@ -54,10 +54,13 @@ function addModuleOfInterest (name, file) {
 }
 
 const modulesOfInterest = new Set()
+// Packages with a hooked file. All their entry points must resolve like that file (see the onResolve handler).
+const packagesWithHookedFile = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
     addModuleOfInterest(name, entry.file)
+    if (entry.file) packagesWithHookedFile.add(name)
   }
 }
 
@@ -193,6 +196,22 @@ ${build.initialOptions.banner.js}`
     // leaving some bindings uninstrumented. Routing a self-import to the wrapper would create a wrapper -> original ->
     // wrapper cycle that can hit the wrapper's exports in their temporal dead zone.
     const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX) || args.importer === fullPathToModule
+
+    // Hooked files are resolved with Node.js semantics, but esbuild also enables the `module` export condition. A
+    // package that publishes both a `module` and a `node`/`require` variant (e.g. `@smithy/core` with `dist-es` and
+    // `dist-cjs`) would be bundled twice: the hooked file from one variant and every other entry point from the other,
+    // with both copies importing each other. Resolve the whole package the way the hooked file is resolved.
+    if (
+      args.namespace === 'file' &&
+      !isModuleOfInterest &&
+      target === undefined &&
+      !internal &&
+      packagesWithHookedFile.has(extracted?.pkg) &&
+      !args.path.startsWith('.') &&
+      !path.isAbsolute(args.path)
+    ) {
+      return { path: fullPathToModule }
+    }
 
     if (args.namespace === 'file' && (isModuleOfInterest || target !== undefined)) {
       // Internal module like http/fs is imported and the build output is ESM
