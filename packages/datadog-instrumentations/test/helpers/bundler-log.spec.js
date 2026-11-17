@@ -15,7 +15,7 @@ describe('bundler loggers', () => {
     sinon.restore()
   })
 
-  for (const name of ['esbuild', 'webpack']) {
+  for (const name of ['esbuild', 'vite', 'webpack']) {
     describe(name, () => {
       const entry = require.resolve(`../../../datadog-${name}/src/log`)
 
