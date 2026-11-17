@@ -100,7 +100,7 @@ function runAllowedCallbacks (results, callbacks) {
     try {
       callback()
     } catch (error) {
-      log.debug('AIGuard: unable to record the evaluated MCP tool calls: %s', error.message)
+      log.debug('AIGuard: unable to record the evaluated MCP tool calls: %s', error?.message)
     }
   }
 }

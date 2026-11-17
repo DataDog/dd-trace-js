@@ -117,7 +117,7 @@ function getMcpLink (ctx, getFunction) {
   try {
     link = linkMcpTools(ctx.arguments[0].tools, getFunction, ctx)
   } catch (error) {
-    log.debug('AIGuard: unable to link the MCP tools of the OpenAI request: %s', error.message)
+    log.debug('AIGuard: unable to link the MCP tools of the OpenAI request: %s', error?.message)
   }
   return link
 }

@@ -385,26 +385,50 @@ describe('AIGuard MCP integration', () => {
         assert.deepStrictEqual(copy, original)
       }
 
-      it('evaluates the safe JSON form of a call that a JSON transport cannot send, and keeps the params', async () => {
+      /**
+       * Returns the error that the JSON serialization of the sent params throws, as in the SDK.
+       *
+       * @param {{ arguments: IArguments|unknown[] }} ctx
+       */
+      const sendError = ctx => {
+        try {
+          JSON.stringify(ctx.arguments[0])
+        } catch (error) {
+          return error
+        }
+        assert.fail('the sent params must fail to serialize')
+      }
+
+      it('evaluates the safe JSON form of a call that a JSON transport cannot send, and the SDK fails', async () => {
         const circular = { name: 'node' }
         circular.self = circular
         const params = { name: 'search', arguments: { value: 1n, circular } }
+        let expected
+        try {
+          JSON.stringify(params.arguments)
+        } catch (error) {
+          expected = error
+        }
         const ctx = publishCallTool(remote(), params)
 
         await ctx.beforeCall?.()
 
         assert.strictEqual(evaluatedArguments(), '{"value":"1","circular":{"name":"node","self":"[Circular]"}}')
-        assert.strictEqual(ctx.arguments[0], params)
+        assert.notStrictEqual(ctx.arguments[0], params)
+        const error = sendError(ctx)
+        assert.strictEqual(error.constructor, expected.constructor)
+        assert.strictEqual(error.message, expected.message)
       })
 
-      it('evaluates a value that a JSON transport fails to serialize only once', async () => {
+      it('sends no value that the check did not read when the serialization fails only once', async () => {
         let reads = 0
+        const notReady = new Error('not ready')
         const params = {
           name: 'search',
           arguments: {
             get text () {
-              if (reads++ === 0) throw new Error('not ready')
-              return 'bad [deny]'
+              if (reads++ === 0) throw notReady
+              return 'checked'
             },
           },
         }
@@ -412,8 +436,32 @@ describe('AIGuard MCP integration', () => {
 
         await ctx.beforeCall?.()
 
-        assert.strictEqual(evaluatedArguments(), '{"text":"bad [deny]"}')
-        assert.strictEqual(ctx.arguments[0], params)
+        assert.strictEqual(evaluatedArguments(), '{"text":"checked"}')
+        // Without the check, the serialization of the SDK is the first read, so the call fails.
+        assert.strictEqual(sendError(ctx), notReady)
+        assert.strictEqual(reads, 2)
+      })
+
+      it('sends no value of a stateful toJSON that the check did not read', async () => {
+        const notReady = new Error('not ready')
+        const values = [notReady, { text: 'checked' }, { text: 'executed' }]
+        const params = {
+          name: 'search',
+          arguments: {
+            toJSON () {
+              const value = values.shift()
+              if (value instanceof Error) throw value
+              return value
+            },
+          },
+        }
+        const ctx = publishCallTool(remote(), params)
+
+        await ctx.beforeCall?.()
+
+        assert.strictEqual(evaluatedArguments(), '{"text":"checked"}')
+        assert.strictEqual(sendError(ctx), notReady)
+        assert.deepStrictEqual(values, [{ text: 'executed' }])
       })
 
       it('blocks a call that a JSON transport cannot send when the evaluation denies it', async () => {
@@ -424,7 +472,7 @@ describe('AIGuard MCP integration', () => {
         await assert.rejects(call, candidate => candidate === error)
       })
 
-      it('evaluates no arguments when JSON leaves out the value of a JSON transport', async () => {
+      it('evaluates and sends no arguments when JSON leaves out the value of a JSON transport', async () => {
         const params = { name: 'search', arguments: () => {} }
         const ctx = publishCallTool(remote(), params)
 
@@ -432,7 +480,19 @@ describe('AIGuard MCP integration', () => {
 
         assert.strictEqual(evaluatedArguments(), '{}')
         assert.notStrictEqual(ctx.arguments[0], params)
-        assert.strictEqual(sentArguments(ctx), params.arguments)
+        assert.strictEqual(JSON.stringify(ctx.arguments[0]), '{"name":"search"}')
+      })
+
+      it('sends no arguments when a stateful toJSON first gives no JSON value', async () => {
+        const values = [undefined, { text: 'executed' }]
+        const params = { name: 'search', arguments: { toJSON: () => values.shift() } }
+        const ctx = publishCallTool(remote(), params)
+
+        await ctx.beforeCall?.()
+
+        assert.strictEqual(evaluatedArguments(), '{}')
+        assert.strictEqual(JSON.stringify(ctx.arguments[0]), '{"name":"search"}')
+        assert.deepStrictEqual(values, [{ text: 'executed' }])
       })
 
       it('keeps the types for an in-process transport, and a Buffer arrives as a Uint8Array', async () => {
@@ -901,8 +961,9 @@ describe('AIGuard MCP integration', () => {
         assert.strictEqual(evaluatedArguments(), expected)
         // The identities are compared as booleans: a failure cannot write a diff of such a deep value.
         if (written === undefined) {
-          // The SDK cannot send these arguments either, so the params stay as they are.
-          assert.strictEqual(ctx.arguments[0] === params, true)
+          // The SDK fails on these arguments with the same error, as without the check.
+          assert.strictEqual(ctx.arguments[0] === params, false)
+          assert.ok(sendError(ctx) instanceof RangeError)
         } else {
           // The SDK sends the JSON form, so the server gets a copy of that form.
           assert.strictEqual(ctx.arguments[0] === params, false)

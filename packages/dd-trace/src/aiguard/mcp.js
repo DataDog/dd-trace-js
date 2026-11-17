@@ -414,7 +414,7 @@ class McpToolLink {
       return this.#attach(messages, isFunctionCall)
     } catch (error) {
       // Without mcp references, the evaluation stays generic and the later callTool gets its own check.
-      log.debug('AIGuard: unable to attach the MCP references: %s', error.message)
+      log.debug('AIGuard: unable to attach the MCP references: %s', error?.message)
       return messages
     }
   }

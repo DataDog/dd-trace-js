@@ -31,8 +31,10 @@ const JSON_TRANSPORTS = new Set(['stdio', 'sse', 'streamable_http', 'websocket']
 const CYCLE = '[Circular]'
 const UNREADABLE = '[Unreadable]'
 const TRUNCATED = '[Truncated]'
-// The JSON text that the check gets has at most this many entries. The cap bounds the check, not
-// the call: model output is far smaller, and only a large value of the application goes past it.
+// The JSON text that the check gets has at most this many entries. The cap bounds the evaluation,
+// not the call: model output is far smaller, and only a large value of the application goes past it.
+// The copy that the server gets is not capped, and for a truncated text, hasUnsafeObject scans the
+// rest of the clone. That work grows with the size of the arguments, like the clone itself.
 const MAX_JSON_ENTRIES = 1_000_000
 // The structured clone of the arguments cannot be the value that the server gets.
 const NO_CLONE = Symbol('dd-trace.aiguard.noClone')
@@ -176,7 +178,7 @@ function onListToolsResult (ctx) {
   try {
     recordListedTools(ctx.client, resolveServer(ctx.transport, ctx.transportInfo), ctx.tools)
   } catch (error) {
-    log.debug('AIGuard: unable to record the listed MCP tools: %s', error.message)
+    log.debug('AIGuard: unable to record the listed MCP tools: %s', error?.message)
   }
 }
 
@@ -199,7 +201,7 @@ function checkToolCall (ctx) {
   try {
     evaluation = evaluateToolCall(ctx)
   } catch (error) {
-    log.debug('AIGuard: unable to evaluate the MCP tool call: %s', error.message)
+    log.debug('AIGuard: unable to evaluate the MCP tool call: %s', error?.message)
     return
   }
   return evaluation?.then(ignoreResult, onEvaluationError)
@@ -274,14 +276,30 @@ function prepareCall (params, toolName, info) {
   let json
   try {
     json = JSON.stringify(callArguments)
-  } catch {
-    // The SDK serializes the params of the application again. Usually it fails on the same value,
-    // for example a BigInt, but a value that fails only once can still go to the server.
-    return { args: safeJson(callArguments) ?? '{}', params: undefined }
+  } catch (error) {
+    // Without the check, this serialization is the one of the SDK. The SDK gets arguments that fail
+    // with the same error, so a value that fails only once, or a stateful toJSON, cannot send the
+    // server a value that the check did not read.
+    return { args: safeJson(callArguments) ?? '{}', params: copyParams(params, toolName, failingJson(error)) }
   }
-  // JSON leaves out an undefined value or a function, so the server gets no arguments.
-  if (json === undefined) return { args: '{}', params: copyParams(params, toolName, callArguments) }
+  // JSON leaves out an undefined value or a function, so the server gets no arguments. The copy has
+  // no arguments either, so the SDK does not serialize the value of the application again.
+  if (json === undefined) return { args: '{}', params: copyParams(params, toolName) }
   return { args: json, params: copyParams(params, toolName, JSON.parse(json)) }
+}
+
+/**
+ * Returns a value whose JSON serialization throws error.
+ *
+ * @param {unknown} error
+ * @returns {{ toJSON: () => never }}
+ */
+function failingJson (error) {
+  return {
+    toJSON () {
+      throw error
+    },
+  }
 }
 
 /**
@@ -291,7 +309,7 @@ function prepareCall (params, toolName, info) {
  *
  * @param {object} params
  * @param {unknown} toolName
- * @param {unknown} args
+ * @param {unknown} [args] The arguments to send. Without them, the copy has no arguments.
  * @returns {object|undefined}
  */
 function copyParams (params, toolName, args) {
