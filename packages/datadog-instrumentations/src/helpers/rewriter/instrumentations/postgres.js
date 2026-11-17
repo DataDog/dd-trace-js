@@ -6,7 +6,7 @@ for (const filePath of ['src/index.js', 'cjs/src/index.js']) {
   instrumentations.push({
     module: {
       name: 'postgres',
-      versionRange: '>=3.0.0',
+      versionRange: '>=3.0.0 <4',
       filePath,
     },
     astQuery: 'Program',
@@ -19,7 +19,7 @@ for (const filePath of ['src/connection.js', 'cjs/src/connection.js']) {
   instrumentations.push({
     module: {
       name: 'postgres',
-      versionRange: '>=3.0.0',
+      versionRange: '>=3.0.0 <4',
       filePath,
     },
     astQuery: 'Program',
@@ -28,7 +28,7 @@ for (const filePath of ['src/connection.js', 'cjs/src/connection.js']) {
   }, {
     module: {
       name: 'postgres',
-      versionRange: '>=3.0.0',
+      versionRange: '>=3.0.0 <4',
       filePath,
     },
     astQuery: 'Program',
@@ -41,7 +41,7 @@ for (const filePath of ['src/query.js', 'cjs/src/query.js']) {
   instrumentations.push({
     module: {
       name: 'postgres',
-      versionRange: '>=3.0.0',
+      versionRange: '>=3.0.0 <4',
       filePath,
     },
     astQuery: 'Program',
@@ -49,5 +49,34 @@ for (const filePath of ['src/query.js', 'cjs/src/query.js']) {
     channelName: 'query',
   })
 }
+
+instrumentations.push({
+  module: {
+    name: 'postgres',
+    versionRange: '>=4.0.0',
+    filePath: 'src/pool.js',
+  },
+  astQuery: 'Program',
+  transform: 'postgresNativePreparation',
+  channelName: 'query:prepare',
+}, {
+  module: {
+    name: 'postgres',
+    versionRange: '>=4.0.0',
+    filePath: 'src/connection.js',
+  },
+  astQuery: 'Program',
+  transform: 'postgresNativeTransactionEnd',
+  channelName: 'query:prepare',
+}, {
+  module: {
+    name: 'postgres',
+    versionRange: '>=4.0.0',
+    filePath: 'src/connection.js',
+  },
+  astQuery: 'Program',
+  transform: 'postgresNativeCopy',
+  channelName: 'query:copy',
+})
 
 module.exports = instrumentations
