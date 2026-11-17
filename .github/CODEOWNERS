@@ -531,6 +531,7 @@
 /packages/dd-trace/src/pkg.js @DataDog/lang-platform-js
 /packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
 /packages/dd-trace/src/rate_limiter.js @DataDog/lang-platform-js
+/packages/dd-trace/src/register-loader.js @DataDog/lang-platform-js
 /packages/dd-trace/src/require-package-json.js @DataDog/lang-platform-js
 /packages/dd-trace/src/ritm.js @DataDog/lang-platform-js
 /packages/dd-trace/src/scope.js @DataDog/lang-platform-js
