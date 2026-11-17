@@ -47,7 +47,7 @@ class WSReceiverPlugin extends TracingPlugin {
     }, ctx)
 
     if (traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
-      span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
+      span.setTag('_dd.dm.service', spanTags['service.name'])
       span.setTag('_dd.dm.resource', spanTags['resource.name'])
       span.setTag('_dd.dm.inherited', 1)
     }

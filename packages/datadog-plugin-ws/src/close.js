@@ -46,7 +46,7 @@ class WSClosePlugin extends TracingPlugin {
     }
 
     if (isPeerClose && traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
-      span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
+      span.setTag('_dd.dm.service', spanTags['service.name'])
       span.setTag('_dd.dm.resource', spanTags['resource.name'])
       span.setTag('_dd.dm.inherited', 1)
     }
