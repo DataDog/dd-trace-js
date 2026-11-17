@@ -857,16 +857,37 @@ describe('Config', () => {
       sinon.assert.neverCalledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true')
     })
 
+    it('should disable explicitly enabled OTLP span metrics while DD_TRACE_ENABLED=true keeps tracing', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+      assert.strictEqual(config.getOrigin('OTEL_TRACES_SPAN_METRICS_ENABLED'), 'calculated')
+      // Span metrics no longer force stats computation for OTLP traces.
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      sinon.assert.calledWith(
+        log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'OTEL_TRACES_SPAN_METRICS_ENABLED'
+      )
+    })
+
     for (const value of [undefined, '', 'false']) {
       it(`should keep explicitly enabled OTel metrics and logs with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
         if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
         process.env.DD_METRICS_OTEL_ENABLED = 'true'
         process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
 
         const config = getConfig()
 
         assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
         assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       })
     }
   })

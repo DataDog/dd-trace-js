@@ -439,10 +439,12 @@ class Config extends ConfigBase {
     }
     // OTEL_SDK_DISABLED disables every OpenTelemetry signal, so unlike the other OTel settings it
     // overrides an explicit Datadog opt-in. Tracing is handled at the entry point (src/index.js),
-    // where an explicit DD_TRACE_ENABLED takes precedence.
+    // where an explicit DD_TRACE_ENABLED takes precedence. That override keeps tracing only: OTLP
+    // span metrics are part of the metrics signal.
     if (this.OTEL_SDK_DISABLED) {
       deactivateForOtelSdkDisabled(this, 'DD_METRICS_OTEL_ENABLED')
       deactivateForOtelSdkDisabled(this, 'DD_LOGS_OTEL_ENABLED')
+      deactivateForOtelSdkDisabled(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED')
     }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
@@ -894,7 +896,7 @@ function deactivateIfEnabledAndWarnOnWindows (config, envVar) {
 
 /**
  * @param {Config} config
- * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED'} name
+ * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED' | 'OTEL_TRACES_SPAN_METRICS_ENABLED'} name
  */
 function deactivateForOtelSdkDisabled (config, name) {
   if (config[name]) {
