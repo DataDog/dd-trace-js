@@ -36,7 +36,7 @@ class BenchmarkWorker extends OriginalWorker {
 }
 
 const agentInfoPath = require.resolve('../../../packages/dd-trace/src/agent/info')
-require.cache[agentInfoPath] = { exports: { fetchAgentInfo } }
+require.cache[agentInfoPath] = /** @type {import('node:module').Module} */ ({ exports: { fetchAgentInfo } })
 
 // The benchmark has no active trace, so provide the production no-op tracer for
 // the paused-frame expression without loading the debugger before its worker is replaced.
@@ -172,7 +172,11 @@ function startDebugger (onProbeInstalled) {
     removeProductHandler () {},
   }
 
-  start(config, rc)
+  // The benchmark provides only the configuration fields and Remote Config methods the debugger uses.
+  start(
+    /** @type {Parameters<typeof start>[0]} */ (/** @type {unknown} */ (config)),
+    /** @type {Parameters<typeof start>[1]} */ (/** @type {unknown} */ (rc))
+  )
 
   assert.ok(globalThis[Symbol.for('dd-trace')].utilTypes, 'debugger.start did not populate utilTypes')
 }

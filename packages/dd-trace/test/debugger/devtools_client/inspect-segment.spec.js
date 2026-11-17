@@ -94,7 +94,7 @@ describe('inspectSegment', function () {
   })
 
   it('preserves circular references when truncating objects', function () {
-    const value = { circular: undefined, a: 1, b: 2, c: 3, d: 4, e: 5 }
+    const value = { circular: /** @type {object | undefined} */ (undefined), a: 1, b: 2, c: 3, d: 4, e: 5 }
     value.circular = value
 
     assert.strictEqual(

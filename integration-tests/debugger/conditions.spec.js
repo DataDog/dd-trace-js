@@ -99,7 +99,7 @@ describe('Dynamic Instrumentation', function () {
         await stopProc(t.proc)
 
         assert.strictEqual(
-          diagnosticsByProbeId.get(rcConfig.config.id).exception.message,
+          diagnosticsByProbeId.get(rcConfig.config.id)?.exception?.message,
           `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)`
         )
         assert.ok(!statuses.includes('INSTALLED'), 'Probe should not install when condition compilation fails')

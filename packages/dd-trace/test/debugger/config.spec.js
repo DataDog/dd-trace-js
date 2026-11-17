@@ -21,7 +21,7 @@ const getDebuggerConfig = proxyquire('../../src/debugger/config', {
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
     const tracerConfig = getConfig({
-      url: new URL('http://example.com:1234'),
+      url: 'http://example.com:1234',
     })
     const config = getDebuggerConfig(tracerConfig)
     assert.deepStrictEqual(Object.keys(config), [
@@ -71,7 +71,16 @@ describe('getDebuggerConfig', function () {
 
 describe('Debugger worker config', () => {
   it('converts the capture and evaluation timeouts to nanoseconds on initialization and update', () => {
-    /** @type {((config: NonNullable<ReturnType<import('../../src/debugger/config')>>) => void) | undefined} */
+    /**
+     * @typedef {{
+     *   url: string,
+     *   dynamicInstrumentation: {
+     *     DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number,
+     *     DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number,
+     *   },
+     * }} ConfigUpdate
+     */
+    /** @type {((config: ConfigUpdate) => void) | undefined} */
     let onMessage
     const configPort = {
       on: sinon.spy((event, listener) => {
