@@ -12,6 +12,15 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 require('../../../register')
 
+const POSTGRES_TARGET = {
+  database: 'postgres',
+  host: '127.0.0.1',
+  max: 1,
+  password: 'postgres',
+  port: 5432,
+  user: 'postgres',
+}
+
 /**
  * @template T
  * @param {string} resource
@@ -38,14 +47,7 @@ describe('postgres native query lifecycle', () => {
     beforeEach(async () => {
       const postgresModule = require(`../../../versions/postgres@${version}`)
       postgres = (await import(pathToFileURL(postgresModule.getPath()).href)).default
-      sql = postgres({
-        database: 'postgres',
-        host: '127.0.0.1',
-        max: 1,
-        password: 'postgres',
-        port: 5432,
-        user: 'postgres',
-      })
+      sql = postgres(POSTGRES_TARGET)
       tracer = require('../../dd-trace')
       tracer.use('postgres', { dbmPropagationMode: 'full', service: 'native-postgres' })
     })
@@ -427,6 +429,45 @@ describe('postgres native query lifecycle', () => {
       await Promise.all([traced('SELECT 15 AS enabled', () => sql`SELECT 15 AS enabled`), absent])
     })
 
+    withVersions('postgres', 'postgres', '>=3 <4', legacyVersion => {
+      it('keeps legacy and native queries independent across configuration changes', async () => {
+        const legacyPostgres = require(`../../../versions/postgres@${legacyVersion}`).get()
+        const legacy = legacyPostgres(POSTGRES_TARGET)
+        const resource = 'SELECT current_query() AS mixed'
+        try {
+          for (const mode of ['disabled', 'service', 'full', 'dynamic_service']) {
+            const service = `mixed-${mode}`
+            tracer.use('postgres', { dbmPropagationMode: mode, service })
+            for (const client of [legacy, sql]) {
+              const result = await traced(resource, () => client.unsafe(resource, [], {
+                prepare: false,
+                simple: false,
+              }), span => assert.strictEqual(span.service, service))
+              const statement = result[0].mixed
+              assert.strictEqual((statement.match(/dddbs=/g) || []).length, mode === 'disabled' ? 0 : 1)
+              assert.strictEqual(statement.includes('traceparent='), mode === 'full')
+              if (mode !== 'disabled') {
+                assert.ok(statement.includes(`dddbs='${service}'`))
+              }
+            }
+          }
+          tracer.use('postgres', { enabled: false })
+          const absent = agent.assertNoTraces(() => assert.fail('disabled query created a span'), {
+            spanResourceMatch: /^SELECT 27 AS disabled_mixed$/, timeoutMs: 200,
+          })
+          const results = await Promise.all([
+            legacy`SELECT 27 AS disabled_mixed`,
+            sql`SELECT 27 AS disabled_mixed`,
+            absent,
+          ])
+          assert.strictEqual(results[0][0].disabled_mixed, 27)
+          assert.strictEqual(results[1][0].disabled_mixed, 27)
+        } finally {
+          await legacy.end({ timeout: 0 })
+        }
+      })
+    })
+
     it('ignores completion when enabled after another subscriber observes the start', async () => {
       tracer.use('postgres', { enabled: false })
       let starts = 0
@@ -434,12 +475,7 @@ describe('postgres native query lifecycle', () => {
       const channel = dc.channel('tracing:postgres:query:start')
       channel.subscribe(observe)
       const late = postgres({
-        database: 'postgres',
-        host: '127.0.0.1',
-        max: 1,
-        password: 'postgres',
-        port: 5432,
-        user: 'postgres',
+        ...POSTGRES_TARGET,
         debug: () => tracer.use('postgres', {}),
       })
       try {
