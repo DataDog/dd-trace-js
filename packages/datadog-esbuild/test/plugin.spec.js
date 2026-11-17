@@ -441,4 +441,49 @@ describe('datadog-esbuild plugin', () => {
       assert.equal(initialOptions.banner.js.includes('DD_GIT_REPOSITORY_URL'), false)
     })
   })
+
+  describe('entry points of packages with a hooked file', () => {
+    const repoRoot = path.join(__dirname, '../../..')
+    // express hooks `lib/express.js`, so its other entry points are pinned to the Node.js resolution.
+    const expectedPath = require.resolve('express/lib/utils', { paths: [repoRoot] })
+
+    /**
+     * @param {string[]} external
+     * @param {string} specifier
+     */
+    function resolve (external, specifier) {
+      let onResolve
+      ddPlugin.setup({
+        initialOptions: { external },
+        onEnd () {},
+        onResolve (options, callback) {
+          onResolve = callback
+        },
+        onLoad () {},
+      })
+      return onResolve({
+        path: specifier,
+        importer: path.join(repoRoot, 'app.js'),
+        namespace: 'file',
+        kind: 'require-call',
+        resolveDir: repoRoot,
+      })
+    }
+
+    it('resolves them with the Node.js conditions', () => {
+      assert.deepEqual(resolve([], 'express/lib/utils'), { path: expectedPath })
+    })
+
+    it('leaves subpaths of an external package to esbuild', () => {
+      assert.equal(resolve(['express'], 'express/lib/utils'), undefined)
+    })
+
+    it('leaves paths matching an external wildcard to esbuild', () => {
+      assert.equal(resolve(['express/lib/*'], 'express/lib/utils'), undefined)
+    })
+
+    it('does not treat a package with the same prefix as external', () => {
+      assert.deepEqual(resolve(['expres'], 'express/lib/utils'), { path: expectedPath })
+    })
+  })
 })
