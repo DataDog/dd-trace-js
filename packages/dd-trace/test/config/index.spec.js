@@ -23,6 +23,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
@@ -890,6 +891,97 @@ describe('Config', () => {
         assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       })
     }
+  })
+
+  describe('OpenTelemetry environment telemetry', () => {
+    const CONFLICT_MESSAGE = 'Conflicting %s and %s environment variables are set for %s'
+    const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+    /**
+     * Series keep their creation order across tests, so sort them to keep assertions independent of test order.
+     *
+     * @param {string} metric
+     */
+    function series (metric) {
+      return (tracerMetrics.toJSON().metrics?.series ?? [])
+        .filter(entry => entry.metric === metric)
+        .map(({ tags, points }) => ({ tags, value: points[0][1] }))
+        .sort((a, b) => a.tags.join().localeCompare(b.tags.join()))
+    }
+
+    beforeEach(() => {
+      tracerMetrics.reset()
+    })
+
+    it('should report a conflict with each Datadog equivalent that is set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+    })
+
+    it('should only report a conflict with the Datadog equivalents that are set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      sinon.assert.neverCalledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED')
+    })
+
+    it('should report an invalid value once, tagged with the first Datadog equivalent', () => {
+      process.env.OTEL_SDK_DISABLED = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+    })
+
+    it('should report an invalid value without a Datadog equivalent', () => {
+      process.env.OTEL_LOGS_EXPORTER = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_opentelemetry:otel_logs_exporter'], value: 1 },
+      ])
+    })
+
+    it('should report a conflict with a single Datadog equivalent', () => {
+      process.env.OTEL_SERVICE_NAME = 'otel-service'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_service', 'config_opentelemetry:otel_service_name'], value: 1 },
+      ])
+    })
+
+    it('should not report anything without OpenTelemetry variables', () => {
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+    })
   })
 
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
