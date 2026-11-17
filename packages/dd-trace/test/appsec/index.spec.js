@@ -1001,7 +1001,7 @@ describe('AppSec Index', function () {
               sinon.assert.calledOnceWithExactly(apiSecurity.sampleRequest, req,
                 statusCode ? { statusCode: 202 } : res)
               sinon.assert.calledOnceWithExactly(waf.run, {
-                persistent: { [addresses.HTTP_INCOMING_RESPONSE_BODY]: body },
+                [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
               }, req)
             })
           }
@@ -1018,7 +1018,7 @@ describe('AppSec Index', function () {
               })
 
               sinon.assert.calledOnceWithExactly(waf.run, {
-                persistent: { [addresses.HTTP_INCOMING_RESPONSE_BODY]: { value: 'café' } },
+                [addresses.HTTP_INCOMING_RESPONSE_BODY]: { value: 'café' },
               }, req)
             })
 
