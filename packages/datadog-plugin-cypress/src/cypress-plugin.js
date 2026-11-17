@@ -525,6 +525,9 @@ class CypressPlugin {
   // Cypress 16.3.0+ runs every after:spec handler, including user handlers that forward to the
   // legacy helper after the plugin's own handler, so each spec execution is finalized once.
   #specFinalizations = new WeakMap()
+  // Cypress 16.3.0+ also runs user after:screenshot handlers after the plugin's, so a renamed screenshot
+  // reaches after:spec under a new path. Its capture time still identifies the uploaded screenshot.
+  #uploadedScreenshotCaptures = new Set()
 
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
@@ -673,6 +676,7 @@ class CypressPlugin {
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.#uploadedScreenshotCaptures = new Set()
     this.uploadedVideoPaths = new Set()
     this.pendingVideoUploads = []
     this.screenshotUploadPromisesByTraceId = new Map()
@@ -2127,10 +2131,13 @@ class CypressPlugin {
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
-      if (!filePath || this.uploadedScreenshotPaths.has(filePath)) {
+      const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
+      const captureKey = takenAt ? `${traceId}:${takenAt}` : undefined
+      if (!filePath || this.uploadedScreenshotPaths.has(filePath) || this.#uploadedScreenshotCaptures.has(captureKey)) {
         continue
       }
       this.uploadedScreenshotPaths.add(filePath)
+      if (captureKey) this.#uploadedScreenshotCaptures.add(captureKey)
       // Stable per-artifact key (trace + filename) so an upload retry overwrites the
       // same stored object instead of duplicating; the Cypress filename encodes the
       // test name and attempt, so it is unique within the trace.
