@@ -105,6 +105,35 @@ const transformers = {
     }
     return tags
   },
+  /**
+   * Resolves an OpenTelemetry exporter list (e.g. `console,otlp`) to the single exporter the
+   * tracer supports. `otlp` anywhere wins, otherwise `none` disables export. Other entries are
+   * ignored with a warning; a list without a supported entry resolves to unset.
+   *
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @param {boolean} [reportInvalid]
+   * @returns {'none' | 'otlp' | undefined}
+   */
+  parseOtelExporterList (value, optionName, source, reportInvalid = true) {
+    const entries = value.split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean)
+
+    let exporter
+    if (entries.includes('otlp')) {
+      exporter = 'otlp'
+    } else if (entries.includes('none')) {
+      exporter = 'none'
+    }
+
+    const ignored = entries.filter(entry => entry !== 'otlp' && entry !== 'none')
+    if (ignored.length > 0 && reportInvalid) {
+      const outcome = exporter === undefined ? 'picked default' : null
+      warnInvalidValue(ignored.join(','), optionName, source, 'Unsupported exporters ignored', undefined, outcome)
+    }
+
+    return exporter
+  },
   normalizeProfilingEnabled (configValue) {
     if (configValue == null) {
       return

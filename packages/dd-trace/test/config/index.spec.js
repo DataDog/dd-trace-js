@@ -671,6 +671,15 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
+  it('should use the no-op proxy when OTEL_TRACES_EXPORTER lists none without otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none,console'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
   it('should keep the no-op proxy when OTel semantics and OTEL_TRACES_EXPORTER=none are set', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
@@ -1467,6 +1476,62 @@ describe('Config', () => {
   it('should default OTEL_TRACES_EXPORTER to undefined when not set (opt-in)', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+  })
+
+  describe('OTEL_TRACES_EXPORTER list', () => {
+    it('should select otlp when it is listed next to an unsupported exporter', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'console,otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "Unsupported exporters ignored: 'console' for OTEL_TRACES_EXPORTER (source: env_var)"
+      )
+    })
+
+    it('should select otlp over none', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'none,otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should select none when otlp is not listed', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'none,console'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "Unsupported exporters ignored: 'console' for OTEL_TRACES_EXPORTER (source: env_var)"
+      )
+    })
+
+    it('should trim entries, ignore case and skip blank entries', () => {
+      process.env.OTEL_TRACES_EXPORTER = ' OTLP , ,'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should pick the default when no supported exporter is listed', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'console,zipkin'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "Unsupported exporters ignored: 'console,zipkin' for OTEL_TRACES_EXPORTER (source: env_var), picked default"
+      )
+    })
   })
 
   it('should disable OTel semantics when the trace exporter is explicitly none', () => {

@@ -4777,8 +4777,7 @@
         "implementation": "H",
         "type": "string",
         "default": null,
-        "allowed": "none|otlp",
-        "transform": "toLowerCase"
+        "transform": "parseOtelExporterList"
       }
     ],
     "OTEL_TRACES_SAMPLER": [
