@@ -13,9 +13,18 @@ module.exports = defineConfig({
     async setupNodeEvents (on, config) {
       const mode = process.env.DD_CYPRESS_AFTER_SPEC_MODE
       const plugin = require('dd-trace/ci/cypress/plugin')
-      // Cypress 16.3.0+ runs every after:spec handler instead of only the last one. Drop the plugin's
-      // handler so recovery modes exercise after:run on every version, while forwarded mode keeps both
-      // to cover the plugin receiving the same spec twice.
+      // dd-trace loads too late here to wrap `on`, so the plugin's after:spec handler and the user's
+      // handler below are both registered directly with Cypress:
+      // - Before Cypress 16.3.0, Cypress keeps only the last after:spec handler, so the user's handler
+      //   replaces the plugin's. dd-trace only sees the specs the user forwards to `after-spec`.
+      // - From Cypress 16.3.0, Cypress runs every after:spec handler in registration order, so the
+      //   plugin's handler runs and then the user's handler runs.
+      // Per mode:
+      // - missing / partial: the user forwards no specs / only first.cy.js, and the rest must be recovered
+      //   at after:run. Hide the plugin's after:spec handler so it is never registered, keeping the
+      //   pre-16.3.0 "replaced" behavior on every version.
+      // - forwarded: the user forwards every spec. Register both handlers: before 16.3.0 dd-trace sees each
+      //   spec once, and from 16.3.0 it sees each spec twice and must finalize it only once.
       const registerPluginEvent = mode === 'forwarded'
         ? on
         : (event, handler) => {
