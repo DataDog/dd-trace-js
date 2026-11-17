@@ -211,19 +211,19 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
 }
 
 function runWaf (eventName, user) {
-  const persistent = {
+  const requestData = {
     [`server.business_logic.${eventName}`]: null,
   }
 
   if (user?.id) {
-    persistent[addresses.USER_ID] = String(user.id)
+    requestData[addresses.USER_ID] = String(user.id)
   }
 
   if (user?.login) {
-    persistent[addresses.USER_LOGIN] = String(user.login)
+    requestData[addresses.USER_LOGIN] = String(user.login)
   }
 
-  waf.run({ persistent })
+  waf.run(requestData)
 }
 
 module.exports = {

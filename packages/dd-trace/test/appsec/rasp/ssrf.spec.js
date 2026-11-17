@@ -5,20 +5,23 @@ const { EventEmitter } = require('events')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
 const {
   httpClientRequestStart,
+  httpClientRequestError,
+  httpClientRequestFinish,
   httpClientResponseStart,
   httpClientResponseFinish,
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const { withRequest } = require('../../../src/appsec/store')
+const { getActiveRequest, withRequest } = require('../../../src/appsec/store')
 
 const DEFAULT_URL = 'http://example.com'
 
 describe('RASP - ssrf.js', () => {
-  let waf
+  let waf, run, contexts
   let downstream
   let ssrf
   let telemetry
@@ -63,8 +66,28 @@ describe('RASP - ssrf.js', () => {
   beforeEach(() => {
     nextIncludeBodies = false
 
+    run = sinon.stub()
+    contexts = new WeakMap()
     waf = {
-      run: sinon.stub(),
+      runSubContext: sinon.stub().callsFake((data, rule, ctx) => {
+        let context = ctx.wafSubcontext
+        if (!context) {
+          context = {
+            parent: { req: getActiveRequest() },
+            run: sinon.spy((...args) => run(...args)),
+            dispose: sinon.spy(),
+          }
+          ctx.wafSubcontext = context
+        }
+        contexts.set(ctx, context)
+        return context.run(data, rule)
+      }),
+      getRequest: sinon.spy(ctx => ctx.wafSubcontext?.parent.req),
+      disposeSubContext: sinon.spy(ctx => {
+        ctx.wafSubcontext?.dispose()
+        ctx.wafSubcontext = undefined
+        contexts.delete(ctx)
+      }),
     }
 
     downstream = {
@@ -115,6 +138,51 @@ describe('RASP - ssrf.js', () => {
     clearStore()
   })
 
+  it('unsubscribes from requests when disabled', () => {
+    assert.strictEqual(httpClientRequestStart.hasSubscribers, true)
+    ssrf.disable()
+    assert.strictEqual(httpClientRequestStart.hasSubscribers, false)
+    assert.strictEqual(httpClientRequestError.hasSubscribers, false)
+    assert.strictEqual(httpClientRequestFinish.hasSubscribers, false)
+  })
+
+  it('evaluates redirect headers immediately and disposes each hop independently', () => {
+    stubStore()
+    const first = makeCtx()
+    const second = makeCtx({ args: { uri: 'http://example.com/next', options: {} } })
+    publishRequestStart({ ctx: first })
+    const firstScope = contexts.get(first)
+    downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302' })
+    const redirect = createResponse({ statusCode: 302, headers: { location: '/next' } })
+    publishResponseStart(first, redirect)
+    sinon.assert.calledTwice(firstScope.run)
+    sinon.assert.notCalled(downstream.planResponseBodyCollection)
+    publishRequestStart({ ctx: second })
+    const secondScope = contexts.get(second)
+    assert.notStrictEqual(firstScope, secondScope)
+
+    httpClientResponseFinish.publish({ ctx: first, res: redirect, body: null })
+    sinon.assert.calledTwice(firstScope.run)
+    sinon.assert.calledOnce(firstScope.dispose)
+    sinon.assert.notCalled(secondScope.dispose)
+
+    httpClientResponseFinish.publish({ ctx: second, res: createResponse(), body: null })
+    sinon.assert.calledTwice(secondScope.run)
+    sinon.assert.calledOnce(secondScope.dispose)
+  })
+
+  it('prefers the outgoing URL from request options', () => {
+    stubStore()
+    const ctx = makeCtx({
+      args: {
+        uri: 'http://fallback.example/wrong/start',
+        options: { uri: { protocol: 'http:', host: 'example.com', pathname: '/right/start' } },
+      },
+    })
+    publishRequestStart({ ctx })
+    assert.strictEqual(run.firstCall.args[0][addresses.HTTP_OUTGOING_URL], 'http://example.com/right/start')
+  })
+
   describe('analyzeSsrf', () => {
     it('should analyze ssrf', () => {
       const ctx = makeCtx()
@@ -127,16 +195,155 @@ describe('RASP - ssrf.js', () => {
       })
 
       sinon.assert.calledOnceWithExactly(
-        waf.run,
+        waf.runSubContext,
         {
-          ephemeral: {
-            [addresses.HTTP_OUTGOING_URL]: DEFAULT_URL,
-            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
-          },
+          [addresses.HTTP_OUTGOING_URL]: DEFAULT_URL,
+          [addresses.HTTP_OUTGOING_METHOD]: 'GET',
         },
-        req,
-        { type: 'ssrf', variant: 'request' }
+        { type: 'ssrf', variant: 'request' },
+        ctx
       )
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+      assert.strictEqual(Object.hasOwn(ctx, 'appsecRequest'), false)
+    })
+
+    it('uses the same scope and originating request for response evaluation', () => {
+      const ctx = makeCtx()
+      const { req } = stubStore()
+      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      run.onSecondCall().returns({ events: [{}] })
+      const res = createResponse()
+      stubStore() // Response callbacks can run under a different active request.
+      publishResponseStart(ctx, res)
+      sinon.assert.calledWith(downstream.planResponseBodyCollection, req, res, ctx)
+      httpClientResponseFinish.publish({ ctx, res, body: null })
+      sinon.assert.calledWithExactly(
+        scope.run,
+        { [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' },
+        { type: 'ssrf', variant: 'response' }
+      )
+      sinon.assert.calledOnce(scope.dispose)
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags,
+        req, { type: 'ssrf', variant: 'response' }, false, false)
+      httpClientResponseFinish.publish({ ctx, res, body: null })
+      sinon.assert.calledTwice(run)
+    })
+
+    it('isolates concurrent outgoing requests and redirect hops', () => {
+      stubStore()
+      const first = makeCtx({ req: new EventEmitter() })
+      const second = makeCtx({ req: new EventEmitter() })
+      publishRequestStart({ ctx: first })
+      publishRequestStart({ ctx: second })
+      const firstScope = contexts.get(first)
+      const secondScope = contexts.get(second)
+      assert.notStrictEqual(firstScope, secondScope)
+      httpClientResponseFinish.publish({ ctx: first, res: createResponse({ statusCode: 302 }), body: null })
+      sinon.assert.calledOnce(firstScope.dispose)
+      sinon.assert.notCalled(secondScope.dispose)
+      assert.strictEqual(contexts.get(second), secondScope)
+      httpClientResponseFinish.publish({ ctx: second, res: createResponse(), body: null })
+      sinon.assert.calledOnce(secondScope.dispose)
+    })
+
+    it('disposes an errored outgoing request without affecting another request', () => {
+      stubStore()
+      const first = makeCtx()
+      const second = makeCtx()
+      publishRequestStart({ ctx: first })
+      publishRequestStart({ ctx: second })
+      const firstScope = contexts.get(first)
+      const secondScope = contexts.get(second)
+      first.error = new Error('connection reset')
+      httpClientRequestError.publish(first)
+      httpClientRequestError.publish(first)
+      httpClientResponseFinish.publish({ ctx: first, res: createResponse(), body: null })
+      sinon.assert.calledOnce(firstScope.dispose)
+      sinon.assert.calledOnce(firstScope.run)
+      sinon.assert.notCalled(secondScope.dispose)
+    })
+
+    it('ignores errors for requests that have no subcontext', () => {
+      httpClientRequestError.publish(makeCtx())
+      sinon.assert.notCalled(run)
+    })
+
+    it('releases a request closed without a response, once', () => {
+      stubStore()
+      const ctx = makeCtx({ req: { destroyed: true } })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      httpClientRequestFinish.publish(ctx)
+      httpClientRequestFinish.publish(ctx)
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
+    it('retains the response context when request finish precedes response finish', () => {
+      stubStore()
+      const res = createResponse()
+      const ctx = makeCtx({ req: { destroyed: true }, res })
+      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      httpClientRequestFinish.publish(ctx)
+      sinon.assert.notCalled(scope.dispose)
+      httpClientResponseFinish.publish({ ctx, res, body: null })
+      sinon.assert.calledTwice(scope.run)
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
+    it('retains the subcontext when a timeout is followed by a response', () => {
+      stubStore()
+      const ctx = makeCtx({ req: new EventEmitter() })
+      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+
+      ctx.req.emit('timeout')
+      ctx.error = undefined
+      httpClientRequestError.publish(ctx)
+      // The HTTP instrumentation publishes request finish on timeout, before a possible response.
+      dc.channel('apm:http:client:request:finish').publish(ctx)
+      assert.strictEqual(ctx.req.listenerCount('close'), 1)
+      sinon.assert.notCalled(scope.dispose)
+      httpClientResponseFinish.publish({ ctx, res: createResponse(), body: null })
+
+      sinon.assert.calledTwice(scope.run)
+      sinon.assert.calledWithExactly(scope.run.secondCall,
+        { [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' }, { type: 'ssrf', variant: 'response' })
+      ctx.req.destroyed = true
+      ctx.req.emit('close')
+      assert.strictEqual(ctx.req.listenerCount('close'), 0)
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
+    it('releases the scope on response completion even without response data', () => {
+      stubStore()
+      const ctx = makeCtx({ req: new EventEmitter() })
+      publishRequestStart({ ctx })
+      const scope = contexts.get(ctx)
+      httpClientResponseFinish.publish({ ctx, res: createResponse(), body: null })
+      sinon.assert.calledOnce(scope.dispose)
+    })
+
+    it('does not create a response context under another request after initial creation failed', () => {
+      stubStore()
+      waf.runSubContext.resetBehavior()
+      const ctx = makeCtx()
+      publishRequestStart({ ctx })
+      stubStore() // The response runs under an unrelated incoming request.
+      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
+      const res = createResponse()
+      publishResponseStart(ctx, res)
+      httpClientResponseFinish.publish({ ctx, res, body: null })
+
+      sinon.assert.calledOnce(waf.runSubContext)
+      sinon.assert.notCalled(downstream.planResponseBodyCollection)
+      sinon.assert.notCalled(downstream.extractResponseData)
+      sinon.assert.notCalled(run)
+      assert.strictEqual(contexts.has(ctx), false)
     })
 
     it('should not analyze ssrf if rasp is disabled', () => {
@@ -147,7 +354,7 @@ describe('RASP - ssrf.js', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(run)
     })
 
     it('should not analyze ssrf if no store', () => {
@@ -156,7 +363,7 @@ describe('RASP - ssrf.js', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(run)
     })
 
     it('should not analyze ssrf if no req', () => {
@@ -165,7 +372,7 @@ describe('RASP - ssrf.js', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(run)
     })
 
     it('should not analyze ssrf if no url', () => {
@@ -174,7 +381,7 @@ describe('RASP - ssrf.js', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(run)
     })
 
     it('does not set shouldCollectBody until response headers when sampling disabled', () => {
@@ -210,8 +417,8 @@ describe('RASP - ssrf.js', () => {
       }
 
       downstream.extractResponseData.returns(responseAddresses)
-      waf.run.onFirstCall().returns({ events: [] })
-      waf.run.onSecondCall().returns({ events: [{ id: 'ssrf' }] })
+      run.onFirstCall().returns({ events: [] })
+      run.onSecondCall().returns({ events: [{ id: 'ssrf' }] })
 
       publishRequestStart({ ctx, includeBodies: true, requestAddresses })
       const response = createResponse({ headers: { 'content-type': 'application/json' } })
@@ -224,7 +431,7 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledWith(
         telemetry.updateRaspRuleMatchMetricTags, req, { type: 'ssrf', variant: 'response' }, false, false)
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.calledTwice(run)
     })
 
     it('evaluates response without body when body is null', () => {
@@ -234,7 +441,7 @@ describe('RASP - ssrf.js', () => {
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
       publishResponseStart(ctx, createResponse())
@@ -244,7 +451,7 @@ describe('RASP - ssrf.js', () => {
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.calledTwice(run)
     })
 
     it('does not call response evaluation when no response addresses', () => {
@@ -252,7 +459,7 @@ describe('RASP - ssrf.js', () => {
       const { req } = stubStore({}, {})
 
       downstream.extractResponseData.returns({})
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
       publishResponseStart(ctx, createResponse())
@@ -261,7 +468,7 @@ describe('RASP - ssrf.js', () => {
       httpClientResponseFinish.publish({ ctx, res: response, body: null })
 
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
-      sinon.assert.calledOnce(waf.run) // only for request
+      sinon.assert.calledOnce(run) // only for request
     })
 
     it('handles redirect responses and skips body analysis', () => {
@@ -272,7 +479,7 @@ describe('RASP - ssrf.js', () => {
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
         [addresses.HTTP_OUTGOING_RESPONSE_HEADERS]: { location: 'http://example.com/redirect' },
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: true })
 
@@ -286,7 +493,7 @@ describe('RASP - ssrf.js', () => {
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
 
-      sinon.assert.calledTwice(waf.run)
+      sinon.assert.calledTwice(run)
     })
 
     it('passes body for non-redirect responses', () => {
@@ -297,7 +504,7 @@ describe('RASP - ssrf.js', () => {
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
         [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true },
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: true })
 
@@ -328,7 +535,7 @@ describe('RASP - ssrf.js', () => {
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
       publishResponseStart(ctx, createResponse({ statusCode: 200 }))
@@ -347,7 +554,7 @@ describe('RASP - ssrf.js', () => {
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: true })
 
@@ -369,7 +576,7 @@ describe('RASP - ssrf.js', () => {
       downstream.extractResponseData.returns({
         [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
       })
-      waf.run.returns({ events: [] })
+      run.returns({ events: [] })
 
       publishRequestStart({ ctx, includeBodies: false })
       publishResponseStart(ctx, createResponse({ statusCode: 200 }))
