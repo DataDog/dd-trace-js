@@ -109,6 +109,9 @@ source-rewrite targets in Node.js bundles.
 The wrapper does not instrument client or edge bundles. It also excludes generic ESM export replacement, linked
 workspaces, Prisma clients outside `node_modules`, and Yarn Plug'n'Play packages.
 
+For Node.js applications built with Vite 6 or newer, use `datadogVite` from `dd-trace/vite.js`.
+See the [Vite setup and limitations](https://datadoghq.dev/dd-trace-js/#vite).
+
 ## Security Vulnerabilities
 
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
