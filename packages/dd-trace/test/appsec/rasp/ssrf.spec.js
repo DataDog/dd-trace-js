@@ -9,6 +9,7 @@ const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
 const {
+  fetchRequestStart,
   httpClientRequestStart,
   httpClientRequestError,
   httpClientRequestFinish,
@@ -70,6 +71,9 @@ describe('RASP - ssrf.js', () => {
     contexts = new WeakMap()
     waf = {
       runSubContext: sinon.stub().callsFake((data, rule, ctx) => {
+        // Without a state, the evaluation runs in a subcontext released right away.
+        if (!ctx) return run(data, rule)
+
         let context = ctx.wafSubcontext
         if (!context) {
           context = {
@@ -94,6 +98,7 @@ describe('RASP - ssrf.js', () => {
       enable: sinon.stub(),
       disable: sinon.stub(),
       extractRequestData: sinon.stub().returns({}),
+      extractFetchRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
       planResponseBodyCollection: sinon.stub().callsFake((originatingReq, res, ctx) => {
@@ -591,6 +596,57 @@ describe('RASP - ssrf.js', () => {
       })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
+  })
+
+  describe('analyze fetch ssrf', () => {
+    const fetchUrl = 'http://example.com/path'
+
+    it('should analyze ssrf for an outgoing fetch request', () => {
+      const request = new Request(fetchUrl, { method: 'POST' })
+      const { req } = stubStore({}, {})
+      downstream.extractFetchRequestData.returns({ [addresses.HTTP_OUTGOING_METHOD]: 'POST' })
+
+      fetchRequestStart.publish({ req: request, abortController: new AbortController() })
+
+      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request, undefined)
+      sinon.assert.calledOnceWithExactly(
+        waf.runSubContext,
+        {
+          [addresses.HTTP_OUTGOING_URL]: fetchUrl,
+          [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+        },
+        { type: 'ssrf', variant: 'request' },
+        undefined
+      )
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+    })
+
+    it('should analyze the options that fetch applies over an outgoing fetch request', () => {
+      const request = new Request(fetchUrl)
+      const init = { method: 'POST' }
+      stubStore({}, {})
+
+      fetchRequestStart.publish({ req: request, init, abortController: new AbortController() })
+
+      sinon.assert.calledOnceWithExactly(downstream.extractFetchRequestData, request, init)
+    })
+
+    it('should not analyze an outgoing fetch request without an incoming request', () => {
+      clearStore()
+
+      fetchRequestStart.publish({ req: new Request(fetchUrl), abortController: new AbortController() })
+
+      sinon.assert.notCalled(waf.runSubContext)
+    })
+
+    it('should not analyze an outgoing fetch request if rasp is disabled', () => {
+      ssrf.disable()
+      stubStore({}, {})
+
+      fetchRequestStart.publish({ req: new Request(fetchUrl), abortController: new AbortController() })
+
+      sinon.assert.notCalled(waf.runSubContext)
     })
   })
 })

@@ -279,7 +279,12 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
         },
       })
 
-      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+      // The telemetry result may be a copy, but its stream is shared with the SDK.
+      // Preserve that identity and attach the observer when the SDK pipes the stream.
+      shimmer.wrap(ctx.result.stream, 'pipeThrough', pipeThrough => function () {
+        const stream = pipeThrough.call(this, transform)
+        return pipeThrough.apply(stream, arguments)
+      })
     },
   })
 

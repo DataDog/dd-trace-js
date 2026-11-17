@@ -1,14 +1,69 @@
 'use strict'
 
+const { Stream } = require('node:stream')
+
 const web = require('../../plugins/util/web')
 const { isEmpty } = require('../../util')
 const addresses = require('../addresses')
 const apiSecurity = require('../api_security')
 const { isBlocked, callBlockDelegation, handleResults } = require('../blocking')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
 
 const responseAnalyzedSet = new WeakSet()
+const nextResponseBodies = new WeakMap()
+
+/**
+ * @param {unknown} body
+ * @returns {body is object}
+ */
+function isJsonBody (body) {
+  return body !== null && typeof body === 'object' && !Buffer.isBuffer(body) && !(body instanceof Stream)
+}
+
+/**
+ * @param {{ stream: ReadableStream | null, body: unknown }} ctx
+ */
+function onNextJsonResponse ({ stream, body }) {
+  // NextResponse wraps the native Response but retains its body stream.
+  if (stream && isJsonBody(body)) nextResponseBodies.set(stream, body)
+}
+
+/**
+ * Pages Router `res.json()` and `res.send()`.
+ *
+ * @param {{ arguments: unknown[] }} ctx
+ */
+function onNextResponseBody (ctx) {
+  const body = ctx.arguments[0]
+  if (!isJsonBody(body)) return
+
+  const req = /** @type {import('node:http').IncomingMessage | undefined} */ (getActiveRequest())
+  if (!req || req.method === 'HEAD') return
+
+  const res = web.getContext(req)?.res
+  if (res) onResponseBody({ req, res, body })
+}
+
+/**
+ * App Router route handler result. Only the returned response is analyzed.
+ *
+ * @param {{ result?: Response, error?: unknown }} ctx
+ */
+function onNextAppRouteResponse (ctx) {
+  // Async completion is also published for rejected route handlers, including rejection with undefined.
+  if ('error' in ctx) return
+
+  const response = ctx.result
+  const body = response?.body && nextResponseBodies.get(response.body)
+  if (!body) return
+
+  const req = /** @type {import('node:http').IncomingMessage | undefined} */ (getActiveRequest())
+  if (!req || req.method === 'HEAD') return
+
+  onResponseBody({ req, res: { statusCode: response.status }, body })
+}
 
 function onResponseBody ({ req, res, body }) {
   if (
@@ -73,6 +128,9 @@ function onResponseOperation ({ res, abortController }) {
 }
 
 module.exports = {
+  onNextAppRouteResponse,
+  onNextResponseBody,
+  onNextJsonResponse,
   onResponseBody,
   onResponseWriteHead,
   onResponseOperation,
