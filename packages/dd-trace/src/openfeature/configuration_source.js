@@ -12,10 +12,8 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
-// Node.js throws on some non-ASCII header values (for example `支付`), and then every poll fails.
-const PRINTABLE_ASCII = /^[\x21-\x7E]+$/
 const USAGE_SERVICE_REJECTED_MESSAGE =
-  'Feature Flags: service %s has no ASCII normalized name; DD-Service header not sent'
+  'Feature Flags: service %s has no normalized name; DD-Service header not sent'
 const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
   'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
   'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
@@ -125,17 +123,16 @@ function endpoint (config, configuredBaseUrl) {
  * Selects the DD-Service value: the tracer service, normalized with the same function as the inferred service. For
  * example, `My Service` becomes `my_service`.
  *
- * If the normalized name is empty or not printable ASCII, no value is sent. The tracer service itself does not change.
- * A value that is sent is always printable ASCII, so Node.js cannot throw on the header. The CDN alone decides which
- * values it uses.
+ * If nothing is left of the normalized name, no value is sent. The normalized name has only ASCII characters, so
+ * Node.js cannot throw on the header. The tracer service itself does not change. The CDN alone decides which values it
+ * uses.
  *
  * @param {string | undefined} service - Tracer service name.
  */
 function usageService (service) {
-  const name = normalizeService(service) ?? ''
-  const accepted = PRINTABLE_ASCII.test(name)
-  if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
-  return accepted ? name : undefined
+  const name = normalizeService(service)
+  if (service && !name) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
+  return name || undefined
 }
 
 /**

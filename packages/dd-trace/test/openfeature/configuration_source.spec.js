@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -268,11 +269,14 @@ describe('OpenFeature configuration source', () => {
   })
 
   // The tests of normalizeService cover its rules. These rows check only that the source passes the normalized name,
-  // and passes none when nothing is left of it.
+  // and passes none when nothing is left of it. normalizeService changes each non-ASCII character to `_`.
   const NORMALIZED_SERVICES = [
     ['checkout', 'checkout'],
     ['My Service', 'my_service'],
     ['Default Web Site/Shop', 'default_web_site/shop'],
+    ['caf\u00E9-api', 'caf_-api'],
+    ['\u652F\u4ED8-api', 'api'],
+    ['\u652F\u4ED8', undefined],
     ['___', undefined],
     ['   ', undefined],
   ]
@@ -302,7 +306,7 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(createSourceConfig().service, undefined, service)
       sinon.assert.calledWithExactly(
         log.debug,
-        'Feature Flags: service %s has no ASCII normalized name; DD-Service header not sent',
+        'Feature Flags: service %s has no normalized name; DD-Service header not sent',
         service
       )
     }
@@ -350,6 +354,16 @@ describe('OpenFeature configuration source', () => {
       config.service = 'My Service'
 
       assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
+    })
+
+    it('sends a non-ASCII service as its normalized name, which Node.js accepts in a header', async () => {
+      config.service = 'caf\u00E9-api'
+
+      const headers = await firstRequestHeaders()
+
+      assert.strictEqual(headers['DD-Service'], 'caf_-api')
+      // Node.js throws here on a value that it refuses in a header.
+      http.validateHeaderValue('DD-Service', headers['DD-Service'])
     })
 
     it('still polls, without DD-Service, when the service has no normalized name', async () => {
