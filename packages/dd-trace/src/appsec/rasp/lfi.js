@@ -77,13 +77,13 @@ function analyzeLfi (ctx) {
 }
 
 function analyzeLfiPath (path, req, res, abortController) {
-  const ephemeral = {
+  const subcontextData = {
     [FS_OPERATION_PATH]: path,
   }
 
   const raspRule = { type: RULE_TYPES.LFI }
 
-  const result = waf.run({ ephemeral }, req, raspRule)
+  const result = waf.runSubContext(subcontextData, raspRule, undefined, req)
   handleResult(result, req, res, abortController, config, raspRule)
 }
 

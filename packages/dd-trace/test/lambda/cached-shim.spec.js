@@ -35,7 +35,8 @@ describe('cached datadog-lambda-js completion adapter', () => {
           process.env.LAMBDA_TASK_ROOT = root
           process.env.DD_LAMBDA_HANDLER = 'handler.handler'
           process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = ${JSON.stringify(disabled ? 'lambda' : '')}
-          require(${JSON.stringify(require.resolve('../../src/lambda'))})
+          const initializeLambda = require(${JSON.stringify(require.resolve('../../src/lambda'))})
+          initializeLambda()
           assert.strictEqual(globalThis.helperLoads, 4, 'cached modules must not be evaluated again')
           for (const [helper, original] of helpers) {
             assert.${disabled ? 'strictEqual' : 'notStrictEqual'}(helper.promisifiedHandler, original)
@@ -71,7 +72,8 @@ describe('cached datadog-lambda-js completion adapter', () => {
           process.env.LAMBDA_TASK_ROOT = root
           process.env.DD_LAMBDA_HANDLER = 'handler.handler'
           process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = ''
-          require(${JSON.stringify(require.resolve('../../src/lambda'))})
+          const initializeLambda = require(${JSON.stringify(require.resolve('../../src/lambda'))})
+          initializeLambda()
           assert.strictEqual(require.cache[helper], undefined)
         } finally {
           fs.rmSync(root, { recursive: true, force: true })

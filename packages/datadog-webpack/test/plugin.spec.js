@@ -352,15 +352,6 @@ describe('loader', () => {
         assert.equal(code, source)
         assert.equal(map, inputSourceMap)
       })
-
-      it('returns the source untouched when the installed version is unsupported', () => {
-        const unsupportedDir = writePackage(path.join(projectDir, 'unsupported'), pkg, '0.0.1')
-        const source = 'class Pregel { async stream () { return [] } }\nmodule.exports = { Pregel }\n'
-
-        const { code } = runLoader(path.join(unsupportedDir, modulePath), options, source)
-
-        assert.equal(code, source)
-      })
     })
 
     describe('target with export hooks', () => {

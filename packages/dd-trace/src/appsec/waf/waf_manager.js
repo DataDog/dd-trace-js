@@ -53,19 +53,35 @@ class WAFManager {
 
   getWAFContext (req) {
     let wafContext = contexts.get(req)
+    if (wafContext === null) return
 
     if (!wafContext) {
+      const context = this.ddwaf.createContext()
+      if (context === null) return
+
       wafContext = new WAFContextWrapper(
-        this.ddwaf.createContext(),
+        context,
         this.wafTimeout,
         this.ddwafVersion,
         this.rulesVersion,
-        this.ddwaf.knownAddresses
+        this.ddwaf.knownAddresses,
+        req
       )
       contexts.set(req, wafContext)
     }
 
     return wafContext
+  }
+
+  /** @param {object} req Request whose evaluations have finished. */
+  disposeContext (req) {
+    const context = contexts.get(req)
+    if (context) {
+      context.dispose()
+    } else {
+      // No native context exists when all rules were removed; late callbacks must still stay disabled.
+      contexts.set(req, null)
+    }
   }
 
   setRulesVersion () {

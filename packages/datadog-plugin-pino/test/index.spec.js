@@ -47,7 +47,7 @@ describe('Plugin', () => {
 
             // pino-pretty uses `on-exit-leak-free` and that adds a listener to process.
             process.setMaxListeners(process.getMaxListeners() + 1)
-            const pretty = require('../../../versions/pino-pretty@8.0.0').get()
+            const pretty = require('../../../versions/pino-pretty@13.2.0').get()
 
             stream = pretty().pipe(stream)
           }

@@ -198,14 +198,14 @@ describe('effective OTel startup configuration', () => {
     })
   }
 
-  it('includes automatically initialized span metrics when checking shared resources', () => {
+  it('excludes span metrics by default when checking shared resources', () => {
     const result = run({
       OTEL_TRACES_EXPORTER: 'otlp', DD_LOGS_OTEL_ENABLED: 'true', DD_METRICS_OTEL_ENABLED: 'true',
     }, { service: 'configured-service', tags: { 'service.name': 'resource-service' } })
     for (const output of [result.configuration, result.flare]) {
-      assert.equal(output.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
-      assert.equal('OTEL_SERVICE_NAME' in output, false)
-      assert.equal('service.name' in output.OTEL_RESOURCE_ATTRIBUTES, false)
+      assert.equal(output.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+      assert.equal(output.OTEL_SERVICE_NAME, 'resource-service')
+      assert.equal(output.OTEL_RESOURCE_ATTRIBUTES['service.name'], 'resource-service')
     }
   })
 

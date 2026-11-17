@@ -657,7 +657,6 @@ describe('otel-thread-ctx', () => {
       sinon.assert.notCalled(context.appendAttributes)
       webTags['resource.name'] = 'GET /x'
       endpointResolvedCh.publish(activeSpan)
-      endpointResolvedCh.publish(activeSpan)
       sinon.assert.calledOnce(context.appendAttributes)
       assert.equal(context.attributes[1], 'GET /x')
     })
@@ -732,7 +731,7 @@ describe('otel-thread-ctx', () => {
       for (const child of children) spanFinishCh.publish(child)
     })
 
-    it('appends the endpoint only once per record', () => {
+    it('refines the endpoint in existing records', () => {
       const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
       cachedWebTags.set(parent, webTags)
       cachedWebTags.set(child, webTags)
@@ -744,11 +743,12 @@ describe('otel-thread-ctx', () => {
 
       webTags['http.route'] = '/x'
       endpointResolvedCh.publish(parent)
-      // A second announcement for the same request (the cache guarantees one,
-      // but the waiters are gone either way) must not append again.
+      webTags['http.route'] = '/x/y'
       endpointResolvedCh.publish(parent)
       for (const context of constructedContexts) {
-        sinon.assert.calledOnce(context.appendAttributes)
+        sinon.assert.calledTwice(context.appendAttributes)
+        assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+        assert.equal(context.appendAttributes.secondCall.args[0][1], 'GET /x/y')
       }
     })
 
@@ -1040,17 +1040,38 @@ describe('otel-thread-ctx', () => {
   })
 })
 
+/**
+ * @param {string} scenario
+ * @param {boolean} [otelSemantics]
+ */
+function runRetentionScenario (scenario, otelSemantics = false) {
+  return execFileAsync(process.execPath, [
+    '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
+  ], {
+    env: {
+      ...process.env,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: String(otelSemantics),
+      DD_CRASHTRACKING_ENABLED: 'false',
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+    },
+  })
+}
+
 describe('otel-thread-ctx waiter retention', () => {
   it('releases finished and retargeted waiters before the request ends', async () => {
-    await Promise.all(['finish', 'retarget'].map(scenario => execFileAsync(process.execPath, [
-      '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
-    ], {
-      env: {
-        ...process.env,
-        DD_CRASHTRACKING_ENABLED: 'false',
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-      },
-    })))
+    const scenarios = [
+      'finish', 'retarget', 'finish-resolved', 'retarget-resolved',
+      'late', 'late-resolved', 'late-no-web', 'late-own', 'late-promoted',
+    ]
+    await Promise.all(scenarios.map(scenario => runRetentionScenario(scenario)))
+  })
+
+  it('keeps route updates and retargeting after collecting reactivated records', async () => {
+    await Promise.all(['retained', 'retained-resolved'].map(scenario => runRetentionScenario(scenario)))
+  })
+
+  it('refines native endpoints as nested HTTP routes resolve', async () => {
+    await runRetentionScenario('refinement', true)
   })
 })

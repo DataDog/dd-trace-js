@@ -63,11 +63,10 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'ci/vitest-no-worker-init-setup.mjs',
   'nyc.config.js',
   'packages/datadog-esbuild/index.js',
-  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/helpers/bundler-log.js',
   'packages/datadog-instrumentations/src/cypress-config.js',
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
-  'packages/datadog-webpack/src/log.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
   'packages/dd-trace/src/config/helper.js',
@@ -351,6 +350,11 @@ export default [
           {
             pattern: 'dd-trace',
             group: 'builtin',
+            position: 'before',
+          },
+          {
+            pattern: '@actions/**',
+            group: 'external',
             position: 'before',
           },
         ],
@@ -1011,7 +1015,7 @@ export default [
       n: eslintPluginN,
     },
     files: [
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
     settings: {
       node: {
@@ -1047,7 +1051,7 @@ export default [
     ...eslintPluginCypress.configs.recommended,
     files: [
       'integration-tests/cypress/**/*.jsx',
-      'packages/datadog-plugin-cypress/src/support.js',
+      'packages/datadog-plugin-cypress/src/support.mjs',
     ],
   },
   {
@@ -1259,7 +1263,7 @@ export default [
     // These fixture apps import dd-trace the way a customer does
     // (`require('dd-trace')`), so dd-trace never appears in their own manifest.
     // Both extraneous-require rules must be off; otherwise the rule fires
-    // whenever dd-trace happens to be resolvable locally (e.g. `yarn link`),
+    // whenever dd-trace happens to be resolvable through a local package link,
     // even though CI's clean install keeps it unresolvable.
     name: 'dd-trace/tests/integration-and-resources',
     plugins: {

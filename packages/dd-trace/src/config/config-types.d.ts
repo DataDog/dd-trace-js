@@ -9,6 +9,9 @@ export interface ConfigProperties extends GeneratedConfig {
     rules: PayloadTaggingRules
   }
   debug: boolean
+  featureFlags: GeneratedConfig['featureFlags'] & {
+    flagSelection: unknown
+  }
   instrumentationSource: 'manual' | 'ssi'
   isCiVisibility: boolean
   isServiceNameInferred: boolean

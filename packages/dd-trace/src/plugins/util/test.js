@@ -30,6 +30,8 @@ const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  GIT_CHECKOUT_ROOT,
+  GIT_CHECKOUT_IS_CUSTOM,
   GIT_TAG,
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
@@ -46,6 +48,7 @@ const {
   GIT_COMMIT_HEAD_COMMITTER_NAME,
   GIT_COMMIT_HEAD_MESSAGE,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,
   CI_PIPELINE_DISPLAY_NAME,
@@ -75,6 +78,7 @@ const {
   getLocalBranches,
   getMergeBase,
   getCounts,
+  hasLocalGitObject,
 } = require('./git')
 
 /**
@@ -269,6 +273,9 @@ const TEST_LEVELS_METADATA_TAGS = [
   CI_PROVIDER_NAME,
   CI_STAGE_NAME,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
+  GIT_CHECKOUT_ROOT,
+  GIT_CHECKOUT_IS_CUSTOM,
   GIT_BRANCH,
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
@@ -656,8 +663,8 @@ function removeInvalidMetadata (metadata) {
       log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
       return filteredTags
     }
-    if (tag === GIT_COMMIT_SHA && !validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-      log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
+    if ((tag === GIT_COMMIT_SHA || tag === CI_GIT_MERGE_COMMIT_SHA) && !validateGitCommitSha(metadata[tag])) {
+      log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[tag])
       return filteredTags
     }
     if (tag === CI_PIPELINE_URL && !validateUrl(metadata[CI_PIPELINE_URL])) {
@@ -736,15 +743,15 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v1: ciRepositoryUrl,
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
-      expected: 'ci_provider',
-      discrepant: 'git_client',
+      expected: 'git_client',
+      discrepant: 'ci_provider',
     },
     {
       v1: ciCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
-      expected: 'ci_provider',
-      discrepant: 'git_client',
+      expected: 'git_client',
+      discrepant: 'ci_provider',
     },
   ]
 
@@ -782,30 +789,34 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
   if (!shouldSkipGitMetadataExtraction) {
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
-    const {
-      [GIT_COMMIT_SHA]: commitSHA,
-      [GIT_BRANCH]: branch,
-      [GIT_REPOSITORY_URL]: repositoryUrl,
-      [GIT_TAG]: tag,
-      [GIT_COMMIT_AUTHOR_NAME]: authorName,
-      [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-      [GIT_COMMIT_MESSAGE]: commitMessage,
-      [CI_WORKSPACE_PATH]: ciWorkspacePath,
-      [GIT_COMMIT_HEAD_SHA]: headCommitSha,
-    } = ciMetadata
     gitMetadata = getGitMetadata({
-      commitSHA,
-      branch,
-      repositoryUrl,
-      tag,
-      authorName,
-      authorEmail,
-      commitMessage,
-      ciWorkspacePath,
-      headCommitSha,
+      ciWorkspacePath: ciMetadata[CI_WORKSPACE_PATH],
+      headCommitSha: ciMetadata[GIT_COMMIT_HEAD_SHA],
       pullRequestBaseBranchSha: userProvidedGitMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA] ||
         ciMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA],
     })
+  }
+
+  let providerMetadata = ciMetadata
+  if (gitMetadata[GIT_COMMIT_SHA]) {
+    providerMetadata = {}
+    // Preserve workflow and PR relationships separately from the selected checkout metadata.
+    for (const key of Object.keys(ciMetadata)) {
+      const isPullRequestMetadata = key.startsWith('git.commit.head.') || key.startsWith('git.pull_request.')
+      if (!key.startsWith('git.') || isPullRequestMetadata) {
+        providerMetadata[key] = ciMetadata[key]
+      }
+    }
+    const isMatchingDetachedCheckout = ciMetadata[CI_WORKSPACE_PATH] && gitMetadata[GIT_CHECKOUT_ROOT] &&
+      gitMetadata[GIT_CHECKOUT_IS_CUSTOM] !== 'true' && !gitMetadata[GIT_BRANCH] &&
+      (gitMetadata[GIT_COMMIT_SHA] === ciMetadata[GIT_COMMIT_SHA] ||
+        gitMetadata[GIT_COMMIT_SHA] === ciMetadata[CI_GIT_MERGE_COMMIT_SHA])
+    if (isMatchingDetachedCheckout) {
+      // A detached CI checkout can use a mirror remote; CI supplies its branch, tag and canonical repository identity.
+      for (const key of [GIT_BRANCH, GIT_TAG, GIT_REPOSITORY_URL]) {
+        if (ciMetadata[key]) providerMetadata[key] = ciMetadata[key]
+      }
+    }
   }
 
   /** @type {TestEnvironmentMetadata} */
@@ -815,9 +826,21 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     [TEST_FRAMEWORK]: testFramework,
     [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
-    ...ciMetadata,
+    ...providerMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
+  }
+  const explicitSha = userProvidedGitMetadata[GIT_COMMIT_SHA]
+  if (explicitSha && explicitSha !== (gitMetadata[GIT_COMMIT_SHA] || ciMetadata[GIT_COMMIT_SHA])) {
+    // The checkout's author, message and tag must not describe a different user-selected commit.
+    for (const key of Object.keys(metadata)) {
+      if ((key === GIT_TAG || (key.startsWith('git.commit.') && key !== GIT_COMMIT_SHA &&
+          !key.startsWith('git.commit.head.'))) &&
+          // eslint-disable-next-line prefer-object-has-own -- Cypress 6's plugin process runs on Node 12.
+          !Object.prototype.hasOwnProperty.call(userProvidedGitMetadata, key)) {
+        delete metadata[key]
+      }
+    }
   }
   if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
     metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
@@ -1968,23 +1991,25 @@ function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = 
   }
 }
 
-function getPullRequestBaseBranch (pullRequestBaseBranch) {
-  const remoteName = getGitRemoteName()
+function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot) {
+  const remoteName = getGitRemoteName(gitRoot)
 
-  const sourceBranch = getSourceBranch()
+  const sourceBranch = getSourceBranch(gitRoot)
   // TODO: We will get the default branch name from the backend in the future.
   const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
 
   const candidateBranches = []
   if (pullRequestBaseBranch) {
-    checkAndFetchBranch(pullRequestBaseBranch, remoteName)
-    candidateBranches.push(pullRequestBaseBranch)
+    checkAndFetchBranch(pullRequestBaseBranch, remoteName, gitRoot)
+    candidateBranches.push(hasLocalGitObject(pullRequestBaseBranch, gitRoot)
+      ? pullRequestBaseBranch
+      : `${remoteName}/${pullRequestBaseBranch}`)
   } else {
     for (const branch of POSSIBLE_BASE_BRANCHES) {
-      checkAndFetchBranch(branch, remoteName)
+      checkAndFetchBranch(branch, remoteName, gitRoot)
     }
 
-    const localBranches = getLocalBranches(remoteName)
+    const localBranches = getLocalBranches(remoteName, gitRoot)
     for (const branch of localBranches) {
       const shortBranchName = branch.replace(new RegExp(`^${remoteName}/`), '')
       if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
@@ -1994,19 +2019,19 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   }
 
   if (candidateBranches.length === 1) {
-    return getMergeBase(candidateBranches[0], sourceBranch)
+    return getMergeBase(candidateBranches[0], sourceBranch, gitRoot)
   }
 
   const metrics = {}
   let hasMetrics = false
   for (const candidate of candidateBranches) {
     // Find common ancestor
-    const baseSha = getMergeBase(candidate, sourceBranch)
+    const baseSha = getMergeBase(candidate, sourceBranch, gitRoot)
     if (!baseSha) {
       continue
     }
     // Count commits ahead/behind
-    const counts = getCounts(candidate, sourceBranch)
+    const counts = getCounts(candidate, sourceBranch, gitRoot)
     if (!counts) {
       continue
     }
@@ -2042,11 +2067,11 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   return bestBranch ? metrics[bestBranch].baseSha : null
 }
 
-function getPullRequestDiff (baseCommit, targetCommit) {
+function getPullRequestDiff (baseCommit, targetCommit, gitRoot) {
   if (!baseCommit) {
     return
   }
-  return getGitDiff(baseCommit, targetCommit)
+  return getGitDiff(baseCommit, targetCommit, gitRoot)
 }
 
 function getModifiedFilesFromDiff (diff) {

@@ -6,8 +6,9 @@ matched.** Orchestrion rewrites a library at load time (CJS + ESM) and injects
 source hooks, ESM support, and avoiding runtime monkey-patching.
 
 Engine: `@apm-js-collab/code-transformer` (mirror of
-[nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)). Its
-installed version is recorded in `vendor/package-lock.json`.
+[nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
+`vendor/dist/@apm-js-collab/code-transformer/`. Its installed version is recorded
+in `vendor/bun.lock`.
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. Confirm anything

@@ -1,0 +1,22 @@
+{
+    "_datadog": {
+      "Execution": {
+        "Id": "arn:aws:states:ca-central-1:425362996713:execution:MyStateMachine-wsx8chv4d:1356a963-42a5-48b0-ba3f-73bde559a50c",
+        "StartTime": "2024-11-13T16:46:47.715Z",
+        "Name": "1356a963-42a5-48b0-ba3f-73bde559a50c",
+        "RoleArn": "arn:aws:iam::425362996713:role/service-role/StepFunctions-MyStateMachine-wsx8chv4d-role-1su0fkfd3",
+        "RedriveCount": 0
+      },
+      "StateMachine": {
+        "Id": "arn:aws:states:ca-central-1:425362996713:stateMachine:MyStateMachine-wsx8chv4d",
+        "Name": "MyStateMachine-wsx8chv4d"
+      },
+      "State": {
+        "Name": "Lambda Invoke",
+        "EnteredTime": "2024-11-13T16:46:47.740Z",
+        "RetryCount": 0
+      },
+      "RootExecutionId": "arn:aws:states:ca-central-1:425362996713:execution:MyStateMachine-wsx8chv4d:1356a963-42a5-48b0-ba3f-73bde559a50c",
+      "serverless-version": "v1"
+    }
+  }

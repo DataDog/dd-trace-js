@@ -336,6 +336,7 @@ describe('Vercel telemetry retention', () => {
   const endpointVariables = [
     'VERCEL',
     'OTEL_TRACES_EXPORTER',
+    'OTEL_TRACES_SPAN_METRICS_ENABLED',
     'DD_LOGS_OTEL_ENABLED',
     'DD_METRICS_OTEL_ENABLED',
     'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
@@ -361,6 +362,7 @@ describe('Vercel telemetry retention', () => {
 
   it('retains trace, log, and metric payloads until their intake responses complete', async () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const received = new Set()

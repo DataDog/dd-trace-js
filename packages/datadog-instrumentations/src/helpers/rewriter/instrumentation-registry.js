@@ -42,6 +42,10 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
+  {
+    activate: { setup: () => require('../../modelcontextprotocol-server') },
+    instrumentations: require('./instrumentations/modelcontextprotocol-server'),
+  },
   { instrumentations: require('./instrumentations/next') },
   { instrumentations: require('./instrumentations/openai-agents') },
   {
@@ -71,6 +75,7 @@ const registry = [
     activate: { setup: () => require('../../typesafe') },
     instrumentations: require('./instrumentations/typesafe'),
   },
+  { activate: true, instrumentations: require('./instrumentations/trpc') },
 ]
 
 const activatedModules = new Set()

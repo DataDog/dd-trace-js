@@ -137,11 +137,10 @@ const scenarioConfig = {
       }
     },
     maxInstances: 1,
-    specs: ['./automatic-log-submission.e2e.js'],
-  },
-  automaticConsoleLogSubmission: {
-    maxInstances: 1,
-    specs: ['./automatic-console-log-submission.e2e.js'],
+    specs: [[
+      './automatic-log-submission.e2e.js',
+      './automatic-console-log-submission.e2e.js',
+    ]],
   },
   atr: {
     maxInstances: 1,
@@ -318,6 +317,7 @@ const scenarioConfig = {
   locallyDisabledFailures: {
     maxInstances: 1,
     specs: [[
+      './atr-always-fail.e2e.js',
       './efd.e2e.js',
       './test-management.e2e.js',
     ]],

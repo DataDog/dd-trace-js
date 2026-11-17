@@ -437,6 +437,14 @@ const programmaticTypeCoercions = {
       return value
     }
   },
+  /**
+   * Keeps any value as given, for an option that its consumer validates.
+   *
+   * @param {unknown} value
+   */
+  PASSTHROUGH (value) {
+    return value
+  },
 }
 
 module.exports = {
