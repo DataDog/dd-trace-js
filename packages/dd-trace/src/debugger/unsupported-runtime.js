@@ -11,6 +11,8 @@
 function getUnsupportedRuntime () {
   if (process.versions.bun !== undefined) return 'Bun'
   if (process.versions.deno !== undefined) return 'Deno'
+  // eslint-disable-next-line unicorn/no-useless-undefined -- Explicit return satisfies noImplicitReturns.
+  return undefined
 }
 
 module.exports = { getUnsupportedRuntime }

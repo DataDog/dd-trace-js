@@ -470,6 +470,8 @@ function getErrorStringProperty (error, property) {
     if (descriptor !== undefined) return typeof descriptor.value === 'string' ? descriptor.value : undefined
     error = Object.getPrototypeOf(error)
   }
+  // eslint-disable-next-line unicorn/no-useless-undefined -- Explicit return satisfies noImplicitReturns.
+  return undefined
 }
 
 /**
