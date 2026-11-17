@@ -9,13 +9,14 @@ const fs = require('node:fs')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 const HttpRequest = require('../setup/helpers/http-client')
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const { blockedTemplateJson: json, getWebSpan, setTestBlockingTemplates } = require('./utils')
 
 /**
  * @param {string} cookieVersion
@@ -134,6 +135,94 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
       }
+    })
+  })
+
+  describe('Response blocking', () => {
+    let app, server, httpRequest
+
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
+
+      app = fastify()
+
+      app.get('/not-found', (request, reply) => {
+        reply.code(404).send('Not found')
+      })
+
+      app.get('/header', (request, reply) => {
+        reply.header('x-response-rule', request.query.value)
+        reply.send('DONE')
+      })
+
+      await app.listen({ host: '127.0.0.1', port: 0 })
+      server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}`, validateStatus: null })
+    })
+
+    after(async () => {
+      await app.close()
+      await agent.close()
+    })
+
+    beforeEach(() => {
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'response-status-and-header-rules.json'),
+        },
+      }))
+      setTestBlockingTemplates()
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    /**
+     * @param {string} url
+     */
+    async function assertResponseBlocked (url) {
+      const [res] = await Promise.all([
+        httpRequest.get(url),
+        agent.assertSomeTraces(traces => {
+          assertObjectContains(getWebSpan(traces).meta, {
+            'appsec.blocked': 'true',
+            'http.status_code': '403',
+          })
+        }),
+      ])
+
+      assert.strictEqual(res.status, 403)
+      assert.deepStrictEqual(res.data, JSON.parse(json))
+    }
+
+    it('should block a response whose status matches a blocking rule', () => {
+      return assertResponseBlocked('/not-found')
+    })
+
+    it('should block the 404 response of an unknown route', () => {
+      return assertResponseBlocked('/unknown-route')
+    })
+
+    it('should block a response whose headers match a blocking rule', () => {
+      return assertResponseBlocked('/header?value=blockresponse')
+    })
+
+    it('should not block a response that matches no blocking rule', async () => {
+      const [res] = await Promise.all([
+        httpRequest.get('/header?value=safe'),
+        agent.assertSomeTraces(traces => {
+          const span = getWebSpan(traces)
+          assert.strictEqual(span.meta['appsec.blocked'], undefined)
+          assert.strictEqual(span.meta['http.status_code'], '200')
+        }),
+      ])
+
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.data, 'DONE')
     })
   })
 
