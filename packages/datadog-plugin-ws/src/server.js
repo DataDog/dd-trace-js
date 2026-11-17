@@ -32,6 +32,16 @@ class WSServerPlugin extends TracingPlugin {
     this.addBind('tracing:ws:server:connect:setSocket', () => {})
   }
 
+  /**
+   * @param {object} config
+   */
+  configure (config) {
+    return super.configure({
+      ...config,
+      queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
+    })
+  }
+
   bindStart (ctx) {
     const req = ctx.req
 
@@ -47,7 +57,7 @@ class WSServerPlugin extends TracingPlugin {
     const path = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const requestTarget = otelSemantics
-      ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, url)
+      ? obfuscateQs(this.config, url)
       : path
     const uri = `${protocol}//${host}${requestTarget}`
     const resourceName = otelSemantics ? otelHttpResourceName(options.method) : `${options.method} ${path}`
