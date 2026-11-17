@@ -40,6 +40,7 @@ const NORMALIZED_FETCH_METHODS = new Map([
   ['options', 'OPTIONS'],
   ['post', 'POST'],
   ['put', 'PUT'],
+  ['query', 'QUERY'],
 ])
 
 let config

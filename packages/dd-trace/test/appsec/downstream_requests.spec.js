@@ -302,6 +302,8 @@ describe('appsec downstream_requests', () => {
 
         assert.strictEqual(getMethod('post'), 'POST')
         assert.strictEqual(getMethod('Delete'), 'DELETE')
+        assert.strictEqual(getMethod('query'), 'QUERY')
+        assert.strictEqual(getMethod('Query'), 'QUERY')
         assert.strictEqual(getMethod('patch'), 'patch')
         assert.strictEqual(getMethod('custom'), 'custom')
         assert.strictEqual(getMethod('constructor'), 'constructor')
