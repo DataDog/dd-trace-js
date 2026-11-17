@@ -35,6 +35,7 @@ ddGlobal.graphql_utilities = { ...utilities, separateOperations: separateOperati
 const { parse } = require('graphql')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { defaultEngineReportingSignature } = require('../../src/tools/signature')
 const { getCachedRequestOperation, getRequestCache, refineRequestSpan } = require('../../src/utils')
 
@@ -413,6 +414,28 @@ describe('graphql signature byte output', () => {
       defaultEngineReportingSignature(ast, 'Q'),
       'query Q($a:Int,$a:String){...F}fragment F on Query@same(b:0)@same(a:0){f}'
     )
+  })
+})
+
+describe('graphql signature parser compatibility', () => {
+  withVersions('graphql', 'graphql', version => {
+    for (const [source, expected] of [
+      ['{ hello }', '{hello}'],
+      ['query { hello }', '{hello}'],
+      ['query Named { hello }', 'query Named{hello}'],
+      ['query Named($id: ID) { hello(id: $id) }', 'query Named($id:ID){hello(id:$id)}'],
+      ['{ ...Hello } fragment Hello on Query { hello }', '{...Hello}fragment Hello on Query{hello}'],
+    ]) {
+      it(`preserves the full signature for ${source}`, () => {
+        const graphql = require(`../../../../versions/graphql@${version}`).get()
+        const document = graphql.parse(source)
+        const operation = document.definitions[0]
+        const name = operation.name
+
+        assert.equal(defaultEngineReportingSignature(document, name?.value), expected)
+        assert.equal(operation.name, name)
+      })
+    }
   })
 })
 
