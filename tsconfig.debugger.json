@@ -3,14 +3,25 @@
   "include": [
     "./benchmark/sirun/debugger/**/*.js",
     "./benchmark/sirun/debugger/**/*.mjs",
+    "./integration-tests/code-origin/**/*.js",
+    "./integration-tests/code-origin-remote-config.spec.js",
+    "./integration-tests/code-origin.spec.js",
     "./integration-tests/debugger/**/*.js",
     "./integration-tests/debugger/**/*.mjs",
+    "./packages/datadog-code-origin/**/*.js",
+    "./packages/datadog-plugin-*/**/code_origin.js",
+    "./packages/datadog-plugin-*/**/code_origin.spec.js",
+    "./packages/dd-trace/src/debugger/**/*.js",
+    "./packages/dd-trace/src/debugger/**/*.mjs",
     "./packages/dd-trace/test/debugger/**/*.js",
     "./packages/dd-trace/test/debugger/**/*.mjs",
-    "./packages/dd-trace/src/debugger/**/*.js",
-    "./packages/dd-trace/src/debugger/**/*.mjs"
+    "./packages/dd-trace/test/plugins/util/stacktrace.spec.js"
   ],
   "exclude": [
+    "./integration-tests/code-origin/typescript.js",
+    "./integration-tests/debugger/target-app/source-map-support/bundle.js",
+    "./integration-tests/debugger/target-app/source-map-support/hello/world.js",
+    "./integration-tests/debugger/target-app/source-map-support/minify.min.js",
     "./integration-tests/debugger/target-app/source-map-support/typescript.js"
   ]
 }
