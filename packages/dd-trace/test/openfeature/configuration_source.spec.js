@@ -267,49 +267,18 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  // Expected DD-Service values. They come from the Agent NormalizeService (datadog-agent
-  // pkg/trace/traceutil/normalize v0.82.3) and the ASCII check. `undefined` means: no DD-Service header.
-  const APM_SERVICE_NAMES = [
+  // The tests of normalizeService cover its rules. These rows check only that the source passes the normalized name,
+  // and passes none when nothing is left of it.
+  const NORMALIZED_SERVICES = [
     ['checkout', 'checkout'],
     ['My Service', 'my_service'],
-    ['My-API', 'my-api'],
-    ['UPPER', 'upper'],
-    ['bad\nvalue', 'bad_value'],
-    ['a\tb', 'a_b'],
-    ['a  b!', 'a_b'],
-    ['svc ', 'svc'],
-    [' svc', '_svc'],
-    ['a_', 'a'],
-    ['svc-', 'svc-'],
-    ['a..b', 'a..b'],
-    ['2fa-service', '2fa-service'],
-    ['9lives', '9lives'],
-    ['unnamed-service', 'unnamed-service'],
-    ['svc_name.v2:api/edge-1', 'svc_name.v2:api/edge-1'],
-    ['my__service', 'my_service'],
     ['Default Web Site/Shop', 'default_web_site/shop'],
-    [`a${'b'.repeat(99)}`, `a${'b'.repeat(99)}`],
-    [`a${'b'.repeat(100)}`, `a${'b'.repeat(99)}`],
-    [`${'a'.repeat(100)} b`, 'a'.repeat(100)],
-    [`${'a'.repeat(99)}é`, 'a'.repeat(99)],
-    ['_svc', '_svc'],
-    ['-svc', '-svc'],
-    ['.svc', '.svc'],
-    [':svc', ':svc'],
-    ['café-api', undefined],
-    ['Café', undefined],
-    ['支付', undefined],
-    ['a🐶b', 'a_b'],
-    ['İstanbul', undefined],
-    ['é'.repeat(60), undefined],
     ['___', undefined],
-    ['-', '-'],
-    ['', undefined],
     ['   ', undefined],
   ]
 
-  it('passes the name APM shows for the service, or none when that name is empty or not plain ASCII', () => {
-    for (const [service, sent] of APM_SERVICE_NAMES) {
+  it('passes the normalized service, or none when nothing is left of it', () => {
+    for (const [service, sent] of NORMALIZED_SERVICES) {
       AgentlessConfigurationSource.resetHistory()
       config.service = service
 
@@ -324,9 +293,8 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(config.service, 'My Service')
   })
 
-  // A different name attributes the usage to a service that APM does not show.
-  it('does not pass a service whose APM name is empty or not plain ASCII', () => {
-    for (const service of ['café-api', '支付', '___']) {
+  it('logs a service that has no normalized name', () => {
+    for (const service of ['支付', '___']) {
       AgentlessConfigurationSource.resetHistory()
       log.debug.resetHistory()
       config.service = service
@@ -334,7 +302,7 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(createSourceConfig().service, undefined, service)
       sinon.assert.calledWithExactly(
         log.debug,
-        'Feature Flags: service %s has no ASCII APM name; DD-Service header not sent',
+        'Feature Flags: service %s has no ASCII normalized name; DD-Service header not sent',
         service
       )
     }
@@ -378,14 +346,14 @@ describe('OpenFeature configuration source', () => {
       return requests[0].headers
     }
 
-    it('sends the name APM shows for the service in DD-Service', async () => {
+    it('sends the normalized service in DD-Service', async () => {
       config.service = 'My Service'
 
       assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
     })
 
-    it('still polls, without DD-Service, when the APM name of the service is not plain ASCII', async () => {
-      for (const service of ['café-api', '支付']) {
+    it('still polls, without DD-Service, when the service has no normalized name', async () => {
+      for (const service of ['支付', '___']) {
         source?.stop()
         requests = []
         config.service = service

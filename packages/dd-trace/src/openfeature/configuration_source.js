@@ -1,5 +1,6 @@
 'use strict'
 
+const { normalizeService } = require('../config/normalize-service')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 const { warnRemoteConfigFlagSelection, withFlagSelection } = require('./flag-selection')
@@ -13,11 +14,8 @@ const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is r
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
 // Node.js throws on some non-ASCII header values (for example `支付`), and then every poll fails.
 const PRINTABLE_ASCII = /^[\x21-\x7E]+$/
-const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s has no ASCII APM name; DD-Service header not sent'
-// The Agent cuts span service names to this many UTF-8 bytes before it normalizes them.
-const MAX_APM_SERVICE_BYTES = 100
-const APM_SERVICE_ASCII_CHAR = /^[a-z0-9:./-]$/
-const APM_SERVICE_NON_ASCII_CHAR = /^[\p{L}\p{Nd}]$/u
+const USAGE_SERVICE_REJECTED_MESSAGE =
+  'Feature Flags: service %s has no ASCII normalized name; DD-Service header not sent'
 const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
   'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
   'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
@@ -124,51 +122,20 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Selects the DD-Service value: the name that APM shows for the tracer service. Thus the usage goes to the same
- * service as the traces. For example, `My Service` becomes `my_service`.
+ * Selects the DD-Service value: the tracer service, normalized with the same function as the inferred service. For
+ * example, `My Service` becomes `my_service`.
  *
- * If the APM name is empty or not plain ASCII (for example `café-api`), no value is sent. A different name would
- * attribute the usage to the wrong service. The tracer service itself does not change. A value that is sent is always
- * plain ASCII, so Node.js cannot throw on the header. The CDN alone decides which values it uses.
+ * If the normalized name is empty or not printable ASCII, no value is sent. The tracer service itself does not change.
+ * A value that is sent is always printable ASCII, so Node.js cannot throw on the header. The CDN alone decides which
+ * values it uses.
  *
  * @param {string | undefined} service - Tracer service name.
  */
 function usageService (service) {
-  const name = service ? apmServiceName(service) : ''
+  const name = normalizeService(service) ?? ''
   const accepted = PRINTABLE_ASCII.test(name)
   if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
   return accepted ? name : undefined
-}
-
-/**
- * Normalizes a service name with the same rules as the Agent `NormalizeService` for spans. Returns an empty string if
- * nothing is left. The rules:
- * - Cut the name to 100 UTF-8 bytes. Do not split a character.
- * - Change ASCII capital letters to lowercase.
- * - Keep letters, digits, and `:./-`.
- * - Replace each run of other characters (`_` included) with one `_`. Remove a run at the end.
- *
- * Non-ASCII letters stay. `usageService` then sends no value.
- *
- * @param {string} service - Tracer service name.
- */
-function apmServiceName (service) {
-  let name = ''
-  let bytes = 0
-  let pendingUnderscore = false
-  for (const character of service) {
-    bytes += Buffer.byteLength(character)
-    if (bytes > MAX_APM_SERVICE_BYTES) break
-    const char = character >= 'A' && character <= 'Z' ? character.toLowerCase() : character
-    if (APM_SERVICE_ASCII_CHAR.test(char) || (char > '\u007F' && APM_SERVICE_NON_ASCII_CHAR.test(char))) {
-      if (pendingUnderscore) name += '_'
-      pendingUnderscore = false
-      name += char
-    } else {
-      pendingUnderscore = true
-    }
-  }
-  return name
 }
 
 /**
