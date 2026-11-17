@@ -245,7 +245,8 @@ function installProbeSampler (guardrailMetrics, config) {
    * Decide if a probe hit should be sampled and store the sampled probe index for the debugger worker.
    *
    * Snapshot-producing probes hit within an active trace share one sampling decision per trace, so a trace emits the
-   * snapshots of all of its probes or none of them. Other hits are sampled independently.
+   * snapshots of all of its probes or none of them, unless the global snapshot rate limit is reached. Other hits are
+   * sampled independently.
    *
    * @param {number} probeIndex - The worker-side probe sampling index.
    * @param {string} probeId - The probe id.
@@ -273,9 +274,9 @@ function installProbeSampler (guardrailMetrics, config) {
   /**
    * Sample a snapshot-producing probe hit using the sampling decision of its trace. The first such probe hit in the
    * trace makes the decision for all of them, subject to its per-probe rate limit and the global snapshot rate limit.
-   * If the trace is sampled, each probe then emits once in it without being subject to the rate limits, so the trace
-   * emits a complete set of snapshots. Those snapshots still count toward the rate limits, which keeps the overall
-   * volume close to the limits by making later traces less likely to be sampled.
+   * If the trace is sampled, each probe then emits once in it without being subject to its own per-probe rate limit,
+   * so a probe shared by traces sampled by different probes emits in each of them. The global snapshot rate limit
+   * still applies to these snapshots: it caps the overall volume, even if that leaves a sampled trace incomplete.
    *
    * @param {LocalTrace} trace - The trace the probe was hit in.
    * @param {number} probeIndex - The worker-side probe sampling index.
@@ -302,7 +303,7 @@ function installProbeSampler (guardrailMetrics, config) {
       return false
     }
 
-    if (!commitSample(probeIndex, probeId, now, true)) return false
+    if (isGloballyRateLimited(now) || !commitSample(probeIndex, probeId, now, true)) return false
     emittedProbes.add(probeIndex)
     return true
   }
@@ -325,13 +326,20 @@ function installProbeSampler (guardrailMetrics, config) {
       return true
     }
 
-    if (isSnapshotProducingProbe &&
-        now - globalSnapshotSamplingRateWindowStart <= oneSecondNs &&
+    return isSnapshotProducingProbe && isGloballyRateLimited(now)
+  }
+
+  /**
+   * Check the global snapshot rate limit, recording the skip if it is reached.
+   *
+   * @param {bigint} now - The current time.
+   */
+  function isGloballyRateLimited (now) {
+    if (now - globalSnapshotSamplingRateWindowStart <= oneSecondNs &&
         snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
       guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
       return true
     }
-
     return false
   }
 

@@ -511,35 +511,114 @@ describe('probe sampler', function () {
         })
       })
 
-      it('should count snapshots emitted in a sampled trace toward the global rate limit without being limited by it',
+      it('should apply the global rate limit to snapshots emitted in a sampled trace', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY - 2; i++) {
+          assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+        }
+
+        const trace = createTrace()
+        inTrace(trace, () => {
+          assert.strictEqual(sampler.makeSampleDecision(100, 'probe-1', 0n, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(101, 'probe-2', 0n, true), true)
+          // The trace was sampled before the global rate limit was reached, but that doesn't exempt it from the limit
+          assert.strictEqual(sampler.makeSampleDecision(102, 'probe-3', 0n, true), false)
+        })
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(103, 'probe-4', 0n, true), false)
+        })
+        assert.strictEqual(sampler.makeSampleDecision(104, 'probe-5', 0n, true), false)
+
+        assert.strictEqual(
+          Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+          MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
+        )
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 3],
+        ])
+
+        // The trace is still sampled, and the probe skipped by the global rate limit hasn't emitted in it yet
+        now += oneSecondNs + 1n
+        inTrace(trace, () => {
+          assert.strictEqual(sampler.makeSampleDecision(102, 'probe-3', 0n, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(100, 'probe-1', 0n, true), false)
+        })
+      })
+
+      it('should keep the snapshots of sampled traces within the global rate limit', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        const traceCount = 20
+        const laterProbeCount = 3
+        let firstProbeSnapshots = 0
+        let laterProbeSnapshots = 0
+
+        // Each trace is started by a different probe, so only the global rate limit applies across traces
+        for (let i = 0; i < traceCount; i++) {
+          inTrace(createTrace(), () => {
+            if (sampler.makeSampleDecision(i, `first-probe-${i}`, oneSecondNs, true)) firstProbeSnapshots++
+            for (let j = 0; j < laterProbeCount; j++) {
+              if (sampler.makeSampleDecision(100 + j, `later-probe-${j}`, oneSecondNs, true)) laterProbeSnapshots++
+            }
+          })
+        }
+
+        // Six traces emit all four snapshots, and the seventh only its first before the global rate limit is reached
+        assert.strictEqual(firstProbeSnapshots, 7)
+        assert.strictEqual(laterProbeSnapshots, 18)
+        assert.strictEqual(firstProbeSnapshots + laterProbeSnapshots, MAX_SNAPSHOTS_PER_SECOND_GLOBALLY)
+        assert.strictEqual(
+          Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+          MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
+        )
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          // The later probes of the seventh trace, and the first probes of the remaining 13 traces
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 3 + 13],
+          // The later probes of the 13 dropped traces
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], 13 * laterProbeCount],
+        ])
+      })
+
+      it('should rate limit each probe that samples a trace, but not a later probe shared by the sampled traces',
         function () {
           const sampledProbeIndexes = installSampler()
           const sampler = getSampler()
-          for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY - 2; i++) {
-            assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+          const firstProbes = [{ index: 1, id: 'probe-a' }, { index: 3, id: 'probe-c' }, { index: 4, id: 'probe-d' }]
+          const sharedProbe = { index: 2, id: 'probe-b' }
+          const requestsPerSecond = 500
+          const seconds = 3
+          const start = now
+          /** @type {Array<Record<string, number>>} */
+          const snapshotsBySecond = Array.from({ length: seconds }, () => ({}))
+
+          /**
+           * @param {Record<string, number>} snapshots - The number of snapshots emitted so far by each probe.
+           * @param {{ index: number, id: string }} probe - The probe that is hit.
+           */
+          const hit = (snapshots, { index, id }) => {
+            if (sampler.makeSampleDecision(index, id, oneSecondNs, true)) snapshots[id] = (snapshots[id] ?? 0) + 1
           }
 
-          inTrace(createTrace(), () => {
-            assert.strictEqual(sampler.makeSampleDecision(100, 'probe-1', 0n, true), true)
-            assert.strictEqual(sampler.makeSampleDecision(101, 'probe-2', 0n, true), true)
-            // The global rate limit is reached, but the trace was sampled before it was
-            assert.strictEqual(sampler.makeSampleDecision(102, 'probe-3', 0n, true), true)
-          })
-          inTrace(createTrace(), () => {
-            assert.strictEqual(sampler.makeSampleDecision(103, 'probe-4', 0n, true), false)
-          })
-          assert.strictEqual(sampler.makeSampleDecision(104, 'probe-5', 0n, true), false)
+          for (let i = 0; i < requestsPerSecond * seconds; i++) {
+            const snapshots = snapshotsBySecond[Number((now - start) / oneSecondNs)]
+            // A request reaches each of the first probes, then each of those requests reaches the shared probe
+            const requests = firstProbes.map((probe) => ({ trace: createTrace(), probe }))
+            for (const { trace, probe } of requests) inTrace(trace, () => hit(snapshots, probe))
+            for (const { trace } of requests) inTrace(trace, () => hit(snapshots, sharedProbe))
+            now += oneSecondNs / BigInt(requestsPerSecond)
+          }
 
-          assert.strictEqual(
-            Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
-            MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1
+          assert.deepStrictEqual(
+            snapshotsBySecond,
+            Array.from({ length: seconds }, () => ({ 'probe-a': 1, 'probe-b': 3, 'probe-c': 1, 'probe-d': 1 }))
           )
+          assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 6 * seconds)
+          // Both probes of every request that a first probe dropped because of its rate limit are skipped
+          const droppedRequests = (requestsPerSecond - 1) * seconds * firstProbes.length
           assert.deepStrictEqual(drainGuardrailMetrics(), [
-            ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 2],
+            ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], droppedRequests * 2],
           ])
-
-          now += oneSecondNs + 1n
-          assert.strictEqual(sampler.makeSampleDecision(104, 'probe-5', 0n, true), true)
         }
       )
 
