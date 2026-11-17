@@ -2,6 +2,7 @@
 
 const { format } = require('url')
 const {
+  fetchRequestStart,
   httpClientRequestStart,
   httpClientRequestError,
   httpClientRequestFinish,
@@ -28,6 +29,7 @@ function enable (_config) {
   httpClientRequestStart.subscribe(analyzeSsrf)
   httpClientResponseStart.subscribe(planResponseBodyCollection)
   httpClientResponseFinish.subscribe(handleResponseFinish)
+  fetchRequestStart.subscribe(analyzeFetchSsrf)
 }
 
 function disable () {
@@ -38,6 +40,7 @@ function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
   if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
+  if (fetchRequestStart.hasSubscribers) fetchRequestStart.unsubscribe(analyzeFetchSsrf)
 }
 
 function analyzeSsrf (ctx) {
@@ -46,8 +49,32 @@ function analyzeSsrf (ctx) {
 
   if (!req || !outgoingUrl) return
 
-  const requestAddresses = downstream.extractRequestData(ctx)
+  // The subcontext stays on ctx for the response evaluation of the same outgoing request.
+  runRequestEvaluation(req, outgoingUrl, downstream.extractRequestData(ctx), ctx.abortController, ctx)
+}
 
+/**
+ * Evaluates an outgoing request of the global fetch before it is sent.
+ * @param {{ req: Request, init?: import('undici-types').RequestInit, abortController: AbortController }} ctx fetch
+ *   instrumentation context, where `init` holds the options that fetch applies over `req`.
+ */
+function analyzeFetchSsrf ({ req: request, init, abortController }) {
+  const req = getActiveRequest()
+  if (!req) return
+
+  // Fetch responses are not evaluated, so the request runs in a subcontext released right away.
+  runRequestEvaluation(req, request.url, downstream.extractFetchRequestData(request, init), abortController)
+}
+
+/**
+ * Runs the request variant of SSRF RASP and aborts the outgoing request when a rule blocks it.
+ * @param {import('http').IncomingMessage} req originating request.
+ * @param {string} outgoingUrl URL of the outgoing request.
+ * @param {object} requestAddresses method and headers of the outgoing request.
+ * @param {AbortController} abortController aborts the outgoing request.
+ * @param {import('../waf').SubcontextState} [subcontextState] keeps the WAF subcontext for later evaluations.
+ */
+function runRequestEvaluation (req, outgoingUrl, requestAddresses, abortController, subcontextState) {
   const subcontextData = {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl,
     ...requestAddresses,
@@ -55,9 +82,9 @@ function analyzeSsrf (ctx) {
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'request' }
 
-  const result = waf.runSubContext(subcontextData, raspRule, ctx)
+  const result = waf.runSubContext(subcontextData, raspRule, subcontextState)
 
-  handleResult(result, req, web.getContext(req)?.res, ctx.abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
 }

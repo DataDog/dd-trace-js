@@ -407,6 +407,27 @@ describe('Cypress plugin run lifecycle', () => {
     })
   }
 
+  // Run-mode duplicate finalization is covered against real Cypress in cypress-reporting-instrumentation.spec.js.
+  // Integration tests cannot drive open-mode reruns, so this covers a rerun that never reached dd:testSuiteStart.
+  it('finalizes an interactive rerun of a spec that aborts before the suite starts', async () => {
+    const { createSpan } = prepareRunFinalization()
+    const spec = { relative: 'cypress/e2e/skipped.js' }
+    const results = {
+      tests: [{ title: ['skipped'], state: 'pending', attempts: [] }], stats: { tests: 1, pending: 1 },
+    }
+    const getTestSpan = sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+    sinon.stub(cypressPlugin, 'getTestProperties').returns({})
+    cypressPlugin.testSuiteSpan = createSpan()
+    await cypressPlugin.afterSpec(spec, results)
+
+    // Cypress delivers new results for the rerun, but no suite span was started for it.
+    await cypressPlugin.afterSpec(spec, { ...results })
+
+    sinon.assert.calledTwice(getTestSpan)
+    sinon.assert.calledOnceWithMatch(cypressPlugin.tracer.startSpan, 'cypress.test_suite')
+    sinon.assert.calledOnce(cypressPlugin.tracer.startSpan.firstCall.returnValue.finish)
+  })
+
   it('starts a suite video upload from after:run after Cypress video processing', async () => {
     const testSuiteSpan = {
       context: () => ({ toSpanId: () => '456' }),
