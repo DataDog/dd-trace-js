@@ -36,6 +36,80 @@ describe('initialize.mjs', () => {
   })
 })
 
+describe('Lambda loader registration', () => {
+  it('initializes synchronous hooks when module.register is unavailable', function () {
+    const { supportsSyncHooks } = require('../../../vendor/dist/import-in-the-middle/create-hook')
+    if (!supportsSyncHooks()) {
+      // Older Node.js releases still use the asynchronous loader.
+      this.skip()
+    }
+
+    const result = spawnSync(process.execPath, ['--no-experimental-require-module', '--input-type=module', '--eval', `
+      import Module from 'node:module'
+
+      const originalRegisterHooks = Module.registerHooks
+      let registrations = 0
+      Module.registerHooks = (options) => {
+        registrations++
+        return originalRegisterHooks(options)
+      }
+      Module.register = undefined
+      Module.syncBuiltinESMExports()
+
+      await import(${JSON.stringify(pathToFileURL(join(repositoryRoot, 'initialize.mjs')).href)})
+      console.log(registrations)
+    `], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '', DD_INJECT_FORCE: 'true', DD_TRACE_STARTUP_LOGS: 'false' },
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, '1\n')
+    assert.doesNotMatch(result.stderr, /DEP0205|could not register synchronous loader hooks/)
+  })
+
+  for (const [entry, fixture] of [
+    ['initialize.mjs', 'instrument.js'],
+    ['initialize.mjs', 'instrument.mjs'],
+    ['register.js', 'instrument.js'],
+    ['register.js', 'instrument.mjs'],
+  ]) {
+    it(`instruments ${fixture} through ${entry} without require(esm) or deprecated hooks`, function () {
+      if (!process.allowedNodeEnvironmentFlags.has('--no-experimental-require-module')) {
+        // Older Node.js releases do not recognize this flag.
+        this.skip()
+      }
+      // Older Node.js versions still need the asynchronous loader.
+      const { supportsSyncHooks } = require('../../../vendor/dist/import-in-the-middle/create-hook')
+      if (!supportsSyncHooks()) {
+        // Older Node.js releases still use the asynchronous loader.
+        this.skip()
+      }
+
+      const result = spawnSync(process.execPath, [
+        '--no-experimental-require-module',
+        '--no-experimental-detect-module',
+        ...(entry === 'initialize.mjs'
+          ? ['--import', pathToFileURL(join(repositoryRoot, entry)).href]
+          : ['--require', join(repositoryRoot, 'init.js'), '--require', join(repositoryRoot, entry)]),
+        join(repositoryRoot, 'integration-tests/init', fixture),
+      ], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '',
+          DD_INJECT_FORCE: 'true',
+          DD_TRACE_STARTUP_LOGS: 'false',
+        },
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.match(result.stdout, /^true\n/)
+      assert.doesNotMatch(result.stderr, /DEP0205|could not register synchronous loader hooks/)
+    })
+  }
+})
+
 /**
  * @param {string[]} [execArgv]
  */
@@ -165,6 +239,50 @@ describe('loader hook', () => {
       sequence: ['activation', 'start'],
       starts: 1,
     })
+  })
+
+  it('rewrites ESM dependencies through synchronous hooks when require(esm) is disabled', function () {
+    const { supportsSyncHooks } = require('../../../vendor/dist/import-in-the-middle/create-hook')
+    if (!supportsSyncHooks()) {
+      // Older Node.js releases still use the asynchronous loader.
+      this.skip()
+    }
+
+    assert.deepStrictEqual(runPureLoaderPipeline({ version: '5.66.0', sync: true }), {
+      activations: 1,
+      compatibility: ['rewritten'],
+      iitmCalls: 0,
+      result: 'added',
+      sequence: ['activation', 'start'],
+      starts: 1,
+    })
+  })
+
+  it('shares ESM export hooks with the public import-in-the-middle registry', function () {
+    const { supportsSyncHooks } = require('../../../vendor/dist/import-in-the-middle/create-hook')
+    if (!supportsSyncHooks()) {
+      // Older Node.js releases still use the asynchronous loader.
+      this.skip()
+    }
+
+    const packageDirectory = join(temporaryDirectory, 'node_modules', 'graphql')
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ type: 'module' }))
+    const fixture = join(packageDirectory, 'index.mjs')
+    writeFileSync(fixture, 'export function parse () { return "original" }\n')
+
+    const result = spawnSync(process.execPath, ['--no-experimental-require-module', '--eval', `
+      const { Hook } = require(${JSON.stringify(require.resolve('import-in-the-middle'))})
+      Hook(['graphql'], { internals: true }, exports => {
+        exports.parse = () => 'instrumented'
+      })
+      require(${JSON.stringify(join(repositoryRoot, 'register.js'))})
+      import(${JSON.stringify(pathToFileURL(fixture).href)}).then(({ parse }) => console.log(parse()))
+    `], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, 'instrumented\n')
+    assert.doesNotMatch(result.stderr, /DEP0205|could not register synchronous loader hooks/)
   })
 
   it('does not rewrite or activate disabled and unsupported pure modules in the asynchronous loader', () => {
@@ -308,7 +426,7 @@ describe('loader hook', () => {
     })
   })
 
-  function runPureLoaderPipeline ({ disabled = false, version }) {
+  function runPureLoaderPipeline ({ disabled = false, version, sync = false }) {
     const packageDirectory = join(temporaryDirectory, 'node_modules', 'bullmq')
     const fixturePath = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')
     const mainPath = join(temporaryDirectory, `main-${disabled}-${version}.cjs`)
@@ -333,7 +451,9 @@ describe('loader hook', () => {
         iitmCalls++
         return exports
       })
-      register(${JSON.stringify(loaderHookUrl)}, pathToFileURL(__filename))
+      ${sync
+        ? `require(${JSON.stringify(join(repositoryRoot, 'register.js'))})`
+        : `register(${JSON.stringify(loaderHookUrl)}, pathToFileURL(__filename))`}
 
       let activations = 0
       const compatibility = []
@@ -359,7 +479,10 @@ describe('loader hook', () => {
       })
     `)
 
-    const result = spawnSync(process.execPath, [mainPath], {
+    const result = spawnSync(process.execPath, [
+      ...(sync ? ['--no-experimental-require-module', '--no-experimental-detect-module'] : []),
+      mainPath,
+    ], {
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -367,6 +490,7 @@ describe('loader hook', () => {
       },
     })
     assert.strictEqual(result.status, 0, result.stderr)
+    if (sync) assert.doesNotMatch(result.stderr, /DEP0205|could not register synchronous loader hooks/)
     return JSON.parse(result.stdout.trim())
   }
 })

@@ -26,7 +26,7 @@ const brokenLoaders = NODE_VERSION.startsWith('18.0')
 const isNode20LoaderWorker = !isMainThread && NODE_VERSION.startsWith('20.0')
 const useDefaultLoader = brokenLoaders || isNode20LoaderWorker
 // Avoid CommonJS in the loader worker on Node 20.0: https://github.com/nodejs/node/issues/47566
-const loaderHook = useDefaultLoader ? undefined : await import('./loader-hook.mjs?initialize')
+const loaderHook = useDefaultLoader ? undefined : await import('./loader-hook.mjs')
 
 let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href

@@ -6,12 +6,14 @@
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
+const { createRequire } = require('node:module')
 const { join } = require('node:path')
 
-const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
+const { CopyRspackPlugin, DefinePlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 
 const { dependencies } = require('./package.json')
+const rootRequire = createRequire(join(__dirname, '..', 'package.json'))
 
 const include = new Set([
   ...Object.keys(dependencies),
@@ -27,7 +29,29 @@ const exclude = new Set([
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
-module.exports = {
+function createLicensePlugin () {
+  return new LicenseWebpackPlugin({
+    outputFilename: '[name]/LICENSE',
+    handleMissingLicenseText: (packageName, licenseType) => licenseType,
+    // Module order depends on the installer's layout, so the first module does not identify the entry package.
+    renderLicenses: modules => modules
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(licenseModule => {
+        if (!licenseModule.licenseText) {
+          throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+        }
+        return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+      })
+      .join(`\n${'-'.repeat(78)}\n\n`),
+    stats: {
+      warnings: false,
+    },
+  })
+}
+
+const config = {
+  name: 'dependencies',
   entry: Object.fromEntries(difference.entries()),
   target: 'node',
   mode: 'production',
@@ -69,24 +93,7 @@ module.exports = {
     '@opentelemetry/api': '@opentelemetry/api',
   },
   plugins: [
-    new LicenseWebpackPlugin({
-      outputFilename: '[name]/LICENSE',
-      handleMissingLicenseText: (packageName, licenseType) => licenseType,
-      // Module order depends on the installer's layout, so the first module does not identify the entry package.
-      renderLicenses: modules => modules
-        .slice()
-        .sort((left, right) => left.name.localeCompare(right.name))
-        .map(licenseModule => {
-          if (!licenseModule.licenseText) {
-            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
-          }
-          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
-        })
-        .join(`\n${'-'.repeat(78)}\n\n`),
-      stats: {
-        warnings: false,
-      },
-    }),
+    createLicensePlugin(),
     new CopyRspackPlugin({
       patterns: [
         {
@@ -110,3 +117,30 @@ module.exports = {
     clean: true,
   },
 }
+
+// Only the pure loader helper is bundled. The public import-in-the-middle registry
+// and its generated wrappers must keep using the application's shared dependency.
+// A CommonJS build lets synchronous preloads install hooks when require(esm) is disabled.
+module.exports = [config, {
+  ...config,
+  name: 'loader-helper',
+  dependencies: ['dependencies'],
+  context: join(__dirname, '..'),
+  entry: {
+    'import-in-the-middle/create-hook': rootRequire.resolve('import-in-the-middle/create-hook.mjs'),
+  },
+  optimization: {
+    ...config.optimization,
+    concatenateModules: false,
+  },
+  plugins: [
+    createLicensePlugin(),
+    new DefinePlugin({
+      'import.meta.url': 'require("node:url").pathToFileURL(__filename).href',
+    }),
+  ],
+  output: {
+    ...config.output,
+    clean: false,
+  },
+}]

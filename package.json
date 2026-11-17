@@ -167,6 +167,7 @@
     "LICENSE",
     "LICENSE.Apache",
     "LICENSE.BSD3",
+    "loader-hook.js",
     "loader-hook.mjs",
     "lambda.d.ts",
     "lambda.js",

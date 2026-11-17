@@ -33,12 +33,10 @@ describe('register.js', () => {
   it('falls back to the async loader on unsupported Node.js versions', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(true)
-    const supportsSyncHooks = sinon.stub().throws(new Error('should not be called'))
 
     loadRegister({
       register,
       registerSyncLoaderHooks,
-      supportsSyncHooks,
       version: {
         NODE_MAJOR: 24,
         NODE_MINOR: 11,
@@ -47,7 +45,6 @@ describe('register.js', () => {
     })
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
-    sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.notCalled(emitWarning)
   })
@@ -59,7 +56,6 @@ describe('register.js', () => {
     loadRegister({
       register,
       registerSyncLoaderHooks,
-      supportsSyncHooks: () => true,
     })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
@@ -74,7 +70,6 @@ describe('register.js', () => {
     loadRegister({
       register,
       registerSyncLoaderHooks,
-      supportsSyncHooks: () => true,
     })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
@@ -90,7 +85,6 @@ describe('register.js', () => {
     loadRegister({
       register,
       registerSyncLoaderHooks,
-      supportsSyncHooks: () => true,
     })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
@@ -101,24 +95,6 @@ describe('register.js', () => {
     )
   })
 
-  it('falls back to the async loader if require(esm) is disabled', () => {
-    const register = sinon.stub()
-    const error = new Error('require(esm) is disabled')
-    error.code = 'ERR_REQUIRE_ESM'
-
-    loadRegister({
-      register,
-      loaderHook: createThrowingLoaderHook(error),
-      supportsSyncHooks: () => true,
-    })
-
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
-    sinon.assert.calledOnceWithMatch(
-      emitWarning,
-      /dd-trace could not register synchronous loader hooks.*require\(esm\) is disabled/
-    )
-  })
-
   it('warns and falls back if sync loader import fails', () => {
     const register = sinon.stub()
     const error = new Error('loader import failure')
@@ -126,7 +102,6 @@ describe('register.js', () => {
     loadRegister({
       register,
       loaderHook: createThrowingLoaderHook(error),
-      supportsSyncHooks: () => true,
     })
 
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
@@ -136,33 +111,27 @@ describe('register.js', () => {
     )
   })
 
-  it('skips the async loader if module.register has been removed', () => {
-    const requireEsmError = new Error('require(esm) is disabled')
-    requireEsmError.code = 'ERR_REQUIRE_ESM'
+  it('registers sync loader hooks when module.register is unavailable', () => {
+    const registerSyncLoaderHooks = sinon.stub().returns(true)
 
     loadRegister({
       register: undefined,
-      registerSyncLoaderHooks: sinon.stub().throws(new Error('should not be called')),
-      supportsSyncHooks: sinon.stub().throws(requireEsmError),
-      version: { NODE_MAJOR: 27, NODE_MINOR: 0, NODE_PATCH: 0 },
+      registerSyncLoaderHooks,
     })
 
+    sinon.assert.calledOnce(registerSyncLoaderHooks)
     sinon.assert.notCalled(emitWarning)
   })
 
-  it('warns and falls back if sync hook support detection fails', () => {
-    const register = sinon.stub()
-    const error = new Error('support detection failure')
-
+  it('warns when synchronous registration fails and module.register is unavailable', () => {
     loadRegister({
-      register,
-      supportsSyncHooks: () => { throw error },
+      register: undefined,
+      registerSyncLoaderHooks: sinon.stub().throws(new Error('sync hook failure')),
     })
 
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(
       emitWarning,
-      /dd-trace could not register synchronous loader hooks.*support detection failure/
+      /ESM instrumentation is unavailable.*sync hook failure/
     )
   })
 })
@@ -175,11 +144,10 @@ function createThrowingLoaderHook (error) {
   })
 }
 
-function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
+function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, version }) {
   proxyquire('../../../register.js', {
     'node:module': { register },
-    'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
-    './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
+    './loader-hook.js': loaderHook || { registerSyncLoaderHooks },
     './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
   })
 }
