@@ -11,6 +11,7 @@ const { match } = sinon
 require('../../setup/core')
 
 const { Log } = require('../../../src/log/log')
+const SafeError = require('../../../src/log/safe-error')
 
 describe('telemetry logs', () => {
   let defaultConfig
@@ -161,6 +162,20 @@ describe('telemetry logs', () => {
           level: 'ERROR',
           errorType: 'Error',
           stack_trace: stack,
+        }))
+        assert.ok(!('safeErrorMessage' in logCollectorAdd.firstCall.args[0]))
+      })
+
+      it('should collect the message of a SafeError cause', () => {
+        const error = new SafeError('Unknown probe id')
+        errorLog.publish({ cause: error, sendViaTelemetry: true })
+
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          message: 'Generic Error',
+          level: 'ERROR',
+          errorType: 'SafeError',
+          safeErrorMessage: 'Unknown probe id',
+          stack_trace: error.stack,
         }))
       })
 
