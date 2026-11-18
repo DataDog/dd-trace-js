@@ -9,8 +9,8 @@ const web = require('../../dd-trace/src/plugins/util/web')
 class ExpressCodeOriginForSpansPlugin extends Plugin {
   static id = 'express'
 
-  constructor (...args) {
-    super(...args)
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
 
     const layerTags = new WeakMap()
 

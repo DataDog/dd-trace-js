@@ -3,7 +3,7 @@
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 
 /**
- * @param {ReturnType<import('../config')>} config - Debugger configuration
+ * @param {NonNullable<ReturnType<import('../config')>>} config - Debugger configuration
  * @param {string} hostname - Host name
  * @param {string} debuggerVersion - Debugger version
  * @param {typeof import('./log')} log - Debugger logger

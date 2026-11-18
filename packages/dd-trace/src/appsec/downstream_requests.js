@@ -1,5 +1,8 @@
 'use strict'
 
+// Headers is only used for requests of the global fetch, which comes with it.
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['Headers'] }] */
+
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { isEmpty } = require('../util')
@@ -26,6 +29,19 @@ const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_MISSING =
   '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
 const RESPONSE_BODY_IGNORED_TAG_CONTENT_LENGTH_TOO_BIG =
   '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
+
+const HTTP_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~\dA-Za-z]+$/
+const FORBIDDEN_FETCH_METHODS = new Set(['connect', 'trace', 'track'])
+const ARRAY_ITERATOR = Array.prototype[Symbol.iterator]
+const NORMALIZED_FETCH_METHODS = new Map([
+  ['delete', 'DELETE'],
+  ['get', 'GET'],
+  ['head', 'HEAD'],
+  ['options', 'OPTIONS'],
+  ['post', 'POST'],
+  ['put', 'PUT'],
+  ['query', 'QUERY'],
+])
 
 let config
 let samplingRate
@@ -212,6 +228,94 @@ function extractRequestData (ctx) {
 }
 
 /**
+ * Extracts request data from an outgoing fetch request for WAF analysis.
+ * @param {Request} request outgoing fetch request.
+ * @param {import('undici-types').RequestInit} [init] options that fetch applies over `request`.
+ * @returns {object} a map of addresses and request data.
+ */
+function extractFetchRequestData (request, init) {
+  /** @type {Record<string, unknown>} */
+  const addresses = {}
+
+  // An override that can't be read as plain data is left out rather than reported with the value it replaces.
+  const method = init?.method === undefined ? request.method : getFetchMethod(init.method)
+  if (method !== undefined) {
+    addresses[HTTP_OUTGOING_METHOD] = method
+  }
+
+  // Header names of a fetch request are already lowercase.
+  const headers = init?.headers === undefined ? Object.fromEntries(request.headers) : getFetchHeaders(init.headers)
+  if (headers !== undefined && !isEmpty(headers)) {
+    addresses[HTTP_OUTGOING_HEADERS] = headers
+  }
+
+  return addresses
+}
+
+/**
+ * Returns the method that fetch sends for a method option, or undefined when fetch would reject it or would have to
+ * convert it to a string.
+ * @param {unknown} method method option of a fetch call.
+ * @returns {string | undefined}
+ */
+function getFetchMethod (method) {
+  if (typeof method !== 'string' || !HTTP_TOKEN_PATTERN.test(method)) return
+
+  const lowercaseMethod = method.toLowerCase()
+  if (FORBIDDEN_FETCH_METHODS.has(lowercaseMethod)) return
+
+  return NORMALIZED_FETCH_METHODS.get(lowercaseMethod) ?? method
+}
+
+/**
+ * Returns the headers that fetch sends for a headers option, or undefined when the option is not plain data. Iterables
+ * other than plain arrays and Headers objects are left out: reading them could consume the values that fetch sends.
+ * @param {unknown} headers headers option of a fetch call.
+ * @returns {Record<string, string> | undefined}
+ */
+function getFetchHeaders (headers) {
+  if (typeof headers !== 'object' || headers === null) return
+
+  try {
+    const iterator = headers[Symbol.iterator]
+    let entries
+    if (iterator == null) {
+      entries = Object.entries(headers)
+      if (!entries.every(([, value]) => isFetchHeaderPrimitive(value))) return
+    } else if (iterator === ARRAY_ITERATOR && Array.isArray(headers)) {
+      if (!headers.every(isFetchHeaderEntry)) return
+      entries = headers
+    } else if (headers instanceof Headers && iterator === Headers.prototype[Symbol.iterator]) {
+      return Object.fromEntries(headers)
+    } else {
+      return
+    }
+
+    // Headers applies the normalization of fetch, and rejects the names and values that fetch rejects.
+    return Object.fromEntries(new Headers(entries))
+  } catch {}
+}
+
+/**
+ * @param {unknown} entry entry of a headers option given as an array.
+ */
+function isFetchHeaderEntry (entry) {
+  return Array.isArray(entry) &&
+    entry[Symbol.iterator] === ARRAY_ITERATOR &&
+    entry.length === 2 &&
+    isFetchHeaderPrimitive(entry[0]) &&
+    isFetchHeaderPrimitive(entry[1])
+}
+
+/**
+ * Tells whether fetch converts a header name or value to a string without calling code of the application.
+ * @param {unknown} value header name or value of a headers option.
+ */
+function isFetchHeaderPrimitive (value) {
+  return value === null || (typeof value !== 'object' && typeof value !== 'function' && typeof value !== 'symbol')
+}
+
+/**
  * Extracts response data for WAF analysis.
  * @param {import('http').IncomingMessage} res downstream response object.
  * @param {Buffer|string|object|null} responseBody response body.
@@ -341,5 +445,6 @@ module.exports = {
   incrementDownstreamAnalysisCount,
   extractMimeType,
   extractRequestData,
+  extractFetchRequestData,
   extractResponseData,
 }

@@ -108,7 +108,7 @@ async function teardown () {
  */
 async function setAndTriggerBreakpoint (path, line, trigger) {
   const target = require(path)
-  trigger ??= target.run
+  trigger ??= /** @type {() => void} */ (target.run)
   await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId: await target.scriptId,
