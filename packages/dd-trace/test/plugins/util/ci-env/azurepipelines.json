@@ -497,6 +497,7 @@
       "git.branch": "pr",
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
+      "git.commit.head.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.commit.message": "azure-pipelines-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
@@ -536,6 +537,7 @@
       "git.branch": "pr",
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
+      "git.commit.head.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.commit.message": "azure-pipelines-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
@@ -575,6 +577,7 @@
       "git.branch": "pr",
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
+      "git.commit.head.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.commit.message": "azure-pipelines-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
