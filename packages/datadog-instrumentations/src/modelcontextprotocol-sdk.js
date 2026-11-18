@@ -12,8 +12,38 @@ const serverRequestCh = tracingChannel('apm:mcp:server:request')
 const clientRequestInjectCh = channel('apm:mcp:client:request:inject')
 const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
+// Published before Client.callTool sends tools/call, with the client, its transport, the raw
+// transport values and the call arguments. A subscriber may set this hook, and this
+// instrumentation applies it:
+//   beforeCall () => Promise<void>|undefined   the call starts only after the promise fulfils,
+//                                               and a rejection cancels the call with that reason
+// The original gets ctx.arguments when the call starts. A subscriber may replace ctx.arguments[0],
+// for example with a copy of the params that it checked. Then later changes to the params of the
+// application cannot reach the server. The channel gets no call of a client without a transport,
+// and no call of a tool that the client knows to require task-based execution. The SDK rejects
+// both before it sends anything. Other checks of the SDK run after the hook and can still reject a
+// published call, for example strict capabilities or a signal that is already aborted.
+// The client can close its connection and connect to another server while the hook promise is
+// pending. Then the call does not start on the new transport with the old hook. This instrumentation
+// publishes the call again, with the new transport and the current ctx.arguments, and applies the new
+// hook. Thus one callTool can publish more than once, but the original runs once.
+const callToolInterceptCh = channel('dd-trace:mcp:callTool:intercept')
+
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
+const SDK_VERSIONS = ['>=1.27.1']
+
+// The client transports by the type that subscribers get. The CommonJS and ESM builds load
+// different classes, so each build adds its own entry.
+const TRANSPORT_EXPORTS = [
+  ['client/stdio.js', 'StdioClientTransport', 'stdio'],
+  ['client/sse.js', 'SSEClientTransport', 'sse'],
+  ['client/streamableHttp.js', 'StreamableHTTPClientTransport', 'streamable_http'],
+  ['client/websocket.js', 'WebSocketClientTransport', 'websocket'],
+  ['inMemory.js', 'InMemoryTransport', 'in_process'],
+]
+const transportClasses = new Map()
+const transportInfos = new WeakMap()
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
 // _onrequest (span start, in the correct HTTP async context), the SDK request
@@ -219,6 +249,156 @@ function wrapMcpServer (McpServer) {
   })
 
   return McpServer
+}
+
+/**
+ * Reads the raw values that identify the server of a client transport. It reads only the stdio
+ * command and arguments, or the URL of a remote transport. It never reads headers, request
+ * options, authentication data, environment or working directory.
+ *
+ * @param {object} transport
+ * @returns {{ type: string, command?: unknown, args?: unknown, url?: unknown }}
+ */
+function describeTransport (transport) {
+  try {
+    for (const [Transport, type] of transportClasses) {
+      if (!(transport instanceof Transport)) continue
+
+      if (type === 'stdio') {
+        const params = transport._serverParams
+        return { type, command: params?.command, args: params?.args }
+      }
+      return type === 'in_process' ? { type } : { type, url: transport._url }
+    }
+  } catch {
+    // A transport that cannot be inspected is reported without metadata.
+  }
+  return { type: 'unknown' }
+}
+
+/**
+ * @param {unknown} transport
+ * @returns {{ type: string, command?: unknown, args?: unknown, url?: unknown }|undefined}
+ */
+function getTransportInfo (transport) {
+  if (transport === null || typeof transport !== 'object') return
+
+  let info = transportInfos.get(transport)
+  if (info === undefined) {
+    info = describeTransport(transport)
+    transportInfos.set(transport, info)
+  }
+  return info
+}
+
+/**
+ * @typedef {object} CallToolInterceptContext
+ * @property {object} client
+ * @property {unknown} transport
+ * @property {ReturnType<typeof getTransportInfo>} transportInfo
+ * @property {IArguments} arguments
+ * @property {() => Promise<unknown>|undefined} [beforeCall]
+ */
+
+/**
+ * Runs the hook that a subscriber installed. A failure of the hook itself lets the call run.
+ *
+ * @param {CallToolInterceptContext} ctx
+ * @returns {Promise<unknown>|undefined}
+ */
+function startBeforeCall (ctx) {
+  if (typeof ctx.beforeCall !== 'function') return
+
+  let pending
+  try {
+    pending = ctx.beforeCall()
+  } catch {
+    // The hook must not break the call.
+    return
+  }
+  return typeof pending?.then === 'function' ? pending : undefined
+}
+
+/**
+ * Returns whether the SDK rejects the call because the tool requires task-based execution.
+ *
+ * @param {{ isToolTaskRequired?: (name: unknown) => unknown }} client
+ * @param {unknown} params
+ */
+function isTaskRequired (client, params) {
+  try {
+    const name = /** @type {{ name?: unknown }|undefined} */ (params)?.name
+    return typeof client.isToolTaskRequired === 'function' && client.isToolTaskRequired(name) === true
+  } catch {
+    return false
+  }
+}
+
+// Shimmer, not Orchestrion, like the other AI Guard interceptors. The call waits for an asynchronous
+// check before tools/call is sent. A rejected check must cancel the call, and the original must get
+// the params that the subscriber put in ctx.arguments. The awaitContextCallback rewriter transform
+// can hold a call, but it ignores a rejection and cannot replace the arguments. The wrapper is on the
+// exported Client class, so this check runs before the Orchestrion span of Client_callTool starts.
+/**
+ * @param {Function} callTool
+ */
+function wrapCallTool (callTool) {
+  return function callToolWithIntercept () {
+    if (!callToolInterceptCh.hasSubscribers) return callTool.apply(this, arguments)
+
+    const transport = this?.transport
+    // The SDK rejects these calls with its own error before it sends anything.
+    if (!transport || isTaskRequired(this, arguments[0])) return callTool.apply(this, arguments)
+
+    /** @type {CallToolInterceptContext} */
+    const ctx = { client: this, transport, transportInfo: getTransportInfo(transport), arguments }
+    callToolInterceptCh.publish(ctx)
+
+    const pending = startBeforeCall(ctx)
+    const args = ctx.arguments
+    if (!pending) return callTool.apply(this, args)
+
+    return pending.then(() => {
+      // The hook checked the call for the server of its transport.
+      if (this?.transport === transport) return callTool.apply(this, args)
+      return callToolWithIntercept.apply(this, /** @type {[]} */ (/** @type {unknown} */ (args)))
+    })
+  }
+}
+
+/**
+ * @param {Function|undefined} Client
+ */
+function wrapClient (Client) {
+  const prototype = Client?.prototype
+  if (typeof prototype?.callTool === 'function') shimmer.wrap(prototype, 'callTool', wrapCallTool)
+  return Client
+}
+
+/**
+ * @param {unknown} Transport
+ * @param {string} type
+ */
+function captureTransport (Transport, type) {
+  if (typeof Transport === 'function') transportClasses.set(Transport, type)
+}
+
+for (const build of ['cjs', 'esm']) {
+  addHook({
+    name: '@modelcontextprotocol/sdk',
+    versions: SDK_VERSIONS,
+    file: `dist/${build}/client/index.js`,
+  }, exports => {
+    wrapClient(/** @type {{ Client?: Function }} */ (exports).Client)
+    return exports
+  })
+
+  for (const [file, exportName, type] of TRANSPORT_EXPORTS) {
+    addHook({ name: '@modelcontextprotocol/sdk', versions: SDK_VERSIONS, file: `dist/${build}/${file}` }, exports => {
+      captureTransport(/** @type {Record<string, unknown>} */ (exports)[exportName], type)
+      return exports
+    })
+  }
 }
 
 addHook({

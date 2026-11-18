@@ -6,10 +6,14 @@ const express = require('express')
 function startApiMock () {
   return new Promise((resolve, reject) => {
     try {
+      // The bodies of the evaluate requests, in order, so specs can assert on the exact payloads.
+      const requests = []
       const app = express()
-      app.use(express.json())
+      // The evaluation of a large in-process argument can have a few megabytes.
+      app.use(express.json({ limit: '64mb' }))
       app.post('/evaluate', (req, res) => {
         const body = req.body
+        requests.push(body)
         const attributes = body?.data?.attributes
         if (!attributes?.messages || !attributes?.meta) {
           return res
@@ -51,6 +55,13 @@ function startApiMock () {
         }
         let blocking = content.endsWith('[block]')
 
+        // A monitored violation: DENY, but the service does not ask the tracer to block.
+        if (messages.some(msg => extractContent(msg).includes('[monitor]'))) {
+          action = 'DENY'
+          reason = 'Monitored by policy'
+          blocking = false
+        }
+
         // Check all messages for DENY marker
         for (const msg of messages) {
           const msgContent = extractContent(msg)
@@ -75,7 +86,7 @@ function startApiMock () {
           })
       })
       const server = app.listen(() => {
-        resolve(server)
+        resolve(Object.assign(server, { requests }))
       })
     } catch (e) {
       reject(e)
