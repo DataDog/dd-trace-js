@@ -27,6 +27,7 @@ const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 // pending. Then the call does not start on the new transport with the old hook. This instrumentation
 // publishes the call again, with the new transport and the current ctx.arguments, and applies the new
 // hook. Thus one callTool can publish more than once, but the original runs once.
+// MCP v1 (@modelcontextprotocol/sdk) and MCP v2 (@modelcontextprotocol/client) use the same contract.
 const callToolInterceptCh = channel('dd-trace:mcp:callTool:intercept')
 // Published when Client.listTools resolves, before the caller gets the tools.
 const listToolsResultCh = channel('dd-trace:mcp:listTools:result')
@@ -468,4 +469,4 @@ addHook({
   return exports
 })
 
-module.exports = { addTraceContextToRequest }
+module.exports = { addTraceContextToRequest, captureTransport, wrapClient }

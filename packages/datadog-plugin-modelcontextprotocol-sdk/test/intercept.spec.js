@@ -40,6 +40,8 @@ const SUITES = [
   {
     packageName: '@modelcontextprotocol/sdk',
     subModule: '@modelcontextprotocol/sdk/client',
+    // Only MCP v1 has the client check of task-based tools.
+    v1: true,
     load (meta) {
       const sdkDir = sdkRoot(meta.versionMod.getPath('@modelcontextprotocol/sdk/client'))
       const load = file => require(path.join(sdkDir, 'dist/cjs', file))
@@ -50,6 +52,24 @@ const SUITES = [
         SSEClientTransport: load('client/sse.js').SSEClientTransport,
         StdioClientTransport: load('client/stdio.js').StdioClientTransport,
         StreamableHTTPClientTransport: load('client/streamableHttp.js').StreamableHTTPClientTransport,
+      }
+    },
+  },
+  {
+    packageName: '@modelcontextprotocol/client',
+    subModule: '@modelcontextprotocol/client',
+    v1: false,
+    // The MCP v2 client talks to the latest MCP v1 servers with the same protocol. The instrumentation
+    // under test is only on the client side.
+    load (meta) {
+      const v1 = require('../../../versions/@modelcontextprotocol/sdk')
+      return {
+        ...loadV1Servers(sdkRoot(v1.getPath('@modelcontextprotocol/sdk/client'))),
+        Client: meta.mod.Client,
+        InMemoryTransport: meta.mod.InMemoryTransport,
+        SSEClientTransport: meta.mod.SSEClientTransport,
+        StdioClientTransport: meta.versionMod.get('@modelcontextprotocol/client/stdio').StdioClientTransport,
+        StreamableHTTPClientTransport: meta.mod.StreamableHTTPClientTransport,
       }
     },
   },
@@ -254,34 +274,36 @@ for (const suite of SUITES) {
         assert.strictEqual(published.length, 0)
       })
 
-      it('publishes no call of a tool that requires task-based execution', async () => {
-        const published = []
-        subscribe(callToolInterceptCh, ctx => published.push(ctx))
-        const taskServer = new sdk.McpServer({ name: 'task-server', version: '1.0.0' }, {
-          capabilities: { tasks: { requests: { tools: { call: {} } } } },
-        })
-        const unused = () => { throw new Error('not used') }
-        taskServer.experimental.tasks.registerToolTask('task_tool', {
-          description: 'Requires a task',
-          inputSchema: { text: sdk.z.string() },
-        }, { createTask: unused, getTask: unused, getTaskResult: unused })
-        const [clientTransport, serverTransport] = sdk.InMemoryTransport.createLinkedPair()
-        await taskServer.connect(serverTransport)
-        const taskClient = new sdk.Client({ name: 'test-client', version: '1.0.0' })
-        await taskClient.connect(clientTransport)
-        await taskClient.listTools()
-
-        try {
-          await assert.rejects(taskClient.callTool({ name: 'task_tool', arguments: { text: 'x' } }), {
-            name: 'McpError',
-            message: /requires task-based execution/,
+      if (suite.v1) {
+        it('publishes no call of a tool that requires task-based execution', async () => {
+          const published = []
+          subscribe(callToolInterceptCh, ctx => published.push(ctx))
+          const taskServer = new sdk.McpServer({ name: 'task-server', version: '1.0.0' }, {
+            capabilities: { tasks: { requests: { tools: { call: {} } } } },
           })
-          assert.strictEqual(published.length, 0)
-        } finally {
-          await taskClient.close()
-          await taskServer.close()
-        }
-      })
+          const unused = () => { throw new Error('not used') }
+          taskServer.experimental.tasks.registerToolTask('task_tool', {
+            description: 'Requires a task',
+            inputSchema: { text: sdk.z.string() },
+          }, { createTask: unused, getTask: unused, getTaskResult: unused })
+          const [clientTransport, serverTransport] = sdk.InMemoryTransport.createLinkedPair()
+          await taskServer.connect(serverTransport)
+          const taskClient = new sdk.Client({ name: 'test-client', version: '1.0.0' })
+          await taskClient.connect(clientTransport)
+          await taskClient.listTools()
+
+          try {
+            await assert.rejects(taskClient.callTool({ name: 'task_tool', arguments: { text: 'x' } }), {
+              name: 'McpError',
+              message: /requires task-based execution/,
+            })
+            assert.strictEqual(published.length, 0)
+          } finally {
+            await taskClient.close()
+            await taskServer.close()
+          }
+        })
+      }
 
       it('publishes the listed tools before the caller gets them', async () => {
         const published = []
