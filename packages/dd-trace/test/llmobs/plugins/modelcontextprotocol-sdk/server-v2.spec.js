@@ -8,6 +8,22 @@ const { assertLlmObsSpanEvent, MOCK_STRING, useLlmObs } = require('../../util')
 const BASE_TAGS = { ml_app: 'test', integration: 'modelcontextprotocol-sdk' }
 const TOOL_RESULT = { content: [{ type: 'text', text: 'Result from test-tool' }] }
 
+/**
+ * The 2.x client is traced too, so each request also has a client span, which is the parent of the server span.
+ *
+ * @param {{ apmSpans: Array<{ resource: string }>, llmobsSpans: Array<{ name: string, span_id: string }> }} events
+ * @param {string} serverName
+ * @param {string} serverResource
+ * @param {string} clientName
+ */
+function findServerSpan ({ apmSpans, llmobsSpans }, serverName, serverResource, clientName) {
+  return {
+    llmobsSpan: llmobsSpans.find(span => span.name === serverName),
+    apmSpan: apmSpans.find(span => span.resource === serverResource),
+    parentId: llmobsSpans.find(span => span.name === clientName).span_id,
+  }
+}
+
 describe('integrations', () => {
   describe('modelcontextprotocol-sdk with @modelcontextprotocol/server 2.x', () => {
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
@@ -47,10 +63,13 @@ describe('integrations', () => {
         it('creates a server tool span for tools/call', async () => {
           await client.callTool({ name: 'test-tool', arguments: { query: 'hello' } })
 
-          const { apmSpans, llmobsSpans } = await getEvents()
+          const { llmobsSpan, apmSpan, parentId } = findServerSpan(
+            await getEvents(2), 'test-tool', 'server_tool_call', 'MCP Client Tool Call: test-tool'
+          )
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(llmobsSpan, {
+            span: apmSpan,
+            parentId,
             spanKind: 'tool',
             name: 'test-tool',
             inputValue: JSON.stringify({
@@ -75,10 +94,13 @@ describe('integrations', () => {
         it('creates a task span for other methods', async () => {
           await client.listTools()
 
-          const { apmSpans, llmobsSpans } = await getEvents()
+          const { llmobsSpan, apmSpan, parentId } = findServerSpan(
+            await getEvents(2), 'mcp.tools/list', 'tools/list', 'MCP Client List Tools'
+          )
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(llmobsSpan, {
+            span: apmSpan,
+            parentId,
             spanKind: 'task',
             name: 'mcp.tools/list',
             inputValue: JSON.stringify({ method: 'tools/list', jsonrpc: '2.0', id: 1 }),
@@ -118,10 +140,13 @@ describe('integrations', () => {
         it('tags the envelope client info and keeps the reserved _meta keys in the input', async () => {
           await client.callTool({ name: 'test-tool', arguments: {}, _meta: { _dd_trace_context: {}, keep: 'me' } })
 
-          const { apmSpans, llmobsSpans } = await getEvents()
+          const { llmobsSpan, apmSpan, parentId } = findServerSpan(
+            await getEvents(2), 'test-tool', 'server_tool_call', 'MCP Client Tool Call: test-tool'
+          )
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(llmobsSpan, {
+            span: apmSpan,
+            parentId,
             spanKind: 'tool',
             name: 'test-tool',
             inputValue: JSON.stringify({
