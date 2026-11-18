@@ -1706,6 +1706,7 @@ describe('TracerProxy', () => {
     let buildProxy
     let id
     let randomFillSync
+    let libdatadogExtras
 
     beforeEach(() => {
       uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
@@ -1735,8 +1736,9 @@ describe('TracerProxy', () => {
         }),
       }
       storeConfig = sinon.stub().returns({})
+      libdatadogExtras = { '@noCallThru': true, maybeLoad: sinon.stub() }
 
-      buildProxy = (nodeBundlesOpenssl = false) => new (proxyquire('../src/proxy', {
+      buildProxy = (nodeBundlesOpenssl = false, extras = libdatadogExtras) => new (proxyquire('../src/proxy', {
         './tracer': DatadogTracer,
         './noop/proxy': NoopProxy,
         './config': Config,
@@ -1746,6 +1748,7 @@ describe('TracerProxy', () => {
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        '@datadog/libdatadog-extras': extras,
         './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
@@ -1801,6 +1804,60 @@ describe('TracerProxy', () => {
 
       sinon.assert.notCalled(storeConfig)
       sinon.assert.calledTwice(channelMock.publish)
+    })
+
+    it('should preload process-discovery at registration and store metadata only on /run', () => {
+      microProxy.init()
+
+      sinon.assert.calledOnceWithExactly(libdatadogExtras.maybeLoad, 'process-discovery')
+      sinon.assert.notCalled(storeConfig)
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledOnceWithExactly(storeConfig, config)
+    })
+
+    it('should load the tracer metadata module during init, before /run', () => {
+      const repoRoot = path.resolve(__dirname, '../../..')
+      const metadataPath = require.resolve('../src/tracer_metadata')
+      const script = `
+        const isLoaded = () => require.cache[${JSON.stringify(metadataPath)}] !== undefined
+        const tracer = require(${JSON.stringify(repoRoot)})
+        const beforeInit = isLoaded()
+        tracer.init()
+        process.stdout.write(JSON.stringify({ beforeInit, afterInit: isLoaded() }), () => process.exit(0))
+      `
+      const inherited = Object.fromEntries(Object.entries(process.env)
+        .filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+      const result = spawnSync(process.execPath, ['--eval', script], {
+        encoding: 'utf8',
+        timeout: 10_000,
+        env: { ...inherited, AWS_LAMBDA_MICROVM_IMAGE_ARN: 'arn:aws:lambda:us-east-1:123456789012:microvm-image:test' },
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.deepStrictEqual(JSON.parse(result.stdout), { beforeInit: false, afterInit: true })
+    })
+
+    it('should not preload process-discovery when tracing is disabled', () => {
+      config.DD_TRACE_ENABLED = false
+      microProxy.init()
+
+      sinon.assert.notCalled(libdatadogExtras.maybeLoad)
+    })
+
+    it('should keep the /run identity refresh when libdatadog-extras is not installed', () => {
+      buildProxy(false, null).init()
+
+      sinon.assert.notCalled(log.error)
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(storeConfig, config)
     })
 
     it('should publish datadog:identity:update with the tracer config on POST .../run', () => {

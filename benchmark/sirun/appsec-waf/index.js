@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { DDWAF } = require('@datadog/native-appsec')
+const { version } = require('@datadog/native-appsec/package.json')
 
 const rules = require('../../../packages/dd-trace/src/appsec/recommended.json')
 const samples = require('../appsec/waf-samples.json')
@@ -13,6 +14,10 @@ const sample = samples[process.env.WAF_SAMPLE]
 
 assert.ok(operations > 0, 'OPERATIONS must be positive')
 assert.ok(sample, `unknown WAF_SAMPLE: ${process.env.WAF_SAMPLE}`)
+
+// The same benchmark runs against the baseline's v1 API and the candidate's v2 API.
+const nativeMajor = Number(version.split('.')[0])
+const inputs = sample.map(({ payload }) => nativeMajor >= 12 ? payload : { persistent: payload })
 
 // Keep these aligned with the production defaults without loading the configuration manifest into the benchmark.
 const obfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|' +
@@ -41,7 +46,7 @@ function runRequest (verify) {
   const context = waf.createContext()
   let matched = false
 
-  for (const { payload } of sample) {
+  for (const payload of inputs) {
     const result = context.run(payload, 5e3)
     if (verify && result.events?.length) {
       matched = true

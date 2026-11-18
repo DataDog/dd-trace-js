@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const dc = require('dc-polyfill')
 
 const { HANDLER_STREAMING, STREAM_RESPONSE } = require('../../../datadog-instrumentations/src/helpers/lambda-handler')
 const agent = require('../plugins/agent')
@@ -163,6 +164,62 @@ describe('Lambda facade context extraction', () => {
     assert.strictEqual(span.parent_id.toString(10), '5678')
   })
 
+  for (const [extraction, traceExtractor] of [
+    ['sync', () => customParent],
+    ['async', async () => customParent],
+    ['sync failure', () => { throw Error('extraction failed') }],
+    ['async failure', async () => { throw Error('extraction failed') }],
+    ['sync fallback', () => null],
+    ['async fallback', async () => null],
+  ]) {
+    for (const streaming of [false, true]) {
+      const kind = streaming ? 'streaming' : 'buffered'
+      for (const rejected of [false, true]) {
+        it(`finishes ${kind} ${rejected ? 'rejection' : 'throw'} after ${extraction} extraction`,
+          async () => {
+            const error = Error('customer failed')
+            const handler = () => {
+              if (rejected) return Promise.reject(error)
+              throw error
+            }
+            if (streaming) handler[HANDLER_STREAMING] = STREAM_RESPONSE
+            const onEnd = sinon.spy()
+            const channel = dc.channel('datadog:aws-lambda:invocation:end')
+            channel.subscribe(onEnd)
+            try {
+              const wrapped = facade.wrap(handler, { traceExtractor })
+              const pending = streaming ? wrapped({ headers }, {}, context) : wrapped({ headers }, context)
+              await assert.rejects(pending, actual => actual === error)
+              const span = assertExactlyOneLambdaSpan(traces)
+              assert.strictEqual(span.error, 1)
+              assert.strictEqual(span.meta['error.message'], 'customer failed')
+              sinon.assert.calledOnce(onEnd)
+              assert.strictEqual(onEnd.firstCall.args[0].error, error)
+              assert.strictEqual(clock.countTimers(), 0)
+            } finally {
+              channel.unsubscribe(onEnd)
+            }
+          })
+      }
+    }
+  }
+
+  for (const source of ['event', 'xray', 'ddtrace']) {
+    for (const merge of [false, true]) {
+      it(`preserves custom ${source} parenting and parent-source tags with merge=${merge}`, async () => {
+        const span = await invoke({}, {
+          traceExtractor: () => ({ ...customParent, source }),
+          mergeDatadogXrayTraces: merge,
+        })
+        const adoptsParent = source === 'event' || merge
+        assert.strictEqual(span.parent_id.toString(10), adoptsParent ? '5678' : '0')
+        if (adoptsParent) assert.strictEqual(span.trace_id.toString(10), '1234')
+        const expectedSource = source === 'event' || (source === 'xray' && merge) ? source : undefined
+        assert.strictEqual(span.meta['_dd.parent_source'], expectedSource)
+      })
+    }
+  }
+
   for (const sampleMode of [-1, 0, 1, 2]) {
     it(`keeps custom sampling numeric through export: ${sampleMode}`, async () => {
       const span = await invoke({}, { traceExtractor: async () => ({ ...customParent, sampleMode }) })
@@ -221,6 +278,47 @@ describe('Lambda facade context extraction', () => {
     sinon.assert.calledOnce(custom)
   })
 
+  for (const extraction of ['event', 'sync custom', 'async custom']) {
+    it(`finishes the stale active span before ${extraction} extraction and exports it`, async () => {
+      const stale = tracer.startSpan('stale')
+      const finish = sinon.spy(stale, 'finish')
+      const extract = () => {
+        sinon.assert.calledOnce(finish)
+        assert.strictEqual(tracer.scope().active(), null)
+        return customParent
+      }
+      const traceExtractor = extraction === 'sync custom'
+        ? extract
+        : extraction === 'async custom' ? async () => extract() : undefined
+      const wrapped = facade.wrap(() => {
+        sinon.assert.calledOnce(finish)
+        return 'done'
+      }, { traceExtractor })
+      assert.strictEqual(await tracer.scope().activate(stale, () => wrapped({ headers }, context)), 'done')
+      const span = assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(span.parent_id.toString(10), '5678')
+      assert.strictEqual(traces.flat().filter(span => span.name === 'stale').length, 1)
+      sinon.assert.calledOnce(finish)
+    })
+  }
+
+  it('continues extraction and preserves handler failure when stale-span finishing throws', async () => {
+    const stale = tracer.startSpan('stale')
+    const finish = sinon.stub(stale, 'finish').throws(Error('stale finish failed'))
+    const custom = sinon.stub().resolves(customParent)
+    const failure = Error('customer failed')
+    const wrapped = facade.wrap(() => { throw failure }, { traceExtractor: custom })
+    try {
+      await assert.rejects(tracer.scope().activate(stale, () => wrapped({}, context)), error => error === failure)
+      sinon.assert.calledOnce(finish)
+      sinon.assert.calledOnce(custom)
+      assert.strictEqual(assertExactlyOneLambdaSpan(traces).parent_id.toString(10), '5678')
+    } finally {
+      finish.restore()
+      stale.finish()
+    }
+  })
+
   it('ignores stale ambient context during extraction and does not leak parents between warm calls', async () => {
     const stale = tracer.startSpan('stale')
     const wrapped = facade.wrap(event => tracer.scope().active().context().toTraceId(), {
@@ -242,7 +340,7 @@ describe('Lambda facade context extraction', () => {
         assert.notStrictEqual(traceId, stale.context().toTraceId())
       }
     }
-    stale.finish()
+    assert.strictEqual(stale.context()._isFinished, true)
   })
 
   it('isolates overlapping awaited extractions', async () => {
@@ -286,8 +384,14 @@ describe('Lambda facade context extraction', () => {
     tracer.use('aws-lambda', false)
     const custom = sinon.stub().resolves(customParent)
     const wrapped = facade.wrap(() => 'done', { traceExtractor: custom })
-    assert.strictEqual(await wrapped({}, context), 'done')
+    const ambient = tracer.startSpan('ambient')
+    try {
+      assert.strictEqual(await tracer.scope().activate(ambient, () => wrapped({}, context)), 'done')
+      assert.strictEqual(ambient.context()._isFinished, false)
+    } finally {
+      ambient.finish()
+    }
     sinon.assert.notCalled(custom)
-    assert.strictEqual(traces.length, 0)
+    assert.strictEqual(traces.flat().filter(span => span.name === 'aws.lambda').length, 0)
   })
 })

@@ -50,7 +50,7 @@ function wrapHandler (handler, config, monitor) {
     if (prepareChannel.hasSubscribers) prepareChannel.publish(invocationContext)
     if (invocationContext.preparation) {
       return invocationContext.preparation.then(() => invocationChannel.tracePromise(
-        () => Reflect.apply(invoke, this, args), invocationContext
+        () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)), invocationContext
       ))
     }
     return invocationChannel.tracePromise(

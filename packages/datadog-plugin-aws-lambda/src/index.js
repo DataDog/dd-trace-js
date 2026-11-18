@@ -36,6 +36,13 @@ class AwsLambdaPlugin extends TracingPlugin {
         context.parentSource = extracted.source
       }
     }
+    // Match the shim's stale-span cleanup before detaching the extraction scope.
+    try {
+      const activeSpan = this.tracer.scope().active()
+      if (activeSpan && typeof activeSpan.finish === 'function') activeSpan.finish()
+    } catch (error) {
+      log.debug('Unable to finish stale Lambda span: %s', error)
+    }
     try {
       const extracted = this.tracer.scope().activate(null, () => extractor.extract(context.event, context.context))
       if (config.traceExtractor) {
@@ -65,7 +72,9 @@ class AwsLambdaPlugin extends TracingPlugin {
       getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
     const span = this.startSpan('aws.lambda', {
       childOf: context.parent || null,
-      meta: context.parent ? { '_dd.parent_source': context.parentSource } : undefined,
+      meta: context.parent && (context.parentSource === 'event' || context.parentSource === 'xray')
+        ? { '_dd.parent_source': context.parentSource }
+        : undefined,
       kind: 'server',
       resource: functionName,
       service: resolveServiceName(functionName, this.config, context.config),

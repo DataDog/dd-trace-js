@@ -60,6 +60,25 @@ jobs:
         with:
           id: ${{ github.job }}
 
+  vite:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: npm run test:vite:ci
+      - uses: ./.github/actions/node/latest
+      - run: npm run test:vite:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-vite
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
+
   webpack:
     runs-on: ubuntu-latest
     permissions:
@@ -238,7 +257,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
       - run: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
@@ -745,8 +763,14 @@ jobs:
       fail-fast: false
       matrix:
         # Vite 8 requires Node.js ^20.19.0 || >=22.12.0.
-        version: [maintenance, active, latest]
-    name: ${{ github.workflow }} / integration-vite (node-${{ matrix.version }})
+        include:
+          - version: maintenance
+          - version: active
+          - version: latest
+          # Exercise the plugin's Rollup path once in addition to the default Rolldown builds.
+          - version: active
+            vite_version: '6.0.0'
+    name: ${{ github.workflow }} / integration-vite (node-${{ matrix.version }}${{ matrix.vite_version && ', rollup' || '' }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -758,6 +782,8 @@ jobs:
       - uses: ./.github/actions/install
       # Vite bundles dd-trace into a single file with the application, like webpack, so coverage is not collected.
       - run: npm run test:integration:vite
+        env:
+          VITE_PLUGIN_TEST_VERSION: ${{ matrix.vite_version }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:

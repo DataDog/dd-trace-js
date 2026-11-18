@@ -21,6 +21,37 @@ const keys = (name, versions, nonConsecutive) =>
 
 const latestMajorKey = name => String(major(coerce(latests[name])))
 
+describe('getCappedRange', () => {
+  const { getCappedRange } = proxyquire('./versions', {
+    './package.json': { dependencies: { example: '3.0.5' } },
+  })
+
+  for (const [range, expected] of [
+    ['', '3.0.5'],
+    ['latest', '3.0.5'],
+    ['*', '<=3.0.5'],
+    ['1.2.3 <2.3', '1.2.3 <2.3.0-0 <=3.0.5'],
+    ['1.2 - 4.0', '>=1.2.0 <4.1.0-0 <=3.0.5'],
+    ['1.2.3 - 4.0.0', '>=1.2.3 <=4.0.0 <=3.0.5'],
+    ['^2 || >=3', '>=2.0.0 <3.0.0-0 <=3.0.5 || >=3.0.0 <=3.0.5'],
+    ['>=3.0.5', '>=3.0.5 <=3.0.5'],
+  ]) {
+    it(`caps every branch of ${JSON.stringify(range)} at the canonical pin`, () => {
+      assert.equal(getCappedRange('example', range), expected)
+    })
+  }
+
+  for (const version of ['4.0.0', '=4.0.0', 'v4.0.0', '4.0.0-rc.1']) {
+    it(`preserves the explicit version ${version} without requiring a pin`, () => {
+      assert.equal(getCappedRange('unpinned', version), version)
+    })
+  }
+
+  it('rejects an unpinned range', () => {
+    assert.throws(() => getCappedRange('unpinned', '^1'), /Latest version for 'unpinned' needs to be defined/)
+  })
+})
+
 describe('getVersionList', () => {
   it('collapses the wildcard to the latest major', () => {
     assert.deepEqual(keys('mongodb', ['*']), [latestMajorKey('mongodb')])
