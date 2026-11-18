@@ -11,11 +11,17 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { storage } = require('../../../../datadog-core')
 const { AIGuardAbortError, AIGuardClientError } = require('../../../src/aiguard/errors')
 const { MCP_SERVERS } = require('../../../src/aiguard/mcp')
 const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
 
 const callToolInterceptChannel = channel('dd-trace:mcp:callTool:intercept')
+const listToolsResultChannel = channel('dd-trace:mcp:listTools:result')
+const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
+const responsesInterceptChannel = channel('dd-trace:openai:responses:intercept')
+
+const legacyStorage = storage('legacy')
 
 const TYPED_ARRAYS = [
   Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array,
@@ -23,6 +29,7 @@ const TYPED_ARRAYS = [
 ].filter(TypedArray => typeof TypedArray === 'function')
 
 const MCP_OPTS = { block: true, source: SOURCE_AUTO, integration: 'mcp' }
+const OPENAI_OPTS = { block: true, source: SOURCE_AUTO, integration: 'openai' }
 const REMOTE_URL = 'https://user:secret@mcp.example.com/api/s3cr3t-t0ken/mcp?token=abc#frag'
 const REMOTE_SERVER_ID = 'mcp_b77bc22583ac5006'
 const LOCAL_ID = /^dd_mcp_[0-9a-f]{32}$/
@@ -36,6 +43,39 @@ function serverId (key) {
   return 'mcp_' + createHash('sha256').update(key, 'utf8').digest('hex').slice(0, 16)
 }
 
+class FakeStream {
+  constructor (chunks) {
+    this.chunks = chunks
+  }
+
+  tee () {
+    return [new FakeStream(this.chunks), new FakeStream(this.chunks)]
+  }
+
+  [Symbol.asyncIterator] () {
+    let index = 0
+    return {
+      next: () => Promise.resolve(index < this.chunks.length
+        ? { done: false, value: this.chunks[index++] }
+        : { done: true, value: undefined }),
+    }
+  }
+}
+
+/**
+ * Creates the local trace of an outer operation, with a span for the model request inside it.
+ */
+function createTrace () {
+  const trace = { started: /** @type {object[]} */ ([]) }
+  const span = () => {
+    const created = { context: () => ({ _trace: trace }) }
+    trace.started.push(created)
+    return created
+  }
+  const root = span()
+  return { trace, root, span }
+}
+
 /**
  * Creates a client with its transport, as the instrumentation publishes them.
  *
@@ -43,6 +83,18 @@ function serverId (key) {
  */
 function createClient (transportInfo) {
   return { client: { name: 'client' }, transport: { name: 'transport' }, transportInfo }
+}
+
+/**
+ * Publishes the listTools result of a client and returns the listed tools.
+ *
+ * @param {ReturnType<typeof createClient>} mcpClient
+ * @param {string[]} names
+ */
+function listTools (mcpClient, names) {
+  const tools = names.map(name => ({ name, inputSchema: { type: 'object', properties: { q: { type: 'string' } } } }))
+  listToolsResultChannel.publish({ ...mcpClient, tools })
+  return tools
 }
 
 /**
@@ -65,34 +117,40 @@ function publishCallTool (mcpClient, params) {
 }
 
 /**
- * Publishes a callTool intercept and runs its hook.
+ * Publishes a callTool intercept and runs its hook in the context of the active span.
  *
  * @param {ReturnType<typeof createClient>} mcpClient
  * @param {object} params
+ * @param {object} [activeSpan]
  */
-function callTool (mcpClient, params) {
+function callTool (mcpClient, params, activeSpan) {
   /** @type {{ beforeCall?: () => Promise<unknown>|undefined, [key: string]: unknown }} */
   const ctx = { ...mcpClient, arguments: [params] }
   callToolInterceptChannel.publish(ctx)
   const { beforeCall } = ctx
   assert.ok(beforeCall, 'the integration installs a beforeCall hook')
-  return beforeCall()
+  // Without a span, the hook runs in the current store, as in the SDK.
+  return activeSpan ? legacyStorage.run({ span: activeSpan }, () => beforeCall()) : beforeCall()
 }
 
 describe('AIGuard MCP integration', () => {
   let evaluate
   let log
   let mcp
+  let openai
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves({ action: 'ALLOW' })
     log = { debug: sinon.stub(), error: sinon.stub() }
+    const evaluateModule = proxyquire('../../../src/aiguard/integrations/evaluate', { '../../log': log })
     mcp = proxyquire('../../../src/aiguard/integrations/mcp', { '../../log': log })
+    openai = proxyquire('../../../src/aiguard/integrations/openai', { './evaluate': evaluateModule })
     mcp.enable({ evaluate }, true)
   })
 
   afterEach(() => {
     mcp.disable()
+    openai.disable()
     sinon.restore()
   })
 
@@ -1251,6 +1309,521 @@ describe('AIGuard MCP integration', () => {
       mcp.disable()
 
       assert.strictEqual(callToolInterceptChannel.hasSubscribers, false)
+      assert.strictEqual(listToolsResultChannel.hasSubscribers, false)
+    })
+  })
+
+  describe('model request correlation', () => {
+    const mcpServer = {
+      id: REMOTE_SERVER_ID,
+      managed_by: 'client',
+      url: 'https://mcp.example.com',
+      transport: 'streamable_http',
+    }
+
+    let remote
+
+    beforeEach(() => {
+      openai.enable({ evaluate }, true, true, true)
+      remote = createClient({ type: 'streamable_http', url: new URL(REMOTE_URL) })
+    })
+
+    /**
+     * Publishes an OpenAI chat completions intercept inside the given trace.
+     *
+     * @param {object} params
+     * @param {object} requestSpan
+     */
+    function interceptChat (params, requestSpan) {
+      const ctx = { arguments: [params], tracingContext: { currentStore: { span: requestSpan } } }
+      chatCompletionsInterceptChannel.publish(ctx)
+      return ctx
+    }
+
+    /**
+     * @param {object} params
+     * @param {object} requestSpan
+     */
+    function interceptResponses (params, requestSpan) {
+      const ctx = { arguments: [params], tracingContext: { currentStore: { span: requestSpan } } }
+      responsesInterceptChannel.publish(ctx)
+      return ctx
+    }
+
+    /**
+     * @param {string} name
+     * @param {object} schema
+     */
+    function chatTool (name, schema) {
+      return { type: 'function', function: { name, parameters: schema } }
+    }
+
+    /**
+     * @param {string} name
+     * @param {string} args
+     * @param {string} [id]
+     */
+    function chatBody (name, args, id = 'call_model') {
+      return {
+        choices: [{
+          message: { role: 'assistant', tool_calls: [{ id, type: 'function', function: { name, arguments: args } }] },
+        }],
+      }
+    }
+
+    function mcpEvaluations () {
+      return evaluate.getCalls().filter(call => call.args[1][MCP_SERVERS])
+    }
+
+    it('attaches the server to the model tool call and skips the later callTool check', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const params = { messages: [{ role: 'user', content: 'Find x' }], tools: [chatTool('search', tool.inputSchema)] }
+      const body = chatBody('search', '{ "q": "x" }')
+      const ctx = interceptChat(params, span())
+
+      assert.strictEqual(await ctx.onResult(body), body)
+
+      sinon.assert.calledOnce(evaluate)
+      assert.deepStrictEqual(evaluate.firstCall.args[0], [
+        { role: 'user', content: 'Find x' },
+        {
+          role: 'assistant',
+          tool_calls: [{
+            id: 'call_model',
+            type: 'function',
+            function: { name: 'search', arguments: '{ "q": "x" }' },
+            mcp: { server_id: REMOTE_SERVER_ID },
+          }],
+        },
+      ])
+      assert.deepStrictEqual(evaluate.firstCall.args[1][MCP_SERVERS], [{ ...mcpServer, tools: { search: 'search' } }])
+
+      assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+      sinon.assert.calledOnce(evaluate)
+
+      // The mark is gone: a second call with the same arguments gets its own check.
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root)
+      sinon.assert.calledTwice(evaluate)
+    })
+
+    it('starts a marked call at once with a copy of the params', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+      const params = { name: 'search', arguments: { q: 'x' } }
+      const callCtx = { ...remote, arguments: [params] }
+      callToolInterceptChannel.publish(callCtx)
+
+      const pending = legacyStorage.run({ span: root }, () => callCtx.beforeCall?.())
+
+      assert.strictEqual(pending, undefined)
+      sinon.assert.calledOnce(evaluate)
+      assert.notStrictEqual(callCtx.arguments[0], params)
+      assert.deepStrictEqual(callCtx.arguments[0], { name: 'search', arguments: { q: 'x' } })
+    })
+
+    it('skips the later check when validation changes the key order of the arguments', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+      await ctx.onResult(chatBody('search', '{"q":"x","limit":{"max":2,"min":1}}'))
+
+      assert.strictEqual(
+        await callTool(remote, { name: 'search', arguments: { limit: { min: 1, max: 2 }, q: 'x' } }, root),
+        undefined
+      )
+      sinon.assert.calledOnce(evaluate)
+    })
+
+    it('never links a hosted MCP call that has the name of a linked function tool', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptResponses({
+        input: [
+          { role: 'user', content: 'Find x' },
+          { type: 'mcp_call', id: 'mcp_old', name: 'search', server_label: 'hosted', arguments: '{"q":"old"}' },
+        ],
+        tools: [
+          { type: 'function', name: 'search', parameters: tool.inputSchema },
+          { type: 'mcp', server_label: 'hosted', server_url: 'https://hosted.example.com/mcp' },
+        ],
+      }, span())
+      const response = {
+        output: [
+          { type: 'mcp_call', id: 'mcp_1', name: 'search', server_label: 'hosted', arguments: '{"q":"hosted"}' },
+          { type: 'function_call', call_id: 'call_f', name: 'search', arguments: '{"q":"local"}' },
+        ],
+      }
+
+      await ctx.beforeResult()
+      await ctx.onResult(response)
+
+      const toolCalls = evaluate.secondCall.args[0].flatMap(message => message.tool_calls ?? [])
+      assert.deepStrictEqual(toolCalls.map(toolCall => [toolCall.id, toolCall.mcp]), [
+        ['mcp_old', undefined],
+        ['mcp_1', undefined],
+        ['call_f', { server_id: REMOTE_SERVER_ID }],
+      ])
+      assert.strictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, undefined)
+      assert.strictEqual(Object.getOwnPropertySymbols(evaluate.firstCall.args[1]).length, 0)
+
+      // Only the function call has a mark. The call with the arguments of the hosted call gets its own check.
+      assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'local' } }, root), undefined)
+      await callTool(remote, { name: 'search', arguments: { q: 'hosted' } }, root)
+      sinon.assert.calledThrice(evaluate)
+    })
+
+    it('links a chat completions tool call that has a function but no type', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { span } = createTrace()
+      const ctx = interceptChat({
+        messages: [
+          { role: 'user', content: 'Find x' },
+          { role: 'assistant', tool_calls: [{ id: 'call_untyped', function: { name: 'search', arguments: '{}' } }] },
+        ],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+
+      await ctx.beforeResult()
+
+      assert.deepStrictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, { server_id: REMOTE_SERVER_ID })
+    })
+
+    it('links only the chat completions tool calls of function tools', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { span } = createTrace()
+      const ctx = interceptChat({
+        messages: [
+          { role: 'user', content: 'Find x' },
+          { role: 'assistant', tool_calls: [{ id: 'call_custom', type: 'custom', function: { name: 'search' } }] },
+        ],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+
+      await ctx.beforeResult()
+
+      assert.strictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, undefined)
+      assert.strictEqual(Object.getOwnPropertySymbols(evaluate.firstCall.args[1]).length, 0)
+    })
+
+    it('evaluates a later call that has other arguments, another client or another trace', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const other = createClient(remote.transportInfo)
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+
+      await callTool(remote, { name: 'search', arguments: { q: 'y' } }, root)
+      await callTool(other, { name: 'search', arguments: { q: 'x' } }, root)
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } }, createTrace().root)
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } })
+
+      assert.strictEqual(mcpEvaluations().length, 5)
+    })
+
+    it('evaluates a later call on another connection of the same client, with the server of that connection',
+      async () => {
+        const [tool] = listTools(remote, ['search'])
+        const { root, span } = createTrace()
+        const ctx = interceptChat({
+          messages: [{ role: 'user', content: 'Find x' }],
+          tools: [chatTool('search', tool.inputSchema)],
+        }, span())
+        await ctx.onResult(chatBody('search', '{"q":"x"}'))
+        // The client closes its connection, and connects to another server in the same trace.
+        const reconnected = {
+          client: remote.client,
+          transport: { name: 'other transport' },
+          transportInfo: { type: 'stdio', command: 'uvx', args: ['mcp-example'] },
+        }
+        listTools(reconnected, ['search'])
+
+        await callTool(reconnected, { name: 'search', arguments: { q: 'x' } }, root)
+
+        const evaluations = mcpEvaluations()
+        assert.strictEqual(evaluations.length, 2)
+        assert.deepStrictEqual(evaluations[0].args[1][MCP_SERVERS], [{ ...mcpServer, tools: { search: 'search' } }])
+        const [messages, opts] = evaluations[1].args
+        assert.deepStrictEqual(messages[0].tool_calls[0].function, { name: 'search', arguments: '{"q":"x"}' })
+        assert.deepStrictEqual(opts[MCP_SERVERS], [{
+          id: 'mcp_0f2f11f8cafdbcc5',
+          managed_by: 'client',
+          transport: 'stdio',
+          command: 'uvx',
+          args: ['mcp-example'],
+          tools: { search: 'search' },
+        }])
+        assert.strictEqual(messages[0].tool_calls[0].mcp.server_id, 'mcp_0f2f11f8cafdbcc5')
+
+        // The mark of the first connection stays, so a call on that connection still skips its check.
+        assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+        assert.strictEqual(mcpEvaluations().length, 2)
+      })
+
+    for (const [description, outcome] of [
+      ['a blocked response', new AIGuardAbortError('blocked', [], {}, [])],
+      ['a failed response evaluation', new Error('unavailable')],
+    ]) {
+      it(`makes no marks for ${description}`, async () => {
+        const [tool] = listTools(remote, ['search'])
+        const { root, span } = createTrace()
+        evaluate.onFirstCall().rejects(outcome)
+        const ctx = interceptChat({
+          messages: [{ role: 'user', content: 'Find x' }],
+          tools: [chatTool('search', tool.inputSchema)],
+        }, span())
+
+        await ctx.onResult(chatBody('search', '{"q":"x"}')).catch(() => {})
+        await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root)
+
+        assert.strictEqual(mcpEvaluations().length, 2)
+      })
+    }
+
+    it('marks the tool calls of a monitored response', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      evaluate.onFirstCall().resolves({ action: 'DENY', reason: 'monitored' })
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+
+      assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+      sinon.assert.calledOnce(evaluate)
+    })
+
+    it('maps a converted model name to the original tool of each client', async () => {
+      const github = createClient({ type: 'streamable_http', url: new URL('https://github.example.com/mcp') })
+      const jira = createClient({ type: 'stdio', command: 'uvx', args: ['mcp-example'] })
+      const [githubSearch] = listTools(github, ['search'])
+      const [jiraSearch] = listTools(jira, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('github__search', githubSearch.inputSchema), chatTool('jira-search', jiraSearch.inputSchema)],
+      }, span())
+      const body = {
+        choices: [{
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              { id: 'call_1', type: 'function', function: { name: 'github__search', arguments: '{"q":"x"}' } },
+              { id: 'call_2', type: 'function', function: { name: 'jira-search', arguments: '{"q":"x"}' } },
+            ],
+          },
+        }],
+      }
+
+      await ctx.onResult(body)
+
+      const [messages, opts] = evaluate.firstCall.args
+      const githubId = serverId('url|https://github.example.com')
+      assert.deepStrictEqual(messages[1].tool_calls.map(toolCall => toolCall.mcp.server_id), [
+        githubId,
+        'mcp_0f2f11f8cafdbcc5',
+      ])
+      assert.deepStrictEqual(opts[MCP_SERVERS].map(server => [server.id, server.tools]), [
+        [githubId, { github__search: 'search' }],
+        ['mcp_0f2f11f8cafdbcc5', { 'jira-search': 'search' }],
+      ])
+
+      // Each client consumes its own mark.
+      assert.strictEqual(await callTool(jira, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+      assert.strictEqual(await callTool(github, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+      sinon.assert.calledOnce(evaluate)
+    })
+
+    it('falls back to the callTool check for cloned schemas', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const params = {
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', structuredClone(tool.inputSchema))],
+      }
+      const ctx = interceptChat(params, span())
+
+      await ctx.beforeResult()
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root)
+
+      sinon.assert.calledThrice(evaluate)
+      assert.strictEqual(Object.getOwnPropertySymbols(evaluate.firstCall.args[1]).length, 0)
+      assert.strictEqual(Object.getOwnPropertySymbols(evaluate.secondCall.args[1]).length, 0)
+      assert.strictEqual(evaluate.secondCall.args[0][1].tool_calls[0].mcp, undefined)
+      assert.strictEqual(mcpEvaluations().length, 1)
+    })
+
+    it('leaves the evaluations generic when the model request is the root of its trace', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const trace = { started: /** @type {object[]} */ ([]) }
+      const requestSpan = { context: () => ({ _trace: trace }) }
+      trace.started.push(requestSpan)
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, requestSpan)
+
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } })
+
+      sinon.assert.calledTwice(evaluate)
+      assert.strictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, undefined)
+      assert.strictEqual(mcpEvaluations().length, 1)
+    })
+
+    it('attaches the servers of the MCP tool calls in the input history', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { span } = createTrace()
+      const history = {
+        role: 'assistant',
+        tool_calls: [{ id: 'call_old', type: 'function', function: { name: 'search', arguments: '{"q":"x"}' } }],
+      }
+      const params = {
+        messages: [
+          { role: 'user', content: 'Find x' },
+          history,
+          { role: 'tool', tool_call_id: 'call_old', content: 'x' },
+        ],
+        tools: [chatTool('search', tool.inputSchema)],
+      }
+      const snapshot = structuredClone(params)
+      const ctx = interceptChat(params, span())
+
+      await ctx.beforeResult()
+
+      const [messages, opts] = evaluate.firstCall.args
+      assert.deepStrictEqual(messages[1].tool_calls[0].mcp, { server_id: REMOTE_SERVER_ID })
+      assert.deepStrictEqual(opts, {
+        ...OPENAI_OPTS,
+        childOf: ctx.tracingContext.currentStore.span,
+        [MCP_SERVERS]: [{ ...mcpServer, tools: { search: 'search' } }],
+      })
+      assert.deepStrictEqual(params, snapshot)
+      assert.strictEqual(params.messages[1], history)
+    })
+
+    it('keeps the request and the response of the application unchanged', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { span } = createTrace()
+      const params = { messages: [{ role: 'user', content: 'Find x' }], tools: [chatTool('search', tool.inputSchema)] }
+      const body = chatBody('search', '{"q":"x"}')
+      const paramsSnapshot = structuredClone(params)
+      const bodySnapshot = structuredClone(body)
+      const ctx = interceptChat(params, span())
+
+      await ctx.beforeResult()
+      await ctx.onResult(body)
+
+      assert.deepStrictEqual(params, paramsSnapshot)
+      assert.deepStrictEqual(body, bodySnapshot)
+      assert.strictEqual(params.tools[0].function.parameters, tool.inputSchema)
+    })
+
+    it('marks the tool calls of a streamed chat completion that it analyzes', async () => {
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+        stream: true,
+      }, span())
+      const chunks = [
+        {
+          choices: [{
+            index: 0,
+            delta: {
+              tool_calls: [{ index: 0, id: 'call_s', type: 'function', function: { name: 'search', arguments: '' } }],
+            },
+          }],
+        },
+        { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"q":"x"}' } }] } }] },
+      ]
+
+      await ctx.onResult(new FakeStream(chunks))
+
+      assert.deepStrictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, { server_id: REMOTE_SERVER_ID })
+      assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+      sinon.assert.calledOnce(evaluate)
+    })
+
+    it('leaves the check to callTool when streamed responses are not analyzed', async () => {
+      openai.disable()
+      openai.enable({ evaluate }, true, false, true)
+      const [tool] = listTools(remote, ['search'])
+      const { root, span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+        stream: true,
+      }, span())
+
+      assert.strictEqual(ctx.onResult, undefined)
+      await ctx.beforeResult()
+      await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root)
+
+      sinon.assert.calledTwice(evaluate)
+      assert.strictEqual(mcpEvaluations().length, 1)
+    })
+
+    for (const stream of [false, true]) {
+      it(`marks the function calls of a ${stream ? 'streamed ' : ''}Responses API output`, async () => {
+        const [tool] = listTools(remote, ['search'])
+        const { root, span } = createTrace()
+        const params = {
+          input: 'Find x',
+          tools: [{ type: 'function', name: 'srv_search', parameters: tool.inputSchema }],
+          stream,
+        }
+        const response = {
+          output: [{ type: 'function_call', call_id: 'call_r', name: 'srv_search', arguments: '{"q":"x"}' }],
+        }
+        const ctx = interceptResponses(params, span())
+
+        await ctx.onResult(stream ? new FakeStream([{ type: 'response.completed', response }]) : response)
+
+        const [messages, opts] = evaluate.firstCall.args
+        assert.deepStrictEqual(messages[1], {
+          role: 'assistant',
+          tool_calls: [{
+            id: 'call_r',
+            function: { name: 'srv_search', arguments: '{"q":"x"}' },
+            mcp: { server_id: REMOTE_SERVER_ID },
+          }],
+        })
+        assert.deepStrictEqual(opts[MCP_SERVERS], [{ ...mcpServer, tools: { srv_search: 'search' } }])
+        assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+        sinon.assert.calledOnce(evaluate)
+      })
+    }
+
+    it('links no tool when the MCP kill switch is off', async () => {
+      openai.disable()
+      openai.enable({ evaluate }, true, true, false)
+      const [tool] = listTools(remote, ['search'])
+      const { span } = createTrace()
+      const ctx = interceptChat({
+        messages: [{ role: 'user', content: 'Find x' }],
+        tools: [chatTool('search', tool.inputSchema)],
+      }, span())
+
+      await ctx.onResult(chatBody('search', '{"q":"x"}'))
+
+      assert.strictEqual(evaluate.firstCall.args[0][1].tool_calls[0].mcp, undefined)
+      assert.strictEqual(Object.getOwnPropertySymbols(evaluate.firstCall.args[1]).length, 0)
     })
   })
 })

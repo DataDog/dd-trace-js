@@ -62,6 +62,13 @@ function startApiMock () {
           blocking = false
         }
 
+        // A tool policy: it applies only to requests that carry MCP server metadata.
+        if (attributes.mcp_servers && messages.some(msg => extractContent(msg).includes('[deny-mcp]'))) {
+          action = 'DENY'
+          reason = 'Blocked by MCP policy'
+          blocking = true
+        }
+
         // Check all messages for DENY marker
         for (const msg of messages) {
           const msgContent = extractContent(msg)

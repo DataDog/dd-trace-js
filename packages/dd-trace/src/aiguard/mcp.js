@@ -2,6 +2,9 @@
 
 const { createHash } = require('node:crypto')
 
+const { storage } = require('../../../datadog-core')
+const log = require('../log')
+
 /**
  * @typedef {object} McpServer
  * @property {string} id
@@ -22,6 +25,30 @@ const { createHash } = require('node:crypto')
  * @property {unknown} [url]
  */
 
+/**
+ * @typedef {object} ListedTool
+ * @property {number} connectionId The ID of the client connection that listed the tool.
+ * @property {McpServer} server The server of the client, without tools.
+ * @property {string} originalName
+ */
+
+/**
+ * @typedef {object} ConversationMcp
+ * @property {McpServer[]} servers The servers that the tool calls of the conversation reference.
+ * @property {() => void} [onAllowed] Runs when the evaluation completes without a block.
+ */
+
+/**
+ * @typedef {object} Mark
+ * @property {number} connectionId The ID of the client connection of the listed tool.
+ * @property {string} name The original MCP tool name.
+ * @property {string} args The arguments in canonical form.
+ */
+
+/**
+ * @typedef {{ context: () => { _trace: { started: unknown[] } } }} TraceSpan
+ */
+
 // Internal evaluate option. A symbol key keeps it out of the public evaluate options.
 const MCP_SERVERS = Symbol('dd-trace.aiguard.mcpServers')
 
@@ -35,6 +62,26 @@ const RUNNER_FLAGS = new Set(['-y', '--yes', '-q', '--quiet'])
 const PACKAGE_ID = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@[a-z0-9][a-z0-9._+-]*)?$/i
 const PYTHON = /^python(\d+(\.\d+)?)?$/
 const PYTHON_MODULE = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/
+
+// A trace keeps a small number of marks. When the limit is reached, the oldest mark goes first and
+// its tool call gets its own check.
+const MAX_MARKS_PER_TRACE = 64
+
+/** @type {WeakMap<object, ListedTool>} */
+const toolsBySchema = new WeakMap()
+let hasListedTools = false
+
+/** @type {WeakMap<object, Mark[]>} */
+const marksByTrace = new WeakMap()
+
+// A transport is one connection to one server. A client can close its connection and connect to
+// another server, so a mark of one transport must not skip the check of another transport.
+// Records keep a small ID of the transport and not the transport itself. An application can keep
+// listed schemas or traces for a long time, and a closed connection must not stay in memory because
+// of them.
+/** @type {WeakMap<object, number>} */
+const connectionIds = new WeakMap()
+let lastConnectionId = 0
 
 /**
  * Returns the origin of a URL: the lowercase scheme and host, and the port when it is not the
@@ -197,8 +244,321 @@ function createClientServer (info, name) {
   return createServer('client', transport, { name, url: type === 'in_process' ? undefined : info?.url })
 }
 
+/**
+ * Returns the connection ID of a transport, and makes one for a new transport.
+ *
+ * @param {object} transport
+ */
+function getConnectionId (transport) {
+  let id = connectionIds.get(transport)
+  if (id === undefined) {
+    id = ++lastConnectionId
+    connectionIds.set(transport, id)
+  }
+  return id
+}
+
+/**
+ * Records the input schema of each listed tool, so that a model request can link a function tool
+ * to its MCP server by schema identity.
+ *
+ * @param {unknown} transport The transport of the connection that listed the tools.
+ * @param {McpServer|undefined} server
+ * @param {unknown} tools
+ */
+function recordListedTools (transport, server, tools) {
+  // Without a transport, the client has no connection, and no later call can use these tools.
+  if (!server || !Array.isArray(tools) || transport === null || typeof transport !== 'object') return
+
+  const connectionId = getConnectionId(transport)
+  for (const tool of tools) {
+    const schema = tool?.inputSchema
+    if (schema === null || typeof schema !== 'object' || typeof tool.name !== 'string') continue
+
+    toolsBySchema.set(schema, { connectionId, server, originalName: tool.name })
+    hasListedTools = true
+  }
+}
+
+/**
+ * Returns the local trace of the active span.
+ *
+ * @returns {object|undefined}
+ */
+function activeTrace () {
+  const span = /** @type {TraceSpan|undefined} */ (storage('legacy').getStore()?.span)
+  return span?.context()._trace
+}
+
+/**
+ * Returns the local trace that a later callTool of a model request shares, or undefined when there
+ * is no outer operation. A model request span at the root of its trace has no outer operation.
+ *
+ * @param {{ tracingContext?: { currentStore?: { span?: TraceSpan } } }} interceptCtx
+ * @returns {object|undefined}
+ */
+function getRequestTrace (interceptCtx) {
+  const requestSpan = interceptCtx?.tracingContext?.currentStore?.span
+  if (!requestSpan) return activeTrace()
+
+  const trace = requestSpan.context()._trace
+  return trace.started[0] === requestSpan ? undefined : trace
+}
+
+/**
+ * Links the function tools of one model request to the MCP tools that a client listed. A function
+ * tool links only when its parameters object is the listed input schema, never by its name alone.
+ *
+ * @param {unknown} requestTools
+ * @param {(tool: object) => { name?: unknown, parameters?: unknown }|undefined} getFunction
+ * @param {object} interceptCtx
+ * @returns {McpToolLink|undefined} undefined when no tool links, or when no outer trace exists.
+ */
+function linkMcpTools (requestTools, getFunction, interceptCtx) {
+  if (!hasListedTools || !Array.isArray(requestTools)) return
+
+  let tools
+  for (const requestTool of requestTools) {
+    const fn = requestTool && getFunction(requestTool)
+    const listed = fn && toolsBySchema.get(/** @type {object} */ (fn.parameters))
+    if (listed && typeof fn.name === 'string') {
+      tools ??= new Map()
+      tools.set(fn.name, listed)
+    }
+  }
+  if (!tools) return
+
+  const trace = getRequestTrace(interceptCtx)
+  return trace ? new McpToolLink(tools, trace) : undefined
+}
+
+/**
+ * Returns JSON arguments in a canonical form with sorted object keys, or undefined when they are
+ * not JSON. Validation can change the key order of the arguments before callTool, so the match of a
+ * model tool call and a later callTool does not use the key order. Evaluations still send the
+ * arguments in their own order.
+ *
+ * @param {unknown} text
+ * @returns {string|undefined}
+ */
+function canonicalArguments (text) {
+  if (typeof text !== 'string') return
+
+  let args
+  try {
+    args = JSON.stringify(JSON.parse(text), sortKeys)
+  } catch {
+    // A call with such arguments gets its own check.
+  }
+  return args
+}
+
+/**
+ * JSON.stringify replacer that writes the keys of each object in sorted order.
+ *
+ * @param {string} key
+ * @param {unknown} value
+ */
+function sortKeys (key, value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+
+  const object = /** @type {Record<string, unknown>} */ (value)
+  // A null prototype keeps a __proto__ key as an own property.
+  const sorted = Object.create(null)
+  for (const name of Object.keys(object).sort()) {
+    sorted[name] = object[name]
+  }
+  return sorted
+}
+
+/**
+ * @param {object} trace
+ * @param {Mark} mark
+ */
+function addMark (trace, mark) {
+  let marks = marksByTrace.get(trace)
+  if (!marks) {
+    marks = []
+    marksByTrace.set(trace, marks)
+  }
+  if (marks.length >= MAX_MARKS_PER_TRACE) marks.shift()
+  marks.push(mark)
+}
+
+/**
+ * Removes the mark of a tool call that a model response evaluation already checked. It returns
+ * true when a mark matched. A mark matches only a call on the connection that listed the tool.
+ *
+ * @param {object|undefined} trace The local trace of the active span.
+ * @param {unknown} transport The transport of the call.
+ * @param {string} name The original MCP tool name.
+ * @param {string} args The JSON arguments that callTool sends.
+ */
+function consumeMark (trace, transport, name, args) {
+  const marks = trace && marksByTrace.get(trace)
+  if (!marks || transport === null || typeof transport !== 'object') return false
+  const connectionId = connectionIds.get(transport)
+  if (connectionId === undefined) return false
+
+  let canonical
+  for (let i = 0; i < marks.length; i++) {
+    const mark = marks[i]
+    if (mark.connectionId !== connectionId || mark.name !== name) continue
+
+    canonical ??= canonicalArguments(args)
+    if (mark.args === canonical) {
+      marks.splice(i, 1)
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The client-managed MCP tools of one model request, by model-visible name.
+ */
+class McpToolLink {
+  #tools
+  #trace
+
+  /**
+   * @param {Map<string, ListedTool>} tools
+   * @param {object} trace The local trace that keeps the marks of the request.
+   */
+  constructor (tools, trace) {
+    this.#tools = tools
+    this.#trace = trace
+  }
+
+  /**
+   * Returns the messages with an mcp reference on each tool call of a linked tool. It copies the
+   * changed messages and tool calls, and keeps the objects of the application unchanged.
+   *
+   * @param {Array<object>} messages
+   * @param {(toolCall: object) => boolean} isFunctionCall Selects the tool calls of function tools.
+   *   Other tool calls, for example hosted MCP calls, never get a reference to a client server.
+   * @returns {Array<object>} The same array when no tool call is linked, or when the copy fails.
+   */
+  attach (messages, isFunctionCall) {
+    try {
+      return this.#attach(messages, isFunctionCall)
+    } catch (error) {
+      // Without mcp references, the evaluation stays generic and the later callTool gets its own check.
+      log.debug('AIGuard: unable to attach the MCP references: %s', error?.message)
+      return messages
+    }
+  }
+
+  /**
+   * @param {Array<object>} messages
+   * @param {(toolCall: object) => boolean} isFunctionCall
+   * @returns {Array<object>}
+   */
+  #attach (messages, isFunctionCall) {
+    let attached
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      const toolCalls = message?.tool_calls
+      if (!Array.isArray(toolCalls)) continue
+
+      let attachedCalls
+      for (let j = 0; j < toolCalls.length; j++) {
+        const toolCall = toolCalls[j]
+        const listed = this.#tools.get(toolCall?.function?.name)
+        if (!listed || !isFunctionCall(toolCall)) continue
+
+        attachedCalls ??= [...toolCalls]
+        attachedCalls[j] = { ...toolCall, mcp: { server_id: listed.server.id } }
+      }
+      if (!attachedCalls) continue
+
+      attached ??= [...messages]
+      attached[i] = { ...message, tool_calls: attachedCalls }
+    }
+    return attached ?? messages
+  }
+
+  /**
+   * Returns the MCP options of one evaluation.
+   *
+   * @param {Array<object>} conversation The evaluated messages, after attach.
+   * @param {Array<object>} [outputs] The model outputs. They get marks when the evaluation allows them.
+   * @returns {ConversationMcp|undefined} undefined when no tool call references a server.
+   */
+  evaluation (conversation, outputs) {
+    const servers = this.#referencedServers(conversation)
+    if (!servers) return
+    return outputs ? { servers, onAllowed: () => this.#mark(outputs) } : { servers }
+  }
+
+  /**
+   * Returns the servers that the tool calls reference, each with only the tools that they call.
+   *
+   * @param {Array<object>} messages
+   * @returns {McpServer[]|undefined}
+   */
+  #referencedServers (messages) {
+    // Clients can reach the same server, so the entries merge by server ID.
+    /** @type {Map<string, { server: McpServer, tools: Record<string, string> }>|undefined} */
+    let referenced
+    for (const message of messages) {
+      const toolCalls = message?.tool_calls
+      if (!Array.isArray(toolCalls)) continue
+
+      for (const toolCall of toolCalls) {
+        const name = toolCall?.function?.name
+        const listed = toolCall?.mcp && this.#tools.get(name)
+        if (!listed || listed.server.id !== toolCall.mcp.server_id) continue
+
+        referenced ??= new Map()
+        let entry = referenced.get(listed.server.id)
+        if (!entry) {
+          entry = { server: listed.server, tools: {} }
+          referenced.set(listed.server.id, entry)
+        }
+        entry.tools[name] = listed.originalName
+      }
+    }
+    if (!referenced) return
+
+    const servers = []
+    for (const { server, tools } of referenced.values()) {
+      servers.push({ ...server, tools })
+    }
+    return servers
+  }
+
+  /**
+   * Marks each MCP tool call of the outputs. A later callTool on the same connection, with the same
+   * tool and arguments in the same trace, then skips its own evaluation.
+   *
+   * @param {Array<object>} outputs
+   */
+  #mark (outputs) {
+    for (const message of outputs) {
+      const toolCalls = message?.tool_calls
+      if (!Array.isArray(toolCalls)) continue
+
+      for (const toolCall of toolCalls) {
+        const listed = toolCall?.mcp && this.#tools.get(toolCall.function?.name)
+        if (!listed) continue
+
+        const args = canonicalArguments(toolCall.function.arguments)
+        if (args !== undefined) {
+          addMark(this.#trace, { connectionId: listed.connectionId, name: listed.originalName, args })
+        }
+      }
+    }
+  }
+}
+
 module.exports = {
   MCP_SERVERS,
+  McpToolLink,
+  activeTrace,
+  consumeMark,
   createClientServer,
   createServer,
+  linkMcpTools,
+  recordListedTools,
 }

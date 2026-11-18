@@ -1,13 +1,28 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
 const { createHash } = require('node:crypto')
+const path = require('node:path')
+const { promisify } = require('node:util')
 
 const { describe, it } = require('mocha')
 
-const { createClientServer, createServer } = require('../../src/aiguard/mcp')
+const { storage } = require('../../../datadog-core')
+const {
+  activeTrace,
+  consumeMark,
+  createClientServer,
+  createServer,
+  linkMcpTools,
+  recordListedTools,
+} = require('../../src/aiguard/mcp')
 
+/** @typedef {import('../../src/aiguard/mcp').McpServer} McpServer */
 /** @typedef {import('../../src/aiguard/mcp').TransportInfo} TransportInfo */
+
+const exec = promisify(execFile)
+const legacyStorage = storage('legacy')
 
 /**
  * The server ID rule of the wire contract, computed without the tracer.
@@ -16,6 +31,64 @@ const { createClientServer, createServer } = require('../../src/aiguard/mcp')
  */
 function serverId (key) {
   return 'mcp_' + createHash('sha256').update(key, 'utf8').digest('hex').slice(0, 16)
+}
+
+/**
+ * Creates a span double whose context belongs to the given local trace.
+ *
+ * @param {{ started: object[] }} trace
+ */
+function fakeSpan (trace) {
+  const span = { context: () => ({ _trace: trace }) }
+  trace.started.push(span)
+  return span
+}
+
+/**
+ * Creates a local trace whose root is an outer operation, and a model request span inside it.
+ */
+function outerTrace () {
+  const trace = { started: /** @type {object[]} */ ([]) }
+  const root = fakeSpan(trace)
+  const requestSpan = fakeSpan(trace)
+  return { trace, root, requestSpan, interceptCtx: { tracingContext: { currentStore: { span: requestSpan } } } }
+}
+
+/**
+ * @param {{ type?: string, function?: object }} tool
+ */
+function chatFunction (tool) {
+  return tool.type === 'function' ? tool.function : undefined
+}
+
+/**
+ * Selects every tool call, as a filter for tests that do not check the filter.
+ */
+function anyToolCall () {
+  return true
+}
+
+/**
+ * Links the request tools and fails the test when no tool links.
+ *
+ * @param {Parameters<typeof linkMcpTools>} args
+ */
+function mustLink (...args) {
+  const link = linkMcpTools(...args)
+  assert.ok(link)
+  return link
+}
+
+/**
+ * Runs the callback that an evaluation which allows the outputs runs.
+ *
+ * @param {import('../../src/aiguard/mcp').McpToolLink} link
+ * @param {Array<object>} outputs
+ */
+function allow (link, outputs) {
+  const evaluation = link.evaluation(outputs, outputs)
+  assert.ok(evaluation?.onAllowed)
+  evaluation.onAllowed()
 }
 
 describe('AI Guard MCP helpers', () => {
@@ -286,5 +359,280 @@ describe('AI Guard MCP helpers', () => {
         assert.strictEqual(createClientServer(info), undefined)
       })
     }
+  })
+
+  describe('model request links', () => {
+    const server = /** @type {McpServer} */ (
+      createClientServer({ type: 'streamable_http', url: 'https://mcp.example.com/mcp' })
+    )
+
+    /**
+     * @param {object} client
+     * @param {string} name
+     * @param {object} [transport] The transport of the connection that lists the tool.
+     */
+    function listTool (client, name, transport = transportOf(client)) {
+      const tool = { name, inputSchema: { type: 'object', properties: { q: { type: 'string' } } } }
+      recordListedTools(transport, server, [tool])
+      return tool
+    }
+
+    /** @type {WeakMap<object, object>} */
+    const transports = new WeakMap()
+
+    /**
+     * Returns the first transport of a client, as one connection of the client.
+     *
+     * @param {object} client
+     */
+    function transportOf (client) {
+      let transport = transports.get(client)
+      if (!transport) {
+        transport = {}
+        transports.set(client, transport)
+      }
+      return transport
+    }
+
+    it('links a function tool by the identity of its parameters only', () => {
+      const client = {}
+      const listed = listTool(client, 'search')
+      const { interceptCtx } = outerTrace()
+
+      const byName = linkMcpTools([
+        { type: 'function', function: { name: 'search', parameters: { ...listed.inputSchema } } },
+      ], chatFunction, interceptCtx)
+      const bySchema = mustLink([
+        { type: 'function', function: { name: 'srv__search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+
+      assert.strictEqual(byName, undefined)
+      const messages = bySchema.attach([{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'srv__search', arguments: '{"q":"x"}' } }],
+      }], anyToolCall)
+      assert.deepStrictEqual(bySchema.evaluation(messages)?.servers, [{ ...server, tools: { srv__search: 'search' } }])
+    })
+
+    it('does not link when the model request span is the root of its trace', () => {
+      const listed = listTool({}, 'search')
+      const trace = { started: [] }
+      const requestSpan = fakeSpan(trace)
+
+      const link = linkMcpTools([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, { tracingContext: { currentStore: { span: requestSpan } } })
+
+      assert.strictEqual(link, undefined)
+    })
+
+    it('uses the active trace when the model request has no span', () => {
+      const listed = listTool({}, 'search')
+      const trace = { started: [] }
+      const active = fakeSpan(trace)
+
+      const link = legacyStorage.run({ span: active }, () => linkMcpTools([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, {}))
+      const noTrace = linkMcpTools([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, {})
+
+      assert.ok(link)
+      assert.strictEqual(noTrace, undefined)
+    })
+
+    it('attaches mcp with copy-on-write', () => {
+      const listed = listTool({}, 'search')
+      const { interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const user = { role: 'user', content: 'Find it' }
+      const toolCall = { id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"q":"x"}' } }
+      const other = { id: 'call_2', type: 'function', function: { name: 'other', arguments: '{}' } }
+      const assistant = { role: 'assistant', tool_calls: [toolCall, other] }
+      const messages = [user, assistant]
+      const snapshot = structuredClone(messages)
+
+      const attached = link.attach(messages, anyToolCall)
+
+      assert.deepStrictEqual(messages, snapshot)
+      assert.notStrictEqual(attached, messages)
+      assert.strictEqual(attached[0], user)
+      assert.strictEqual(attached[1].tool_calls[1], other)
+      assert.deepStrictEqual(attached[1], {
+        role: 'assistant',
+        tool_calls: [{ ...toolCall, mcp: { server_id: server.id } }, other],
+      })
+      assert.strictEqual(link.attach([user], anyToolCall).length, 1)
+      assert.deepStrictEqual(link.evaluation([user]), undefined)
+    })
+
+    it('attaches mcp only to the tool calls that the filter selects', () => {
+      const listed = listTool({}, 'search')
+      const { interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const functionCall = { id: 'call_1', function: { name: 'search', arguments: '{}' } }
+      const hostedCall = { id: 'mcp_1', function: { name: 'search', arguments: '{}' } }
+
+      const [attached] = link.attach([{ role: 'assistant', tool_calls: [functionCall, hostedCall] }], toolCall => {
+        return toolCall.id === 'call_1'
+      })
+
+      assert.deepStrictEqual(attached.tool_calls, [{ ...functionCall, mcp: { server_id: server.id } }, hostedCall])
+    })
+
+    it('marks allowed outputs for the connection, original name and canonical arguments', () => {
+      const client = {}
+      const transport = transportOf(client)
+      const listed = listTool(client, 'search')
+      const { trace, root, interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'srv__search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const outputs = link.attach([{
+        role: 'assistant',
+        tool_calls: [
+          { id: 'call_1', function: { name: 'srv__search', arguments: '{ "q": "x" }' } },
+          { id: 'call_2', function: { name: 'srv__search', arguments: 'not json' } },
+        ],
+      }], anyToolCall)
+
+      allow(link, outputs)
+
+      assert.strictEqual(legacyStorage.run({ span: root }, activeTrace), trace)
+      assert.strictEqual(consumeMark(trace, {}, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, undefined, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'srv__search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"y"}'), false)
+      assert.strictEqual(consumeMark({ started: [] }, transport, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"x"}'), true)
+      // A mark is consumed once.
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', 'not json'), false)
+    })
+
+    it('consumes a mark only on the connection that listed the tool', () => {
+      const client = {}
+      const first = {}
+      const second = {}
+      const listed = listTool(client, 'search', first)
+      // The client closes the first connection and connects to another server.
+      listTool(client, 'search', second)
+      const { trace, interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const outputs = link.attach([{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: '{"q":"x"}' } }],
+      }], anyToolCall)
+
+      allow(link, outputs)
+
+      assert.strictEqual(consumeMark(trace, second, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, first, 'search', '{"q":"x"}'), true)
+    })
+
+    it('matches a mark when validation changes the key order of the arguments', () => {
+      const client = {}
+      const listed = listTool(client, 'search')
+      const { trace, interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const args = '{"b":"1","a":{"y":[2,1],"x":null},"__proto__":{"e":1}}'
+      const outputs = link.attach([{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: args } }],
+      }], anyToolCall)
+
+      allow(link, outputs)
+
+      // Another value, or another order of array items, does not match.
+      const otherValue = '{"a":{"x":null,"y":[2,1]},"b":"2","__proto__":{"e":1}}'
+      const otherArray = '{"a":{"x":null,"y":[1,2]},"b":"1","__proto__":{"e":1}}'
+      const sameValues = '{"__proto__":{"e":1},"a":{"x":null,"y":[2,1]},"b":"1"}'
+      const transport = transportOf(client)
+      assert.strictEqual(consumeMark(trace, transport, 'search', otherValue), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', otherArray), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', sameValues), true)
+    })
+
+    it('keeps a bounded number of marks for each trace', () => {
+      const client = {}
+      const listed = listTool(client, 'search')
+      const { trace, interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const toolCalls = []
+      for (let i = 0; i < 65; i++) {
+        toolCalls.push({ id: `call_${i}`, function: { name: 'search', arguments: JSON.stringify({ q: i }) } })
+      }
+      const outputs = link.attach([{ role: 'assistant', tool_calls: toolCalls }], anyToolCall)
+
+      allow(link, outputs)
+
+      const transport = transportOf(client)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":0}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":1}'), true)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":64}'), true)
+    })
+
+    it('sends one entry for two clients that reach the same server', () => {
+      const first = { name: 'search', inputSchema: { type: 'object' } }
+      const second = { name: 'fetch', inputSchema: { type: 'object' } }
+      const sameServer = createClientServer({ type: 'streamable_http', url: 'https://mcp.example.com/other' })
+      recordListedTools({}, server, [first])
+      recordListedTools({}, sameServer, [second])
+      const { interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'a_search', parameters: first.inputSchema } },
+        { type: 'function', function: { name: 'b_fetch', parameters: second.inputSchema } },
+      ], chatFunction, interceptCtx)
+
+      const messages = link.attach([{
+        role: 'assistant',
+        tool_calls: [
+          { id: 'call_1', function: { name: 'a_search', arguments: '{}' } },
+          { id: 'call_2', function: { name: 'b_fetch', arguments: '{}' } },
+        ],
+      }], anyToolCall)
+
+      assert.notStrictEqual(sameServer, server)
+      assert.deepStrictEqual(link.evaluation(messages)?.servers, [
+        { ...server, tools: { a_search: 'search', b_fetch: 'fetch' } },
+      ])
+    })
+
+    it('ignores listed tools without a server, a transport or a schema', () => {
+      const schema = { type: 'object' }
+      recordListedTools({}, undefined, [{ name: 'search', inputSchema: schema }])
+      recordListedTools(undefined, server, [{ name: 'search', inputSchema: schema }])
+      recordListedTools({}, server, [{ name: 'search' }, { inputSchema: {} }, null])
+
+      const { interceptCtx } = outerTrace()
+      const link = linkMcpTools([
+        { type: 'function', function: { name: 'search', parameters: schema } },
+        null,
+        'not a tool',
+      ], chatFunction, interceptCtx)
+
+      assert.strictEqual(link, undefined)
+    })
+
+    it('keeps no client or transport alive through the listed schemas and the marks', async function () {
+      this.timeout(10000)
+      const fixture = path.join(__dirname, 'fixtures/mcp-client-retention.js')
+
+      const { stdout, stderr } = await exec(process.execPath, ['--expose-gc', fixture], { timeout: 7000 })
+
+      assert.strictEqual(stdout, '')
+      assert.strictEqual(stderr, '')
+    })
   })
 })
