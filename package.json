@@ -19,6 +19,7 @@
     "verify:rewriter:targets": "node scripts/generate-rewriter-targets.js --check",
     "generate:supported-integrations": "node scripts/generate-supported-integrations.js",
     "type:check": "tsc --noEmit -p tsconfig.dev.json",
+    "type:check:ci": "node scripts/type-check.js tsconfig.type-checked.json",
     "type:doc:build": "cd docs && bun install --frozen-lockfile && bun run build",
     "type:doc:test": "cd docs && bun install --frozen-lockfile && bun run test",
     "lint": "bash ./scripts/lint.sh",

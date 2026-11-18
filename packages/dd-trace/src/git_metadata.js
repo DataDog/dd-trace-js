@@ -19,7 +19,8 @@ const {
 const cache = {}
 
 /**
- * @param {import('./config/config-types').ConfigProperties} config
+ * @param {Pick<import('./config/config-types').ConfigProperties, 'DD_GIT_COMMIT_SHA' | 'DD_GIT_FOLDER_PATH' |
+ *   'DD_GIT_PROPERTIES_FILE' | 'DD_GIT_REPOSITORY_URL' | 'DD_TRACE_GIT_METADATA_ENABLED' | 'tags'>} config
  */
 function getGitMetadata (config) {
   if (!config.DD_TRACE_GIT_METADATA_ENABLED) {

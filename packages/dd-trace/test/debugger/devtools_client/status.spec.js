@@ -225,10 +225,10 @@ describe('diagnostic message http requests', function () {
     const options = getRequestOptions(requestAgentless)
     assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
     assert.match(options.path, /runtime_id%3Amy-runtime-id/)
-    assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(/** @type {URL} */ (options.url).href, 'https://debugger-intake.us3.datadoghq.com/')
     assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
     assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
-    assert.strictEqual(options.agent, undefined)
+    assert.strictEqual(Object.hasOwn(options, 'agent'), false)
   })
 })
 
