@@ -146,65 +146,52 @@ describe('workflow jobs', () => {
       })
     })
 
-    it('restarts pagination after a later page returns an empty HTTP 200 body', async () => {
+    it('paginates jobs at a fixed page size', async () => {
       const jobs = Array.from({ length: 101 }, (_, id) => ({ id }))
-      const requests = []
-      const listJobsForWorkflowRunAttempt = sinon.stub().callsFake(options => {
-        const { per_page: perPage, page } = options
-        requests.push([perPage, page])
-        if (perPage === 100 && page === 2) return Promise.resolve({ status: 200, data: '' })
+      const listJobsForWorkflowRunAttempt = sinon.stub().callsFake(({ per_page: perPage, page }) => {
         return Promise.resolve({ data: { jobs: jobs.slice((page - 1) * perPage, page * perPage) } })
       })
 
       const actual = await getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run)
 
       assert.deepStrictEqual(actual, jobs)
-      assert.deepStrictEqual(requests, [[100, 1], [100, 2], [50, 1], [50, 2], [50, 3]])
+      const requests = listJobsForWorkflowRunAttempt.args.map(([options]) => [options.per_page, options.page])
+      assert.deepStrictEqual(requests, [[100, 1], [100, 2]])
     })
 
-    for (const status of [500, 502, 503, 504]) {
-      it(`falls back to ten-job pages after HTTP ${status} responses`, async () => {
-        const jobs = Array.from({ length: 11 }, (_, id) => ({ id }))
-        const listJobsForWorkflowRunAttempt = sinon.stub().callsFake(({ per_page: perPage, page }) => {
-          if (perPage > 10) return Promise.reject(Object.assign(new Error('GitHub failed'), { status }))
-          return Promise.resolve({ data: { jobs: jobs.slice((page - 1) * perPage, page * perPage) } })
-        })
+    it('fails on an empty later response instead of returning partial jobs or restarting', async () => {
+      const listJobsForWorkflowRunAttempt = sinon.stub()
+      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ data: { jobs: Array.from({ length: 100 }, () => ({})) } })
+      listJobsForWorkflowRunAttempt.onSecondCall().resolves({ status: 200, data: '' })
 
-        const actual = await getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run)
-
-        assert.deepStrictEqual(actual, jobs)
-        const pageSizes = listJobsForWorkflowRunAttempt.args.map(([options]) => options.per_page)
-        assert.deepStrictEqual(pageSizes, [100, 50, 10, 10])
+      await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
+        name: 'TypeError',
+        message: 'Unexpected jobs response for workflow run 42, attempt 1, page 2, per_page 100 (HTTP 200).',
       })
-    }
+      const requests = listJobsForWorkflowRunAttempt.args.map(([options]) => [options.per_page, options.page])
+      assert.deepStrictEqual(requests, [[100, 1], [100, 2]])
+    })
 
-    for (const status of [401, 403, 404, 429]) {
-      it(`does not retry HTTP ${status}`, async () => {
+    for (const status of [403, 502]) {
+      it(`propagates HTTP ${status} without retrying or changing the page size`, async () => {
         const error = Object.assign(new Error('GitHub rejected the request'), { status })
         const listJobsForWorkflowRunAttempt = sinon.stub().rejects(error)
 
         await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), error)
         assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
+        assert.strictEqual(listJobsForWorkflowRunAttempt.firstCall.args[0].per_page, 100)
       })
     }
 
-    it('stops after ten-job pages also fail', async () => {
-      const error = Object.assign(new Error('GitHub failed'), { status: 502 })
-      const listJobsForWorkflowRunAttempt = sinon.stub().rejects(error)
-
-      await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), error)
-      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 3)
-    })
-
     for (const data of ['', {}, { jobs: {} }]) {
-      it(`reports persistent malformed responses: ${JSON.stringify(data)}`, async () => {
+      it(`rejects malformed responses: ${JSON.stringify(data)}`, async () => {
         const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ status: 200, data })
 
         await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
           name: 'TypeError',
-          message: 'Unexpected jobs response for workflow run 42, attempt 1, page 1, per_page 10 (HTTP 200).',
+          message: 'Unexpected jobs response for workflow run 42, attempt 1, page 1, per_page 100 (HTTP 200).',
         })
-        assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 3)
+        assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
       })
     }
 

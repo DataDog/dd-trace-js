@@ -65,8 +65,6 @@ const CHECK_RUNS_QUERY = `
   }
 `
 
-const RETRYABLE_STATUSES = new Set([500, 502, 503, 504])
-
 /**
  * @param {Pick<import('octokit').Octokit, 'graphql'>} api
  * @param {WorkflowRun} run
@@ -126,41 +124,30 @@ export async function getCheckRuns (api, run, failedOnly = false) {
  * @returns {Promise<WorkflowJob[]>}
  */
 export async function getRestJobs (api, run) {
-  let perPage = 100
-  for (;;) {
-    const jobs = []
-    const attempt = run.run_attempt ?? 1
+  const perPage = 100
+  const jobs = []
+  const attempt = run.run_attempt ?? 1
 
-    for (let page = 1; ; page++) {
-      let response
-      try {
-        // eslint-disable-next-line no-await-in-loop -- the response determines whether another page is needed
-        response = await api.rest.actions.listJobsForWorkflowRunAttempt({
-          owner: 'DataDog',
-          repo: 'dd-trace-js',
-          run_id: run.id,
-          attempt_number: attempt,
-          per_page: perPage,
-          page,
-        })
-      } catch (error) {
-        if (!RETRYABLE_STATUSES.has(error.status) || perPage === 10) throw error
-        break
-      }
+  for (let page = 1; ; page++) {
+    // eslint-disable-next-line no-await-in-loop -- the response determines whether another page is needed
+    const response = await api.rest.actions.listJobsForWorkflowRunAttempt({
+      owner: 'DataDog',
+      repo: 'dd-trace-js',
+      run_id: run.id,
+      attempt_number: attempt,
+      per_page: perPage,
+      page,
+    })
 
-      const batch = response?.data?.jobs
-      if (!Array.isArray(batch)) {
-        if (perPage !== 10) break
-        throw new TypeError(
-          `Unexpected jobs response for workflow run ${run.id}, attempt ${attempt}, ` +
-          `page ${page}, per_page ${perPage} (HTTP ${response?.status}).`
-        )
-      }
-
-      jobs.push(...batch)
-      if (batch.length < perPage) return jobs
+    const batch = response?.data?.jobs
+    if (!Array.isArray(batch)) {
+      throw new TypeError(
+        `Unexpected jobs response for workflow run ${run.id}, attempt ${attempt}, ` +
+        `page ${page}, per_page ${perPage} (HTTP ${response?.status}).`
+      )
     }
-    // Page boundaries change with per_page; discard earlier pages before retrying.
-    perPage = perPage === 100 ? 50 : 10
+
+    jobs.push(...batch)
+    if (batch.length < perPage) return jobs
   }
 }
