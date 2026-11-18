@@ -15,6 +15,7 @@ const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
+const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
 const { HTTP_STATUS_ERROR, applyHttpOtelSemantics } = require('../../src/plugins/util/http-otel-semantics')
@@ -22,6 +23,19 @@ const processTags = require('../../src/process-tags')
 const { SpanBuckets } = require('../../src/span_stats')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
+const { protoTraceService } = getProtobufTypes()
+
+/**
+ * Decodes an OTLP protobuf trace payload into a plain object. Longs become numbers so
+ * nanosecond timestamps compare equal to the DD span numbers they were encoded from,
+ * and bytes fields stay Buffers.
+ *
+ * @param {Buffer} payload - The protobuf-encoded ExportTraceServiceRequest
+ * @returns {object} Decoded request
+ */
+function decodeProtobufPayload (payload) {
+  return protoTraceService.toObject(protoTraceService.decode(payload), { longs: Number })
+}
 
 const OTEL_ENV_KEYS = [
   'OTEL_TRACES_EXPORTER',
@@ -95,7 +109,9 @@ describe('OpenTelemetry Traces', () => {
         const mockReq = {
           write: (data) => { capturedPayload = data },
           end: () => {
-            const decoded = JSON.parse(capturedPayload.toString())
+            const decoded = capturedHeaders['Content-Type'] === 'application/x-protobuf'
+              ? decodeProtobufPayload(capturedPayload)
+              : JSON.parse(capturedPayload.toString())
             validator(decoded, capturedHeaders)
             validatorCalled = true
           },
@@ -150,7 +166,6 @@ describe('OpenTelemetry Traces', () => {
 
   describe('Transformer', () => {
     const OtlpTraceTransformer = require('../../src/opentelemetry/trace/otlp_transformer')
-    const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
     const { protoSpanKind } = getProtobufTypes()
     const {
       SPAN_KIND_UNSPECIFIED,
@@ -192,7 +207,7 @@ describe('OpenTelemetry Traces', () => {
     }
 
     it('transforms a basic span to OTLP JSON format', () => {
-      const transformer = new OtlpTraceTransformer({ 'service.name': 'test-service' })
+      const transformer = new OtlpTraceTransformer({ 'service.name': 'test-service' }, 'http/json')
       const span = createMockSpan()
 
       const decoded = decodePayload(transformer.transformSpans([span]))
@@ -232,7 +247,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('exports W3C tracestate and the sampled flag as first-class OTLP fields', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const traceState = 'dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668'
       const span = createMockSpan({
         trace_state: traceState,
@@ -248,7 +263,7 @@ describe('OpenTelemetry Traces', () => {
 
     for (const priority of [-1, 0, 1, 2, undefined]) {
       it(`exports the sampled flag for priority ${priority}`, () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const span = createMockSpan({ metrics: { _sampling_priority_v1: priority } })
         const decoded = decodePayload(transformer.transformSpans([span]))
         const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
@@ -259,7 +274,7 @@ describe('OpenTelemetry Traces', () => {
     }
 
     it('maps span kind correctly', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
 
       const kinds = ['internal', 'server', 'client', 'producer', 'consumer']
       const expected = [SPAN_KIND_INTERNAL, SPAN_KIND_SERVER, SPAN_KIND_CLIENT, SPAN_KIND_PRODUCER, SPAN_KIND_CONSUMER]
@@ -272,7 +287,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('defaults to SPAN_KIND_UNSPECIFIED when no span.kind', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({ meta: {} })
 
       const decoded = decodePayload(transformer.transformSpans([span]))
@@ -280,7 +295,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('maps error status correctly', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
 
       const okSpan = createMockSpan({ error: 0 })
       const okDecoded = decodePayload(transformer.transformSpans([okSpan]))
@@ -295,7 +310,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('combines error.type and error.message in status message', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
 
       const span = createMockSpan({
         error: 1,
@@ -309,7 +324,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('falls back to error.type when no error.message is present', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
 
       const span = createMockSpan({ error: 1, meta: { 'error.type': 'TypeError' } })
       const decoded = decodePayload(transformer.transformSpans([span]))
@@ -320,7 +335,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('omits parentSpanId for root spans (zero parent ID)', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({ parent_id: id('0') })
 
       const decoded = decodePayload(transformer.transformSpans([span]))
@@ -330,7 +345,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('includes meta and metrics as attributes', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({
         meta: {
           'http.method': 'POST',
@@ -356,7 +371,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('encodes meta_struct values as base64 bytesValue attributes', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({
         meta_struct: {
           '_dd.stack': { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] },
@@ -381,7 +396,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('excludes _dd.span_links and span.kind from attributes', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({
         meta: {
           'span.kind': 'client',
@@ -399,7 +414,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('includes resource, service, type, and operation name as attributes', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan()
 
       const decoded = decodePayload(transformer.transformSpans([span]))
@@ -422,7 +437,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('transforms span events', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       // Raw events carry startTime; the transformer derives timeUnixNano = round(startTime * 1e6).
       const span = createMockSpan({
         span_events: [{
@@ -450,7 +465,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('transforms span links from _dd.span_links JSON', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const links = JSON.stringify([{
         trace_id: 'aabbccddaabbccddaabbccddaabbccdd',
         span_id: '1122334455667788',
@@ -477,7 +492,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('maps timestamps correctly', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const beforeNs = Date.now() * 1e6
       const durationNs = 50000000 // 50ms
       const span = createMockSpan({
@@ -495,7 +510,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('handles empty span array', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const decoded = decodePayload(transformer.transformSpans([]))
 
       assert.strictEqual(decoded.resourceSpans.length, 1)
@@ -503,7 +518,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('handles multiple spans', () => {
-      const transformer = new OtlpTraceTransformer({})
+      const transformer = new OtlpTraceTransformer({}, 'http/json')
       const spans = [
         createMockSpan({ resource: '/api/first' }),
         createMockSpan({ resource: '/api/second', span_id: id('bbbbbbbbbbbbbbbb') }),
@@ -521,7 +536,7 @@ describe('OpenTelemetry Traces', () => {
 
     describe('resource attribute deduplication', () => {
       it('omits span tags the resource carries with the same value', () => {
-        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' })
+        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' }, 'http/json')
         const span = createMockSpan({
           meta: { 'span.kind': 'server', 'http.method': 'GET', team: 'core', region: 'us1' },
         })
@@ -537,7 +552,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('keeps span tags whose value differs from the resource', () => {
-        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' })
+        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' }, 'http/json')
         const span = createMockSpan({ meta: { team: 'core', region: 'eu1' } })
 
         const decoded = decodePayload(transformer.transformSpans([span]))
@@ -551,7 +566,7 @@ describe('OpenTelemetry Traces', () => {
         const transformer = new OtlpTraceTransformer({
           'deployment.environment.name': 'prod',
           'service.version': '1.0.0',
-        })
+        }, 'http/json')
         const span = createMockSpan({ meta: { env: 'prod', version: '1.0.0' } })
 
         const decoded = decodePayload(transformer.transformSpans([span]))
@@ -561,7 +576,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('compares against the resource attributes after an update', () => {
-        const transformer = new OtlpTraceTransformer({ 'runtime-id': 'initial-id' })
+        const transformer = new OtlpTraceTransformer({ 'runtime-id': 'initial-id' }, 'http/json')
         transformer.updateResourceAttributes({ 'runtime-id': 'refreshed-id' })
 
         const spans = [
@@ -586,7 +601,7 @@ describe('OpenTelemetry Traces', () => {
       // to find `_dd.p.tid` and then apply it to every span.
 
       it('reconstructs the full 128-bit traceId for every span in a batch from _dd.p.tid', () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const lowHex = 'abcdef0123456789'
         const tidHigh = '1234567890abcdef'
         const traceIdLow = id(lowHex)
@@ -616,7 +631,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('drops _dd.p.tid from OTLP attributes once consumed into traceId', () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const span = createMockSpan({
           trace_id: id('abcdef0123456789'),
           meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890abcdef' },
@@ -629,7 +644,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('zero-pads traceId to 32 hex chars when no _dd.p.tid is present', () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const span = createMockSpan({
           trace_id: id('abcdef0123456789'),
           meta: { 'span.kind': 'internal' },
@@ -642,7 +657,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('lowercases an uppercase _dd.p.tid so the OTLP traceId is canonical lowercase hex', () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const lowHex = 'abcdef0123456789'
         const span = createMockSpan({
           trace_id: id(lowHex),
@@ -656,7 +671,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('uses a full 16-byte trace_id buffer directly without consulting _dd.p.tid', () => {
-        const transformer = new OtlpTraceTransformer({})
+        const transformer = new OtlpTraceTransformer({}, 'http/json')
         const unusedTidHigh = '1000000000000000'
         const span = createMockSpan({
           trace_id: id('1234567890abcdef1234567890abcdef'),
@@ -673,7 +688,7 @@ describe('OpenTelemetry Traces', () => {
     describe('otelTraceSemanticsEnabled', () => {
       for (const [kind, statusCode] of [['server', 500], ['server', 599], ['client', 400], ['client', 500]]) {
         it(`leaves the status description empty for an HTTP ${kind} ${statusCode} error`, () => {
-          const transformer = new OtlpTraceTransformer({}, true)
+          const transformer = new OtlpTraceTransformer({}, 'http/json', true)
           const span = createMockSpan({
             error: 1,
             meta: {
@@ -749,7 +764,7 @@ describe('OpenTelemetry Traces', () => {
         },
       ]) {
         it(`preserves the status when ${description}`, () => {
-          const transformer = new OtlpTraceTransformer({}, semantics)
+          const transformer = new OtlpTraceTransformer({}, 'http/json', semantics)
           const span = createMockSpan({ error, meta, metrics })
 
           const decoded = decodePayload(transformer.transformSpans([span]))
@@ -761,7 +776,7 @@ describe('OpenTelemetry Traces', () => {
       }
 
       it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
-        const transformer = new OtlpTraceTransformer({}, true)
+        const transformer = new OtlpTraceTransformer({}, 'http/json', true)
         const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })
 
         const decoded = decodePayload(transformer.transformSpans([span]))
@@ -778,7 +793,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('still emits non-DD meta tags and metrics as attributes', () => {
-        const transformer = new OtlpTraceTransformer({}, true)
+        const transformer = new OtlpTraceTransformer({}, 'http/json', true)
         const span = createMockSpan({
           meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://localhost/api' },
           metrics: { 'http.status_code': 200 },
@@ -793,7 +808,7 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('excludes error.message from attributes but still populates OTLP status', () => {
-        const transformer = new OtlpTraceTransformer({}, true)
+        const transformer = new OtlpTraceTransformer({}, 'http/json', true)
         const span = createMockSpan({
           error: 1,
           meta: {
@@ -813,6 +828,131 @@ describe('OpenTelemetry Traces', () => {
           code: 2,
           message: 'cannot read properties',
         }, 'OTLP status must still be populated from error.message')
+      })
+    })
+
+    describe('http/protobuf', () => {
+      /**
+       * @param {object[]} spans - DD-formatted spans
+       * @param {import('@opentelemetry/api').Attributes} [resourceAttributes]
+       * @returns {object} Decoded ExportTraceServiceRequest
+       */
+      function transformToProtobuf (spans, resourceAttributes = {}) {
+        const transformer = new OtlpTraceTransformer(resourceAttributes, 'http/protobuf')
+        return decodeProtobufPayload(transformer.transformSpans(spans))
+      }
+
+      /** @param {Uint8Array} bytes */
+      function toHex (bytes) {
+        return Buffer.from(bytes).toString('hex')
+      }
+
+      it('encodes span fields as an OTLP protobuf ExportTraceServiceRequest', () => {
+        const span = createMockSpan({
+          error: 1,
+          trace_state: 'dd=s:1',
+          meta: {
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'error.type': 'TypeError',
+            'error.message': 'cannot read properties',
+          },
+          metrics: { _sampling_priority_v1: 1, 'http.status_code': 200, ratio: 0.5 },
+          span_events: [{ name: 'exception', startTime: 1700000000010, attributes: { 'exception.escaped': true } }],
+        })
+
+        const decoded = transformToProtobuf([span], { 'service.name': 'test-service' })
+        const { resource, scopeSpans } = decoded.resourceSpans[0]
+        const otlpSpan = scopeSpans[0].spans[0]
+
+        assert.strictEqual(extractAttrs(resource.attributes)['service.name'], 'test-service')
+        assert.strictEqual(scopeSpans[0].scope.name, 'dd-trace-js')
+        assertObjectContains(otlpSpan, {
+          name: '/api/test',
+          kind: SPAN_KIND_CLIENT,
+          startTimeUnixNano: 1700000000000000000,
+          endTimeUnixNano: 1700000000050000000,
+          traceState: 'dd=s:1',
+          flags: 1,
+          status: { code: 2, message: 'TypeError: cannot read properties' },
+        })
+        assertObjectContains(extractAttrs(otlpSpan.attributes), {
+          'service.name': 'test-service',
+          'operation.name': 'test.operation',
+          'http.method': 'GET',
+          'http.status_code': 200,
+          ratio: 0.5,
+        })
+        assert.strictEqual(otlpSpan.events.length, 1)
+        assertObjectContains(otlpSpan.events[0], { name: 'exception', timeUnixNano: 1700000000010000000 })
+        assert.deepStrictEqual(otlpSpan.events[0].attributes, [
+          { key: 'exception.escaped', value: { boolValue: true } },
+        ])
+      })
+
+      it('encodes trace, span, and parent IDs as raw bytes', () => {
+        const span = createMockSpan()
+
+        const otlpSpan = transformToProtobuf([span]).resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(toHex(otlpSpan.traceId), '1234567890abcdef1234567890abcdef')
+        assert.strictEqual(toHex(otlpSpan.spanId), 'abcdef1234567890')
+        assert.strictEqual(toHex(otlpSpan.parentSpanId), '1111111111111111')
+      })
+
+      it('omits parentSpanId for root spans', () => {
+        const span = createMockSpan({ parent_id: id('0') })
+
+        const otlpSpan = transformToProtobuf([span]).resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.parentSpanId, undefined)
+      })
+
+      it('encodes 16-byte trace IDs from _dd.p.tid and zero-pads 64-bit trace IDs', () => {
+        const lowHex = 'abcdef0123456789'
+        const spans = [
+          createMockSpan({ trace_id: id(lowHex), meta: { '_dd.p.tid': '1234567890ABCDEF' } }),
+          createMockSpan({ trace_id: id(lowHex), span_id: id('bbbbbbbbbbbbbbbb'), meta: {} }),
+          createMockSpan({ trace_id: id('0123456789abcdef'), span_id: id('cccccccccccccccc'), meta: {} }),
+        ]
+
+        const otlpSpans = transformToProtobuf(spans).resourceSpans[0].scopeSpans[0].spans
+
+        assert.deepStrictEqual(otlpSpans.map(otlpSpan => toHex(otlpSpan.traceId)), [
+          '1234567890abcdef' + lowHex,
+          '1234567890abcdef' + lowHex,
+          '00000000000000000123456789abcdef',
+        ])
+      })
+
+      it('encodes span link IDs as raw bytes', () => {
+        const span = createMockSpan({
+          meta: {
+            '_dd.span_links': JSON.stringify([
+              { trace_id: 'aabbccddaabbccddaabbccddaabbccdd', span_id: '1122334455667788', tracestate: 'dd=s:1' },
+              { trace_id: '0x1', span_id: '2' },
+            ]),
+          },
+        })
+
+        const { links } = transformToProtobuf([span]).resourceSpans[0].scopeSpans[0].spans[0]
+        const hexLinks = links.map(link => ({ ...link, traceId: toHex(link.traceId), spanId: toHex(link.spanId) }))
+
+        assert.deepStrictEqual(hexLinks, [
+          { traceId: 'aabbccddaabbccddaabbccddaabbccdd', spanId: '1122334455667788', traceState: 'dd=s:1' },
+          { traceId: '00000000000000000000000000000001', spanId: '0000000000000002' },
+        ])
+      })
+
+      it('encodes meta_struct values as their JSON bytes without base64', () => {
+        const stack = { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] }
+        const span = createMockSpan({ meta_struct: { '_dd.stack': stack } })
+
+        const { attributes } = transformToProtobuf([span]).resourceSpans[0].scopeSpans[0].spans[0]
+        const stackAttr = attributes.find(attribute => attribute.key === '_dd.stack')
+
+        assert.ok(stackAttr, '_dd.stack attribute should be present')
+        assert.deepStrictEqual(JSON.parse(Buffer.from(stackAttr.value.bytesValue).toString()), stack)
       })
     })
   })
@@ -839,6 +979,48 @@ describe('OpenTelemetry Traces', () => {
 
       exporter.export([createMockSpan()])
     })
+
+    for (const env of [
+      { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
+    ]) {
+      it(`exports protobuf-encoded spans with ${JSON.stringify(env)}`, () => {
+        const verify = mockOtlpExport((decoded, headers) => {
+          assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
+          const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+          assert.strictEqual(otlpSpan.name, '/api/test')
+          assert.strictEqual(Buffer.from(otlpSpan.spanId).toString('hex'), 'abcdef1234567890')
+        })
+
+        const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...env })
+        exporter.export([createMockSpan()])
+
+        verify()
+        assert.strictEqual(exporter.protocol, 'http/protobuf')
+        assert.ok(exporter.telemetryTags.includes('encoding:protobuf'))
+      })
+    }
+
+    for (const env of [
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc' },
+      { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'grpc' },
+    ]) {
+      it(`exports JSON-encoded spans with ${JSON.stringify(env)}`, () => {
+        const verify = mockOtlpExport((decoded, headers) => {
+          assert.strictEqual(headers['Content-Type'], 'application/json')
+          assert.strictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].spanId, 'abcdef1234567890')
+        })
+
+        const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...env })
+        exporter.export([createMockSpan()])
+
+        verify()
+        assert.strictEqual(exporter.protocol, 'http/json')
+        assert.ok(exporter.telemetryTags.includes('encoding:json'))
+      })
+    }
 
     it('includes custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
       mockOtlpExport((decoded, headers) => {
@@ -902,7 +1084,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.export([])
       assert(!exportCalled, 'No HTTP request should be made for empty span arrays')
@@ -915,7 +1097,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: 0 } })])
       assert(!exportCalled, 'No HTTP request should be made for rejected traces')
@@ -928,7 +1110,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
@@ -1010,8 +1192,7 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Configurations', () => {
-    // Only http/json is currently supported. Other protocols (grpc, http/protobuf)
-    // are not yet implemented and will be added in a future release.
+    // http/json remains the default; http/protobuf is opt-in and grpc is not implemented.
     it('uses default http/json protocol', () => {
       const config = getConfigFresh()
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
@@ -1046,22 +1227,22 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('exporter setUrl preserves a bare URL as-is without adding a signal path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/')
     })
 
     it('exporter setUrl preserves an explicit signal-specific path as-is', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/custom')
     })
 
     it('exporter setUrl preserves a trailing-slash signal-specific path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces/', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces/', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/v1/traces/')
     })
 
     it('exporter setUrl keeps /v1/traces when already present', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/v1/traces')
     })
 
@@ -1149,13 +1330,13 @@ describe('OpenTelemetry Traces', () => {
 
   describe('Telemetry Metrics', () => {
     it('sets protocol:http tag for http:// endpoint', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, 'http/json', {})
 
       assert.ok(exporter.telemetryTags.includes('protocol:http'))
     })
 
     it('sets protocol:https tag for https:// endpoint', () => {
-      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, 'http/json', {})
 
       assert.ok(exporter.telemetryTags.includes('protocol:https'))
     })
@@ -1170,7 +1351,7 @@ describe('OpenTelemetry Traces', () => {
         }),
       })
 
-      const exporter = new MockedExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new MockedExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
       exporter.export([createMockSpan()])
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
@@ -1179,7 +1360,7 @@ describe('OpenTelemetry Traces', () => {
 
   describe('setUrl', () => {
     it('retargets hostname and port and preserves an explicit custom path as-is', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.setUrl('http://otel-collector:9999/custom/path')
 
@@ -1189,7 +1370,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('uses a bare URL as-is without adding a signal path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.setUrl('http://otel-collector:9999')
 
@@ -1197,7 +1378,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('keeps /v1/traces when already present and preserves the query string', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
 
       exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
 
@@ -1205,7 +1386,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('selects http transport for http:// URLs', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, 'http/json', {})
       const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
       const httpStub = sinon.stub(http, 'request').returns(mockReq)
       sinon.stub(https, 'request').returns(mockReq)
@@ -1216,7 +1397,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('selects https transport for https:// URLs', () => {
-      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, 'http/json', {})
       const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
       sinon.stub(http, 'request').returns(mockReq)
       const httpsStub = sinon.stub(https, 'request').returns(mockReq)
@@ -1227,7 +1408,7 @@ describe('OpenTelemetry Traces', () => {
     })
 
     it('switches transport when setUrl is called with a different scheme', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, 'http/json', {})
       const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
       sinon.stub(http, 'request').returns(mockReq)
       const httpsStub = sinon.stub(https, 'request').returns(mockReq)

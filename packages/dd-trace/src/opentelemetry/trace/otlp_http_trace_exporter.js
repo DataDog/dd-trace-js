@@ -6,13 +6,13 @@ const { AUTO_KEEP } = require('../../../../../ext/priority')
 const OtlpTraceTransformer = require('./otlp_transformer')
 
 /**
- * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP/JSON.
+ * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP (JSON or protobuf).
  *
  * This implementation follows the OTLP HTTP specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * It receives DD-formatted spans (from span_format.js), transforms them
- * to OTLP ExportTraceServiceRequest JSON format, and sends them to the
+ * to an OTLP ExportTraceServiceRequest in the configured encoding, and sends them to the
  * configured OTLP endpoint via HTTP POST.
  *
  * TODO: Add batch handling similar to the OpenTelemetry SDK Batch Processor
@@ -35,12 +35,13 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
    *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
+   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {boolean} otelTraceSemanticsEnabled - When true, do not emit Datadog-only attributes as span attributes
+   * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled) {
-    super(url, headers, timeout, 'http/json', 'traces', resourceAttributes)
-    this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelTraceSemanticsEnabled)
+  constructor (url, headers, timeout, protocol, resourceAttributes, otelTraceSemanticsEnabled) {
+    super(url, headers, timeout, protocol, 'traces', resourceAttributes)
+    this.#transformer = new OtlpTraceTransformer(resourceAttributes, protocol, otelTraceSemanticsEnabled)
   }
 
   /**
