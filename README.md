@@ -69,6 +69,28 @@ For more information about library versioning and compatibility, see the [Node.j
 Changes associated with each individual release are documented on the [GitHub Releases](https://github.com/DataDog/dd-trace-js/releases) screen.
 
 
+## Bun (experimental)
+
+Bun support is experimental and is not covered by the Node.js compatibility policy. The capabilities and safety
+fallbacks below depend on the installed tracer version and require a release that includes the corresponding Bun
+support.
+
+```sh
+bun --preload dd-trace/init app.js
+```
+
+Alternatively, call `require('dd-trace').init()` before loading instrumented modules.
+
+- Supported paths include compatible CommonJS-loaded instrumentations, `node:http`/`fetch`, log injection for supported
+  CommonJS loggers, and wall/timeline profiling uploads. Versions with the corresponding Bun-specific instrumentation
+  also support `Bun.serve` server spans and Orchestrion-based CommonJS integrations.
+- Automatic instrumentation of native ES modules loaded with `import` is not supported. CommonJS packages imported from
+  ESM are not reliably instrumented either.
+- `Bun.SQL`, `bun:sqlite`, IAST, heap profiling, and JavaScript stack samples in wall profiles are not supported.
+  With Bun runtime safety support, IAST and heap profiling are disabled automatically, and runtime metrics use the
+  JavaScript collector instead of the unsupported native collector.
+
+
 ## Development and Contribution
 
 Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
