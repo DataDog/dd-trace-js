@@ -5,6 +5,7 @@ const { fitsInlineAudioBudget, formatAudioPartWithGuard } = require('../audio-ut
 const { AUDIO_FALLBACK, LLMOBS_AUDIO_INLINE_MAX_BYTES } = require('../constants/audio')
 const { SESSION_ID } = require('../constants/tags')
 const { storage } = require('../storage')
+const { collectConversationCost } = require('../elevenlabs-cost')
 const LLMObsPlugin = require('./base')
 
 /** @typedef {import('../../../../datadog-instrumentations/src/elevenlabs/session').Scope} Scope */
@@ -19,10 +20,29 @@ class ElevenLabsLLMObsPlugin extends LLMObsPlugin {
   constructor (...args) {
     super(...args)
     this.addSub('dd-trace:elevenlabs:audio', () => {})
+    this.addSub('dd-trace:elevenlabs:ended', ({ client, conversationId, context }) => {
+      const enabled = () => this._llmobsEnabled && this._enabled && this.config.conversationCostEnabled !== false &&
+        this._tracerConfig.llmobs.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED
+      if (!context || !enabled()) return
+      collectConversationCost(client, conversationId, context.config, context.routing, enabled)
+    })
     this.addSub('dd-trace:elevenlabs:capture-context', message => {
       const scope = /** @type {Scope} */ (message)
       // An absent store intentionally restores an explicit root context.
       const store = /** @type {Store} */ (storage.getStore())
+      if (scope.conversation && this._llmobsEnabled && this.config.conversationCostEnabled !== false &&
+          this._tracerConfig.llmobs.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED) {
+        // Copy only attribution. Billing must not retain the voice context or its spans.
+        scope.billing = {
+          routing: store?.routingContext,
+          config: {
+            llmobs: { DD_LLMOBS_ML_APP: this._tracerConfig.llmobs.DD_LLMOBS_ML_APP },
+            service: this._tracerConfig.service,
+            env: this._tracerConfig.env,
+            version: this._tracerConfig.version,
+          },
+        }
+      }
       const previous = scope.runInContext ?? (fn => fn())
       scope.runInContext = fn => previous(() => storage.run(store, fn))
     })

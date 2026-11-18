@@ -2839,7 +2839,10 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
      */
-    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {
+      /** Automatically retrieve post-call USD billing using the existing client. @default true */
+      conversationCostEnabled?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the

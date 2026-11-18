@@ -50,7 +50,9 @@ function wav (part, rate, expected) {
 
 describe('integrations', () => {
   describe('elevenlabs', () => {
-    const { getEvents } = useLlmObs({ plugin: 'elevenlabs', tracerConfigOptions: {} })
+    const { getEvents } = useLlmObs({
+      plugin: 'elevenlabs', pluginConfig: { conversationCostEnabled: false }, tracerConfigOptions: {},
+    })
     withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version => {
       let Conversation, ClientTools, clock, conversation, socket, audio, tools, outputSpy
 
@@ -112,6 +114,93 @@ describe('integrations', () => {
       }
       function vad (score) { socket.deliver({ type: 'vad_score', vad_score_event: { vad_score: score } }) }
       function close () { clock.tick(2000); conversation.endSession() }
+
+      it('automatically emits one billing workflow from the real session-end hook', async () => {
+        const tracer = require('../../../..')
+        tracer.use('elevenlabs', {})
+        const get = sinon.stub(conversation.client.conversationalAi.conversations, 'get').resolves({
+          conversationId: 'conv-test',
+          status: 'done',
+          metadata: {
+            startTimeUnixSecs: 1000,
+            callDurationSecs: 10,
+            costFiat: 0.12,
+            charging: { llmPrice: 0.02, platformPrice: 0.1 },
+          },
+        })
+        clock.restore()
+        clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        try {
+          await start()
+          conversation.endSession()
+          conversation.endSession()
+          await clock.tickAsync(1000)
+          assert.equal(get.callCount, 1)
+          clock.restore()
+          tracer.llmobs.flush()
+          const { llmobsSpans } = await getEvents(1, { writerOnly: true })
+          assert.equal(llmobsSpans.length, 1)
+          const billing = llmobsSpans[0]
+          assert.equal(billing.name, 'elevenlabs conversation billing')
+          assert.equal(billing.session_id, 'conv-test')
+          assert.deepEqual(billing.meta.metadata.provider_cost.amounts, { total: 0.12, llm: 0.02, platform: 0.1 })
+          assert.deepEqual(billing.metrics, {})
+        } finally {
+          tracer.use('elevenlabs', { conversationCostEnabled: false })
+          get.restore()
+        }
+      })
+
+      it('retains session-start tenant routing after its context exits', async () => {
+        const tracer = require('../../../..')
+        const { storage } = require('../../../../src/llmobs/storage')
+        const SpanWriter = require('../../../../src/llmobs/writers/spans')
+        const routing = { apiKey: 'test-session-tenant', site: 'datad0g.com' }
+        const append = sinon.stub(SpanWriter.prototype, 'append').returns(true)
+        const get = sinon.stub(conversation.client.conversationalAi.conversations, 'get').resolves({
+          conversationId: 'conv-test',
+          status: 'done',
+          metadata: {
+            startTimeUnixSecs: 1000,
+            callDurationSecs: 10,
+            costFiat: 0.12,
+            charging: { llmPrice: 0.02, platformPrice: 0.1 },
+          },
+        })
+        clock.restore()
+        clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        tracer.use('elevenlabs', {})
+        try {
+          await storage.run({ routingContext: routing }, start)
+          conversation.endSession()
+          await clock.tickAsync(1000)
+          assert.equal(get.callCount, 1)
+          assert.equal(append.callCount, 1)
+          assert.deepEqual(append.firstCall.args[1], routing)
+          assert.equal(append.firstCall.args[0].name, 'elevenlabs conversation billing')
+        } finally {
+          tracer.use('elevenlabs', { conversationCostEnabled: false })
+          append.restore()
+          get.restore()
+        }
+      })
+
+      it('keeps a session-start billing opt-out after reconfiguration', async () => {
+        const tracer = require('../../../..')
+        const get = sinon.stub(conversation.client.conversationalAi.conversations, 'get').rejects(new Error('unused'))
+        clock.restore()
+        clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        try {
+          await start()
+          tracer.use('elevenlabs', {})
+          conversation.endSession()
+          await clock.tickAsync(40000)
+          assert.equal(get.callCount, 0)
+        } finally {
+          tracer.use('elevenlabs', { conversationCostEnabled: false })
+          get.restore()
+        }
+      })
 
       it('exports bounded WAVs and direct phase children with explicit TTFA opt-out', async () => {
         await start()

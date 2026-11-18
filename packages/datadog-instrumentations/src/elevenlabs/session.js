@@ -47,7 +47,7 @@ function toolIdOf (value) {
 }
 
 /**
- * @typedef {{runInContext?: <T>(fn: () => T) => T}} Scope
+ * @typedef {{runInContext?: <T>(fn: () => T) => T, conversation?: boolean, billing?: object}} Scope
  * @typedef {{
  * id: bigint, input: AudioBuffer, output: AudioBuffer, userText: string,
  * responses: Map<string, string>, completed: Set<string>, calls: Map<string, object>,
@@ -64,12 +64,13 @@ function toolIdOf (value) {
  */
 
 class Session {
-  /** @type {{runInContext?: <T>(fn: () => T) => T}} */
+  /** @type {Scope} */
   scope = {}
   /** @type {object | undefined} */
   socket = undefined
   /** @type {(failed: boolean) => void} */
   finalize = () => {}
+  collectCost = () => {}
   /** @type {Map<bigint, Turn>} */
   turns = new Map()
   pending = new AudioBuffer()

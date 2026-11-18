@@ -1599,6 +1599,14 @@
         "namespace": "llmobs"
       }
     ],
+    "DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "llmobs"
+      }
+    ],
     "DD_LLMOBS_ENABLED": [
       {
         "implementation": "A",
