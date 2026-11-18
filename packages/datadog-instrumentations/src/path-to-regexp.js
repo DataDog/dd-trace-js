@@ -8,12 +8,7 @@ let compileToRegexp
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
 
-/**
- * @typedef {(tokens: object[], options?: { sensitive?: boolean, trailing?: boolean })
- *   => ((url: string) => object | undefined) | undefined} MatcherFactory
- */
-
-/** @type {MatcherFactory | undefined} */
+/** @type {((tokens: object[], options?: object) => ((url: string) => object | undefined) | undefined) | undefined} */
 let makeMatcher
 
 addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
@@ -60,9 +55,8 @@ addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
     makeMatcher = (tokens, options) => {
       let matcher
       try {
-        // Callers read raw param values only: skipping decode is faster and stops a malformed
-        // escape ('%ZZ') from throwing URIError, which would read as "no match". 8.0.0's match()
-        // requires a real TokenData instance for pre-parsed tokens.
+        // Callers read raw param values only: skipping decode is faster and
+        // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
         matcher = match(new TokenData(tokens), { ...options, decode: false })
       } catch {
         return
@@ -104,12 +98,10 @@ function getParse () {
 }
 
 /**
- * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) =>
- * (url => params)` that compiles a token sequence once (as `match(new TokenData(...))`, with the
- * caller's `sensitive`/`trailing` options) and returns a matcher yielding the raw captured
- * params (or undefined on no match / unusable tokens).
- * `undefined` when the host has not loaded an 8.x path-to-regexp.
- * @returns {MatcherFactory | undefined}
+ * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) => (url => params)`
+ * that compiles a token sequence once and returns a matcher yielding the captured params (or undefined on no
+ * match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
+ * @returns {((tokens: object[], options?: object) => ((url: string) => object | undefined) | undefined) | undefined}
  */
 function getMatch () {
   return makeMatcher

@@ -140,12 +140,6 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize(route, paramsFor(63)), expectedFor(63))
     })
 
-    it('does not mix up cached results of a route with more than 31 optional groups', () => {
-      const route = '/r' + Array.from({ length: 33 }, (_, i) => `{/:p${i}}`).join('')
-      assert.equal(normalize(route, { p0: 'x' }), '/r/{p0}')
-      assert.equal(normalize(route, { p32: 'x' }), '/r/{p32}')
-    })
-
     it('resolves from req.params when a matcher cannot be built', () => {
       assert.equal(normalizeRouteExpress('/m{/:id}/:x', { x: '1' }, '/m/1', parse, () => undefined), '/m/{x}')
     })

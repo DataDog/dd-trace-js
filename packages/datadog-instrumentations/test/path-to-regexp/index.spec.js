@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
-// eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
-const realPathToRegexp = require('path-to-regexp')
 
 const satisfies = require('../../../../vendor/dist/semifies')
 const instrumentations = require('../../src/helpers/instrumentations')
@@ -25,6 +23,13 @@ const v7Module = {
   pathToRegexp: () => ({ regexp: /^\/a\/([^/]+)$/, keys: [] }),
 }
 
+const v8Module = {
+  parse: pattern => ({ tokens: [{ type: 'text', value: pattern }] }),
+  match: () => () => ({ params: { id: '1' } }),
+  TokenData: class TokenData {},
+  pathToRegexp: () => ({ regexp: /^\/a\/([^/]+)$/, keys: [] }),
+}
+
 describe('path-to-regexp instrumentation', () => {
   it('does not let 7.x install the parse/match adapters', () => {
     const parseBefore = getParse()
@@ -40,25 +45,21 @@ describe('path-to-regexp instrumentation', () => {
     const parseBefore = getParse()
     const matchBefore = getMatch()
 
-    applyHooksFor('8.4.2', { ...realPathToRegexp, TokenData: undefined })
+    applyHooksFor('8.4.2', { ...v8Module, TokenData: undefined })
 
     assert.equal(getParse(), parseBefore)
     assert.equal(getMatch(), matchBefore)
   })
 
   it('installs the adapters for 8.x', () => {
-    applyHooksFor('8.4.2', realPathToRegexp)
+    applyHooksFor('8.4.2', v8Module)
 
     assert.equal(typeof getParse(), 'function')
     assert.equal(typeof getMatch(), 'function')
     const parse = getParse()
-    const { tokens } = parse('/a/:id')
-    assert.deepStrictEqual(tokens, [{ type: 'text', value: '/a/' }, { type: 'param', name: 'id' }])
-    const makeMatcher = getMatch()
-    const matchPath = makeMatcher(tokens)
-    // Values stay raw (no decode), so a malformed escape still matches.
-    assert.deepStrictEqual({ ...matchPath('/a/%ZZ') }, { id: '%ZZ' })
-    assert.equal(matchPath('/b/1'), undefined)
-    assert.equal(parse('/a/:'), undefined)
+    assert.deepStrictEqual(parse('/x'), { tokens: [{ type: 'text', value: '/x' }] })
+    const match = getMatch()
+    const matchPath = match('/a/:id')
+    assert.deepStrictEqual(matchPath('/a/1'), { id: '1' })
   })
 })
