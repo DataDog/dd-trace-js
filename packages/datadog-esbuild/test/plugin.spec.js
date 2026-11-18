@@ -451,11 +451,12 @@ describe('datadog-esbuild plugin', () => {
      * @param {string[]} external
      * @param {string} specifier
      * @param {string} [resolveDir]
+     * @param {object} [options] Extra esbuild build options, such as `packages` or `alias`.
      */
-    function resolve (external, specifier, resolveDir = repoRoot) {
+    function resolve (external, specifier, resolveDir = repoRoot, options = {}) {
       let onResolve
       ddPlugin.setup({
-        initialOptions: { external },
+        initialOptions: { external, ...options },
         onEnd () {},
         onResolve (options, callback) {
           onResolve = callback
@@ -495,6 +496,16 @@ describe('datadog-esbuild plugin', () => {
 
     it('leaves paths matching an external wildcard to esbuild', () => {
       assert.equal(resolve(['express/lib/*'], 'express/lib/utils'), undefined)
+    })
+
+    it('leaves them to esbuild when all packages are external', () => {
+      assert.equal(resolve([], 'express/lib/utils', repoRoot, { packages: 'external' }), undefined)
+    })
+
+    it('leaves aliased paths to esbuild', () => {
+      const alias = { 'express/lib/utils': './custom-utils.js' }
+      assert.equal(resolve([], 'express/lib/utils', repoRoot, { alias }), undefined)
+      assert.equal(resolve([], 'express/lib/utils/x', repoRoot, { alias }), undefined)
     })
 
     it('does not treat a package with the same prefix as external', () => {

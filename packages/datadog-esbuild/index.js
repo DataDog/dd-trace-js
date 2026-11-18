@@ -103,6 +103,8 @@ module.exports.setup = function (build) {
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
+  const allPackagesExternal = build.initialOptions.packages === 'external'
+  const aliases = Object.keys(build.initialOptions.alias || {})
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (DD_IAST_ENABLED) {
@@ -210,7 +212,9 @@ ${build.initialOptions.banner.js}`
       packagesWithHookedFile.has(extracted?.pkg) &&
       !args.path.startsWith('.') &&
       !path.isAbsolute(args.path) &&
-      !isExternalSpecifier(args.path, externalModules)
+      !allPackagesExternal &&
+      !isExternalSpecifier(args.path, externalModules) &&
+      !aliases.some(alias => args.path === alias || args.path.startsWith(`${alias}/`))
     ) {
       // A plugin result bypasses esbuild's own resolution, so keep the metadata that lets it drop unused imports.
       return hasNoSideEffects(extracted.pkgJson)
