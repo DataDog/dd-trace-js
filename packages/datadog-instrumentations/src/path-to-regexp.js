@@ -8,7 +8,12 @@ let compileToRegexp
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
 
-/** @type {((route: string) => ((url: string) => object | undefined) | undefined) | undefined} */
+/**
+ * @typedef {(tokens: object[], options?: { sensitive?: boolean, trailing?: boolean })
+ *   => ((url: string) => object | undefined) | undefined} MatcherFactory
+ */
+
+/** @type {MatcherFactory | undefined} */
 let makeMatcher
 
 addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
@@ -39,9 +44,9 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
 // `{ tokens }` too, yet its tokens are bare strings rather than typed nodes. Gating on the version
 // keeps those from installing adapters the consumers would misread.
 addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
-  const { parse, match } = moduleExports
+  const { parse, match, TokenData } = moduleExports
 
-  if (typeof parse === 'function' && typeof match === 'function') {
+  if (typeof parse === 'function' && typeof match === 'function' && typeof TokenData === 'function') {
     parseTokens = pattern => {
       let result
       try {
@@ -52,12 +57,13 @@ addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
       if (Array.isArray(result?.tokens)) return result
     }
 
-    makeMatcher = route => {
+    makeMatcher = (tokens, options) => {
       let matcher
       try {
-        // Callers read which params matched, never their values: skipping decode is faster and
-        // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
-        matcher = match(route, { decode: false })
+        // Callers read raw param values only: skipping decode is faster and stops a malformed
+        // escape ('%ZZ') from throwing URIError, which would read as "no match". 8.0.0's match()
+        // requires a real TokenData instance for pre-parsed tokens.
+        matcher = match(new TokenData(tokens), { ...options, decode: false })
       } catch {
         return
       }
@@ -98,10 +104,12 @@ function getParse () {
 }
 
 /**
- * Returns the host's path-to-regexp 8.x `match` adapter: a factory `route => (url => params)` that
- * compiles a route once and returns a matcher yielding the captured params (or undefined on no
- * match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
- * @returns {((route: string) => ((url: string) => object | undefined) | undefined) | undefined}
+ * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) =>
+ * (url => params)` that compiles a token sequence once (as `match(new TokenData(...))`, with the
+ * caller's `sensitive`/`trailing` options) and returns a matcher yielding the raw captured
+ * params (or undefined on no match / unusable tokens).
+ * `undefined` when the host has not loaded an 8.x path-to-regexp.
+ * @returns {MatcherFactory | undefined}
  */
 function getMatch () {
   return makeMatcher
