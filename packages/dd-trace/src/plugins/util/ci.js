@@ -38,6 +38,9 @@ const {
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 
+// `user-provided-git` requires this module, so its SHA validator cannot be reused here.
+const COMMIT_SHA_REGEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
 function parseEmailAndName (emailAndName) {
@@ -573,6 +576,13 @@ module.exports = {
           [GIT_TAG]: APPVEYOR_REPO_TAG_NAME,
           [GIT_BRANCH]: APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH,
         }
+
+        // A PR build of a commit other than the PR head commit is testing the merge result.
+        const headSha = APPVEYOR_PULL_REQUEST_HEAD_COMMIT?.toLowerCase()
+        if (/^\d+$/.test(APPVEYOR_PULL_REQUEST_NUMBER || '') && COMMIT_SHA_REGEX.test(headSha || '') &&
+          APPVEYOR_REPO_COMMIT && headSha !== APPVEYOR_REPO_COMMIT.toLowerCase()) {
+          tags[CI_GIT_MERGE_COMMIT_SHA] = APPVEYOR_REPO_COMMIT
+        }
       }
     }
 
@@ -611,6 +621,7 @@ module.exports = {
         [CI_PIPELINE_NAME]: BUILD_DEFINITIONNAME,
         [CI_PIPELINE_NUMBER]: BUILD_BUILDID,
         [GIT_COMMIT_SHA]: SYSTEM_PULLREQUEST_SOURCECOMMITID || BUILD_SOURCEVERSION,
+        [GIT_COMMIT_HEAD_SHA]: SYSTEM_PULLREQUEST_SOURCECOMMITID,
         [CI_WORKSPACE_PATH]: BUILD_SOURCESDIRECTORY,
         [GIT_REPOSITORY_URL]: SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI || BUILD_REPOSITORY_URI,
         [refKey]: ref,
