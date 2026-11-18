@@ -1,5 +1,35 @@
 [
   {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/index\\.[cm]js$",
+    "flags": ""
+  },
+  {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/public-[\\w-]+\\.[cm]js$",
+    "flags": ""
+  },
+  {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/src-[\\w-]+\\.[cm]js$",
+    "flags": ""
+  },
+  {
+    "name": "@modelcontextprotocol/server",
+    "source": "^dist\\/mcp-[\\w-]+\\.[cm]js$",
+    "flags": ""
+  },
+  {
+    "name": "next",
+    "source": "^dist\\/compiled\\/next-server\\/app-route[\\w-]*\\.runtime\\.(?:dev|prod)\\.js$",
+    "flags": ""
+  },
+  {
+    "name": "next",
+    "source": "^dist\\/compiled\\/next-server\\/pages-api[\\w-]*\\.runtime\\.(?:dev|prod)\\.js$",
+    "flags": ""
+  },
+  {
     "name": "react-router",
     "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
     "flags": "",

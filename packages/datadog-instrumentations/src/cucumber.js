@@ -584,9 +584,12 @@ function isNewTest (testSuite, testName) {
 /** @param {{ tags?: Array<{ name: string }> }} pickle */
 function getScenarioAnnotations (pickle) {
   const tags = pickle.tags || []
+  // Preserve the colon spellings accepted by earlier tracer releases.
   return {
-    mustFail: tags.some(tag => tag.name === '@datadog:prevent_failure_suppression'),
-    noAutoRetry: tags.some(tag => tag.name === '@datadog:no_auto_retry'),
+    mustFail: tags.some(tag => tag.name === '@datadog_prevent_failure_suppression' ||
+      tag.name === '@datadog:prevent_failure_suppression'),
+    noAutoRetry: tags.some(tag => tag.name === '@datadog_no_auto_retry' ||
+      tag.name === '@datadog:no_auto_retry'),
   }
 }
 

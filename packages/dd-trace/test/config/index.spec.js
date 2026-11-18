@@ -23,6 +23,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
@@ -769,6 +770,255 @@ describe('Config', () => {
     const indexFile = require('../../src/index')
     const noop = require('../../src/noop/proxy')
     assert.strictEqual(indexFile, noop)
+  })
+
+  describe('OTEL_SDK_DISABLED', () => {
+    function loadEntryPoint () {
+      delete require.cache[require.resolve('../../src/index')]
+      return require('../../src/index')
+    }
+
+    for (const value of ['true', 'TRUE', '1']) {
+      it(`should select the no-op proxy with OTEL_SDK_DISABLED=${value}`, () => {
+        process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    for (const value of [undefined, '', 'false', '0', 'foo']) {
+      it(`should select the real proxy with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+      })
+    }
+
+    it('should let an explicit DD_TRACE_ENABLED take precedence', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+    })
+
+    it('should take precedence over OTEL_TRACES_EXPORTER=otlp', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    it('should still honor OTEL_TRACES_EXPORTER=none when set to false', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.OTEL_TRACES_EXPORTER = 'none'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should select the no-op proxy when ${name} is set`, () => {
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env[name] = 'true'
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    it('should be unset by default', () => {
+      assert.strictEqual(getConfig().OTEL_SDK_DISABLED, undefined)
+    })
+
+    /**
+     * @param {string} name
+     */
+    function sdkDisabledDiagnostic (name) {
+      return `DATADOG TRACER DIAGNOSTIC - ${name} is disabled, because OTEL_SDK_DISABLED=true disables the ` +
+        'OpenTelemetry SDK.'
+    }
+
+    for (const ddTraceEnabled of [undefined, 'true']) {
+      it(`should disable explicitly enabled OTel metrics and logs with DD_TRACE_ENABLED=${ddTraceEnabled}`, () => {
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        if (ddTraceEnabled !== undefined) process.env.DD_TRACE_ENABLED = ddTraceEnabled
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+        assert.strictEqual(config.getOrigin('DD_METRICS_OTEL_ENABLED'), 'calculated')
+        assert.strictEqual(config.getOrigin('DD_LOGS_OTEL_ENABLED'), 'calculated')
+        // Disabled OTel logs no longer displace Datadog log injection.
+        assert.strictEqual(config.logInjection, true)
+        sinon.assert.calledTwice(logWriter.warn)
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_METRICS_OTEL_ENABLED'))
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
+      })
+    }
+
+    it('should not explain anything when OTel metrics and logs are not enabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should explain only once why OTel logs are disabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+      // Recalculates the config, starting from the environment variable again
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
+    })
+
+    it('should not explain why OTel logs are disabled without startup logs', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should disable explicitly enabled OTLP span metrics while DD_TRACE_ENABLED=true keeps tracing', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+      assert.strictEqual(config.getOrigin('OTEL_TRACES_SPAN_METRICS_ENABLED'), 'calculated')
+      // Span metrics no longer force stats computation for OTLP traces.
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('OTEL_TRACES_SPAN_METRICS_ENABLED'))
+    })
+
+    for (const value of [undefined, '', 'false']) {
+      it(`should keep explicitly enabled OTel metrics and logs with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      })
+    }
+  })
+
+  describe('OpenTelemetry environment telemetry', () => {
+    const CONFLICT_MESSAGE = 'Conflicting %s and %s environment variables are set for %s'
+    const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+    /**
+     * Series keep their creation order across tests, so sort them to keep assertions independent of test order.
+     *
+     * @param {string} metric
+     */
+    function series (metric) {
+      return (tracerMetrics.toJSON().metrics?.series ?? [])
+        .filter(entry => entry.metric === metric)
+        .map(({ tags, points }) => ({ tags, value: points[0][1] }))
+        .sort((a, b) => a.tags.join().localeCompare(b.tags.join()))
+    }
+
+    beforeEach(() => {
+      tracerMetrics.reset()
+    })
+
+    it('should report a conflict with each Datadog equivalent that is set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+    })
+
+    it('should only report a conflict with the Datadog equivalents that are set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      sinon.assert.neverCalledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED')
+    })
+
+    it('should report an invalid value once, tagged with the first Datadog equivalent', () => {
+      process.env.OTEL_SDK_DISABLED = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+    })
+
+    it('should report an invalid value without a Datadog equivalent', () => {
+      process.env.OTEL_LOGS_EXPORTER = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_opentelemetry:otel_logs_exporter'], value: 1 },
+      ])
+    })
+
+    it('should report a conflict with a single Datadog equivalent', () => {
+      process.env.OTEL_SERVICE_NAME = 'otel-service'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_service', 'config_opentelemetry:otel_service_name'], value: 1 },
+      ])
+    })
+
+    it('should not report anything without OpenTelemetry variables', () => {
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+    })
   })
 
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
@@ -4106,6 +4356,14 @@ describe('Config', () => {
     assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
+  it('should preserve AI Guard outside Test Optimization', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, true)
+  })
+
   it('should set telemetry default values', () => {
     const config = getConfig()
 
@@ -4129,6 +4387,48 @@ describe('Config', () => {
     exporters.PLAYWRIGHT_WORKER,
     exporters.VITEST_WORKER,
   ]) {
+    it(`should disable security and LLMObs products for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_AI_GUARD_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, false)
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_RESOURCE_RENAMING_ENABLED, false)
+    })
+
+    for (const profiling of ['true', 'auto']) {
+      it(`should preserve profiling=${profiling} and DSM for the ${exporter} Test Optimization exporter`, () => {
+        process.env.DD_PROFILING_ENABLED = profiling
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
+
+        const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
+
+        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, profiling)
+        assert.strictEqual(config.dsmEnabled, true)
+      })
+    }
+
+    it(`should prevent implicit LLMObs enablement for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_LLMOBS_ML_APP = 'test-app'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+    })
+
     it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
 

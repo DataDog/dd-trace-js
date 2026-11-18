@@ -14,6 +14,7 @@ const { pollInterval, setup } = require('./utils')
  * @param {Array<object>} expectedPayloads
  * @param {number} expectedAckUpdates
  * @param {() => void} [onInstalled]
+ * @returns {Promise<void>}
  */
 function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdates, onInstalled) {
   return new Promise((resolve, reject) => {
@@ -86,7 +87,7 @@ function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdate
 
 /**
  * @param {ReturnType<typeof setup>} t
- * @param {Array<{ id: string, config: { id: string } }>} configs
+ * @param {Array<{ product: string, id: string, config: { id: string } }>} configs
  * @param {string[]} expectedProbeIds
  */
 async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
@@ -102,10 +103,10 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
   const pendingProbeIds = new Set(expectedProbeIds)
   let captureError
   let resolveExpected
-  const expectedProbesReceived = new Promise(resolve => {
+  const expectedProbesReceived = /** @type {Promise<void>} */ (new Promise(resolve => {
     resolveExpected = resolve
     if (pendingProbeIds.size === 0) resolve()
-  })
+  }))
 
   /** @param {{ payload: Array<{ debugger: { diagnostics: { probeId: string, status: string } } }> }} event */
   function handleDiagnostics ({ payload }) {

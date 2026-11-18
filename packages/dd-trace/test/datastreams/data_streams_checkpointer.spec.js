@@ -11,6 +11,7 @@ const agent = require('../plugins/agent')
 
 const { computePathwayHash, encodePathwayContextBase64 } = require('../../src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../src/datastreams/processor')
+const processTags = require('../../src/process-tags')
 const propagationHash = require('../../src/propagation-hash')
 
 const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
@@ -25,17 +26,19 @@ describe('data streams checkpointer manual api', () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
     tracer = await agent.load(null, { dsmEnabled: true })
 
-    // Compute expected hashes using the actual service/env/propagationHash that the processor will use
+    // Compute expected hashes using the actual service, env and process tags that the processor will use
     const proc = tracer._tracer._dataStreamsProcessor
     const service = proc.service
     const env = proc.env
-    const phash = propagationHash.getHash()
+    const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+    const containerTagsHash = propagationHash.getContainerTagsHash()
 
     const producerHash = computePathwayHash(
       service, env,
       ['direction:out', 'topic:test-queue', 'type:testProduce'],
       ENTRY_PARENT_HASH,
-      phash
+      processTagsForHash,
+      containerTagsHash
     )
     expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
 
@@ -49,7 +52,8 @@ describe('data streams checkpointer manual api', () => {
       service, env,
       ['direction:in', 'topic:test-queue', 'type:testConsume'],
       producerHash,
-      phash
+      processTagsForHash,
+      containerTagsHash
     )
     expectedConsumerHash = consumerHash.readBigUInt64LE(0).toString()
   })

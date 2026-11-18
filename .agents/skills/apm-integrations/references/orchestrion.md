@@ -8,7 +8,7 @@ source hooks, ESM support, and avoiding runtime monkey-patching.
 Engine: `@apm-js-collab/code-transformer` (mirror of
 [nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
 `vendor/dist/@apm-js-collab/code-transformer/`. Installed version is in
-`vendor/package-lock.json`.
+`vendor/bun.lock`.
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks

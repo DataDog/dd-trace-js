@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
@@ -43,10 +44,11 @@ function getMongoDbName (dbUrl) {
 
 /**
  * @param {string} dbUrl
+ * @param {ReturnType<typeof createRequire>} requireFromSandbox
  * @returns {Promise<void>}
  */
-async function resetMongoDb (dbUrl) {
-  const { MongoClient } = require('mongodb')
+async function resetMongoDb (dbUrl, requireFromSandbox) {
+  const { MongoClient } = requireFromSandbox('mongodb')
   const client = new MongoClient(dbUrl)
   try {
     await client.connect()
@@ -313,11 +315,12 @@ describe('esm', () => {
 
         beforeEach(async function () {
           this.timeout(60000)
+          const requireFromSandbox = createRequire(path.join(sandboxCwd(), 'package.json'))
           if (config.waitForService) {
-            await config.waitForService(true)
+            await config.waitForService(requireFromSandbox)
           }
           if (config.env?.DATABASE_URL?.startsWith('mongodb')) {
-            await resetMongoDb(config.env.DATABASE_URL)
+            await resetMongoDb(config.env.DATABASE_URL, requireFromSandbox)
           }
           agent = await new FakeAgent().start()
           const commands = ['./node_modules/.bin/prisma db push --accept-data-loss']

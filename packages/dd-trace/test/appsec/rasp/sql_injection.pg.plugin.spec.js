@@ -244,10 +244,9 @@ describe('RASP - sql_injection', () => {
                 await runQueryAndIgnoreError('SELECT 1')
 
                 wafRunFinished.publish({
+                  req,
                   payload: {
-                    persistent: {
-                      [addresses.HTTP_INCOMING_URL]: 'test',
-                    },
+                    [addresses.HTTP_INCOMING_URL]: 'test',
                   },
                 })
 
@@ -266,10 +265,9 @@ describe('RASP - sql_injection', () => {
                 await runQueryAndIgnoreError('SELECT 1')
 
                 wafRunFinished.publish({
+                  req,
                   payload: {
-                    persistent: {
-                      'not-an-input': 'test',
-                    },
+                    'not-an-input': 'test',
                   },
                 })
 

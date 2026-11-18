@@ -16,6 +16,8 @@ const INT_ID_SEGMENT = /^(?=.*[0-9])[0-9._-]{3,}$/ // Mixed string with digits a
 const HEX_SEGMENT = /^(?=.*[0-9])[A-Fa-f0-9]{6,}$/ // Hexadecimal digits of size at least 6 with at least one decimal digit
 const HEX_ID_SEGMENT = /^(?=.*[0-9])[A-Fa-f0-9._-]{6,}$/ // Mixed string with hex digits and delimiters
 const SPECIAL_CHARACTER_SEGMENT = /[%&'()*+,:=@]/
+const SCP_STYLE_REPOSITORY_URL = /^(?:[^@/:\s\\]+@)?(?:\[[^@\]/\s\\]+\]|[^@/:\s\\]+):.+$/
+const REPOSITORY_URI_OR_DRIVE = /^(?:[a-z][a-z\d+.-]*:\/\/|[a-z]:[\\/])/i
 
 /**
  * Extract full URL from HTTP request
@@ -178,12 +180,17 @@ function calculateHttpEndpoint (url) {
     : '/'
 }
 
+/** @param {string} repositoryUrl */
+function isScpStyleRepositoryUrl (repositoryUrl) {
+  return !REPOSITORY_URI_OR_DRIVE.test(repositoryUrl) && SCP_STYLE_REPOSITORY_URL.test(repositoryUrl)
+}
+
 function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (!repositoryUrl) {
     return ''
   }
-  if (repositoryUrl.startsWith('git@')) {
-    return repositoryUrl
+  if (isScpStyleRepositoryUrl(repositoryUrl)) {
+    return repositoryUrl.startsWith('git@') ? repositoryUrl : repositoryUrl.replace(/^[^@/:]+@/, '')
   }
 
   // Remove the username from ssh URLs
@@ -208,5 +215,6 @@ module.exports = {
   buildClientHttpUrl,
   calculateHttpEndpoint,
   filterSensitiveInfoFromRepository,
+  isScpStyleRepositoryUrl,
   extractPathFromUrl, // used by http-otel-semantics decomposeServerUrl fallback (and tests)
 }

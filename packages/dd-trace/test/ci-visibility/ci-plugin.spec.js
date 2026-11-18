@@ -47,6 +47,7 @@ describe('CiPlugin', () => {
   let getCodeOwnersFileEntries
   let getRepositoryRoot
   let getTestEnvironmentMetadata
+  let getUserProviderGitMetadata
   let incrementCountMetric
   let logError
 
@@ -55,6 +56,7 @@ describe('CiPlugin', () => {
     getCodeOwnersFileEntries = sinon.stub()
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
+    getUserProviderGitMetadata = sinon.stub().returns({})
     incrementCountMetric = sinon.stub()
     logError = sinon.spy()
 
@@ -68,6 +70,7 @@ describe('CiPlugin', () => {
       './util/git': {
         getRepositoryRoot,
       },
+      './util/user-provided-git': { getUserProviderGitMetadata },
       './util/test': {
         ...require('../../src/plugins/util/test'),
         getCodeOwnersFileEntries,
@@ -117,6 +120,65 @@ describe('CiPlugin', () => {
     assert.strictEqual(plugin.shouldSkipGitMetadataExtraction, true)
     sinon.assert.calledOnce(getRepositoryRoot)
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
+  })
+
+  it('uses the selected checkout root for CODEOWNERS instead of the CI workspace', () => {
+    getTestEnvironmentMetadata.returns({
+      ...getTestEnvironmentMetadataPayload(),
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      [CI_WORKSPACE_PATH]: '/workspace',
+    })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, '/workspace/tools')
+    sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/workspace/tools')
+    assert.strictEqual(plugin.testEnvironmentMetadata[CI_WORKSPACE_PATH], '/workspace')
+    sinon.assert.notCalled(getRepositoryRoot)
+  })
+
+  it('does not use a CI workspace as a repository root when local discovery fails', () => {
+    getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), [CI_WORKSPACE_PATH]: '/workspace' })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, process.cwd())
+    sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, process.cwd())
+  })
+
+  for (const custom of [false, true]) {
+    it(`scopes Test Management PR-head overrides to the CI checkout (custom=${custom})`, () => {
+      getTestEnvironmentMetadata.returns({
+        ...getTestEnvironmentMetadataPayload(),
+        'git.checkout.root': '/workspace/tools',
+        'git.checkout.is_custom': custom ? 'true' : undefined,
+        [GIT_COMMIT_HEAD_SHA]: 'outer-pr-head',
+        [GIT_COMMIT_HEAD_MESSAGE]: 'outer PR message',
+      })
+      const plugin = createPlugin('jest_worker')
+
+      assert.strictEqual(plugin.testConfiguration.commitHeadSha, custom ? undefined : 'outer-pr-head')
+      assert.strictEqual(plugin.testConfiguration.commitHeadMessage, custom ? undefined : 'outer PR message')
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_HEAD_SHA], 'outer-pr-head')
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_HEAD_MESSAGE], 'outer PR message')
+    })
+  }
+
+  it('preserves an explicit PR-head SHA and commit message in custom checkout requests', () => {
+    const head = 'b'.repeat(40)
+    getUserProviderGitMetadata.returns({ [GIT_COMMIT_HEAD_SHA]: head })
+    getTestEnvironmentMetadata.returns({
+      ...getTestEnvironmentMetadataPayload(),
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      [GIT_COMMIT_HEAD_SHA]: head,
+      [GIT_COMMIT_HEAD_MESSAGE]: 'outer PR message',
+      [GIT_COMMIT_MESSAGE]: 'explicit commit message',
+    })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.testConfiguration.commitHeadSha, head)
+    assert.strictEqual(plugin.testConfiguration.commitHeadMessage, undefined)
+    assert.strictEqual(plugin.testConfiguration.commitMessage, 'explicit commit message')
   })
 
   it('clears ITR state when library configuration fails', () => {
@@ -359,6 +421,62 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('replaces stale worker Git fields while preserving PR relationships and other tags', () => {
+    const plugin = createPlugin('jest_worker')
+    delete plugin.testEnvironmentMetadata[GIT_TAG]
+    const span = {
+      name: 'vitest.test',
+      span_id: '1',
+      trace_id: '2',
+      parent_id: '3',
+      meta: {
+        [GIT_COMMIT_SHA]: 'provider-sha',
+        [GIT_TAG]: 'provider-tag',
+        'git.commit.author.name': 'provider-author',
+        [GIT_COMMIT_HEAD_SHA]: 'pr-head',
+        'git.pull_request.base_branch': 'main',
+        'test.custom': 'retained',
+        'git.custom': 'retained',
+      },
+    }
+    plugin._prepareWorkerTrace([span])
+    assert.strictEqual(span.meta[GIT_COMMIT_SHA], plugin.testEnvironmentMetadata[GIT_COMMIT_SHA])
+    assert.strictEqual(span.meta[GIT_TAG], undefined)
+    assert.strictEqual(span.meta['git.commit.author.name'], undefined)
+    assert.strictEqual(span.meta['git.pull_request.base_branch'], 'main')
+    assert.strictEqual(span.meta['test.custom'], 'retained')
+    assert.strictEqual(span.meta['git.custom'], 'retained')
+  })
+
+  it('propagates checkout and provider merge context to every worker test level', () => {
+    const expected = {
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      'ci.workspace_path': '/workspace',
+      'ci.git.merge_commit_sha': 'a'.repeat(40),
+    }
+    getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), ...expected })
+    const plugin = createPlugin('jest_worker')
+    for (const level of ['test_session', 'test_module', 'test_suite', 'test']) {
+      const span = {
+        name: `vitest.${level}`,
+        span_id: '1',
+        trace_id: '2',
+        parent_id: '3',
+        meta: Object.fromEntries(Object.keys(expected).map(key => [key, 'stale'])),
+      }
+      plugin._prepareWorkerTrace([span])
+      for (const [key, value] of Object.entries(expected)) assert.strictEqual(span.meta[key], value, `${level}: ${key}`)
+      delete plugin.testEnvironmentMetadata['git.checkout.is_custom']
+      delete plugin.testEnvironmentMetadata['ci.git.merge_commit_sha']
+      const next = { ...span, span_id: '1', trace_id: '2', parent_id: '3' }
+      plugin._prepareWorkerTrace([next])
+      assert.strictEqual(next.meta['git.checkout.is_custom'], undefined)
+      assert.strictEqual(next.meta['ci.git.merge_commit_sha'], undefined)
+      Object.assign(plugin.testEnvironmentMetadata, expected)
+    }
   })
 
   it('exports worker traces normally', () => {

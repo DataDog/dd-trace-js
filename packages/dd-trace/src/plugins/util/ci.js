@@ -23,6 +23,7 @@ const {
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_JOB_URL,
   CI_JOB_NAME,
   CI_STAGE_NAME,
@@ -36,6 +37,16 @@ const {
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
+
+// `user-provided-git` requires this module, so its SHA validator cannot be reused here.
+const COMMIT_SHA_REGEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const COMMIT_SHA_TAGS = [
+  GIT_COMMIT_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  CI_GIT_MERGE_COMMIT_SHA,
+]
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -78,7 +89,17 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//g, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|refs\/tags\/|tags\//g, '')
+}
+
+/**
+ * Lowercases a commit SHA. Values that are not a SHA in any case stay unchanged so validation still rejects them.
+ *
+ * @param {string | undefined} sha
+ */
+function normalizeCommitSha (sha) {
+  const lowerCaseSha = sha?.toLowerCase()
+  return COMMIT_SHA_REGEX.test(lowerCaseSha || '') ? lowerCaseSha : sha
 }
 
 function resolveTilde (filePath) {
@@ -285,6 +306,7 @@ function getJobIDFromDiagFile () {
 
 module.exports = {
   normalizeRef,
+  normalizeCommitSha,
   expandGlobPattern,
   getJobIDFromDiagFile,
   getCIMetadata () {
@@ -373,6 +395,8 @@ module.exports = {
         CI_MERGE_REQUEST_IID,
         CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
         CI_MERGE_REQUEST_DIFF_BASE_SHA,
+        CI_MERGE_REQUEST_SOURCE_BRANCH_SHA,
+        CI_MERGE_REQUEST_EVENT_TYPE,
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -407,6 +431,11 @@ module.exports = {
         [CI_JOB_ID]: GITLAB_CI_JOB_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_DIFF_BASE_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
+        [GIT_COMMIT_HEAD_SHA]: CI_MERGE_REQUEST_SOURCE_BRANCH_SHA,
+      }
+      if (CI_MERGE_REQUEST_IID &&
+        (CI_MERGE_REQUEST_EVENT_TYPE === 'merged_result' || CI_MERGE_REQUEST_EVENT_TYPE === 'merge_train')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = CI_COMMIT_SHA
       }
     }
 
@@ -504,6 +533,9 @@ module.exports = {
         }),
         [CI_JOB_ID]: GITHUB_JOB_ID ?? GITHUB_JOB,
       }
+      if (/^refs\/pull\/\d+\/merge$/.test(GITHUB_REF || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = GITHUB_SHA
+      }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
         try {
@@ -564,6 +596,13 @@ module.exports = {
           [GIT_TAG]: APPVEYOR_REPO_TAG_NAME,
           [GIT_BRANCH]: APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH,
         }
+
+        // A PR build of a commit other than the PR head commit is testing the merge result.
+        const headSha = APPVEYOR_PULL_REQUEST_HEAD_COMMIT?.toLowerCase()
+        if (/^\d+$/.test(APPVEYOR_PULL_REQUEST_NUMBER || '') && COMMIT_SHA_REGEX.test(headSha || '') &&
+          APPVEYOR_REPO_COMMIT && headSha !== APPVEYOR_REPO_COMMIT.toLowerCase()) {
+          tags[CI_GIT_MERGE_COMMIT_SHA] = APPVEYOR_REPO_COMMIT
+        }
       }
     }
 
@@ -583,6 +622,7 @@ module.exports = {
         SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI,
         BUILD_REPOSITORY_URI,
         BUILD_SOURCEVERSION,
+        BUILD_REASON,
         BUILD_REQUESTEDFORID,
         BUILD_REQUESTEDFOREMAIL,
         BUILD_SOURCEVERSIONMESSAGE,
@@ -601,6 +641,7 @@ module.exports = {
         [CI_PIPELINE_NAME]: BUILD_DEFINITIONNAME,
         [CI_PIPELINE_NUMBER]: BUILD_BUILDID,
         [GIT_COMMIT_SHA]: SYSTEM_PULLREQUEST_SOURCECOMMITID || BUILD_SOURCEVERSION,
+        [GIT_COMMIT_HEAD_SHA]: SYSTEM_PULLREQUEST_SOURCECOMMITID,
         [CI_WORKSPACE_PATH]: BUILD_SOURCESDIRECTORY,
         [GIT_REPOSITORY_URL]: SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI || BUILD_REPOSITORY_URI,
         [refKey]: ref,
@@ -613,6 +654,9 @@ module.exports = {
         [PR_NUMBER]: SYSTEM_PULLREQUEST_PULLREQUESTNUMBER,
         [GIT_PULL_REQUEST_BASE_BRANCH]: SYSTEM_PULLREQUEST_TARGETBRANCH,
         [CI_JOB_ID]: SYSTEM_JOBID,
+      }
+      if (BUILD_REASON === 'PullRequest' && /^refs\/pull\/\d+\/merge$/.test(BUILD_SOURCEBRANCH || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = BUILD_SOURCEVERSION
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {
@@ -772,6 +816,7 @@ module.exports = {
         TRAVIS_COMMIT_MESSAGE,
         TRAVIS_PULL_REQUEST,
         TRAVIS_PULL_REQUEST_SHA,
+        TRAVIS_EVENT_TYPE,
       } = env
 
       tags = {
@@ -790,6 +835,9 @@ module.exports = {
         [GIT_COMMIT_HEAD_SHA]: TRAVIS_PULL_REQUEST_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH]: TRAVIS_BRANCH,
         [PR_NUMBER]: TRAVIS_PULL_REQUEST,
+      }
+      if (TRAVIS_EVENT_TYPE === 'pull_request' && /^\d+$/.test(TRAVIS_PULL_REQUEST || '')) {
+        tags[CI_GIT_MERGE_COMMIT_SHA] = TRAVIS_COMMIT
       }
     }
 
@@ -933,6 +981,9 @@ module.exports = {
     normalizeTag(tags, GIT_TAG, normalizeRef)
     normalizeTag(tags, GIT_PULL_REQUEST_BASE_BRANCH, normalizeRef)
     normalizeTag(tags, PR_NUMBER, normalizeNumber)
+    for (const tag of COMMIT_SHA_TAGS) {
+      normalizeTag(tags, tag, normalizeCommitSha)
+    }
 
     return removeEmptyValues(tags)
   },

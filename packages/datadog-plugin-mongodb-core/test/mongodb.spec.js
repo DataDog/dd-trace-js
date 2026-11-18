@@ -961,197 +961,151 @@ describe('Plugin', () => {
       })
 
       describe('with heartbeatEnabled configuration', () => {
-        describe('when heartbeat tracing is disabled via config', () => {
-          before(() => {
-            return agent.load('mongodb-core', {
-              heartbeatEnabled: false,
-            })
-          })
+        for (const source of ['config', 'env var']) {
+          for (const peerService of ['disabled', 'schema v1', 'defaults enabled']) {
+            describe(`when heartbeat tracing is disabled via ${source}, peer service ${peerService}`, () => {
+              let savedEnv
 
-          after(() => {
-            return agent.close()
-          })
-
-          beforeEach(async () => {
-            client = await createClient()
-            db = client.db('test')
-          })
-
-          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
-            const parentSpan = tracer.startSpan('test.parent')
-
-            agent
-              .assertSomeTraces(traces => {
-                // Should only receive the trace for the parent span
-                assert.strictEqual(traces[0].length, 1)
-                const span = traces[0][0]
-                assert.strictEqual(span.name, 'test.parent')
+              before(async () => {
+                savedEnv = {
+                  DD_TRACE_MONGODB_HEARTBEAT_ENABLED: process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED,
+                  DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED,
+                }
+                process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = source === 'env var' ? 'false' : 'true'
+                if (peerService === 'schema v1') {
+                  delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+                } else {
+                  process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = String(peerService === 'defaults enabled')
+                }
+                await agent.load('mongodb-core', source === 'config' ? { heartbeatEnabled: false } : {}, {
+                  spanAttributeSchema: peerService === 'schema v1' ? 'v1' : 'v0',
+                })
               })
-              .then(done)
-              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat commands
-            tracer.scope().activate(parentSpan, () => {
-              // Test all heartbeat command variations
-              db.command({ hello: 1 }).catch(() => {})
-              db.command({ helloOk: true }).catch(() => {})
-              db.command({ ismaster: 1 }).catch(() => {})
-              db.command({ isMaster: 1 }).catch(() => {})
-              setTimeout(() => parentSpan.finish(), 50)
-            })
-          })
-        })
-
-        describe('when heartbeat tracing is enabled via config (default)', () => {
-          before(() => {
-            return agent.load('mongodb-core', {
-              heartbeatEnabled: true,
-            })
-          })
-
-          after(() => {
-            return agent.close()
-          })
-
-          beforeEach(async () => {
-            client = await createClient()
-            db = client.db('test')
-          })
-
-          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
-            const parentSpan = tracer.startSpan('test.parent')
-
-            agent
-              .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
-                const rootSpan = traces[0][0]
-
-                assert.strictEqual(rootSpan.name, 'test.parent')
-
-                // assert that some child spans were created, these are the heartbeat spans
-                // don't assert on exact number of spans because it's dynamic
-                for (const childSpan of traces[0].slice(1)) {
-                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
-                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
+              after(async () => {
+                await agent.close()
+                for (const [key, value] of Object.entries(savedEnv)) {
+                  if (value === undefined) {
+                    delete process.env[key]
+                  } else {
+                    process.env[key] = value
+                  }
                 }
               })
-              .then(done)
-              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat commands
-            tracer.scope().activate(parentSpan, () => {
-              // Test all heartbeat command variations
-              db.command({ hello: 1 }).catch(() => {})
-              db.command({ helloOk: true }).catch(() => {})
-              db.command({ ismaster: 1 }).catch(() => {})
-              db.command({ isMaster: 1 }).catch(() => {})
-              setTimeout(() => parentSpan.finish(), 200)
-            })
-          })
-        })
-
-        describe('when heartbeat tracing is disabled via env var', () => {
-          let savedHeartbeatEnv
-
-          before(async () => {
-            savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
-            process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            await agent.load('mongodb-core', {})
-          })
-
-          after(async () => {
-            if (savedHeartbeatEnv === undefined) {
-              delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
-            } else {
-              process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
-            }
-            await agent.close()
-          })
-
-          beforeEach(async () => {
-            client = await createClient()
-            db = client.db('test')
-          })
-
-          it('should NOT create a span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
-            const parentSpan = tracer.startSpan('test.parent')
-
-            agent
-              .assertSomeTraces(traces => {
-                // Should only receive the trace for the parent span
-                assert.strictEqual(traces[0].length, 1)
-                const span = traces[0][0]
-                assert.strictEqual(span.name, 'test.parent')
+              beforeEach(async () => {
+                client = await createClient()
+                db = client.db('test')
               })
-              .then(done)
-              .catch(done)
 
-            // Activate parent span scope and trigger heartbeat commands
-            tracer.scope().activate(parentSpan, () => {
-              // Test all heartbeat command variations
-              db.command({ hello: 1 }).catch(() => {})
-              db.command({ helloOk: true }).catch(() => {})
-              db.command({ ismaster: 1 }).catch(() => {})
-              db.command({ isMaster: 1 }).catch(() => {})
-              setTimeout(() => parentSpan.finish(), 50)
+              for (const withParent of [false, true]) {
+                it(`skips heartbeat completion ${withParent ? 'with' : 'without'} a parent span`, async () => {
+                  const parent = withParent ? tracer.startSpan('test.parent') : undefined
+                  const finish = parent && sinon.spy(parent, 'finish')
+                  const commands = async () => {
+                    if (parent) {
+                      const result = await db.command({ ping: 1 })
+                      assert.strictEqual(result.ok, 1)
+                    }
+                    for (const command of [{ hello: 1 }, { ismaster: 1 }, { isMaster: 1 }]) {
+                      const result = await db.command(command)
+                      assert.strictEqual(result.ok, 1)
+                    }
+                    await assert.rejects(db.command({ helloOk: true }), { code: 59 })
+                  }
+
+                  if (parent) {
+                    await tracer.scope().activate(parent, commands)
+                    sinon.assert.notCalled(finish)
+                  } else {
+                    await commands()
+                  }
+
+                  const tracePromise = agent.assertSomeTraces(traces => {
+                    const spans = traces.flat()
+                    assert.strictEqual(spans.length, withParent ? 3 : 1)
+                    const queries = spans.filter(span => span.name === expectedSchema.outbound.opName)
+                    assert.strictEqual(queries.length, withParent ? 2 : 1)
+                    for (const query of queries) {
+                      assert.strictEqual(query.resource, 'ping test.$cmd')
+                    }
+                    if (parent) {
+                      const root = spans.find(span => span.name === 'test.parent')
+                      assert.ok(root)
+                      assert.strictEqual(root.error, 0)
+                      assert.strictEqual(root.meta['peer.service'], undefined)
+                      for (const query of queries) {
+                        assert.strictEqual(query.parent_id.toString(), root.span_id.toString())
+                      }
+                    }
+                  }, { timeoutMs: traceTimeoutMs })
+                  const query = async () => {
+                    const result = await db.command({ ping: 1 })
+                    parent?.finish()
+                    return result
+                  }
+                  const [result] = await Promise.all([
+                    parent ? tracer.scope().activate(parent, query) : query(),
+                    tracePromise,
+                  ])
+                  assert.strictEqual(result.ok, 1)
+                })
+              }
             })
-          })
-        })
+          }
+        }
 
-        describe('when heartbeat tracing is enabled via env var', () => {
-          let savedHeartbeatEnv
+        for (const source of ['config', 'env var']) {
+          describe(`when heartbeat tracing is enabled via ${source}`, () => {
+            let savedHeartbeatEnv
 
-          before(async () => {
-            savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
-            process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            await agent.load('mongodb-core', {})
-          })
+            before(async () => {
+              savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+              process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = String(source === 'env var')
+              await agent.load('mongodb-core', source === 'config' ? { heartbeatEnabled: true } : {})
+            })
 
-          after(async () => {
-            if (savedHeartbeatEnv === undefined) {
-              delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
-            } else {
-              process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
-            }
-            await agent.close()
-          })
+            after(async () => {
+              await agent.close()
+              if (savedHeartbeatEnv === undefined) {
+                delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+              } else {
+                process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
+              }
+            })
 
-          beforeEach(async () => {
-            client = await createClient()
-            db = client.db('test')
-          })
+            beforeEach(async () => {
+              client = await createClient()
+              db = client.db('test')
+            })
 
-          it('should create a child span for heartbeat commands (hello, helloOk, ismaster, isMaster)', (done) => {
-            const parentSpan = tracer.startSpan('test.parent')
-
-            agent
-              .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
-                const rootSpan = traces[0][0]
-
-                assert.strictEqual(rootSpan.name, 'test.parent')
-
-                // assert that some child spans were created, these are the heartbeat spans
-                // don't assert on exact number of spans because it's dynamic
-                for (const childSpan of traces[0].slice(1)) {
-                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
-                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
+            it('creates child spans for heartbeat commands', async () => {
+              const parent = tracer.startSpan('test.parent')
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const root = traces[0][0]
+                const children = traces[0].slice(1)
+                assert.strictEqual(root.name, 'test.parent')
+                assert.ok(children.length >= 4)
+                for (const child of children) {
+                  assert.strictEqual(child.name, expectedSchema.outbound.opName)
+                  assert.strictEqual(child.parent_id.toString(), root.span_id.toString())
                 }
-              })
-              .then(done)
-              .catch(done)
+              }, { timeoutMs: traceTimeoutMs })
 
-            // Activate parent span scope and trigger heartbeat commands
-            tracer.scope().activate(parentSpan, () => {
-              // Test all heartbeat command variations
-              db.command({ hello: 1 }).catch(() => {})
-              db.command({ helloOk: true }).catch(() => {})
-              db.command({ ismaster: 1 }).catch(() => {})
-              db.command({ isMaster: 1 }).catch(() => {})
-              setTimeout(() => parentSpan.finish(), 200)
+              await Promise.all([
+                tracePromise,
+                tracer.scope().activate(parent, async () => {
+                  for (const command of [{ hello: 1 }, { ismaster: 1 }, { isMaster: 1 }]) {
+                    const result = await db.command(command)
+                    assert.strictEqual(result.ok, 1)
+                  }
+                  await assert.rejects(db.command({ helloOk: true }), { code: 59 })
+                  parent.finish()
+                }),
+              ])
             })
           })
-        })
+        }
       })
     })
   })

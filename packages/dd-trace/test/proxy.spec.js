@@ -507,6 +507,86 @@ describe('TracerProxy', () => {
         }
       })
 
+      for (const enabled of ['false', 'true', undefined]) {
+        it(`keeps security and LLMObs products inactive with flags set to ${enabled ?? 'unset'}`, () => {
+          const entrypoint = path.resolve(__dirname, '../../../ci/init')
+          const modules = [
+            require.resolve('../src/appsec'),
+            require.resolve('../src/appsec/sdk'),
+            require.resolve('../src/appsec/blocking'),
+            require.resolve('../src/appsec/iast'),
+            require.resolve('../src/appsec/iast/taint-tracking/rewriter'),
+            require.resolve('../src/otel-thread-ctx'),
+            require.resolve('../src/llmobs'),
+            require.resolve('../src/llmobs/sdk'),
+            require.resolve('../src/aiguard'),
+            require.resolve('../src/aiguard/sdk'),
+          ]
+          const script = `
+            const tracer = require(${JSON.stringify(entrypoint)})
+            const appsec = tracer.appsec
+            const llmobs = tracer.llmobs
+            llmobs.enable({ mlApp: 'test-app' })
+            const result = tracer.trace('test-operation', span => {
+              const sameTracer = tracer.setUser({ id: 'test-user' }) === tracer
+              appsec.trackCustomEvent('test-event', {})
+              const llmobsResult = llmobs.trace({ kind: 'workflow', name: 'test-workflow' }, () => {
+                return tracer.scope().active() === span ? 42 : 0
+              })
+              return {
+                sameTracer,
+                llmobsResult,
+                userTagAbsent: span.context().getTag('usr.id') === undefined,
+              }
+            })
+            tracer.aiguard.evaluate([]).then(evaluation => {
+              process.stdout.write(JSON.stringify({
+                ...result,
+                aiGuardAction: evaluation.action,
+                sameAppsec: appsec === tracer.appsec,
+                sameLlmobs: llmobs === tracer.llmobs,
+                llmobsEnabled: llmobs.enabled,
+                loaded: ${JSON.stringify(modules)}.map(module => require.cache[module] !== undefined),
+              }), () => process.exit(0))
+            }).catch(error => { console.error(error); process.exit(1) })
+          `
+          const inherited = Object.fromEntries(Object.entries(process.env)
+            .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
+          const result = spawnSync(process.execPath, ['--eval', script], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            env: {
+              ...inherited,
+              DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+              DD_APPSEC_ENABLED: enabled,
+              DD_IAST_ENABLED: enabled,
+              DD_LLMOBS_ENABLED: enabled,
+              DD_LLMOBS_ML_APP: 'test-app',
+              DD_AI_GUARD_ENABLED: enabled,
+              DD_API_KEY: 'test-only-not-a-real-key',
+              DD_APP_KEY: 'test-only-not-a-real-key',
+              DD_AI_GUARD_ENDPOINT: 'http://127.0.0.1:1',
+              DD_TRACE_AGENT_URL: 'http://127.0.0.1:1',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_CRASHTRACKING_ENABLED: 'false',
+              JEST_WORKER_ID: '1',
+            },
+          })
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), {
+            sameTracer: true,
+            userTagAbsent: true,
+            sameAppsec: true,
+            sameLlmobs: true,
+            llmobsEnabled: false,
+            llmobsResult: 42,
+            aiGuardAction: 'ALLOW',
+            loaded: modules.map(() => false),
+          })
+        })
+      }
+
       it('does not load Dynamic Instrumentation while disabled', () => {
         proxy.init()
 
@@ -1166,6 +1246,24 @@ describe('TracerProxy', () => {
         }
       })
 
+      it('should preserve profiling label APIs in Test Optimization', () => {
+        config.isCiVisibility = true
+        config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false }
+        proxy.init()
+
+        sinon.assert.notCalled(log.error)
+        const keys = ['test-label']
+        const labels = { 'test-label': 'test-value' }
+        const callback = sinon.stub().returns(42)
+
+        proxy.profiling.setCustomLabelKeys(keys)
+        assert.strictEqual(proxy.profiling.runWithLabels(labels, callback), 42)
+
+        sinon.assert.calledOnceWithExactly(profiler.setCustomLabelKeys, keys)
+        sinon.assert.calledOnceWithExactly(profiler.runWithLabels, labels, callback)
+        sinon.assert.calledOnce(callback)
+      })
+
       it('should resolve profilerStarted() from the profiler module', async () => {
         proxy.init()
 
@@ -1608,6 +1706,7 @@ describe('TracerProxy', () => {
     let buildProxy
     let id
     let randomFillSync
+    let libdatadogExtras
 
     beforeEach(() => {
       uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
@@ -1637,8 +1736,9 @@ describe('TracerProxy', () => {
         }),
       }
       storeConfig = sinon.stub().returns({})
+      libdatadogExtras = { '@noCallThru': true, maybeLoad: sinon.stub() }
 
-      buildProxy = (nodeBundlesOpenssl = false) => new (proxyquire('../src/proxy', {
+      buildProxy = (nodeBundlesOpenssl = false, extras = libdatadogExtras) => new (proxyquire('../src/proxy', {
         './tracer': DatadogTracer,
         './noop/proxy': NoopProxy,
         './config': Config,
@@ -1648,6 +1748,7 @@ describe('TracerProxy', () => {
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        '@datadog/libdatadog-extras': extras,
         './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
@@ -1703,6 +1804,60 @@ describe('TracerProxy', () => {
 
       sinon.assert.notCalled(storeConfig)
       sinon.assert.calledTwice(channelMock.publish)
+    })
+
+    it('should preload process-discovery at registration and store metadata only on /run', () => {
+      microProxy.init()
+
+      sinon.assert.calledOnceWithExactly(libdatadogExtras.maybeLoad, 'process-discovery')
+      sinon.assert.notCalled(storeConfig)
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledOnceWithExactly(storeConfig, config)
+    })
+
+    it('should load the tracer metadata module during init, before /run', () => {
+      const repoRoot = path.resolve(__dirname, '../../..')
+      const metadataPath = require.resolve('../src/tracer_metadata')
+      const script = `
+        const isLoaded = () => require.cache[${JSON.stringify(metadataPath)}] !== undefined
+        const tracer = require(${JSON.stringify(repoRoot)})
+        const beforeInit = isLoaded()
+        tracer.init()
+        process.stdout.write(JSON.stringify({ beforeInit, afterInit: isLoaded() }), () => process.exit(0))
+      `
+      const inherited = Object.fromEntries(Object.entries(process.env)
+        .filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+      const result = spawnSync(process.execPath, ['--eval', script], {
+        encoding: 'utf8',
+        timeout: 10_000,
+        env: { ...inherited, AWS_LAMBDA_MICROVM_IMAGE_ARN: 'arn:aws:lambda:us-east-1:123456789012:microvm-image:test' },
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.deepStrictEqual(JSON.parse(result.stdout), { beforeInit: false, afterInit: true })
+    })
+
+    it('should not preload process-discovery when tracing is disabled', () => {
+      config.DD_TRACE_ENABLED = false
+      microProxy.init()
+
+      sinon.assert.notCalled(libdatadogExtras.maybeLoad)
+    })
+
+    it('should keep the /run identity refresh when libdatadog-extras is not installed', () => {
+      buildProxy(false, null).init()
+
+      sinon.assert.notCalled(log.error)
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(storeConfig, config)
     })
 
     it('should publish datadog:identity:update with the tracer config on POST .../run', () => {

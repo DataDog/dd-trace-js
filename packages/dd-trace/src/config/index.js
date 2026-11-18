@@ -380,6 +380,13 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
+    if (this.isCiVisibility) {
+      setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
+      setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', false)
+      setAndTrack(this, 'aiguard.DD_AI_GUARD_ENABLED', false)
+    }
+
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -429,6 +436,15 @@ class Config extends ConfigBase {
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
+    }
+    // OTEL_SDK_DISABLED disables every OpenTelemetry signal, so unlike the other OTel settings it
+    // overrides an explicit Datadog opt-in. Tracing is handled at the entry point (src/index.js),
+    // where an explicit DD_TRACE_ENABLED takes precedence. That override keeps tracing only: OTLP
+    // span metrics are part of the metrics signal.
+    if (this.OTEL_SDK_DISABLED) {
+      this.#deactivateForOtelSdkDisabled('DD_METRICS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('DD_LOGS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('OTEL_TRACES_SPAN_METRICS_ENABLED')
     }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
@@ -526,7 +542,8 @@ class Config extends ConfigBase {
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+    if (!this.isCiVisibility &&
+        !this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
@@ -826,11 +843,11 @@ class Config extends ConfigBase {
 
     const unsupportedRuntime = getUnsupportedRuntime()
     if (unsupportedRuntime !== undefined) {
-      this.#deactivateOnUnsupportedRuntime(
+      this.#deactivate(
         'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
         `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
       )
-      this.#deactivateOnUnsupportedRuntime(
+      this.#deactivate(
         'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
         'Failed Test Replay is disabled, ' +
           `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
@@ -844,13 +861,20 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
-   * default.
+   * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED' | 'OTEL_TRACES_SPAN_METRICS_ENABLED'} name
+   */
+  #deactivateForOtelSdkDisabled (name) {
+    this.#deactivate(name, `${name} is disabled, because OTEL_SDK_DISABLED=true disables the OpenTelemetry SDK.`)
+  }
+
+  /**
+   * Deactivates an option. Only explains why once, and only when the option was explicitly set: defaults such as
+   * Failed Test Replay need no explanation, and recalculating the config must not repeat it.
    *
    * @param {ConfigPath} name
    * @param {string} reason
    */
-  #deactivateOnUnsupportedRuntime (name, reason) {
+  #deactivate (name, reason) {
     if (!get(this, name)) return
 
     if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
@@ -916,35 +940,39 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  const envs = process.env
+  // Each OpenTelemetry variable lists its Datadog equivalents, then the config path tracking its value when it
+  // differs from the variable name. The first equivalent tags `otel.env.invalid`.
+  for (const [otelEnvVar, ddEnvVars, key = otelEnvVar] of /** @type {Array<[string, string[], string?]>} */ ([
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
+    ['OTEL_LOG_LEVEL', ['DD_TRACE_LOG_LEVEL'], 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE'], 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
-    ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
-    ['OTEL_TRACES_SAMPLER_ARG', 'DD_TRACE_SAMPLE_RATE'],
-    ['OTEL_TRACES_EXPORTER', 'DD_TRACE_ENABLED'],
-    ['OTEL_METRICS_EXPORTER', 'DD_RUNTIME_METRICS_ENABLED'],
-    ['OTEL_RESOURCE_ATTRIBUTES', 'DD_TAGS'],
-    ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
-    ['OTEL_LOGS_EXPORTER'],
-  ]) {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    const envs = process.env
+    ['OTEL_SERVICE_NAME', ['DD_SERVICE'], 'service'],
+    ['OTEL_TRACES_SAMPLER', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_SAMPLER_ARG', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_EXPORTER', ['DD_TRACE_ENABLED']],
+    ['OTEL_METRICS_EXPORTER', ['DD_RUNTIME_METRICS_ENABLED']],
+    ['OTEL_RESOURCE_ATTRIBUTES', ['DD_TAGS']],
+    // OTEL_SDK_DISABLED maps to DD_TRACE_ENABLED and also gates the DD_TRACE_OTEL_ENABLED provider hook.
+    // DD_TRACE_OTEL_ENABLED comes first to keep the established `otel.env.invalid` tag.
+    ['OTEL_SDK_DISABLED', ['DD_TRACE_OTEL_ENABLED', 'DD_TRACE_ENABLED']],
+    ['OTEL_LOGS_EXPORTER', []],
+  ])) {
+    if (!envs[otelEnvVar]) continue
+
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
-    const otelEnvValue = envs[otelEnvVar]
-    if (otelEnvValue) {
+    for (const ddEnvVar of ddEnvVars) {
       if (envs[ddEnvVar]) {
         log.warn('Conflicting %s and %s environment variables are set for %s', ddEnvVar, otelEnvVar, otelSource)
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
-
-      const invalidOtelValue = !otelSource
-      if (invalidOtelValue) {
-        increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
-      }
+    }
+    // An invalid value is one mistake, however many Datadog equivalents the variable has.
+    if (!otelSource) {
+      increaseCounter('otel.env.invalid', ddEnvVars[0], otelEnvVar)
     }
   }
 }

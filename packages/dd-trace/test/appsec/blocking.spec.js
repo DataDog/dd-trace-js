@@ -140,6 +140,16 @@ describe('blocking', () => {
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
+    it('should abort with a reason that identifies the blocked request', () => {
+      const abortController = new AbortController()
+      block(req, res, rootSpan, abortController)
+
+      const { reason } = abortController.signal
+      assert.ok(reason instanceof Error)
+      assert.strictEqual(reason.name, 'BlockedRequestError')
+      assert.strictEqual(reason.message, 'Request blocked by Datadog App and API Protection')
+    })
+
     it('should remove all headers before sending blocking response', () => {
       res.getHeaderNames.returns(['header1', 'header2'])
 

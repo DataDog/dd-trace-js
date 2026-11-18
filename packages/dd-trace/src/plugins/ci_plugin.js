@@ -24,18 +24,35 @@ const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION 
 const {
   CI_PROVIDER_NAME,
   GIT_REPOSITORY_URL,
+  GIT_CHECKOUT_ROOT,
+  GIT_CHECKOUT_IS_CUSTOM,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
   GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_COMMITTER_EMAIL,
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_COMMIT_HEAD_MESSAGE,
 } = require('./util/tags')
+const REPOSITORY_METADATA_KEYS = [
+  GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, GIT_TAG, GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_AUTHOR_DATE, GIT_COMMIT_AUTHOR_NAME, GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_COMMITTER_DATE, GIT_COMMIT_COMMITTER_NAME, GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_CHECKOUT_ROOT, GIT_CHECKOUT_IS_CUSTOM, CI_WORKSPACE_PATH, CI_GIT_MERGE_COMMIT_SHA,
+]
+
 const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
+const { getUserProviderGitMetadata } = require('./util/user-provided-git')
 const {
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -420,16 +437,21 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:modified-files`, ({ onDone }) => {
+      const isCustomCheckout = this.testEnvironmentMetadata[GIT_CHECKOUT_IS_CUSTOM] === 'true'
+      const diffMetadata = isCustomCheckout ? getUserProviderGitMetadata() : this.testEnvironmentMetadata
       const {
         [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
         [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-      } = this.testEnvironmentMetadata
+      } = diffMetadata
+      const targetCommit = commitHeadSha ||
+        (isCustomCheckout ? this.testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
 
-      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+      const baseBranchSha = pullRequestBaseBranchSha ||
+        getPullRequestBaseBranch(pullRequestBaseBranch, this.repositoryRoot)
 
       if (baseBranchSha) {
-        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+        const diff = getPullRequestDiff(baseBranchSha, targetCommit, this.repositoryRoot)
         const modifiedFiles = getModifiedFilesFromDiff(diff)
 
         if (modifiedFiles) {
@@ -602,6 +624,7 @@ module.exports = class CiPlugin extends Plugin {
     if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
 
     this.repositoryRoot = repositoryRoot
+    if (this.testConfiguration) this.testConfiguration.gitRoot = repositoryRoot
     if (codeOwnersEntries === undefined) {
       this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
     }
@@ -640,11 +663,14 @@ module.exports = class CiPlugin extends Plugin {
         if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
           Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
         }
-        // augment with git information (since it will not be available in the worker)
-        for (const key in this.testEnvironmentMetadata) {
+        // Replace worker repository metadata, including fields omitted by the coordinator.
+        for (const key of REPOSITORY_METADATA_KEYS) {
+          delete span.meta[key]
+        }
+        for (const key of Object.keys(this.testEnvironmentMetadata)) {
           // CAREFUL: this bypasses the metadata/metrics distinction
           // Be careful not to pass numbers in `meta`
-          if (key.startsWith('git.')) {
+          if (key.startsWith('git.') || key === CI_WORKSPACE_PATH || key === CI_GIT_MERGE_COMMIT_SHA) {
             span.meta[key] = this.testEnvironmentMetadata[key]
           }
         }
@@ -811,7 +837,8 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_CHECKOUT_ROOT]: gitRoot,
+      [GIT_CHECKOUT_IS_CUSTOM]: isCustomCheckout,
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
@@ -819,7 +846,7 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot ||
+    this.repositoryRoot = gitRoot ||
       (shouldDeferRepositoryRoot ? process.cwd() : getRepositoryRoot() || process.cwd())
 
     this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
@@ -829,6 +856,7 @@ module.exports = class CiPlugin extends Plugin {
     this.testConfiguration = {
       repositoryUrl,
       sha,
+      gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,
       osArchitecture,
@@ -839,8 +867,11 @@ module.exports = class CiPlugin extends Plugin {
       commitMessage,
       tag,
       pullRequestBaseSha,
-      commitHeadSha,
-      commitHeadMessage,
+      // Only an explicit PR head can override the selected commit in a custom checkout.
+      commitHeadSha: isCustomCheckout === 'true'
+        ? getUserProviderGitMetadata()[GIT_COMMIT_HEAD_SHA]
+        : commitHeadSha,
+      commitHeadMessage: isCustomCheckout === 'true' ? undefined : commitHeadMessage,
     }
   }
 
