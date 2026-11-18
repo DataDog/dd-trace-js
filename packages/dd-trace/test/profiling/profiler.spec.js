@@ -864,6 +864,25 @@ describe('profiler', function () {
       assert.strictEqual(infos.hasMissingSourceMaps, false)
     })
 
+    it('preserves missing-source-map metadata on the encoded profile path', async () => {
+      const payload = Buffer.from('encoded profile')
+      const encodeAsync = sinon.stub().resolves(payload)
+      wallProfiler.profile.returns({ hasMissingSourceMaps: true, encodeAsync })
+      wallProfiler.encode.callsFake(profile => profile.encodeAsync())
+
+      const exported = new Promise(resolve => {
+        exporter.export = async exportSpec => resolve(exportSpec)
+      })
+
+      await profiler.start(makeStartOptions())
+      clock.tick(interval)
+
+      const { infos, profiles } = await exported
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
+      assert.deepStrictEqual(profiles.wall, payload)
+      sinon.assert.calledOnce(encodeAsync)
+    })
+
     it('uses the tags captured at each snapshot start', async () => {
       const exportSpecs = []
       exporter.export = sinon.stub().callsFake((exportSpec) => {

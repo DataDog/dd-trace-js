@@ -22,6 +22,7 @@ const {
   getNonJSThreadsLabels,
   getThreadLabels,
   encodeProfileAsync,
+  loadEncodedProfiler,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
@@ -73,6 +74,7 @@ class NativeWallProfiler {
   #lastSampleCount = 0
   #mapper
   #pprof
+  #stopEncoded
   #profilerState
   #samplingIntervalMicros = 0
   #started = false
@@ -127,6 +129,7 @@ class NativeWallProfiler {
 
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
+    this.#stopEncoded = loadEncodedProfiler()?.stopEncoded
     kSampleCount = this.#pprof.time.constants.kSampleCount
 
     this.#pprof.time.start({
@@ -324,7 +327,9 @@ class NativeWallProfiler {
       }
     }
 
-    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+    const profile = this.#stopEncoded === undefined
+      ? this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+      : this.#stopEncoded(restart, this.#boundGenerateLabels, lowCardinalityLabels)
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
