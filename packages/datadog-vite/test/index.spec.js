@@ -736,8 +736,10 @@ describe('datadogVite', () => {
       const plugin = loadPlugin({ getGitMetadataBanner }).datadogVite()
 
       assert.equal(plugin.intro({ isEntry: false }), '')
-      assert.equal(plugin.intro({ isEntry: true }), banner)
-      assert.equal(plugin.intro({ isEntry: true }), banner)
+      const intro = plugin.intro({ isEntry: true })
+      assert.match(intro, /dd-trace:bundler:vite/)
+      assert.match(intro, /process\.env\.DD_GIT_COMMIT_SHA = "abc123";\n$/)
+      assert.equal(plugin.intro({ isEntry: true }), intro)
       sinon.assert.calledOnce(getGitMetadataBanner)
     })
 
@@ -745,8 +747,7 @@ describe('datadogVite', () => {
       const getGitMetadataBanner = sinon.stub().returns('')
       const plugin = loadPlugin({ getGitMetadataBanner }).datadogVite()
 
-      assert.equal(plugin.intro({ isEntry: true }), '')
-      assert.equal(plugin.intro({ isEntry: true }), '')
+      assert.equal(plugin.intro({ isEntry: true }), plugin.intro({ isEntry: true }))
       sinon.assert.calledOnce(getGitMetadataBanner)
     })
 
@@ -755,7 +756,9 @@ describe('datadogVite', () => {
       const getGitMetadataBanner = sinon.stub().returns('process.env.DD_GIT_COMMIT_SHA = "abc123";\n')
       const plugin = loadPlugin({ getGitMetadataBanner }).datadogVite()
 
-      assert.equal(plugin.intro({ isEntry: true }), '')
+      const intro = plugin.intro({ isEntry: true })
+      assert.match(intro, /dd-trace:bundler:vite/)
+      assert.doesNotMatch(intro, /DD_GIT_COMMIT_SHA/)
       sinon.assert.notCalled(getGitMetadataBanner)
     })
   })

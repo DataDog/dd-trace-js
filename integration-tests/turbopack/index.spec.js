@@ -49,6 +49,9 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       agent = await new FakeAgent().start()
       proc = await spawnPluginIntegrationTestProc(applicationDirectory, 'server.js', agent.port, {
         NODE_OPTIONS: '--import=dd-trace/init.js',
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        DD_TELEMETRY_METRICS_ENABLED: 'true',
       })
     })
 
@@ -58,6 +61,17 @@ for (const nextVersion of ['15.5.0', 'latest']) {
     })
 
     it('instruments bundled CommonJS, ESM, and extensionless dependencies', async () => {
+      const assertBundlerUsage = agent.assertTelemetryReceived({
+        requestType: 'generate-metrics',
+        namespace: 'tracers',
+        resolveAtFirstSuccess: true,
+        timeout: 10_000,
+        fn: ({ payload }) => {
+          assert.ok(payload.payload.series.some(({ metric, tags }) =>
+            metric === 'bundler.used' && tags.includes('bundler:turbopack')))
+        },
+      })
+
       const assertCommonJsTrace = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         assert.strictEqual(checkSpansForServiceName(payload, 'express.request'), true)
@@ -67,6 +81,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       const [response] = await Promise.all([
         httpRequest.get(`${proc.url}/api/cjs`),
         assertCommonJsTrace,
+        assertBundlerUsage,
       ])
       assert.deepStrictEqual(response.data, { value: 'extensionless' })
 

@@ -9,6 +9,7 @@ const {
   createEsmWrapper,
   processModule,
 } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { bundlerMarker } = require('../datadog-instrumentations/src/helpers/bundler-telemetry')
 const {
   classify,
   instrument,
@@ -19,6 +20,7 @@ const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'datadog-vite'
+const BUNDLER_MARKER = bundlerMarker('vite')
 // Ids starting with `\0dd-trace-vite:` are reserved for the wrappers this plugin generates to intercept the exports
 // of ES modules, followed by the id of the wrapped module.
 const GENERATED_ID_PREFIX = '\0dd-trace-vite:'
@@ -207,9 +209,9 @@ function datadogVite () {
      * @param {{ isEntry: boolean }} chunk
      */
     intro (chunk) {
-      if (!injectGitMetadata || !chunk.isEntry) return ''
-      gitIntro ??= getGitMetadataBanner(log)
-      return gitIntro
+      if (!chunk.isEntry) return ''
+      if (injectGitMetadata) gitIntro ??= getGitMetadataBanner(log)
+      return BUNDLER_MARKER + (gitIntro ?? '')
     },
   }
 }

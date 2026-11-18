@@ -2,8 +2,11 @@
 
 const fs = require('node:fs')
 
+const { bundlerMarker } = require('../../datadog-instrumentations/src/helpers/bundler-telemetry')
 const { instrument } = require('../../datadog-instrumentations/src/helpers/bundler-transform')
 const { SYNTHETIC_EXTENSION } = require('./constants')
+
+const marker = bundlerMarker('turbopack')
 
 /**
  * @typedef {object} LoaderContext
@@ -35,7 +38,8 @@ module.exports = function loader (source, inputSourceMap) {
       // A warning must not prevent the loader from returning the original source.
     }
   }
-  this.callback(undefined, result?.code ?? source, result ? result.map : inputSourceMap)
+  const code = result?.code ?? source
+  this.callback(undefined, code === source ? code : code + marker, result ? result.map : inputSourceMap)
 }
 
 /**

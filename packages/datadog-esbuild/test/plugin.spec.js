@@ -430,7 +430,7 @@ describe('datadog-esbuild plugin', () => {
       process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
       delete require.cache[pluginPath]
       const plugin = require('../index')
-      const initialOptions = { banner: { js: '// existing\n' } }
+      const initialOptions = { banner: { js: '// existing\n' }, footer: { js: '// existing footer' } }
       plugin.setup({
         initialOptions,
         onEnd () {},
@@ -439,6 +439,7 @@ describe('datadog-esbuild plugin', () => {
       })
       assert.equal(initialOptions.banner.js.includes('DD_GIT_COMMIT_SHA'), false)
       assert.equal(initialOptions.banner.js.includes('DD_GIT_REPOSITORY_URL'), false)
+      assert.match(initialOptions.footer.js, /^\/\/ existing footer\n.+dd-trace:bundler:esbuild/)
     })
   })
 })
