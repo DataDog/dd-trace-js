@@ -65,6 +65,10 @@ describe('vercel ai Orchestrion activation', () => {
   for (const [load, preload] of [['require', ['--require', init]], ['import', ['--import', initialize]]]) {
     it(`reports chunks and completion on the first ai@7 call after ${load}`, function () {
       if (!runtimeSupported) this.skip()
+      const sdk = require('../../../versions/ai@7')
+      const { engines: sdkEngines } = require(sdk.pkgJsonPath())
+      // DD_INJECT_FORCE enables the tracer on older Node versions, not the SDK's telemetry.
+      if (!semver.satisfies(process.version, sdkEngines.node)) this.skip()
       // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Older Node versions lack require(ESM).
       if (load === 'require' && !process.features.require_module) this.skip()
       runSdk(7, preload, `
