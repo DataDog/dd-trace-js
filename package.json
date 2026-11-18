@@ -213,7 +213,7 @@
   "devDependencies": {
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
-    "@babel/helpers": "^8.1.0",
+    "@babel/helpers": "^8.1.2",
     "@eslint/eslintrc": "^3.3.7",
     "@eslint/js": "^10.0.1",
     "@eslint/plugin-kit": "^0.7.3",
