@@ -103,7 +103,7 @@ function installProbeSampler (guardrailMetrics, config) {
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 0)
 
-  const oneSecondNs = 1_000_000_000n
+  const ONE_SECOND_NS = 1_000_000_000n
   let globalSnapshotSamplingRateWindowStart = 0n
   /**
    * The snapshots counted toward the global snapshot rate limit in the current window. Later probes in a sampled trace
@@ -354,8 +354,8 @@ function installProbeSampler (guardrailMetrics, config) {
    */
   function advanceGlobalSnapshotWindow (now) {
     const elapsedNs = now - globalSnapshotSamplingRateWindowStart
-    if (elapsedNs <= oneSecondNs) return
-    const allowance = Number(elapsedNs / oneSecondNs) * MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
+    if (elapsedNs <= ONE_SECOND_NS) return
+    const allowance = Number(elapsedNs / ONE_SECOND_NS) * MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
     snapshotsCountedInWindow = Math.max(snapshotsCountedInWindow - allowance, 0)
     globalSnapshotSamplingRateWindowStart = now
   }
