@@ -242,7 +242,10 @@ describe('register.mjs', () => {
  */
 function runRegisterMjsApp (mode) {
   const app = path.join(__dirname, 'fixtures', 'esm', 'register-mjs-app.mjs')
-  const args = ['--no-experimental-require-module', app]
+  // Node.js releases without require(esm) also reject the flag that disables it.
+  const args = process.allowedNodeEnvironmentFlags.has('--no-experimental-require-module')
+    ? ['--no-experimental-require-module', app]
+    : [app]
   if (mode) args.push(mode)
   const { error, status, stderr, stdout } = spawnSync(process.execPath, args, {
     encoding: 'utf8',
