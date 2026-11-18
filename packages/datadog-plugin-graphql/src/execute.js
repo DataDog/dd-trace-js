@@ -201,6 +201,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const { contextValue } = args
     if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
       ctx.ddSkipped = true
+      ctx.ddNestedContext = true
       ctx.currentStore = legacyStorage.getStore()
       return
     }
@@ -340,6 +341,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   error (ctx) {
+    // A nested execute() sharing a contextValue only carries its caller's store
+    // for context propagation; the caller decides whether the error reaches its span.
+    if (ctx?.ddNestedContext) return
+
     const span = ctx?.currentStore?.span || this.activeSpan
     if (span && ctx?.error) {
       span.setTag('error', ctx.error)

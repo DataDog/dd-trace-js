@@ -2641,6 +2641,8 @@ describe('Plugin', () => {
         // outer execution, so spans created inside them must still inherit the
         // active span instead of starting a new trace.
         it('keeps the active span for a nested execute() on a different schema', () => {
+          // Resolve the tracer after agent.load(); a reference taken earlier can be the uninitialized noop proxy.
+          const ddTracer = require('../../dd-trace')
           const innerSchema = new graphql.GraphQLSchema({
             query: new graphql.GraphQLObjectType({
               name: 'InnerQuery',
@@ -2648,7 +2650,7 @@ describe('Plugin', () => {
                 inner: {
                   type: graphql.GraphQLString,
                   resolve () {
-                    return tracer.trace('inner.child', () => 'inner-value')
+                    return ddTracer.trace('inner.child', () => 'inner-value')
                   },
                 },
               },
@@ -2694,6 +2696,52 @@ describe('Plugin', () => {
           })).then(result => {
             assert.deepStrictEqual(result.errors, undefined)
             assert.strictEqual(result.data.outer, 'outer:inner-value')
+          })
+
+          return Promise.all([assertion, execution])
+        })
+
+        it('does not tag the caller span with an error the caller handled from a nested execute()', () => {
+          const innerSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'HandledInnerQuery',
+              fields: { inner: { type: graphql.GraphQLString } },
+            }),
+          })
+
+          const outerSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'HandledOuterQuery',
+              fields: {
+                outer: {
+                  type: graphql.GraphQLString,
+                  resolve (source, args, contextValue) {
+                    try {
+                      graphql.execute({ schema: innerSchema, document: null, contextValue })
+                    } catch {
+                      return 'handled'
+                    }
+                  },
+                },
+              },
+            }),
+          })
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const resolveSpan = traces[0].find(span => span.resource === 'outer:String')
+
+            assert.ok(resolveSpan, 'expected the outer graphql.resolve span')
+            assert.strictEqual(resolveSpan.error, 0)
+            assert.strictEqual(resolveSpan.meta[ERROR_MESSAGE], undefined)
+          }, { timeoutMs: 3000 })
+
+          const execution = Promise.resolve(graphql.execute({
+            schema: outerSchema,
+            document: graphql.parse('{ outer }'),
+            contextValue: {},
+          })).then(result => {
+            assert.deepStrictEqual(result.errors, undefined)
+            assert.strictEqual(result.data.outer, 'handled')
           })
 
           return Promise.all([assertion, execution])
