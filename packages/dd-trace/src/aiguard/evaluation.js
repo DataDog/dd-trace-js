@@ -70,6 +70,7 @@ const ALLOW = 'ALLOW'
 /**
  * @typedef {object} EvaluationMetaStruct
  * @property {Message[]} [messages]
+ * @property {import('./mcp').McpServer[]} [mcp_servers]
  * @property {Array<unknown>} [attack_categories]
  * @property {Array<unknown>} [sds]
  * @property {Record<string, unknown>} [tag_probs]
@@ -312,7 +313,7 @@ function isReservedExtraTag (key) {
   return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
 }
 
-const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
+const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'mcp_servers', 'attack_categories', 'sds', 'tag_probs'])
 
 /**
  * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct,
@@ -368,7 +369,8 @@ class EvaluationReporter {
    *
    * @param {Span} span
    * @param {Message[]} messages
-   * @param {{ source: string, integration: string, tags?: CustomTags }} options
+   * @param {{ source: string, integration: string, tags?: CustomTags,
+   *   mcpServers?: import('./mcp').McpServer[] }} options
    * @returns {EvaluationReport}
    */
   start (span, messages, options) {
@@ -384,7 +386,10 @@ class EvaluationReporter {
       }
     }
 
+    /** @type {EvaluationMetaStruct} */
     const metaStruct = {}
+    // The same list that the request sends, so a failed evaluation reports it too.
+    if (options.mcpServers?.length) metaStruct.mcp_servers = options.mcpServers
     span.meta_struct = {
       [TAGS.META_STRUCT_KEY]: metaStruct,
     }
