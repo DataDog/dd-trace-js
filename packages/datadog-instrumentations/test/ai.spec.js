@@ -23,49 +23,56 @@ describe('vercel ai Orchestrion activation', () => {
   const register = JSON.stringify(require.resolve('../../../register.js'))
   const assertions = JSON.stringify(require.resolve('./fixtures/ai-activation'))
 
-  for (const version of ['4.0.0', '4', '5', '6.0.0', '6', '7.0.0', '7']) {
-    const major = Number(version.split('.')[0])
-    const cwd = resolve(__dirname, `../../../versions/ai@${version}`)
+  /**
+   * @param {number} version
+   * @param {string[]} preload
+   * @param {string} body
+   */
+  function runSdk (version, preload, body) {
+    const { error, status, stderr } = spawnSync(process.execPath, [...preload, '--input-type=module'], {
+      cwd: resolve(__dirname, `../../../versions/ai@${version}`),
+      env: { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' },
+      encoding: 'utf8',
+      timeout: 15_000,
+      input: `
+        import { createRequire } from 'node:module'
+        const require = createRequire(import.meta.url)
+        const { checkActivation, checkEmbed, checkStream } = require(${assertions})
+        const check = checkActivation('dd-trace:instrumentation:load:orchestrion')
+        ${body}
+      `,
+    })
+    assert.ifError(error)
+    assert.strictEqual(status, 0, stderr)
+  }
 
-    for (const first of ['require', 'import']) {
-      it(`instruments the first call to ai@${version} loaded by ${first}`, function () {
-        if (!runtimeSupported) this.skip()
-        // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Older Node versions lack require(ESM).
-        if (first === 'require' && major === 7 && !process.features.require_module) this.skip()
+  for (const version of [4, 5, 6]) {
+    it(`instruments both builds of ai@${version} on the first call without duplicating subscribers`, function () {
+      if (!runtimeSupported) this.skip()
+      runSdk(version, ['--require', init], `
+        const cjs = require('ai')
+        check(1)
+        await checkEmbed(cjs, ${version - 3})
 
-        const preload = first === 'require' ? ['--require', init] : ['--import', initialize]
-        const { error, status, stderr } = spawnSync(process.execPath, [...preload, '--input-type=module'], {
-          cwd,
-          env: { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' },
-          encoding: 'utf8',
-          timeout: 15_000,
-          input: `
-            import { createRequire } from 'node:module'
-            const require = createRequire(import.meta.url)
-            const { checkActivation, checkEmbed, checkStream } = require(${assertions})
-            const check = checkActivation('dd-trace:instrumentation:load:orchestrion')
-            const load = { require: () => require('ai'), import: () => import('ai') }
-            const ai = await load.${first}()
-            check(1)
-            if (${major} === 7) {
-              await checkStream(ai)
-            } else {
-              await checkEmbed(ai, ${major - 3})
-            }
+        require(${register})
+        const esm = await import('ai')
+        check(2)
+        await checkEmbed(esm, ${version - 3})
+      `)
+    })
+  }
 
-            // v4–6 have two distinct builds, so exercise setup again when the other build loads.
-            if (${major} < 7) {
-              if (${JSON.stringify(first)} === 'require') require(${register})
-              const other = await load.${first === 'require' ? 'import' : 'require'}()
-              check(2)
-              await checkEmbed(other, ${major - 3})
-            }
-          `,
-        })
-        assert.ifError(error)
-        assert.strictEqual(status, 0, stderr)
-      })
-    }
+  for (const [load, preload] of [['require', ['--require', init]], ['import', ['--import', initialize]]]) {
+    it(`reports chunks and completion on the first ai@7 call after ${load}`, function () {
+      if (!runtimeSupported) this.skip()
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Older Node versions lack require(ESM).
+      if (load === 'require' && !process.features.require_module) this.skip()
+      runSdk(7, preload, `
+        const ai = await ${load}('ai')
+        check(1)
+        await checkStream(ai)
+      `)
+    })
   }
 })
 

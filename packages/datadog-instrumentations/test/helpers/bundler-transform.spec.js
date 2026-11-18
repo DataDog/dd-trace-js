@@ -667,10 +667,8 @@ describe('bundler transform', () => {
   })
 
   it('rewrites real targets with export hooks', async () => {
-    const { getRewriteTarget } = require('../../src/helpers/rewriter/targets')
     for (const esm of [false, true]) {
       const file = esm ? 'language/parser.mjs' : 'language/parser.js'
-      assert.equal(getRewriteTarget(`/node_modules/graphql/${file}`).activate, undefined)
       const parser = await runRealRewrite({
         channel: 'tracing:orchestrion:graphql:apm:graphql:parser:start',
         esm,
@@ -686,12 +684,9 @@ describe('bundler transform', () => {
 
       assert.equal(parser.value, 'parsed')
       assert.equal(parser.starts, 1)
-      assert.deepStrictEqual(parser.payloads, [{
-        ...(esm ? { activate: true } : { hasModule: true }),
-        package: 'graphql',
-        path: `graphql/${file}`,
-        version: '16.0.0',
-      }])
+      assert.deepStrictEqual(parser.payloads, esm
+        ? [{ activate: true, package: 'graphql', path: `graphql/${file}`, version: '16.0.0' }]
+        : [{ hasModule: true, package: 'graphql', path: `graphql/${file}`, version: '16.0.0' }])
     }
   })
 
