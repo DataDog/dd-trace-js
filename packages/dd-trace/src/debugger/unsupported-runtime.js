@@ -7,12 +7,12 @@
  * few of its methods, never returns their results, and never emits its events. Deno doesn't let worker threads
  * connect to the main thread inspector. Deno reports a Node.js `process.version`, so both runtimes are detected by
  * their own `process.versions` entry instead.
+ *
+ * @returns {'Bun' | 'Deno' | void}
  */
 function getUnsupportedRuntime () {
   if (process.versions.bun !== undefined) return 'Bun'
   if (process.versions.deno !== undefined) return 'Deno'
-  // eslint-disable-next-line unicorn/no-useless-undefined -- Explicit return satisfies noImplicitReturns.
-  return undefined
 }
 
 module.exports = { getUnsupportedRuntime }
