@@ -937,36 +937,30 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   return result
 }
 
-/**
- * OpenTelemetry environment variables, their Datadog equivalents, and the config path tracking the
- * OpenTelemetry value when it differs from the variable name. The first equivalent tags `otel.env.invalid`.
- *
- * @type {Array<[otelEnvVar: string, ddEnvVars: string[], key?: string]>}
- */
-const OTEL_ENV_EQUIVALENTS = [
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  ['OTEL_LOG_LEVEL', ['DD_TRACE_LOG_LEVEL'], 'logLevel'],
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE'], 'DD_TRACE_PROPAGATION_STYLE'],
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  ['OTEL_SERVICE_NAME', ['DD_SERVICE'], 'service'],
-  ['OTEL_TRACES_SAMPLER', ['DD_TRACE_SAMPLE_RATE']],
-  ['OTEL_TRACES_SAMPLER_ARG', ['DD_TRACE_SAMPLE_RATE']],
-  ['OTEL_TRACES_EXPORTER', ['DD_TRACE_ENABLED']],
-  ['OTEL_METRICS_EXPORTER', ['DD_RUNTIME_METRICS_ENABLED']],
-  ['OTEL_RESOURCE_ATTRIBUTES', ['DD_TAGS']],
-  // OTEL_SDK_DISABLED maps to DD_TRACE_ENABLED and also gates the DD_TRACE_OTEL_ENABLED provider hook.
-  // DD_TRACE_OTEL_ENABLED comes first to keep the established `otel.env.invalid` tag.
-  ['OTEL_SDK_DISABLED', ['DD_TRACE_OTEL_ENABLED', 'DD_TRACE_ENABLED']],
-  ['OTEL_LOGS_EXPORTER', []],
-]
-
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
   // eslint-disable-next-line eslint-rules/eslint-process-env
   const envs = process.env
-  for (const [otelEnvVar, ddEnvVars, key = otelEnvVar] of OTEL_ENV_EQUIVALENTS) {
+  // Each OpenTelemetry variable lists its Datadog equivalents, then the config path tracking its value when it
+  // differs from the variable name. The first equivalent tags `otel.env.invalid`.
+  for (const [otelEnvVar, ddEnvVars, key = otelEnvVar] of /** @type {Array<[string, string[], string?]>} */ ([
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    ['OTEL_LOG_LEVEL', ['DD_TRACE_LOG_LEVEL'], 'logLevel'],
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE'], 'DD_TRACE_PROPAGATION_STYLE'],
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    ['OTEL_SERVICE_NAME', ['DD_SERVICE'], 'service'],
+    ['OTEL_TRACES_SAMPLER', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_SAMPLER_ARG', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_EXPORTER', ['DD_TRACE_ENABLED']],
+    ['OTEL_METRICS_EXPORTER', ['DD_RUNTIME_METRICS_ENABLED']],
+    ['OTEL_RESOURCE_ATTRIBUTES', ['DD_TAGS']],
+    // OTEL_SDK_DISABLED maps to DD_TRACE_ENABLED and also gates the DD_TRACE_OTEL_ENABLED provider hook.
+    // DD_TRACE_OTEL_ENABLED comes first to keep the established `otel.env.invalid` tag.
+    ['OTEL_SDK_DISABLED', ['DD_TRACE_OTEL_ENABLED', 'DD_TRACE_ENABLED']],
+    ['OTEL_LOGS_EXPORTER', []],
+  ])) {
     if (!envs[otelEnvVar]) continue
 
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
