@@ -1,4 +1,6 @@
 {
+  // The files CI type-checks with `npm run type:check:ci`. Type errors in these files fail CI; errors in the files
+  // they import do not. Add an area here once its files are free of type errors.
   "extends": "./tsconfig.dev.json",
   "include": [
     "./benchmark/sirun/debugger/**/*.js",
