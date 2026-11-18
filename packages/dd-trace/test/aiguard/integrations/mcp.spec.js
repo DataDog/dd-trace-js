@@ -1088,15 +1088,22 @@ describe('AIGuard MCP integration', () => {
 
           await ctx.beforeCall?.()
 
-          assert.strictEqual(evaluatedArguments(), '{"command":"checked"}')
           // A boolean: the failure message of the params would read their getters.
           assert.strictEqual(ctx.arguments[0] === params, false)
-          assert.deepStrictEqual(sentArguments(ctx), { command: 'checked' })
           // Without the check, the first read of _meta is the one of the SDK or of the server, and it fails.
-          assert.throws(() => /** @type {{ _meta?: unknown }} */ (ctx.arguments[0])._meta, notReady)
           assert.throws(() => JSON.stringify(ctx.arguments[0]), notReady)
           assert.strictEqual(metaReads, 1)
-          assert.deepStrictEqual(values, [{ command: 'executed' }])
+          if (mcpClient === inMemory) {
+            assert.strictEqual(evaluatedArguments(), '{"command":"checked"}')
+            assert.deepStrictEqual(sentArguments(ctx), { command: 'checked' })
+            assert.throws(() => /** @type {{ _meta?: unknown }} */ (ctx.arguments[0])._meta, notReady)
+            assert.deepStrictEqual(values, [{ command: 'executed' }])
+          } else {
+            // The serialization of the params fails, so the server gets nothing. The evaluation reads
+            // the arguments again, as the best effort.
+            assert.strictEqual(evaluatedArguments(), '{"command":"executed"}')
+            assert.deepStrictEqual(values, [])
+          }
         })
 
         it(`sends the checked arguments when the keys of the params cannot be listed for ${description}`, async () => {
@@ -1124,6 +1131,183 @@ describe('AIGuard MCP integration', () => {
         await callTool(remote(), { name: 42, arguments: {} })
 
         assert.strictEqual(evaluate.firstCall.args[0][0].tool_calls[0].function.name, '42')
+      })
+
+      describe('toJSON of the params', () => {
+        const evaluatedCall = () => evaluate.firstCall.args[0][0].tool_calls[0].function
+        /**
+         * Types the params that a test makes on purpose with values of other types.
+         *
+         * @param {unknown} params
+         */
+        const oddParams = params => /** @type {{ name?: string, arguments?: unknown }} */ (params)
+        const readFile = () => ({
+          name: 'read_file',
+          arguments: { path: 'README.md' },
+          toJSON: () => ({ name: 'delete_repo', arguments: { force: true } }),
+        })
+
+        for (const type of ['stdio', 'sse', 'streamable_http', 'websocket']) {
+          it(`evaluates and sends the JSON form of the params for a ${type} transport`, async () => {
+            const ctx = publishCallTool(createClient({ type, url: 'https://mcp.example.com/mcp', command: 'uvx' }), readFile())
+
+            await ctx.beforeCall?.()
+
+            assert.deepStrictEqual(evaluatedCall(), { name: 'delete_repo', arguments: '{"force":true}' })
+            const sent = ctx.arguments[0]
+            const wire = '{"name":"delete_repo","arguments":{"force":true}}'
+            assert.strictEqual(JSON.stringify(sent), wire)
+            assert.strictEqual(Object.hasOwn(sent, 'toJSON'), false)
+            // The SDK spreads the params to add _meta, for example for a progress token or the trace context.
+            assert.strictEqual(
+              JSON.stringify({ method: 'tools/call', params: { ...sent, _meta: { progressToken: 1 } } }),
+              '{"method":"tools/call","params":{"name":"delete_repo","arguments":{"force":true},' +
+                '"_meta":{"progressToken":1}}}'
+            )
+          })
+        }
+
+        it('blocks the JSON form of the params when the evaluation denies it', async () => {
+          evaluate.callsFake(messages => {
+            const { name } = messages[0].tool_calls[0].function
+            const blocked = new AIGuardAbortError('blocked', [], {}, [])
+            return name === 'delete_repo' ? Promise.reject(blocked) : Promise.resolve({ action: 'ALLOW' })
+          })
+
+          const call = /** @type {Promise<unknown>} */ (callTool(remote(), readFile()))
+          await assert.rejects(call, { name: 'AIGuardAbortError' })
+        })
+
+        it('calls each toJSON method of a JSON transport once, with the key of its value', async () => {
+          const keys = []
+          const params = {
+            name: { toJSON: key => { keys.push(key); return 'delete_repo' }, toString: () => 'read_file' },
+            arguments: { toJSON: key => { keys.push(key); return { force: true } } },
+            _meta: { toJSON: key => { keys.push(key); return { progressToken: 1 } } },
+          }
+          const ctx = publishCallTool(remote(), oddParams(params))
+
+          await ctx.beforeCall?.()
+
+          assert.deepStrictEqual(evaluatedCall(), { name: 'delete_repo', arguments: '{"force":true}' })
+          assert.deepStrictEqual(keys, ['name', 'arguments', '_meta'])
+          assert.strictEqual(
+            JSON.stringify(ctx.arguments[0]),
+            '{"name":"delete_repo","arguments":{"force":true},"_meta":{"progressToken":1}}'
+          )
+        })
+
+        it('keeps the JSON text of the params of a JSON transport', async () => {
+          const params = {
+            name: 'search',
+            arguments: { b: [1, 'x', null, true, { c: 1e21 }], a: undefined, f () {}, __proto__: null },
+            ignored: undefined,
+            toJSON: undefined,
+            ['__proto__']: { kept: 1 },
+          }
+          const wire = JSON.stringify(params)
+          const ctx = publishCallTool(remote(), params)
+
+          await ctx.beforeCall?.()
+
+          assert.strictEqual(JSON.stringify(ctx.arguments[0]), wire)
+          assert.strictEqual(evaluatedArguments(), JSON.stringify(params.arguments))
+        })
+
+        /** @type {Array<[string, unknown]>} */
+        const formsWithoutName = [
+          ['an object without a name', { arguments: { force: true } }],
+          ['a string', 'delete_repo'],
+          ['an array', [{ name: 'delete_repo' }]],
+          ['null', null],
+          ['undefined', undefined],
+        ]
+        for (const [description, form] of formsWithoutName) {
+          it(`evaluates nothing and sends the same JSON when the JSON form of the params is ${description}`,
+            async () => {
+              let calls = 0
+              const params = { name: 'read_file', toJSON: () => { calls++; return form } }
+              const ctx = publishCallTool(remote(), params)
+
+              assert.strictEqual(ctx.beforeCall?.(), undefined)
+
+              sinon.assert.notCalled(evaluate)
+              assert.strictEqual(ctx.arguments[0] === params, false)
+              assert.strictEqual(JSON.stringify(ctx.arguments[0]), JSON.stringify(form))
+              assert.strictEqual(JSON.stringify({ params: ctx.arguments[0] }), JSON.stringify({ params: form }))
+              assert.strictEqual(calls, 1)
+            })
+        }
+
+        it('sends nothing when the toJSON method of the params throws for a JSON transport', async () => {
+          const closed = new Error('closed')
+          let calls = 0
+          const params = {
+            name: 'read_file',
+            arguments: { path: 'README.md' },
+            toJSON: () => {
+              if (calls++ === 0) throw closed
+              return { name: 'delete_repo', arguments: { force: true } }
+            },
+          }
+          const ctx = publishCallTool(remote(), params)
+
+          await ctx.beforeCall?.()
+
+          assert.strictEqual(sendError(ctx), closed)
+          assert.throws(() => JSON.stringify({ ...ctx.arguments[0], _meta: {} }), closed)
+          assert.strictEqual(calls, 1)
+        })
+
+        it('evaluates the name and the arguments of an in-process server, and sends no toJSON method', async () => {
+          const ctx = publishCallTool(inMemory(), readFile())
+
+          await ctx.beforeCall?.()
+
+          // An in-process server reads the name and the arguments. It does not use the JSON form.
+          assert.deepStrictEqual(evaluatedCall(), { name: 'read_file', arguments: '{"path":"README.md"}' })
+          const sent = ctx.arguments[0]
+          assert.deepStrictEqual(sent, { name: 'read_file', arguments: { path: 'README.md' } })
+          assert.strictEqual(JSON.stringify(sent), '{"name":"read_file","arguments":{"path":"README.md"}}')
+        })
+
+        it('sends the object name of the application to an in-process server', async () => {
+          const name = { toString: () => 'read_file', toJSON: () => 'delete_repo' }
+          const ctx = publishCallTool(inMemory(), oddParams({ name, arguments: {} }))
+
+          await ctx.beforeCall?.()
+
+          // An in-process server rejects a name that is not a string.
+          assert.strictEqual(evaluatedCall().name, 'read_file')
+          assert.strictEqual(/** @type {{ name: unknown }} */ (ctx.arguments[0]).name === name, true)
+        })
+
+        it('sends the evaluated name for an object name of a custom transport', async () => {
+          const name = { toString: () => 'read_file', toJSON: () => 'delete_repo' }
+          const ctx = publishCallTool(createClient({ type: 'unknown' }), oddParams({ name, arguments: {} }))
+
+          await ctx.beforeCall?.()
+
+          assert.strictEqual(evaluatedCall().name, 'read_file')
+          assert.strictEqual(JSON.stringify(ctx.arguments[0]), '{"name":"read_file","arguments":{}}')
+        })
+
+        it('gives the key params to the toJSON method of the params, as the SDK does', async () => {
+          const params = {
+            name: 'read_file',
+            arguments: { path: 'README.md' },
+            toJSON: key => key === 'params'
+              ? { name: 'delete_repo', arguments: { force: true } }
+              : { name: 'read_file', arguments: { path: 'README.md' } },
+          }
+          const ctx = publishCallTool(remote(), params)
+
+          await ctx.beforeCall?.()
+
+          assert.deepStrictEqual(evaluatedCall(), { name: 'delete_repo', arguments: '{"force":true}' })
+          const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: ctx.arguments[0] }
+          assert.strictEqual(JSON.parse(JSON.stringify(request)).params.name, 'delete_repo')
+        })
       })
     })
 
@@ -1437,6 +1621,45 @@ describe('AIGuard MCP integration', () => {
 
       assert.strictEqual(mcpEvaluations().length, 5)
     })
+
+    it('evaluates a later call on another connection of the same client, with the server of that connection',
+      async () => {
+        const [tool] = listTools(remote, ['search'])
+        const { root, span } = createTrace()
+        const ctx = interceptChat({
+          messages: [{ role: 'user', content: 'Find x' }],
+          tools: [chatTool('search', tool.inputSchema)],
+        }, span())
+        await ctx.onResult(chatBody('search', '{"q":"x"}'))
+        // The client closes its connection, and connects to another server in the same trace.
+        const reconnected = {
+          client: remote.client,
+          transport: { name: 'other transport' },
+          transportInfo: { type: 'stdio', command: 'uvx', args: ['mcp-example'] },
+        }
+        listTools(reconnected, ['search'])
+
+        await callTool(reconnected, { name: 'search', arguments: { q: 'x' } }, root)
+
+        const evaluations = mcpEvaluations()
+        assert.strictEqual(evaluations.length, 2)
+        assert.deepStrictEqual(evaluations[0].args[1][MCP_SERVERS], [{ ...mcpServer, tools: { search: 'search' } }])
+        const [messages, opts] = evaluations[1].args
+        assert.deepStrictEqual(messages[0].tool_calls[0].function, { name: 'search', arguments: '{"q":"x"}' })
+        assert.deepStrictEqual(opts[MCP_SERVERS], [{
+          id: 'mcp_0f2f11f8cafdbcc5',
+          managed_by: 'client',
+          transport: 'stdio',
+          command: 'uvx',
+          args: ['mcp-example'],
+          tools: { search: 'search' },
+        }])
+        assert.strictEqual(messages[0].tool_calls[0].mcp.server_id, 'mcp_0f2f11f8cafdbcc5')
+
+        // The mark of the first connection stays, so a call on that connection still skips its check.
+        assert.strictEqual(await callTool(remote, { name: 'search', arguments: { q: 'x' } }, root), undefined)
+        assert.strictEqual(mcpEvaluations().length, 2)
+      })
 
     for (const [description, outcome] of [
       ['a blocked response', new AIGuardAbortError('blocked', [], {}, [])],

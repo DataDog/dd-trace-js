@@ -74,6 +74,33 @@ describe('AIGuard MCP client tool calls', () => {
         })
       }
 
+      it(`evaluates the arguments that the toJSON method of the params gives a stdio server (${sdk})`, async () => {
+        const call = (text, wire) => {
+          return get(`/mcp/tojson?sdk=${sdk}&transport=stdio&text=${text}&wire=${encodeURIComponent(wire)}`)
+        }
+        const blocked = await call('checked', 'bad [deny]')
+        const allowed = await call('checked', 'sent')
+
+        assert.strictEqual(blocked.status, 403)
+        assert.strictEqual(allowed.status, 200)
+        assert.deepStrictEqual(await effects('stdio'), ['stdio:sent'])
+        const evaluations = attributes()
+        assert.strictEqual(evaluations.length, 2)
+        assertDirectCall(evaluations[0], 'bad [deny]')
+        assertDirectCall(evaluations[1], 'sent')
+      })
+
+      it(`evaluates the arguments that an in-process server reads, not the toJSON form (${sdk})`, async () => {
+        const response = await get(`/mcp/tojson?sdk=${sdk}&transport=in_memory&text=checked&wire=${
+          encodeURIComponent('bad [deny]')}`)
+
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual((await state()).inProcess, ['in_memory:checked'])
+        const evaluations = attributes()
+        assert.strictEqual(evaluations.length, 1)
+        assert.strictEqual(evaluations[0].messages[0].tool_calls[0].function.arguments, '{"text":"checked"}')
+      })
+
       it(`evaluates an in-process server as an ordinary tool call and still enforces it (${sdk})`, async () => {
         const allowed = await get(`/mcp/call?sdk=${sdk}&transport=in_memory&text=allowed`)
         const blocked = await get(`/mcp/call?sdk=${sdk}&transport=in_memory&text=${encodeURIComponent('bad [deny]')}`)
@@ -375,6 +402,22 @@ describe('AIGuard MCP client tool calls', () => {
           function: { name: 'files__write_file', arguments: '{"text":"hello"}' },
           mcp: { server_id: server.id },
         }])
+        assertNoSecrets()
+      })
+
+      it(`checks the call itself when the client calls the tool on another connection (${sdk})`, async () => {
+        const response = await get(`/mcp/openai?sdk=${sdk}&text=hello&reconnect=true`)
+
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(await state(), { inProcess: [], stdio: ['stdio:hello'], delayed: [] })
+        // The response evaluation allowed the call on the streamable HTTP connection. The client then
+        // calls the tool on its stdio connection, so that call gets its own evaluation with that server.
+        const evaluations = mcpEvaluations()
+        assert.strictEqual(attributes().length, 3)
+        assert.strictEqual(evaluations.length, 2)
+        assert.strictEqual(evaluations[0].mcp_servers[0].transport, 'streamable_http')
+        const server = assertDirectCall(evaluations[1], 'hello')
+        assert.deepStrictEqual(server, expectedServer('stdio', server))
         assertNoSecrets()
       })
 

@@ -23,6 +23,10 @@ const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 // and no call of a tool that the client knows to require task-based execution. The SDK rejects
 // both before it sends anything. Other checks of the SDK run after the hook and can still reject a
 // published call, for example strict capabilities or a signal that is already aborted.
+// The client can close its connection and connect to another server while the hook promise is
+// pending. Then the call does not start on the new transport with the old hook. This instrumentation
+// publishes the call again, with the new transport and the current ctx.arguments, and applies the new
+// hook. Thus one callTool can publish more than once, but the original runs once.
 // MCP v1 (@modelcontextprotocol/sdk) and MCP v2 (@modelcontextprotocol/client) use the same contract.
 const callToolInterceptCh = channel('dd-trace:mcp:callTool:intercept')
 // Published when Client.listTools resolves, before the caller gets the tools.
@@ -361,7 +365,11 @@ function wrapCallTool (callTool) {
     const args = ctx.arguments
     if (!pending) return callTool.apply(this, args)
 
-    return pending.then(() => callTool.apply(this, args))
+    return pending.then(() => {
+      // The hook checked the call for the server of its transport.
+      if (this?.transport === transport) return callTool.apply(this, args)
+      return callToolWithIntercept.apply(this, /** @type {[]} */ (/** @type {unknown} */ (args)))
+    })
   }
 }
 

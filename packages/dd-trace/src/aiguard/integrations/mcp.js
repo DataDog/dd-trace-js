@@ -57,9 +57,9 @@ const LEAVE = 3
 
 /**
  * @typedef {object} PreparedCall
- * @property {string} args The JSON arguments to evaluate.
- * @property {object} params The copy of the params that the SDK sends instead of the params of the
- *   application.
+ * @property {unknown} [name] The tool name to evaluate. Without it, no evaluation runs.
+ * @property {string} [args] The JSON arguments to evaluate. Without them, the evaluation gets {}.
+ * @property {object} params The params that the SDK sends instead of the params of the application.
  */
 
 /**
@@ -176,7 +176,7 @@ function resolveServer (transport, info, name) {
  */
 function onListToolsResult (ctx) {
   try {
-    recordListedTools(ctx.client, resolveServer(ctx.transport, ctx.transportInfo), ctx.tools)
+    recordListedTools(ctx.transport, resolveServer(ctx.transport, ctx.transportInfo), ctx.tools)
   } catch (error) {
     log.debug('AIGuard: unable to record the listed MCP tools: %s', error?.message)
   }
@@ -219,31 +219,33 @@ function onEvaluationError (error) {
 
 /**
  * Evaluates the tool call as one assistant message. A call that a model response evaluation
- * already checked in the same trace gets no second evaluation.
+ * already checked on the same connection and in the same trace gets no second evaluation.
  *
  * @param {CallToolContext} ctx
  * @returns {Promise<unknown>|undefined}
  */
 function evaluateToolCall (ctx) {
-  const params = /** @type {{ name?: unknown, arguments?: unknown }|undefined} */ (ctx.arguments[0])
-  // Without params or a tool name, the request selects no tool, so no tool can run.
+  const params = ctx.arguments[0]
   if (params === null || typeof params !== 'object') return
-  // The check and the copy use one read of each value of the application.
-  const toolName = params.name
-  if (toolName === undefined) return
 
-  const name = typeof toolName === 'string' ? toolName : String(toolName)
-  const call = prepareCall(params, toolName, ctx.transportInfo)
+  const call = JSON_TRANSPORTS.has(/** @type {string} */ (ctx.transportInfo?.type))
+    ? prepareJsonCall(params)
+    : prepareCall(params, ctx.transportInfo)
 
   // The SDK sends the copy, also for a call that starts at once. Then a change to the params of
   // the application after callTool returns cannot reach the server.
   ctx.arguments[0] = call.params
 
-  if (consumeMark(activeTrace(), ctx.client, name, call.args)) return
+  // Without a tool name, the request selects no tool, so no tool can run.
+  if (call.name === undefined) return
+  const name = typeof call.name === 'string' ? call.name : String(call.name)
+  const args = call.args ?? '{}'
+
+  if (consumeMark(activeTrace(), ctx.transport, name, args)) return
 
   // No model call ID exists for a direct call, so the call gets a local ID.
   /** @type {{ id: string, function: { name: string, arguments: string }, mcp?: { server_id: string } }} */
-  const toolCall = { id: `dd_mcp_${randomUUID().replaceAll('-', '')}`, function: { name, arguments: call.args } }
+  const toolCall = { id: `dd_mcp_${randomUUID().replaceAll('-', '')}`, function: { name, arguments: args } }
   const messages = [{ role: 'assistant', tool_calls: [toolCall] }]
   const server = resolveServer(ctx.transport, ctx.transportInfo, getConfiguredServerName())
   // A server that no key identifies gets the evaluation of an ordinary tool call.
@@ -254,38 +256,102 @@ function evaluateToolCall (ctx) {
 }
 
 /**
- * Returns the arguments to evaluate and the copy of the params that the SDK sends. The copy comes
- * first, and the evaluation reads the copy.
+ * Returns the tool name and the arguments to evaluate for a transport that sends the JSON form of
+ * the params, and the copy of the params that the SDK sends.
  *
- * A JSON transport sends the JSON form of the arguments, so the copy gets that same form. Other
- * transports can give the server the objects themselves. Then the copy is a structured clone that
- * keeps the data and its types, and the evaluation gets the content of the clone.
+ * The check makes the JSON form of the params once, as the SDK does. A toJSON method of the params,
+ * of the name or of the arguments applies there. The evaluation reads the name and the arguments of
+ * that form, and the copy is that form. Thus the server gets only the name and the arguments that the
+ * evaluation read.
+ *
+ * @param {object} params
+ * @returns {PreparedCall}
+ */
+function prepareJsonCall (params) {
+  /** @type {unknown} */
+  let wire
+  let args
+  try {
+    // The SDK writes the params as the params key of the request, so toJSON gets the key params.
+    const text = JSON.stringify({ params })
+    wire = JSON.parse(text).params
+    const callArguments = /** @type {{ arguments?: unknown }|undefined} */ (wire)?.arguments
+    if (callArguments !== undefined) args = JSON.stringify(callArguments)
+  } catch (error) {
+    return prepareFailedJsonCall(params, error)
+  }
+
+  if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
+    // The JSON form has no tool name. JSON.stringify calls toJSON only once, so the copy gives the
+    // same value and the SDK does not call the toJSON method of the application again.
+    return { params: { toJSON: () => wire } }
+  }
+  const { name } = /** @type {{ name?: unknown }} */ (wire)
+  return { name, args, params: wire }
+}
+
+/**
+ * Returns the call of a JSON transport whose params JSON cannot write. The SDK gets a copy whose
+ * serialization throws the same error, so the server gets nothing. The evaluation reads the name
+ * and the arguments of the params again, and never throws.
  *
  * @param {{ name?: unknown, arguments?: unknown }} params
- * @param {unknown} toolName The tool name that the check read.
+ * @param {unknown} error
+ * @returns {PreparedCall}
+ */
+function prepareFailedJsonCall (params, error) {
+  // A spread of the copy keeps its toJSON method, so the SDK cannot send it.
+  /** @type {Record<string, unknown>} */
+  const copy = failingJson(error)
+  try {
+    const name = params.name
+    if (name === undefined) return { params: copy }
+
+    const args = safeJson(params.arguments)
+    // The SDK reads the name and the arguments before it sends the request.
+    copy.name = name
+    if (args !== undefined) copy.arguments = JSON.parse(args)
+    return { name, args, params: copy }
+  } catch {
+    // A read of the params throws. The evaluation gets no tool name.
+    return { params: copy }
+  }
+}
+
+/**
+ * Returns the tool name and the arguments to evaluate for a transport that can give the server the
+ * objects themselves, and the copy of the params that the SDK sends. The copy is a structured clone
+ * that keeps the data and its types, and the evaluation gets the content of the clone.
+ *
+ * @param {{ name?: unknown, arguments?: unknown }} params
  * @param {TransportInfo|undefined} info
  * @returns {PreparedCall}
  */
-function prepareCall (params, toolName, info) {
-  const callArguments = params.arguments
-  if (!JSON_TRANSPORTS.has(/** @type {string} */ (info?.type))) {
-    const checked = checkArguments(callArguments)
-    return { args: checked.text ?? '{}', params: copyParams(params, toolName, checked.value) }
-  }
+function prepareCall (params, info) {
+  // The check and the copy use one read of each value of the application.
+  const toolName = params.name
+  if (toolName === undefined) return { params }
 
-  let json
+  // An in-process server rejects a name that is not a string. A custom transport can send the JSON
+  // form of an object, for example the value of its toJSON method. For such a transport, the copy
+  // gets the name that the evaluation reads.
+  const name = info?.type !== 'in_process' && toolName !== null &&
+    (typeof toolName === 'object' || typeof toolName === 'function')
+    ? readableString(toolName)
+    : toolName
+  const checked = checkArguments(params.arguments)
+  return { name, args: checked.text, params: copyParams(params, name, checked.value) }
+}
+
+/**
+ * @param {object} value
+ */
+function readableString (value) {
   try {
-    json = JSON.stringify(callArguments)
-  } catch (error) {
-    // Without the check, this serialization is the one of the SDK. The SDK gets arguments that fail
-    // with the same error, so a value that fails only once, or a stateful toJSON, cannot send the
-    // server a value that the check did not read.
-    return { args: safeJson(callArguments) ?? '{}', params: copyParams(params, toolName, failingJson(error)) }
+    return String(value)
+  } catch {
+    return UNREADABLE
   }
-  // JSON leaves out an undefined value or a function, so the server gets no arguments. The copy has
-  // no arguments either, so the SDK does not serialize the value of the application again.
-  if (json === undefined) return { args: '{}', params: copyParams(params, toolName) }
-  return { args: json, params: copyParams(params, toolName, JSON.parse(json)) }
 }
 
 /**
@@ -311,6 +377,10 @@ function failingJson (error) {
  * check, that read is the first one, of the SDK or of an in-process server, and it fails the same
  * way. When the keys cannot be listed, the serialization of the copy throws the error.
  *
+ * The copy has no toJSON key of the params. An in-process server reads the name and the arguments,
+ * not the JSON form. A custom transport can send the JSON form, and then a toJSON method of the
+ * params could send a name and arguments that the evaluation did not read.
+ *
  * @param {object} params
  * @param {unknown} toolName
  * @param {unknown} [args] The arguments to send. Without them, the copy has no arguments.
@@ -334,7 +404,7 @@ function copyParams (params, toolName, args) {
       copy.name = toolName
     } else if (key === 'arguments') {
       if (args !== undefined) copy.arguments = args
-    } else {
+    } else if (key !== 'toJSON') {
       copyValue(copy, source, key)
     }
   }

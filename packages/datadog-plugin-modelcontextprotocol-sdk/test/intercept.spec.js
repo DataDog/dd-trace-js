@@ -212,6 +212,34 @@ for (const suite of SUITES) {
         assert.deepStrictEqual(calls, ['checked'])
       })
 
+      it('publishes the call again when the client connects to another server during the hook', async () => {
+        const otherCalls = []
+        const otherServer = createServer(otherCalls)
+        const [otherClientTransport, otherServerTransport] = sdk.InMemoryTransport.createLinkedPair()
+        await otherServer.connect(otherServerTransport)
+        const firstTransport = client.transport
+        /** @type {(value?: unknown) => void} */
+        let release = () => {}
+        const published = []
+        subscribe(callToolInterceptCh, ctx => {
+          published.push(ctx.transport)
+          if (published.length === 1) ctx.beforeCall = () => new Promise(resolve => { release = resolve })
+        })
+
+        const call = client.callTool({ name: 'echo', arguments: { text: 'moved' } })
+        await client.close()
+        await client.connect(otherClientTransport)
+        release()
+
+        assert.strictEqual((await call).content[0].text, 'moved')
+        assert.strictEqual(published.length, 2)
+        assert.strictEqual(published[0] === firstTransport, true)
+        assert.strictEqual(published[1] === otherClientTransport, true)
+        assert.deepStrictEqual(calls, [])
+        assert.deepStrictEqual(otherCalls, ['moved'])
+        await otherServer.close()
+      })
+
       it('runs the call when the hook throws synchronously', async () => {
         subscribe(callToolInterceptCh, ctx => {
           ctx.beforeCall = () => { throw new Error('broken hook') }

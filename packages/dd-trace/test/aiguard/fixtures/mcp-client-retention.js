@@ -1,6 +1,7 @@
 'use strict'
 
-// Run with --expose-gc. It fails with a message when the AI Guard MCP records keep a client alive.
+// Run with --expose-gc. It fails with a message when the AI Guard MCP records keep a client or a
+// transport alive.
 const assert = require('node:assert/strict')
 const { setImmediate } = require('node:timers/promises')
 
@@ -8,15 +9,16 @@ const { createClientServer, linkMcpTools, recordListedTools } = require('../../.
 
 /**
  * Lists a tool for a client, links a model request to it, and marks an allowed model tool call.
- * The application keeps the schema and the trace, and drops the client.
+ * The application keeps the schema and the trace, and drops the client and its transport.
  *
  * @param {{ type: string }} schema
  * @param {{ started: object[] }} trace
  */
 function useClient (schema, trace) {
   const client = { name: 'closed client', buffer: Buffer.alloc(1024) }
+  const transport = { name: 'closed transport', buffer: Buffer.alloc(1024) }
   const server = createClientServer({ type: 'streamable_http', url: 'https://mcp.example.com/mcp' })
-  recordListedTools(client, server, [{ name: 'search', inputSchema: schema }])
+  recordListedTools(transport, server, [{ name: 'search', inputSchema: schema }])
 
   const root = { context: () => ({ _trace: trace }) }
   const requestSpan = { context: () => ({ _trace: trace }) }
@@ -36,20 +38,21 @@ function useClient (schema, trace) {
   assert.ok(evaluation?.onAllowed, 'the allowed output must get a mark')
   evaluation.onAllowed()
 
-  return new WeakRef(client)
+  return { client: new WeakRef(client), transport: new WeakRef(transport) }
 }
 
 async function main () {
   const schema = { type: 'object' }
   const trace = { started: [] }
-  const client = useClient(schema, trace)
+  const refs = useClient(schema, trace)
 
   // Leave the job that created the WeakRef before the garbage collection.
   await setImmediate()
   assert.ok(global.gc, 'run the fixture with --expose-gc')
   global.gc()
 
-  assert.strictEqual(client.deref(), undefined, 'the schema record and the mark must not keep the client')
+  assert.strictEqual(refs.client.deref(), undefined, 'the schema record and the mark must not keep the client')
+  assert.strictEqual(refs.transport.deref(), undefined, 'the schema record and the mark must not keep the transport')
   assert.ok(schema && trace)
 }
 

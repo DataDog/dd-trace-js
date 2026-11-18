@@ -329,6 +329,20 @@ app.get('/mcp/call', async (req, res) => {
   }
 })
 
+// The toJSON method of the params gives other arguments. A JSON transport sends them. An in-process
+// server reads the arguments of the params.
+app.get('/mcp/tojson', async (req, res) => {
+  try {
+    const client = await connect(String(req.query.transport), sdkOf(req))
+    const wire = { name: 'write_file', arguments: { text: String(req.query.wire) } }
+    const params = { name: 'write_file', arguments: { text: String(req.query.text) }, toJSON: () => wire }
+    const result = await client.callTool(params)
+    res.json({ blocked: false, result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
 app.get('/mcp/value', async (req, res) => {
   try {
     const client = await connect(String(req.query.transport), sdkOf(req))
@@ -532,9 +546,18 @@ app.get('/mcp/delayed', async (req, res) => {
 })
 
 // The model gets the listed schema object, so AI Guard links the model tool call to the MCP server.
+// With reconnect=true, a new client connects to the stdio server after the model call, and then calls
+// the tool there.
 app.get('/mcp/openai', async (req, res) => {
+  const reconnect = req.query.reconnect === 'true'
+  let client
   try {
-    const client = await connect('streamable_http', sdkOf(req))
+    if (reconnect) {
+      client = new SDKS[sdkOf(req)].Client({ name: `app-client-${SECRET}`, version: '1.0.0' })
+      await client.connect(createTransport('streamable_http', sdkOf(req)))
+    } else {
+      client = await connect('streamable_http', sdkOf(req))
+    }
     const { tools } = await client.listTools()
     const tool = tools.find(candidate => candidate.name === 'write_file')
     const parameters = req.query.clone === 'true' ? structuredClone(tool.inputSchema) : tool.inputSchema
@@ -548,6 +571,10 @@ app.get('/mcp/openai', async (req, res) => {
     })
     const toolCall = completion.choices[0].message.tool_calls[0]
     const params = { name: tool.name, arguments: JSON.parse(toolCall.function.arguments) }
+    if (reconnect) {
+      await client.close()
+      await client.connect(createTransport('stdio', sdkOf(req)))
+    }
     const call = client.callTool(params)
     // The application changes the params after the call starts. The server must get the checked values.
     if (req.query.mutate === 'true') params.arguments.text = 'changed after the call'
@@ -555,6 +582,8 @@ app.get('/mcp/openai', async (req, res) => {
     res.json({ blocked: false, toolCallId: toolCall.id, result: result.content[0].text })
   } catch (error) {
     sendError(res, error)
+  } finally {
+    if (reconnect) await client?.close()
   }
 })
 

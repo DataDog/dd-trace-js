@@ -288,11 +288,29 @@ describe('AI Guard MCP helpers', () => {
     /**
      * @param {object} client
      * @param {string} name
+     * @param {object} [transport] The transport of the connection that lists the tool.
      */
-    function listTool (client, name) {
+    function listTool (client, name, transport = transportOf(client)) {
       const tool = { name, inputSchema: { type: 'object', properties: { q: { type: 'string' } } } }
-      recordListedTools(client, server, [tool])
+      recordListedTools(transport, server, [tool])
       return tool
+    }
+
+    /** @type {WeakMap<object, object>} */
+    const transports = new WeakMap()
+
+    /**
+     * Returns the first transport of a client, as one connection of the client.
+     *
+     * @param {object} client
+     */
+    function transportOf (client) {
+      let transport = transports.get(client)
+      if (!transport) {
+        transport = {}
+        transports.set(client, transport)
+      }
+      return transport
     }
 
     it('links a function tool by the identity of its parameters only', () => {
@@ -386,8 +404,9 @@ describe('AI Guard MCP helpers', () => {
       assert.deepStrictEqual(attached.tool_calls, [{ ...functionCall, mcp: { server_id: server.id } }, hostedCall])
     })
 
-    it('marks allowed outputs for the client, original name and canonical arguments', () => {
+    it('marks allowed outputs for the connection, original name and canonical arguments', () => {
       const client = {}
+      const transport = transportOf(client)
       const listed = listTool(client, 'search')
       const { trace, root, interceptCtx } = outerTrace()
       const link = mustLink([
@@ -405,13 +424,36 @@ describe('AI Guard MCP helpers', () => {
 
       assert.strictEqual(legacyStorage.run({ span: root }, activeTrace), trace)
       assert.strictEqual(consumeMark(trace, {}, 'search', '{"q":"x"}'), false)
-      assert.strictEqual(consumeMark(trace, client, 'srv__search', '{"q":"x"}'), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":"y"}'), false)
-      assert.strictEqual(consumeMark({ started: [] }, client, 'search', '{"q":"x"}'), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":"x"}'), true)
+      assert.strictEqual(consumeMark(trace, undefined, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'srv__search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"y"}'), false)
+      assert.strictEqual(consumeMark({ started: [] }, transport, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"x"}'), true)
       // A mark is consumed once.
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":"x"}'), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', 'not json'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', 'not json'), false)
+    })
+
+    it('consumes a mark only on the connection that listed the tool', () => {
+      const client = {}
+      const first = {}
+      const second = {}
+      const listed = listTool(client, 'search', first)
+      // The client closes the first connection and connects to another server.
+      listTool(client, 'search', second)
+      const { trace, interceptCtx } = outerTrace()
+      const link = mustLink([
+        { type: 'function', function: { name: 'search', parameters: listed.inputSchema } },
+      ], chatFunction, interceptCtx)
+      const outputs = link.attach([{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: '{"q":"x"}' } }],
+      }], anyToolCall)
+
+      allow(link, outputs)
+
+      assert.strictEqual(consumeMark(trace, second, 'search', '{"q":"x"}'), false)
+      assert.strictEqual(consumeMark(trace, first, 'search', '{"q":"x"}'), true)
     })
 
     it('matches a mark when validation changes the key order of the arguments', () => {
@@ -433,9 +475,10 @@ describe('AI Guard MCP helpers', () => {
       const otherValue = '{"a":{"x":null,"y":[2,1]},"b":"2","__proto__":{"e":1}}'
       const otherArray = '{"a":{"x":null,"y":[1,2]},"b":"1","__proto__":{"e":1}}'
       const sameValues = '{"__proto__":{"e":1},"a":{"x":null,"y":[2,1]},"b":"1"}'
-      assert.strictEqual(consumeMark(trace, client, 'search', otherValue), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', otherArray), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', sameValues), true)
+      const transport = transportOf(client)
+      assert.strictEqual(consumeMark(trace, transport, 'search', otherValue), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', otherArray), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', sameValues), true)
     })
 
     it('keeps a bounded number of marks for each trace', () => {
@@ -453,9 +496,10 @@ describe('AI Guard MCP helpers', () => {
 
       allow(link, outputs)
 
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":0}'), false)
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":1}'), true)
-      assert.strictEqual(consumeMark(trace, client, 'search', '{"q":64}'), true)
+      const transport = transportOf(client)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":0}'), false)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":1}'), true)
+      assert.strictEqual(consumeMark(trace, transport, 'search', '{"q":64}'), true)
     })
 
     it('sends one entry for two clients that reach the same server', () => {
@@ -484,9 +528,10 @@ describe('AI Guard MCP helpers', () => {
       ])
     })
 
-    it('ignores listed tools without a server or a schema', () => {
+    it('ignores listed tools without a server, a transport or a schema', () => {
       const schema = { type: 'object' }
       recordListedTools({}, undefined, [{ name: 'search', inputSchema: schema }])
+      recordListedTools(undefined, server, [{ name: 'search', inputSchema: schema }])
       recordListedTools({}, server, [{ name: 'search' }, { inputSchema: {} }, null])
 
       const { interceptCtx } = outerTrace()
@@ -499,7 +544,7 @@ describe('AI Guard MCP helpers', () => {
       assert.strictEqual(link, undefined)
     })
 
-    it('keeps no client alive through the listed schemas and the marks', async function () {
+    it('keeps no client or transport alive through the listed schemas and the marks', async function () {
       this.timeout(10000)
       const fixture = path.join(__dirname, 'fixtures/mcp-client-retention.js')
 

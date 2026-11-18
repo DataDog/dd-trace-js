@@ -234,14 +234,13 @@ function expectedServer (transport, sent, name) {
 }
 
 /**
- * Defines the tests of the MCP tool calls that OpenAI Agents makes through the MCP SDK. The
- * versions differ only in the tool result that the agent gets for a blocked call.
+ * Defines the tests of the configured server name of the MCP tool calls that OpenAI Agents makes.
+ * The name comes from the MCP server object of OpenAI Agents, through the rewriter targets of the
+ * MCP server classes.
  *
  * @param {ReturnType<typeof useMcpApp>} harness
- * @param {Record<string, string|RegExp>} blockedToolOutputs The tool result of a blocked call, for each
- *   transport kind.
  */
-function itChecksAgentsMcpToolCalls (harness, blockedToolOutputs) {
+function itReportsAgentsMcpServerName (harness) {
   for (const transport of ['stdio', 'streamable_http']) {
     it(`checks each MCP tool call once, with the configured server name (${transport})`, async () => {
       const response = await harness.get(`/mcp/agents?transport=${transport}&text=agent`)
@@ -260,7 +259,21 @@ function itChecksAgentsMcpToolCalls (harness, blockedToolOutputs) {
       assert.deepStrictEqual(server, expectedServer(transport, server, 'local-files'))
       harness.assertNoSecrets()
     })
+  }
+}
 
+/**
+ * Defines the tests of the MCP tool calls that OpenAI Agents makes through the MCP SDK. The
+ * versions differ only in the tool result that the agent gets for a blocked call.
+ *
+ * @param {ReturnType<typeof useMcpApp>} harness
+ * @param {Record<string, string|RegExp>} blockedToolOutputs The tool result of a blocked call, for each
+ *   transport kind.
+ */
+function itChecksAgentsMcpToolCalls (harness, blockedToolOutputs) {
+  itReportsAgentsMcpServerName(harness)
+
+  for (const transport of ['stdio', 'streamable_http']) {
     it(`drops the server name that @openai/agents makes from the command or the URL (${transport})`, async () => {
       const response = await harness.get(`/mcp/agents?transport=${transport}&named=false&text=agent`)
 
@@ -319,6 +332,7 @@ module.exports = {
   SECRET,
   expectedServer,
   itChecksAgentsMcpToolCalls,
+  itReportsAgentsMcpServerName,
   serverId,
   startModelMock,
   useMcpApp,

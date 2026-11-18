@@ -28,7 +28,7 @@ const log = require('../log')
 
 /**
  * @typedef {object} ListedTool
- * @property {number} clientId The ID of the MCP client that listed the tool.
+ * @property {number} connectionId The ID of the client connection that listed the tool.
  * @property {McpServer} server The server of the client, without tools.
  * @property {string} originalName
  */
@@ -41,7 +41,7 @@ const log = require('../log')
 
 /**
  * @typedef {object} Mark
- * @property {number} clientId
+ * @property {number} connectionId The ID of the client connection of the listed tool.
  * @property {string} name The original MCP tool name.
  * @property {string} args The arguments in canonical form.
  */
@@ -76,11 +76,14 @@ let hasListedTools = false
 /** @type {WeakMap<object, Mark[]>} */
 const marksByTrace = new WeakMap()
 
-// Records keep a small ID of the client and not the client itself. An application can keep listed
-// schemas or traces for a long time, and a closed client must not stay in memory because of them.
+// A transport is one connection to one server. A client can close its connection and connect to
+// another server, so a mark of one transport must not skip the check of another transport.
+// Records keep a small ID of the transport and not the transport itself. An application can keep
+// listed schemas or traces for a long time, and a closed connection must not stay in memory because
+// of them.
 /** @type {WeakMap<object, number>} */
-const clientIds = new WeakMap()
-let lastClientId = 0
+const connectionIds = new WeakMap()
+let lastConnectionId = 0
 
 /**
  * Returns the origin of a URL: the lowercase scheme and host, and the port when it is not the
@@ -219,13 +222,15 @@ function createClientServer (info, name) {
 }
 
 /**
- * @param {object} client
+ * Returns the connection ID of a transport, and makes one for a new transport.
+ *
+ * @param {object} transport
  */
-function getClientId (client) {
-  let id = clientIds.get(client)
+function getConnectionId (transport) {
+  let id = connectionIds.get(transport)
   if (id === undefined) {
-    id = ++lastClientId
-    clientIds.set(client, id)
+    id = ++lastConnectionId
+    connectionIds.set(transport, id)
   }
   return id
 }
@@ -234,19 +239,20 @@ function getClientId (client) {
  * Records the input schema of each listed tool, so that a model request can link a function tool
  * to its MCP server by schema identity.
  *
- * @param {object} client
+ * @param {unknown} transport The transport of the connection that listed the tools.
  * @param {McpServer|undefined} server
  * @param {unknown} tools
  */
-function recordListedTools (client, server, tools) {
-  if (!server || !Array.isArray(tools)) return
+function recordListedTools (transport, server, tools) {
+  // Without a transport, the client has no connection, and no later call can use these tools.
+  if (!server || !Array.isArray(tools) || transport === null || typeof transport !== 'object') return
 
-  const clientId = getClientId(client)
+  const connectionId = getConnectionId(transport)
   for (const tool of tools) {
     const schema = tool?.inputSchema
     if (schema === null || typeof schema !== 'object' || typeof tool.name !== 'string') continue
 
-    toolsBySchema.set(schema, { clientId, server, originalName: tool.name })
+    toolsBySchema.set(schema, { connectionId, server, originalName: tool.name })
     hasListedTools = true
   }
 }
@@ -358,22 +364,23 @@ function addMark (trace, mark) {
 
 /**
  * Removes the mark of a tool call that a model response evaluation already checked. It returns
- * true when a mark matched.
+ * true when a mark matched. A mark matches only a call on the connection that listed the tool.
  *
  * @param {object|undefined} trace The local trace of the active span.
- * @param {object} client
+ * @param {unknown} transport The transport of the call.
  * @param {string} name The original MCP tool name.
  * @param {string} args The JSON arguments that callTool sends.
  */
-function consumeMark (trace, client, name, args) {
+function consumeMark (trace, transport, name, args) {
   const marks = trace && marksByTrace.get(trace)
-  const clientId = clientIds.get(client)
-  if (!marks || clientId === undefined) return false
+  if (!marks || transport === null || typeof transport !== 'object') return false
+  const connectionId = connectionIds.get(transport)
+  if (connectionId === undefined) return false
 
   let canonical
   for (let i = 0; i < marks.length; i++) {
     const mark = marks[i]
-    if (mark.clientId !== clientId || mark.name !== name) continue
+    if (mark.connectionId !== connectionId || mark.name !== name) continue
 
     canonical ??= canonicalArguments(args)
     if (mark.args === canonical) {
@@ -499,8 +506,8 @@ class McpToolLink {
   }
 
   /**
-   * Marks each MCP tool call of the outputs. A later callTool with the same client, tool and
-   * arguments in the same trace then skips its own evaluation.
+   * Marks each MCP tool call of the outputs. A later callTool on the same connection, with the same
+   * tool and arguments in the same trace, then skips its own evaluation.
    *
    * @param {Array<object>} outputs
    */
@@ -515,7 +522,7 @@ class McpToolLink {
 
         const args = canonicalArguments(toolCall.function.arguments)
         if (args !== undefined) {
-          addMark(this.#trace, { clientId: listed.clientId, name: listed.originalName, args })
+          addMark(this.#trace, { connectionId: listed.connectionId, name: listed.originalName, args })
         }
       }
     }
