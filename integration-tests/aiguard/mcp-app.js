@@ -19,6 +19,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 const { McpServer: McpServerV2 } = require('@modelcontextprotocol/server')
+const { Agent, MCPServerStdio, MCPServerStreamableHttp, OpenAIChatCompletionsModel, run } = require('@openai/agents')
 const express = require('express')
 const OpenAI = require('openai')
 const { z } = require('zod')
@@ -583,6 +584,57 @@ app.get('/mcp/openai', async (req, res) => {
     sendError(res, error)
   } finally {
     if (reconnect) await client?.close()
+  }
+})
+
+/**
+ * Returns the MCP server object of OpenAI Agents for the transport kind.
+ *
+ * @param {string} kind
+ * @param {string|undefined} name Without a name, OpenAI Agents makes one from the command or the URL.
+ */
+function createAgentsServer (kind, name) {
+  if (kind === 'streamable_http') {
+    return new MCPServerStreamableHttp({
+      name,
+      url: streamableHttpUrl().href,
+      requestInit: { headers: { Authorization: `Bearer ${SECRET}` } },
+    })
+  }
+  return new MCPServerStdio({
+    name,
+    command: process.execPath,
+    args: [STDIO_SERVER, '--api-key', SECRET],
+    env: { MCP_SIDE_EFFECT_FILE: SIDE_EFFECT_FILE, SECRET_ENV: SECRET },
+  })
+}
+
+app.get('/mcp/agents', async (req, res) => {
+  const transport = String(req.query.transport ?? 'stdio')
+  const server = createAgentsServer(transport, req.query.named === 'false' ? undefined : 'local-files')
+  try {
+    await server.connect()
+    const agent = new Agent({
+      name: 'writer',
+      instructions: 'Write the line with the tool.',
+      model: new OpenAIChatCompletionsModel(openai, 'gpt-4o-mini'),
+      mcpServers: [server],
+    })
+    const result = await run(agent, `CALL ${JSON.stringify({ text: String(req.query.text) })}`)
+    // The tool results that the agent gave the model, also for a blocked tool call.
+    const toolOutputs = result.newItems
+      .filter(item => item.type === 'tool_call_output_item')
+      .map(item => item.output)
+    // A direct call of the application after the run. It must not get the name of the agent server.
+    if (req.query.direct === 'true') {
+      const client = await connect(transport, 'v1')
+      await client.callTool({ name: 'write_file', arguments: { text: 'direct' } })
+    }
+    res.json({ output: result.finalOutput, toolOutputs })
+  } catch (error) {
+    sendError(res, error)
+  } finally {
+    await server.close()
   }
 })
 

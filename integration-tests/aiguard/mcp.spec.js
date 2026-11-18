@@ -11,7 +11,7 @@ const msgpack = require('@msgpack/msgpack')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { spawnProcAndExpectExit } = require('../helpers')
-const { LOCAL_ORIGIN, expectedServer, serverId, useMcpApp } = require('./mcp-helpers')
+const { LOCAL_ORIGIN, expectedServer, itChecksAgentsMcpToolCalls, serverId, useMcpApp } = require('./mcp-helpers')
 
 const SDKS = ['v1', 'v2']
 
@@ -40,6 +40,7 @@ describe('AIGuard MCP client tool calls', () => {
     '@modelcontextprotocol/client@2.4.0',
     '@modelcontextprotocol/server@2.4.0',
     'openai@6',
+    '@openai/agents@0.14.3',
     'zod',
   ])
   const { attributes, assertDirectCall, assertNoSecrets, directCalls, effects, get, mcpEvaluations, state } = harness
@@ -454,6 +455,19 @@ describe('AIGuard MCP client tool calls', () => {
           assert.strictEqual(directCalls().length, 0)
         })
     }
+
+    describe('of @openai/agents 0.14.3, which uses MCP v1', () => {
+      // This version gives the model the text of the tool error. Its streamable HTTP server object
+      // replaces the error of a failed call with a transport error.
+      itChecksAgentsMcpToolCalls(harness, {
+        stdio: 'An error occurred while running the tool. Please try again. ' +
+          'Error: AIGuardAbortError: Blocked by MCP policy',
+        streamable_http: new RegExp(
+          '^An error occurred while running the tool\\. Please try again\\. Error: MCPTransportError: ' +
+          'MCP streamable HTTP tool call failed for '
+        ),
+      })
+    })
   })
 
   describe('with the MCP kill switch off', () => {
