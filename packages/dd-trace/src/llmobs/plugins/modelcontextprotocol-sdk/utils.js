@@ -134,6 +134,8 @@ function getClientInfoTags (envelope, server) {
 
 const TELEMETRY_KEY = 'telemetry'
 const INTENT_KEY = 'intent'
+// The client writes the intent, so a cap keeps the span event under the intake size limit.
+const MAX_INTENT_LENGTH = 1024
 const TELEMETRY_SCHEMA = {
   type: 'object',
   properties: {
@@ -218,7 +220,7 @@ function stripTelemetry (request) {
   if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
-  const intent = telemetry.intent || undefined
+  const intent = telemetry.intent.slice(0, MAX_INTENT_LENGTH) || undefined
   return { request: { ...request, params: { ...request.params, arguments: rest } }, intent }
 }
 
