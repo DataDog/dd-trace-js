@@ -671,13 +671,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should use the no-op proxy when OTEL_TRACES_EXPORTER lists none without otlp', () => {
+  it('should keep the real proxy when OTEL_TRACES_EXPORTER combines none with another exporter', () => {
     process.env.OTEL_TRACES_EXPORTER = 'none,console'
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
-    const noop = require('../../src/noop/proxy')
-    assert.strictEqual(indexFile, noop)
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
   })
 
   it('should keep the no-op proxy when OTel semantics and OTEL_TRACES_EXPORTER=none are set', () => {
@@ -1491,25 +1491,39 @@ describe('Config', () => {
       )
     })
 
-    it('should select otlp over none', () => {
+    it('should pick the default when none is combined with otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'none,otlp'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      sinon.assert.notCalled(log.warn)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "'none' cannot be combined with other exporters: 'none,otlp' for OTEL_TRACES_EXPORTER (source: env_var), " +
+          'picked default'
+      )
     })
 
-    it('should select none when otlp is not listed', () => {
+    it('should pick the default when none is combined with an unsupported exporter', () => {
       process.env.OTEL_TRACES_EXPORTER = 'none,console'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
       sinon.assert.calledWithExactly(
         log.warn,
-        "Unsupported exporters ignored: 'console' for OTEL_TRACES_EXPORTER (source: env_var)"
+        "'none' cannot be combined with other exporters: 'none,console' for OTEL_TRACES_EXPORTER (source: env_var), " +
+          'picked default'
       )
+    })
+
+    it('should select none when it is the only listed exporter', () => {
+      process.env.OTEL_TRACES_EXPORTER = ' NONE , ,none'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      sinon.assert.notCalled(log.warn)
     })
 
     it('should trim entries, ignore case and skip blank entries', () => {

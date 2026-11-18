@@ -107,8 +107,9 @@ const transformers = {
   },
   /**
    * Resolves an OpenTelemetry exporter list (e.g. `console,otlp`) to the single exporter the
-   * tracer supports. `otlp` anywhere wins, otherwise `none` disables export. Other entries are
-   * ignored with a warning; a list without a supported entry resolves to unset.
+   * tracer supports. `none` disables export and cannot be combined with any other entry: such a
+   * list is invalid and resolves to unset. Otherwise `otlp` anywhere selects OTLP. Other entries
+   * are ignored with a warning; a list without a supported entry resolves to unset.
    *
    * @param {string[]} value
    * @param {string} optionName
@@ -119,14 +120,19 @@ const transformers = {
   parseOtelExporterList (value, optionName, source, reportInvalid = true) {
     const entries = transformers.toLowerCase(value)
 
-    let exporter
-    if (entries.includes('otlp')) {
-      exporter = 'otlp'
-    } else if (entries.includes('none')) {
-      exporter = 'none'
+    if (entries.includes('none')) {
+      if (entries.every(entry => entry === 'none')) {
+        return 'none'
+      }
+      if (reportInvalid) {
+        warnInvalidValue(entries.join(','), optionName, source, "'none' cannot be combined with other exporters")
+      }
+      return
     }
 
-    const ignored = entries.filter(entry => entry !== 'otlp' && entry !== 'none')
+    const exporter = entries.includes('otlp') ? 'otlp' : undefined
+
+    const ignored = entries.filter(entry => entry !== 'otlp')
     if (ignored.length > 0 && reportInvalid) {
       const outcome = exporter === undefined ? 'picked default' : null
       warnInvalidValue(ignored.join(','), optionName, source, 'Unsupported exporters ignored', undefined, outcome)
