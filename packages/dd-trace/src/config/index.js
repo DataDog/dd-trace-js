@@ -442,9 +442,9 @@ class Config extends ConfigBase {
     // where an explicit DD_TRACE_ENABLED takes precedence. That override keeps tracing only: OTLP
     // span metrics are part of the metrics signal.
     if (this.OTEL_SDK_DISABLED) {
-      deactivateForOtelSdkDisabled(this, 'DD_METRICS_OTEL_ENABLED')
-      deactivateForOtelSdkDisabled(this, 'DD_LOGS_OTEL_ENABLED')
-      deactivateForOtelSdkDisabled(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED')
+      this.#deactivateForOtelSdkDisabled('DD_METRICS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('DD_LOGS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('OTEL_TRACES_SPAN_METRICS_ENABLED')
     }
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
@@ -843,11 +843,11 @@ class Config extends ConfigBase {
 
     const unsupportedRuntime = getUnsupportedRuntime()
     if (unsupportedRuntime !== undefined) {
-      this.#deactivateOnUnsupportedRuntime(
+      this.#deactivate(
         'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
         `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
       )
-      this.#deactivateOnUnsupportedRuntime(
+      this.#deactivate(
         'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
         'Failed Test Replay is disabled, ' +
           `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
@@ -861,13 +861,20 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
-   * default.
+   * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED' | 'OTEL_TRACES_SPAN_METRICS_ENABLED'} name
+   */
+  #deactivateForOtelSdkDisabled (name) {
+    this.#deactivate(name, `${name} is disabled, because OTEL_SDK_DISABLED=true disables the OpenTelemetry SDK.`)
+  }
+
+  /**
+   * Deactivates an option. Only explains why once, and only when the option was explicitly set: defaults such as
+   * Failed Test Replay need no explanation, and recalculating the config must not repeat it.
    *
    * @param {ConfigPath} name
    * @param {string} reason
    */
-  #deactivateOnUnsupportedRuntime (name, reason) {
+  #deactivate (name, reason) {
     if (!get(this, name)) return
 
     if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
@@ -891,17 +898,6 @@ function deactivateIfEnabledAndWarnOnWindows (config, envVar) {
     if (source) {
       log.warn('%s is not supported on Windows. Deactivating. (source: %s)', envVar, source)
     }
-  }
-}
-
-/**
- * @param {Config} config
- * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED' | 'OTEL_TRACES_SPAN_METRICS_ENABLED'} name
- */
-function deactivateForOtelSdkDisabled (config, name) {
-  if (config[name]) {
-    log.warn('OTEL_SDK_DISABLED=true overrides %s=true', name)
-    setAndTrack(config, name, false)
   }
 }
 

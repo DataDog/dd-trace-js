@@ -828,8 +828,18 @@ describe('Config', () => {
       assert.strictEqual(getConfig().OTEL_SDK_DISABLED, undefined)
     })
 
+    /**
+     * @param {string} name
+     */
+    function sdkDisabledDiagnostic (name) {
+      return `DATADOG TRACER DIAGNOSTIC - ${name} is disabled, because OTEL_SDK_DISABLED=true disables the ` +
+        'OpenTelemetry SDK.'
+    }
+
     for (const ddTraceEnabled of [undefined, 'true']) {
       it(`should disable explicitly enabled OTel metrics and logs with DD_TRACE_ENABLED=${ddTraceEnabled}`, () => {
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
         process.env.OTEL_SDK_DISABLED = 'true'
         process.env.DD_METRICS_OTEL_ENABLED = 'true'
         process.env.DD_LOGS_OTEL_ENABLED = 'true'
@@ -843,22 +853,51 @@ describe('Config', () => {
         assert.strictEqual(config.getOrigin('DD_LOGS_OTEL_ENABLED'), 'calculated')
         // Disabled OTel logs no longer displace Datadog log injection.
         assert.strictEqual(config.logInjection, true)
-        sinon.assert.calledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'DD_METRICS_OTEL_ENABLED')
-        sinon.assert.calledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'DD_LOGS_OTEL_ENABLED')
+        sinon.assert.calledTwice(logWriter.warn)
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_METRICS_OTEL_ENABLED'))
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
       })
     }
 
-    it('should not warn when OTel metrics and logs are not enabled', () => {
+    it('should not explain anything when OTel metrics and logs are not enabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
       process.env.OTEL_SDK_DISABLED = 'true'
 
       const config = getConfig()
 
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
-      sinon.assert.neverCalledWith(log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true')
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should explain only once why OTel logs are disabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+      // Recalculates the config, starting from the environment variable again
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
+    })
+
+    it('should not explain why OTel logs are disabled without startup logs', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
     })
 
     it('should disable explicitly enabled OTLP span metrics while DD_TRACE_ENABLED=true keeps tracing', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
       process.env.OTEL_SDK_DISABLED = 'true'
       process.env.DD_TRACE_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
@@ -872,9 +911,7 @@ describe('Config', () => {
       assert.strictEqual(config.getOrigin('OTEL_TRACES_SPAN_METRICS_ENABLED'), 'calculated')
       // Span metrics no longer force stats computation for OTLP traces.
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
-      sinon.assert.calledWith(
-        log.warn, 'OTEL_SDK_DISABLED=true overrides %s=true', 'OTEL_TRACES_SPAN_METRICS_ENABLED'
-      )
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('OTEL_TRACES_SPAN_METRICS_ENABLED'))
     })
 
     for (const value of [undefined, '', 'false']) {
