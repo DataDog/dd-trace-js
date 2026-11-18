@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { setTimeout: delay } = require('node:timers/promises')
 
-const { stopProc } = require('../helpers')
+const { assertObjectContains, stopProc } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -98,10 +98,9 @@ describe('Dynamic Instrumentation', function () {
         const diagnosticsByProbeId = await errorReceived
         await stopProc(t.proc)
 
-        assert.strictEqual(
-          diagnosticsByProbeId.get(rcConfig.config.id)?.exception?.message,
-          `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)`
-        )
+        assertObjectContains(diagnosticsByProbeId.get(rcConfig.config.id), {
+          exception: { message: `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)` },
+        })
         assert.ok(!statuses.includes('INSTALLED'), 'Probe should not install when condition compilation fails')
       } finally {
         t.agent.removeListener('debugger-diagnostics', recordStatuses)
