@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * @param {ReturnType<import('../config')>} config - Debugger configuration
+ * @param {NonNullable<ReturnType<import('../config')>>} config - Debugger configuration
  * @param {string} path - Request path
  * @param {Record<string, string>} headers - Payload headers
  * @returns {{
@@ -12,17 +12,15 @@
  * }}
  */
 module.exports = function getRequestOptions (config, path, headers) {
-  const options = {
-    method: 'POST',
-    url: config.url,
-    path,
-    headers,
-  }
-
   if (config.agentless) {
     if (config.apiKey !== undefined) headers['DD-API-KEY'] = config.apiKey
     headers['DD-EVP-ORIGIN'] = 'agent-debugger'
   }
 
-  return options
+  return {
+    method: 'POST',
+    url: config.url,
+    path,
+    headers,
+  }
 }

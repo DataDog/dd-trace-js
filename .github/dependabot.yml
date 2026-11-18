@@ -242,7 +242,7 @@ updates:
           - "@google-cloud/vertexai"
           - "@google/genai"
           - "@langchain/*"
-          - "@modelcontextprotocol/sdk"
+          - "@modelcontextprotocol/*"
           - "@openai/*"
           - "@typesafe-ai/sdk"
           - "ai"

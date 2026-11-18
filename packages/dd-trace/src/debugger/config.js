@@ -27,7 +27,7 @@ module.exports = function getDebuggerConfig (config, inputPath) {
     repositoryUrl,
     runtimeId: config.tags['runtime-id'],
     service: config.service,
-    url: agentless ? agentlessUrl.origin : config.url.toString(),
+    url: agentlessUrl === undefined ? config.url.toString() : agentlessUrl.origin,
     version: config.version,
     inputPath,
   }

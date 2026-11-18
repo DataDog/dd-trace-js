@@ -36,7 +36,7 @@ describe('stacktrace utils', () => {
       it('should parse a frame', function outerFunction () {
         const lineNumber = getNextLineNumber()
         const { stack } = new Error('foo')
-        const [frame] = parseUserLandFrames(stack)
+        const [frame] = parseUserLandFrames(/** @type {string} */ (stack))
         assert.deepStrictEqual(frame, {
           typeName: 'Context',
           functionName: 'outerFunction',
@@ -62,7 +62,7 @@ describe('stacktrace utils', () => {
       })
 
       function getNextLineNumber () {
-        const stack = new Error('foo').stack.split('\n')
+        const stack = /** @type {string} */ (new Error('foo').stack).split('\n')
         return String(Number(stack[2].split(':').at(-2)) + 1)
       }
     })
