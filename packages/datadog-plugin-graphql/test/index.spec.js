@@ -2634,6 +2634,70 @@ describe('Plugin', () => {
 
           return Promise.all([assertion, execution])
         })
+
+        // Schema delegation (e.g. @graphql-tools wrapSchema with the default
+        // executor) re-enters execute() on a DIFFERENT schema with the same
+        // contextValue. The inner schema's resolvers are not wrapped by the
+        // outer execution, so spans created inside them must still inherit the
+        // active span instead of starting a new trace.
+        it('keeps the active span for a nested execute() on a different schema', () => {
+          const innerSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'InnerQuery',
+              fields: {
+                inner: {
+                  type: graphql.GraphQLString,
+                  resolve () {
+                    return tracer.trace('inner.child', () => 'inner-value')
+                  },
+                },
+              },
+            }),
+          })
+
+          const outerSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'OuterQuery',
+              fields: {
+                outer: {
+                  type: graphql.GraphQLString,
+                  resolve (source, args, contextValue) {
+                    // execute() returns synchronously when no resolver is async
+                    return Promise.resolve(graphql.execute({
+                      schema: innerSchema,
+                      document: graphql.parse('{ inner }'),
+                      contextValue,
+                    })).then(result => `outer:${result.data.inner}`)
+                  },
+                },
+              },
+            }),
+          })
+
+          const spans = []
+          const assertion = agent.assertSomeTraces(traces => {
+            for (const trace of traces) spans.push(...trace)
+
+            const child = spans.find(span => span.name === 'inner.child')
+            const execute = spans.find(span => span.name === 'graphql.execute')
+            assert.ok(child, 'expected an inner.child span')
+            assert.ok(execute, 'expected a graphql.execute span')
+            assert.strictEqual(execute.error, 0)
+            assert.notStrictEqual(child.parent_id.toString(10), '0', 'inner.child must not be a trace root')
+            assert.strictEqual(child.trace_id.toString(10), execute.trace_id.toString(10))
+          }, { timeoutMs: 3000 })
+
+          const execution = Promise.resolve(graphql.execute({
+            schema: outerSchema,
+            document: graphql.parse('{ outer }'),
+            contextValue: {},
+          })).then(result => {
+            assert.deepStrictEqual(result.errors, undefined)
+            assert.strictEqual(result.data.outer, 'outer:inner-value')
+          })
+
+          return Promise.all([assertion, execution])
+        })
       })
 
       describe('with an array of variable names', () => {

@@ -269,6 +269,56 @@ describe('GraphQL incremental execution', () => {
       await assertion
     })
 
+    // Schema delegation (e.g. @graphql-tools/wrap's default executor) runs this
+    // execute() on another schema with the caller's contextValue.
+    it('keeps the active span for a nested execute() on a different schema', async () => {
+      const tracer = require('../../dd-trace')
+      const innerSchema = new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'DelegatedInnerQuery',
+          fields: {
+            inner: {
+              type: graphql.GraphQLString,
+              resolve: () => tracer.trace('delegated.child', () => 'inner-value'),
+            },
+          },
+        }),
+      })
+      const outerSchema = new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'DelegatedOuterQuery',
+          fields: {
+            outer: {
+              type: graphql.GraphQLString,
+              async resolve (source, args, contextValue) {
+                const result = await execute({
+                  schema: innerSchema,
+                  document: graphql.parse('{ inner }'),
+                  contextValue,
+                })
+                return result.data.inner
+              },
+            },
+          },
+        }),
+      })
+
+      const [result] = await Promise.all([
+        execute({ schema: outerSchema, document: graphql.parse('query DelegatedOuter { outer }'), contextValue: {} }),
+        agent.assertSomeTraces(traces => {
+          const executeSpan = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const childSpan = traces[0].find(span => span.name === 'delegated.child')
+
+          assert.ok(executeSpan)
+          assert.ok(childSpan)
+          assert.strictEqual(childSpan.trace_id.toString(), executeSpan.trace_id.toString())
+        }, { spanResourceMatch: /DelegatedOuter/ }),
+      ])
+
+      assert.strictEqual(result.errors, undefined)
+      assert.strictEqual(result.data.outer, 'inner-value')
+    })
+
     it('tags errors from deferred payloads', async () => {
       const operationName = 'RejectedDeferred'
       const deferred = createDeferredOperation(operationName)

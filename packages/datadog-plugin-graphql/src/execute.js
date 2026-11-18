@@ -201,6 +201,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const { contextValue } = args
     if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
       ctx.ddSkipped = true
+      ctx.currentStore = legacyStorage.getStore()
       return
     }
 
