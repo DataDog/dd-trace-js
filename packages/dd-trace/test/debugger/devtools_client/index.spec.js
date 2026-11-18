@@ -42,7 +42,7 @@ describe('onPause', function () {
   /**
    * @typedef {{
    *   on: sinon.SinonSpy & { args: Array<[string, Function]> },
-   *   post: sinon.SinonSpy,
+   *   post: sinon.SinonStub,
    *   emit: sinon.SinonSpy,
    *   '@noCallThru'?: boolean
    * }} MockSession
@@ -207,12 +207,15 @@ describe('onPause', function () {
     }
 
     it('should include the time waiting for the resume response', async function () {
+      /** @type {(() => void) | undefined} */
       let completeResume
-      session.post.withArgs('Debugger.resume').returns(new Promise((resolve) => { completeResume = resolve }))
+      const resumed = /** @type {Promise<void>} */ (new Promise((resolve) => { completeResume = resolve }))
+      session.post.withArgs('Debugger.resume').returns(resumed)
 
       const paused = onPaused(event)
       assertPauseDurations([])
       hrtime.returns(6_000_000n)
+      assert.ok(completeResume)
       completeResume()
       await paused
 

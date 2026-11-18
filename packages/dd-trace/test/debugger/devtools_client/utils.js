@@ -8,12 +8,6 @@ module.exports = {
 }
 
 /**
- * @typedef {object} RequestOptions
- * @property {string} method
- * @property {string} path
- */
-
-/**
  * @typedef {object} CaptureExpression
  * @property {string} name - The name of the expression (used as key in snapshot)
  * @property {object} expr - The expression AST to evaluate
@@ -82,7 +76,8 @@ function generateProbeConfig (breakpoint, overrides = {}) {
  * Get the request options from a request spy call
  *
  * @param {import('sinon').SinonSpy} request - The request spy to get the options from.
- * @returns {RequestOptions} - The 2nd argument to the `request` function (i.e. the request options).
+ * @returns {ReturnType<typeof import('../../../src/debugger/devtools_client/request-options')>} - The 2nd argument
+ *   to the `request` function (i.e. the request options).
  */
 function getRequestOptions (request) {
   return request.lastCall.args[1]

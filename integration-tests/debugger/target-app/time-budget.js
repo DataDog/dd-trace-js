@@ -69,7 +69,7 @@ const complexTypes = ['object', 'array', 'map', 'set']
  * @returns {Record<string, unknown>}
  */
 function generateObject (depth, breath) {
-  const obj = {}
+  const obj = /** @type {Record<string, unknown>} */ ({})
   for (let i = 0; i < breath; i++) {
     const key = `p${i}`
     if (depth === 0) {

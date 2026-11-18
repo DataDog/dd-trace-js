@@ -529,7 +529,7 @@ export interface GeneratedConfig {
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
-  OTEL_SDK_DISABLED: boolean;
+  OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
@@ -1224,7 +1224,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_PROPAGATORS: string[];
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
-  OTEL_SDK_DISABLED: boolean;
+  OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_SERVICE_NAME: string | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
