@@ -126,21 +126,13 @@ describe('config', () => {
 
   describe('on Bun', () => {
     let versionsStub
-    let subscriber
-    let warnings
-    const { warnChannel } = require('../../src/log/channels')
-    const diagnostic = 'Heap profiling is disabled, because it is not supported on Bun.'
 
     beforeEach(() => {
       versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
-      warnings = []
-      subscriber = msg => warnings.push(msg)
-      warnChannel.subscribe(subscriber)
     })
 
     afterEach(() => {
       versionsStub.restore()
-      warnChannel.unsubscribe(subscriber)
     })
 
     for (const env of [
@@ -157,17 +149,15 @@ describe('config', () => {
           ? [WallProfiler, EventsProfiler]
           : [WallProfiler])
         assert.deepStrictEqual(config.profilerTypes, samplingContextsAvailable ? ['wall', 'events'] : ['wall'])
-        assert.strictEqual(warnings.filter(msg => msg === diagnostic).length, 1)
       })
     }
 
-    it('should not warn when heap profiling is disabled', () => {
+    it('should keep heap profiling disabled', () => {
       process.env.DD_PROFILING_HEAP_ENABLED = 'false'
 
       const { config } = getProfilerConfig()
 
       assert.ok(config.profilers.every(profiler => !(profiler instanceof SpaceProfiler)))
-      assert.ok(!warnings.includes(diagnostic))
     })
   })
 

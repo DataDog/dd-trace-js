@@ -843,6 +843,15 @@ class Config extends ConfigBase {
 
     if (process.versions.bun !== undefined) {
       this.#deactivate(
+        'runtimeMetrics.native',
+        'Native runtime metrics are disabled, because they are not supported on Bun.'
+      )
+      this.#deactivate(
+        'DD_PROFILING_HEAP_ENABLED',
+        'Heap profiling is disabled, because it is not supported on Bun.'
+      )
+      setAndTrack(this, 'DD_PROFILING_HEAP_ENABLED', false)
+      this.#deactivate(
         'iast.DD_IAST_ENABLED',
         'IAST is disabled, because it is not supported on Bun.'
       )

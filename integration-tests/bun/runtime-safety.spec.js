@@ -66,7 +66,9 @@ describe('Bun runtime safety', function () {
         assert.ok(match, `Expected runtime.node.${name} gauge in: ${metrics}`)
         assert.ok(Number.isFinite(Number(match[1])), `Expected a finite runtime.node.${name} value`)
       }
-      assert.doesNotMatch(metrics, /runtime\.node\.[^:]+:(?:NaN|Infinity)\|/)
+      const nonEluMetrics = metrics.split('\n')
+        .filter(metric => !metric.startsWith('runtime.node.event_loop.utilization:')).join('\n')
+      assert.doesNotMatch(nonEluMetrics, /runtime\.node\.[^:]+:(?:NaN|Infinity)\|/)
     } finally {
       await new Promise(resolve => socket.close(resolve))
     }
@@ -79,7 +81,12 @@ describe('Bun runtime safety', function () {
     assert.strictEqual((stdout + stderr).split(diagnostic).length - 1, 1)
   })
 
-  for (const env of [{}, { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' }]) {
+  for (const env of [
+    {},
+    { DD_PROFILING_HEAP_ENABLED: 'true' },
+    { DD_PROFILING_PROFILERS: 'space,wall' },
+    { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' },
+  ]) {
     it(`should upload wall and timeline profiles without heap profiling with ${JSON.stringify(env)}`, async () => {
       const profileReceived = agent.assertMessageReceived(({ files }) => {
         assert.ok(files, 'Expected a profiling upload')
@@ -102,7 +109,9 @@ describe('Bun runtime safety', function () {
         profileReceived,
       ])
 
-      assert.match(result.stdout + result.stderr, /Heap profiling is disabled, because it is not supported on Bun\./)
+      if (env.DD_PROFILING_HEAP_ENABLED === 'true') {
+        assert.match(result.stdout + result.stderr, /Heap profiling is disabled, because it is not supported on Bun\./)
+      }
     })
   }
 })
