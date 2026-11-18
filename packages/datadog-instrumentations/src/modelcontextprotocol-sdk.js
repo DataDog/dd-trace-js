@@ -123,7 +123,7 @@ function wrapProtocol (Protocol) {
   // can parent server spans to the client operation span.
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
-      if (!clientRequestInjectCh.hasSubscribers || typeof request?.method !== 'string') {
+      if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
         return original.apply(this, arguments)
       }
 
