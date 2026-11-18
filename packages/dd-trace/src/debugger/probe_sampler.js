@@ -462,6 +462,7 @@ function truncateErrorDescription (description) {
  *
  * @param {object} error - The thrown object to inspect.
  * @param {'name' | 'message'} property - The property to find.
+ * @returns {string | void}
  */
 function getErrorStringProperty (error, property) {
   while (error !== null) {
