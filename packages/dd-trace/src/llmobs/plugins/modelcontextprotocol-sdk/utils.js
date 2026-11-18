@@ -179,6 +179,7 @@ function injectTelemetrySchema (result) {
 
     const inputSchema = isObject(tool.inputSchema) ? tool.inputSchema : {}
     const properties = isObject(inputSchema.properties) ? inputSchema.properties : {}
+    if (Object.hasOwn(properties, TELEMETRY_KEY)) return tool
     const required = Array.isArray(inputSchema.required) ? inputSchema.required : []
     return {
       ...tool,
@@ -194,20 +195,30 @@ function injectTelemetrySchema (result) {
 }
 
 /**
+ * @param {unknown} telemetry
+ * @returns {telemetry is { intent: string }}
+ */
+function isInjectedTelemetry (telemetry) {
+  if (!isObject(telemetry) || typeof telemetry[INTENT_KEY] !== 'string') return false
+  for (const key of Object.keys(telemetry)) {
+    if (key !== INTENT_KEY) return false
+  }
+  return true
+}
+
+/**
  * Returns a copy of a tools/call request without the `telemetry` argument, and the intent it carried, or `undefined`
- * when the request has no `telemetry` argument.
+ * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
  * @returns {{ request: object, intent?: string } | undefined}
  */
 function stripTelemetry (request) {
   const args = request?.params?.arguments
-  if (!isObject(args) || !Object.hasOwn(args, TELEMETRY_KEY)) return
+  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
-  const intent = isObject(telemetry) && typeof telemetry[INTENT_KEY] === 'string' && telemetry[INTENT_KEY]
-    ? telemetry[INTENT_KEY]
-    : undefined
+  const intent = telemetry.intent || undefined
   return { request: { ...request, params: { ...request.params, arguments: rest } }, intent }
 }
 

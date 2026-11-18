@@ -77,6 +77,18 @@ describe('integrations', () => {
           receivedArguments = args
           return TOOL_RESULT
         })
+        server.registerTool('report', {
+          description: 'Has its own telemetry argument',
+          inputSchema: serverModule.fromJsonSchema({
+            type: 'object',
+            properties: { telemetry: { type: 'string' } },
+            required: ['telemetry'],
+            additionalProperties: false,
+          }),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
         server.registerTool('ui-only', {
           description: 'Only the app calls this tool',
           inputSchema: {},
@@ -101,6 +113,9 @@ describe('integrations', () => {
         for (const result of [first, second]) {
           assertTelemetryArgument(result.tools.find(tool => tool.name === 'weather'))
           assert.equal(result.tools.find(tool => tool.name === 'ui-only').inputSchema.properties?.telemetry, undefined)
+          assert.deepStrictEqual(result.tools.find(tool => tool.name === 'report').inputSchema.properties.telemetry, {
+            type: 'string',
+          })
         }
 
         const { llmobsSpans } = await getEvents(4)
@@ -156,6 +171,15 @@ describe('integrations', () => {
           outputValue: JSON.stringify(TOOL_RESULT),
           tags: serverToolTags('weather'),
         })
+      })
+
+      it('keeps a telemetry argument that the tool declares', async () => {
+        await client.callTool({ name: 'report', arguments: { telemetry: 'daily' } })
+
+        assert.deepStrictEqual(receivedArguments, { telemetry: 'daily' })
+
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'report')
+        assert.equal(llmobsSpan.meta.intent, undefined)
       })
     })
 
