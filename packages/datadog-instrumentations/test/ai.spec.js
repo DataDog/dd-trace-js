@@ -1,68 +1,73 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const { resolve } = require('node:path')
+
 const { channel, tracingChannel } = require('dc-polyfill')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
+
+const { engines, nodeMaxMajor } = require('../../../package.json')
+const { getActivationSetup } = require('../src/helpers/rewriter/instrumentation-registry')
 
 const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
 const resolveLanguageModelChannel = tracingChannel('orchestrion:ai:resolveLanguageModel')
 
-// Same approach as openai.spec.js: stub `addHook` to capture the module callbacks, then
-// activate every rewrite hook so the instrumentation proves its subscriptions are idempotent.
-function loadAiInstrumentation () {
-  const instrumentPath = require.resolve('../src/helpers/instrument')
-  const realInstrument = require(instrumentPath)
-  const hookCallbacks = []
-  const cache = require.cache[instrumentPath]
-  const previousExports = cache.exports
-  const dcPath = require.resolve('dc-polyfill')
-  const dcCache = require.cache[dcPath]
-  const dcExports = dcCache.exports
-  const channelNames = [
-    'orchestrion:ai:getTracer',
-    'orchestrion:ai:selectTelemetryAttributes',
-    'orchestrion:ai:resolveLanguageModel',
-  ]
-  const subscriptionCounts = new Map(channelNames.map(name => [name, 0]))
+describe('vercel ai Orchestrion activation', () => {
+  const runtimeSupported = process.env.DD_INJECT_FORCE ||
+    semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
+  const init = require.resolve('../../../init.js')
+  const initialize = require.resolve('../../../initialize.mjs')
+  const register = JSON.stringify(require.resolve('../../../register.js'))
+  const assertions = JSON.stringify(require.resolve('./fixtures/ai-activation'))
 
-  cache.exports = {
-    ...realInstrument,
-    addHook (spec, callback) {
-      hookCallbacks.push({ spec, callback })
-    },
+  for (const version of ['4.0.0', '4', '5', '6.0.0', '6', '7.0.0', '7']) {
+    const major = Number(version.split('.')[0])
+    const cwd = resolve(__dirname, `../../../versions/ai@${version}`)
+
+    for (const first of ['require', 'import']) {
+      it(`instruments the first call to ai@${version} loaded by ${first}`, function () {
+        if (!runtimeSupported) this.skip()
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Older Node versions lack require(ESM).
+        if (first === 'require' && major === 7 && !process.features.require_module) this.skip()
+
+        const preload = first === 'require' ? ['--require', init] : ['--import', initialize]
+        const { error, status, stderr } = spawnSync(process.execPath, [...preload, '--input-type=module'], {
+          cwd,
+          env: { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' },
+          encoding: 'utf8',
+          timeout: 15_000,
+          input: `
+            import { createRequire } from 'node:module'
+            const require = createRequire(import.meta.url)
+            const { checkActivation, checkEmbed, checkStream } = require(${assertions})
+            const check = checkActivation('dd-trace:instrumentation:load:orchestrion')
+            const load = { require: () => require('ai'), import: () => import('ai') }
+            const ai = await load.${first}()
+            check(1)
+            if (${major} === 7) {
+              await checkStream(ai)
+            } else {
+              await checkEmbed(ai, ${major - 3})
+            }
+
+            // v4–6 have two distinct builds, so exercise setup again when the other build loads.
+            if (${major} < 7) {
+              if (${JSON.stringify(first)} === 'require') require(${register})
+              const other = await load.${first === 'require' ? 'import' : 'require'}()
+              check(2)
+              await checkEmbed(other, ${major - 3})
+            }
+          `,
+        })
+        assert.ifError(error)
+        assert.strictEqual(status, 0, stderr)
+      })
+    }
   }
-  dcCache.exports = {
-    ...dcExports,
-    tracingChannel (name) {
-      const tracingChannel = dcExports.tracingChannel(name)
-      if (!subscriptionCounts.has(name)) return tracingChannel
-
-      return {
-        ...tracingChannel,
-        subscribe (handlers) {
-          subscriptionCounts.set(name, subscriptionCounts.get(name) + 1)
-          return tracingChannel.subscribe(handlers)
-        },
-      }
-    },
-  }
-
-  try {
-    delete require.cache[require.resolve('../src/ai')]
-    require('../src/ai')
-  } finally {
-    cache.exports = previousExports
-    dcCache.exports = dcExports
-    delete require.cache[require.resolve('../src/ai')]
-  }
-
-  if (hookCallbacks.length === 0) throw new Error('ai instrumentation registered no hooks')
-
-  for (const { callback } of hookCallbacks) callback()
-
-  return channelNames.map(name => subscriptionCounts.get(name))
-}
+})
 
 /**
  * Emits the same `resolveLanguageModel` event the AI SDK does, so the tests drive the
@@ -88,10 +93,10 @@ function subscribeIntercept (onIntercept = () => {}) {
 describe('vercel ai model interception', () => {
   let model
   let doGenerate
-  let subscriptionCounts
 
   before(() => {
-    subscriptionCounts = loadAiInstrumentation()
+    const setup = getActivationSetup('ai')
+    setup({ moduleName: 'ai' })
   })
 
   beforeEach(() => {
@@ -101,10 +106,6 @@ describe('vercel ai model interception', () => {
 
   afterEach(() => {
     sinon.restore()
-  })
-
-  it('subscribes once when multiple rewrite hooks activate', () => {
-    assert.deepStrictEqual(subscriptionCounts, [1, 1, 1])
   })
 
   it('calls the original directly when nothing is subscribed', () => {

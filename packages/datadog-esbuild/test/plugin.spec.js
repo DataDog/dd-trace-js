@@ -265,7 +265,7 @@ describe('datadog-esbuild plugin', () => {
       assert.equal(resolve('@/local'), undefined)
     })
 
-    it('rewrites targets with neither activation nor export hooks without publishing', async () => {
+    it('rewrites the AI SDK and publishes activation without an export hook', async () => {
       const resourcePath = path.join(projectDir, 'node_modules/ai/dist/index.js')
       fs.mkdirSync(path.dirname(resourcePath), { recursive: true })
       fs.writeFileSync(resourcePath, 'function getTracer () { return {} }\nmodule.exports = { getTracer }\n')
@@ -275,7 +275,14 @@ describe('datadog-esbuild plugin', () => {
 
       assert.equal(resolved.pluginData.rewriteOnly, true)
       assert.match(result.contents, /orchestrion:ai:getTracer/)
-      assert.doesNotMatch(result.contents, /dd-trace:bundler:load|payload.module/)
+      assert.match(result.contents, /dd-trace:bundler:load/)
+      assert.ok(result.contents.includes(JSON.stringify({
+        activate: true,
+        package: 'ai',
+        version: '6.0.0',
+        path: 'ai/dist/index.js',
+      })))
+      assert.doesNotMatch(result.contents, /payload.module/)
     })
 
     for (const matches of [true, false]) {

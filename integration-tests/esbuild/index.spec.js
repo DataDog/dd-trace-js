@@ -117,6 +117,10 @@ esbuildVersions.forEach((version) => {
       })
     }
 
+    it('activates the bundled AI SDK before its first streaming call', () => {
+      execSync('node ./build-and-test-ai.js', { timeout })
+    })
+
     describe('ESM', () => {
       afterEach(() => {
         rmSync('./out.mjs', { force: true })
