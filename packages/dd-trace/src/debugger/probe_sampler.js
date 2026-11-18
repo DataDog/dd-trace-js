@@ -103,9 +103,14 @@ function installProbeSampler (guardrailMetrics, config) {
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 0)
 
-  const oneSecondNs = 1_000_000_000n
+  const ONE_SECOND_NS = 1_000_000_000n
   let globalSnapshotSamplingRateWindowStart = 0n
-  let snapshotsSampledWithinTheLastSecond = 0
+  /**
+   * The snapshots counted toward the global snapshot rate limit in the current window. Later probes in a sampled trace
+   * aren't limited by it, so this can exceed the limit. The excess is carried over into the following windows, which
+   * keeps the overall volume within the limit on average.
+   */
+  let snapshotsCountedInWindow = 0
 
   ddTraceGlobal[Symbol.for(PROBE_SAMPLER_SYMBOL)] = {
     /**
@@ -274,8 +279,9 @@ function installProbeSampler (guardrailMetrics, config) {
    * Sample a snapshot-producing probe hit using the sampling decision of its trace. The first such probe hit in the
    * trace makes the decision for all of them, subject to its per-probe rate limit and the global snapshot rate limit.
    * If the trace is sampled, each probe then emits once in it without being subject to the rate limits, so the trace
-   * emits a complete set of snapshots. Those snapshots still count toward the rate limits, which keeps the overall
-   * volume close to the limits by making later traces less likely to be sampled.
+   * emits a complete set of snapshots. Those snapshots still count toward the rate limits. Any that exceed the global
+   * snapshot rate limit are carried over into its following windows, so later traces are less likely to be sampled
+   * until the excess is made up.
    *
    * @param {LocalTrace} trace - The trace the probe was hit in.
    * @param {number} probeIndex - The worker-side probe sampling index.
@@ -325,14 +331,33 @@ function installProbeSampler (guardrailMetrics, config) {
       return true
     }
 
-    if (isSnapshotProducingProbe &&
-        now - globalSnapshotSamplingRateWindowStart <= oneSecondNs &&
-        snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
-      guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
-      return true
-    }
+    return isSnapshotProducingProbe && isGloballyRateLimited(now)
+  }
 
-    return false
+  /**
+   * Check the global snapshot rate limit, recording the skip if it is reached.
+   *
+   * @param {bigint} now - The current time.
+   */
+  function isGloballyRateLimited (now) {
+    advanceGlobalSnapshotWindow(now)
+    if (snapshotsCountedInWindow < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) return false
+    guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
+    return true
+  }
+
+  /**
+   * Start a new window of the global snapshot rate limit if the current one has passed. Snapshots counted in excess of
+   * the limit are carried over, reduced by the limit for each window that has passed since.
+   *
+   * @param {bigint} now - The current time.
+   */
+  function advanceGlobalSnapshotWindow (now) {
+    const elapsedNs = now - globalSnapshotSamplingRateWindowStart
+    if (elapsedNs <= ONE_SECOND_NS) return
+    const allowance = Number(elapsedNs / ONE_SECOND_NS) * MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
+    snapshotsCountedInWindow = Math.max(snapshotsCountedInWindow - allowance, 0)
+    globalSnapshotSamplingRateWindowStart = now
   }
 
   /**
@@ -347,12 +372,8 @@ function installProbeSampler (guardrailMetrics, config) {
     if (!storeSampledProbeIndex(probeIndex)) return false
 
     if (isSnapshotProducingProbe) {
-      if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
-        snapshotsSampledWithinTheLastSecond = 1
-        globalSnapshotSamplingRateWindowStart = now
-      } else {
-        snapshotsSampledWithinTheLastSecond++
-      }
+      advanceGlobalSnapshotWindow(now)
+      snapshotsCountedInWindow++
     }
 
     lastCaptureNsByProbeId.set(probeId, now)
