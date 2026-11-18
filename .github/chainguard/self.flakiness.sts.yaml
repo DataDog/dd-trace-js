@@ -9,4 +9,3 @@ claim_pattern:
 
 permissions:
   actions: read
-  checks: read
