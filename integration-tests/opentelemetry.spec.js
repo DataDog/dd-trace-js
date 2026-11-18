@@ -292,6 +292,7 @@ describe('opentelemetry', function () {
         ['config_datadog:dd_runtime_metrics_enabled', 'config_opentelemetry:otel_metrics_exporter'],
         ['config_datadog:dd_tags', 'config_opentelemetry:otel_resource_attributes'],
         ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'],
+        ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'],
       ]))
 
       assert.deepStrictEqual(sortMetricTags(otelInvalid), [])
