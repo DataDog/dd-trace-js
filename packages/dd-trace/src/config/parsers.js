@@ -110,14 +110,14 @@ const transformers = {
    * tracer supports. `otlp` anywhere wins, otherwise `none` disables export. Other entries are
    * ignored with a warning; a list without a supported entry resolves to unset.
    *
-   * @param {string} value
+   * @param {string[]} value
    * @param {string} optionName
    * @param {string} source
    * @param {boolean} [reportInvalid]
    * @returns {'none' | 'otlp' | undefined}
    */
   parseOtelExporterList (value, optionName, source, reportInvalid = true) {
-    const entries = value.split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean)
+    const entries = transformers.toLowerCase(value)
 
     let exporter
     if (entries.includes('otlp')) {

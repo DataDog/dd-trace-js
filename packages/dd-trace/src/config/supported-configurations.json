@@ -4774,8 +4774,8 @@
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "H",
-        "type": "string",
+        "implementation": "J",
+        "type": "array",
         "default": null,
         "transform": "parseOtelExporterList"
       }
