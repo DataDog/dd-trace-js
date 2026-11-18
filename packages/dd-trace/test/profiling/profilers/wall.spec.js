@@ -268,6 +268,21 @@ describe('profilers/native/wall', () => {
     }
   })
 
+  for (const restart of [true, false]) {
+    it(`should prefer the encoded wall profile with restart=${restart}`, () => {
+      const encoded = { encodeAsync: sinon.stub(), hasMissingSourceMaps: false }
+      pprof.time.stopEncoded = sinon.stub().returns(encoded)
+      const profiler = makeWall(NativeWallProfiler)
+      profiler.start()
+
+      assert.strictEqual(profiler.profile(restart), encoded)
+      sinon.assert.calledOnceWithExactly(pprof.time.stopEncoded, restart, sinon.match.func, sinon.match.array)
+      sinon.assert.notCalled(pprof.time.stop)
+      assert.strictEqual(profiler.isStarted(), restart)
+      profiler.stop()
+    })
+  }
+
   it('should encode profiles calling their encodeAsync method', () => {
     const profiler = makeWall(NativeWallProfiler)
 

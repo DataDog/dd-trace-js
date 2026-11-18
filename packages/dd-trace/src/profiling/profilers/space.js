@@ -5,7 +5,7 @@ const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
-const { encodeProfileAsync, getThreadLabels, loadEncodedProfiler } = require('./shared')
+const { encodeProfileAsync, getThreadLabels } = require('./shared')
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 /**
@@ -22,7 +22,6 @@ class NativeSpaceProfiler {
   #identityRefreshListener
   #mapper
   #pprof
-  #profileEncoded
   #samplingInterval
   #started = false
   #tags
@@ -47,7 +46,6 @@ class NativeSpaceProfiler {
 
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
-    this.#profileEncoded = loadEncodedProfiler()?.profileEncoded
     this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, this.#config.DD_PROFILING_ALLOCATION_ENABLED)
 
     if (this.#config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED) {
@@ -82,9 +80,10 @@ class NativeSpaceProfiler {
   }
 
   profile (restart) {
-    const profile = this.#profileEncoded === undefined
-      ? this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
-      : this.#profileEncoded(undefined, this.#mapper, getThreadLabels, 'pack')
+    const { heap } = this.#pprof
+    const profile = heap.profileEncoded === undefined
+      ? heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
+      : heap.profileEncoded(undefined, this.#mapper, getThreadLabels, 'pack')
     if (!restart) {
       this.stop()
     }

@@ -1,8 +1,5 @@
 'use strict'
 
-const { existsSync } = require('node:fs')
-const { createRequire } = require('node:module')
-const { dirname, join } = require('node:path')
 const { isMainThread, threadId } = require('worker_threads')
 
 const END_TIMESTAMP_LABEL = 'end_timestamp_ns'
@@ -43,12 +40,6 @@ function encodeProfileAsync (profile) {
   return profile.encodeAsync().then(Buffer.from)
 }
 
-function loadEncodedProfiler () {
-  const runtimeRequire = createRequire(__filename)
-  const internal = join(dirname(runtimeRequire.resolve('@datadog/pprof')), 'internal.js')
-  return existsSync(internal) ? runtimeRequire(internal) : undefined
-}
-
 module.exports = {
   END_TIMESTAMP_LABEL,
   THREAD_NAME_LABEL,
@@ -61,5 +52,4 @@ module.exports = {
   getNonJSThreadsLabels,
   getThreadLabels: cacheThreadLabels(),
   encodeProfileAsync,
-  loadEncodedProfiler,
 }
