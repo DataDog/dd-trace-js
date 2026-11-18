@@ -853,6 +853,7 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
@@ -1609,15 +1610,27 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
   })
 
-  it('should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL casing without warning', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'HTTP/JSON'
+  it('should keep the http/json traces default when OTEL_EXPORTER_OTLP_PROTOCOL is unsupported for traces', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
     const config = getConfig()
-    const warnCall = log.warn.getCalls().find(
-      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
-    )
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    assert.strictEqual(warnCall, undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
+    sinon.assert.notCalled(log.warn)
   })
+
+  for (const protocol of ['http/json', 'http/protobuf']) {
+    it(`should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ${protocol} casing without warning`, () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = protocol.toUpperCase()
+      const config = getConfig()
+      const warnCall = log.warn.getCalls().find(
+        (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+      )
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, protocol)
+      assert.strictEqual(warnCall, undefined)
+    })
+  }
 
   it('should use DD_TRACE_SAMPLE_RATE over the parentbased_always_on default when OTEL_TRACES_EXPORTER is otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
