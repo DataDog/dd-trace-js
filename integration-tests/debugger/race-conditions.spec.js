@@ -13,7 +13,7 @@ describe('Dynamic Instrumentation', function () {
 
       const rcConfig2 = t.generateRemoteConfig()
       const secondProbeInstalled = t.waitForProbeStatus([rcConfig2.config.id], 'INSTALLED')
-      const firstProbeReplaced = new Promise(resolve => {
+      const firstProbeReplaced = /** @type {Promise<void>} */ (new Promise(resolve => {
         t.agent.on('debugger-diagnostics', function replaceProbe ({ payload }) {
           for (const event of payload) {
             const { probeId, status } = event.debugger.diagnostics
@@ -26,7 +26,7 @@ describe('Dynamic Instrumentation', function () {
             return
           }
         })
-      })
+      }))
 
       t.agent.addRemoteConfig(t.rcConfig)
       await Promise.all([firstProbeReplaced, secondProbeInstalled])

@@ -131,7 +131,7 @@ function onFlush (payload, done) {
 }
 
 /**
- * @param {number} statusCode - The status code of the response
+ * @param {number | undefined} statusCode - The status code of the response, if one was received
  * @param {string} payload - The payload to send
  * @param {() => void} done - Releases the payload from the upload queue
  */

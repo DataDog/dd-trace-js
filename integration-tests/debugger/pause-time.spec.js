@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
-const { DDSketch } = require('../../vendor/dist/@datadog/sketches-js')
+/** @typedef {typeof import('../../vendor/node_modules/@datadog/sketches-js')} Sketches */
+const { DDSketch } = /** @type {Sketches} */ (require('../../vendor/dist/@datadog/sketches-js'))
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', function () {
