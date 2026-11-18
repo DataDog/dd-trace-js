@@ -212,7 +212,10 @@ ${build.initialOptions.banner.js}`
       !path.isAbsolute(args.path) &&
       !isExternalSpecifier(args.path, externalModules)
     ) {
-      return { path: fullPathToModule }
+      // A plugin result bypasses esbuild's own resolution, so keep the metadata that lets it drop unused imports.
+      return hasNoSideEffects(extracted.pkgJson)
+        ? { path: fullPathToModule, sideEffects: false }
+        : { path: fullPathToModule }
     }
 
     if (args.namespace === 'file' && (isModuleOfInterest || target !== undefined)) {
@@ -441,6 +444,14 @@ ${fileCode}
       }
     }
   })
+}
+
+function hasNoSideEffects (pkgJsonPath) {
+  try {
+    return JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')).sideEffects === false
+  } catch {
+    return false
+  }
 }
 
 // Mirrors esbuild's `external` matching: an entry also excludes the subpaths of a package, and `*` is a wildcard.

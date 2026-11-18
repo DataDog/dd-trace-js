@@ -450,8 +450,9 @@ describe('datadog-esbuild plugin', () => {
     /**
      * @param {string[]} external
      * @param {string} specifier
+     * @param {string} [resolveDir]
      */
-    function resolve (external, specifier) {
+    function resolve (external, specifier, resolveDir = repoRoot) {
       let onResolve
       ddPlugin.setup({
         initialOptions: { external },
@@ -466,12 +467,26 @@ describe('datadog-esbuild plugin', () => {
         importer: path.join(repoRoot, 'app.js'),
         namespace: 'file',
         kind: 'require-call',
-        resolveDir: repoRoot,
+        resolveDir,
       })
     }
 
     it('resolves them with the Node.js conditions', () => {
       assert.deepEqual(resolve([], 'express/lib/utils'), { path: expectedPath })
+    })
+
+    it('keeps the sideEffects: false metadata of the package', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-side-effects-'))
+      try {
+        const pkgDir = path.join(dir, 'node_modules/express')
+        fs.mkdirSync(path.join(pkgDir, 'lib'), { recursive: true })
+        fs.writeFileSync(path.join(pkgDir, 'package.json'), '{"name":"express","version":"4.0.0","sideEffects":false}')
+        fs.writeFileSync(path.join(pkgDir, 'lib/utils.js'), 'module.exports = {}')
+        const result = resolve([], 'express/lib/utils', dir)
+        assert.deepEqual(result, { path: fs.realpathSync(path.join(pkgDir, 'lib/utils.js')), sideEffects: false })
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
     })
 
     it('leaves subpaths of an external package to esbuild', () => {
