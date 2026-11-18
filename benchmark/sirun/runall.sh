@@ -196,6 +196,27 @@ function print_cpu_contention {
         { for (i = 1; i <= n; i++) if ($3 >= lo[i] && $3 <= hi[i]) { printf "%s=%.0f ", $3, $NF; break } }')" >&2 || true
 }
 
+# Prints the per-iteration sirun stats (wall time, CPU time, instructions...) of every variant
+# of suite $1 recorded so far, so a slow variant can be compared with its siblings: more
+# instructions means the process did more work, the same count means it ran slower.
+function print_suite_iterations {
+  echo "  per-iteration sirun stats of ${1}/* so far:" >&2
+  node -e '
+    const fs = require("fs")
+    const [file, suite] = process.argv.slice(1)
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      if (!line.trim()) continue
+      let obj
+      try { obj = JSON.parse(line) } catch { continue }
+      if (obj.name !== suite) continue
+      for (const [i, it] of (obj.iterations || []).entries()) {
+        const stats = Object.entries(it).map(([k, v]) => `${k}=${typeof v === "number" ? Math.round(v) : v}`)
+        console.error(`    ${obj.variant} #${i + 1}: ${stats.join(" ")}`)
+      }
+    }
+  ' "${CWD}/results.ndjson" "$1" 2>&1 >&2 || true
+}
+
 # Run a variant from the suite root. Background calls get their own shell and
 # affinity variables, while all result and failure files remain append-only.
 function run_variant {
@@ -255,6 +276,7 @@ function run_variant {
     echo "${D}/${V} FAILED: completed in ${ELAPSED_SECONDS}s, exceeding the " \
       "${VARIANT_MAX_SECONDS}-second variant limit on core ${CPU_AFFINITY}" >&2
     print_cpu_contention "${CPU_AFFINITY}" "${DIAG_CPUS}" "${TICKS_BEFORE}"
+    print_suite_iterations "${D}"
     cat "${VARIANT_OUT}" >&2
     echo "${D}/${V}" >> "$FAILURES_FILE"
   else
