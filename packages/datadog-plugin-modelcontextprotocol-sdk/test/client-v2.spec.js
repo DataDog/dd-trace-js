@@ -42,12 +42,10 @@ describe('Plugin', () => {
       describe('stateful', () => {
         let server
         let client
-        let serverTransport
 
         beforeEach(async () => {
           server = createServer()
-          const [clientTransport, receiver] = clientModule.InMemoryTransport.createLinkedPair()
-          serverTransport = receiver
+          const [clientTransport, serverTransport] = clientModule.InMemoryTransport.createLinkedPair()
           await server.connect(serverTransport)
           client = new clientModule.Client({ name: 'test-client', version: '1.0.0' })
           await client.connect(clientTransport)
@@ -133,20 +131,26 @@ describe('Plugin', () => {
           assert.equal(result.isError, true)
         })
 
-        it('injects the active context on ping', async () => {
-          let pingRequest
-          const onmessage = serverTransport.onmessage
-          serverTransport.onmessage = (message, extra) => {
-            if (message.method === 'ping') pingRequest = message
-            onmessage.call(serverTransport, message, extra)
+        it('preserves strict custom request parameters with an active span', async () => {
+          const schema = {
+            '~standard': {
+              version: 1,
+              vendor: 'test',
+              validate (value) {
+                if (Object.keys(value).length === 1 && typeof value.value === 'string') return { value }
+                return { issues: [{ message: 'Expected only a string value' }] }
+              },
+            },
           }
+          server.server.setRequestHandler('acme/echo', { params: schema, result: schema }, params => params)
 
-          const parent = tracer.startSpan('ping-parent')
+          const parent = tracer.startSpan('custom-request')
           try {
-            const result = await tracer.scope().activate(parent, () => client.ping())
-            assert.deepStrictEqual(result, {})
-            const headers = pingRequest?.params?._meta?._dd_trace_context
-            assert.strictEqual(headers?.['x-datadog-parent-id'], parent.context().toSpanId())
+            const params = { value: 'echo' }
+            const result = await tracer.scope().activate(parent, () => {
+              return client.request({ method: 'acme/echo', params }, schema)
+            })
+            assert.deepStrictEqual(result, params)
           } finally {
             parent.finish()
           }

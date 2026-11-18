@@ -341,12 +341,6 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
 <h5 id="modelcontextprotocol-sdk"></h5>
-
-Set `DD_MCP_DISTRIBUTED_TRACING=false` to disable trace context injection and extraction through MCP request metadata.
-The default is `true`. MCP spans remain enabled when this option is `false`.
-Injection applies to requests sent through `Protocol.request`. SDK 2.x sends some requests outside this path,
-including the connection-time discovery probe and `subscriptions/listen`.
-
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongoose"></h5>

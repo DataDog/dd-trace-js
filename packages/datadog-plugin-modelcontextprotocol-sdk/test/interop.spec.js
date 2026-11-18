@@ -45,18 +45,16 @@ describe('MCP Python interoperability', () => {
       const transport = new StdioClientTransport({ command: python, args: [pythonPeer, 'server'], env: peerEnv })
       try {
         await client.connect(transport)
-        const clientSpans = []
+        let clientSpan
         const traceAssertion = agent.assertSomeTraces(traces => {
-          const clientSpan = traces.flat().find(span => span.resource === 'client_tool_call')
+          clientSpan = traces.flat().find(span => span.resource === 'client_tool_call')
           assert.ok(clientSpan)
-          clientSpans.push(clientSpan)
         })
         const [result] = await Promise.all([
           client.callTool({ name: 'trace_context', arguments: {} }),
           traceAssertion,
         ])
         assert.strictEqual(result.isError, false)
-        const [clientSpan] = clientSpans
         const response = JSON.parse(result.content[0].text)
         assert.strictEqual(response.parent_id, clientSpan.span_id.toString())
         const low = BigInt(clientSpan.trace_id.toString()).toString(16).padStart(16, '0')
@@ -68,22 +66,29 @@ describe('MCP Python interoperability', () => {
 
     itWithPython('parents the JavaScript server span to a Python client span over stdio', async () => {
       let serverSpan
-      const traceAssertion = agent.assertSomeTraces(traces => {
-        serverSpan = traces.flat().find(span => span.resource === 'server_tool_call')
-        assert.ok(serverSpan)
-      })
-      const [{ stdout }] = await Promise.all([
-        execFileAsync(python, [pythonPeer, 'client', process.execPath, nodePeer, version], {
+      const capture = traces => {
+        serverSpan ??= traces.flat().find(span => span.resource === 'server_tool_call')
+      }
+      agent.subscribe(capture)
+      try {
+        const { stdout } = await execFileAsync(python, [pythonPeer, 'client', process.execPath, nodePeer, version], {
           env: peerEnv,
           timeout: 15000,
-        }),
-        traceAssertion,
-      ])
-      const response = JSON.parse(stdout)
-      assert.strictEqual(serverSpan.parent_id.toString(), response.response.headers['x-datadog-parent-id'])
-      const low = BigInt(serverSpan.trace_id.toString()).toString(16).padStart(16, '0')
-      assert.strictEqual(`${serverSpan.meta['_dd.p.tid']}${low}`, response.trace_id)
-      assert.strictEqual(response.response.trace_id, response.trace_id)
+        })
+        if (!serverSpan) {
+          await agent.assertSomeTraces(traces => {
+            capture(traces)
+            assert.ok(serverSpan)
+          })
+        }
+        const response = JSON.parse(stdout)
+        assert.strictEqual(serverSpan.parent_id.toString(), response.response.headers['x-datadog-parent-id'])
+        const low = BigInt(serverSpan.trace_id.toString()).toString(16).padStart(16, '0')
+        assert.strictEqual(`${serverSpan.meta['_dd.p.tid']}${low}`, response.trace_id)
+        assert.strictEqual(response.response.trace_id, response.trace_id)
+      } finally {
+        agent.unsubscribe(capture)
+      }
     })
   })
 })

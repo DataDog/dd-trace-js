@@ -1749,7 +1749,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "description": "Propagate trace context through metadata on instrumented MCP requests. Disabling propagation does not disable MCP spans."
       }
     ],
     "DD_METRICS_OTEL_ENABLED": [
