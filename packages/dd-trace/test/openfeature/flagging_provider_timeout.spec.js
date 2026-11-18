@@ -29,6 +29,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     }
 
     mockConfig = {
+      getOrigin: sinon.stub().returns('default'),
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
