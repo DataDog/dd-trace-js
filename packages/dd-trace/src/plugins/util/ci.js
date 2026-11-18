@@ -40,6 +40,13 @@ const { filterSensitiveInfoFromRepository } = require('./url')
 
 // `user-provided-git` requires this module, so its SHA validator cannot be reused here.
 const COMMIT_SHA_REGEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const COMMIT_SHA_TAGS = [
+  GIT_COMMIT_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  CI_GIT_MERGE_COMMIT_SHA,
+]
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -83,6 +90,16 @@ function normalizeRef (ref) {
     return ref
   }
   return ref.replaceAll(/origin\/|refs\/heads\/|refs\/tags\/|tags\//g, '')
+}
+
+/**
+ * Lowercases a commit SHA. Values that are not a SHA in any case stay unchanged so validation still rejects them.
+ *
+ * @param {string | undefined} sha
+ */
+function normalizeCommitSha (sha) {
+  const lowerCaseSha = sha?.toLowerCase()
+  return COMMIT_SHA_REGEX.test(lowerCaseSha || '') ? lowerCaseSha : sha
 }
 
 function resolveTilde (filePath) {
@@ -289,6 +306,7 @@ function getJobIDFromDiagFile () {
 
 module.exports = {
   normalizeRef,
+  normalizeCommitSha,
   expandGlobPattern,
   getJobIDFromDiagFile,
   getCIMetadata () {
@@ -377,6 +395,7 @@ module.exports = {
         CI_MERGE_REQUEST_IID,
         CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
         CI_MERGE_REQUEST_DIFF_BASE_SHA,
+        CI_MERGE_REQUEST_SOURCE_BRANCH_SHA,
         CI_MERGE_REQUEST_EVENT_TYPE,
       } = env
 
@@ -412,6 +431,7 @@ module.exports = {
         [CI_JOB_ID]: GITLAB_CI_JOB_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_DIFF_BASE_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
+        [GIT_COMMIT_HEAD_SHA]: CI_MERGE_REQUEST_SOURCE_BRANCH_SHA,
       }
       if (CI_MERGE_REQUEST_IID &&
         (CI_MERGE_REQUEST_EVENT_TYPE === 'merged_result' || CI_MERGE_REQUEST_EVENT_TYPE === 'merge_train')) {
@@ -961,6 +981,9 @@ module.exports = {
     normalizeTag(tags, GIT_TAG, normalizeRef)
     normalizeTag(tags, GIT_PULL_REQUEST_BASE_BRANCH, normalizeRef)
     normalizeTag(tags, PR_NUMBER, normalizeNumber)
+    for (const tag of COMMIT_SHA_TAGS) {
+      normalizeTag(tags, tag, normalizeCommitSha)
+    }
 
     return removeEmptyValues(tags)
   },
