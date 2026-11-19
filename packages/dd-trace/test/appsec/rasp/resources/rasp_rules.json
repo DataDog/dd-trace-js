@@ -58,6 +58,37 @@
       ]
     },
     {
+      "id": "rasp-ssrf-headers-rule-id-6",
+      "name": "Server-side request forgery exploit in outgoing request headers",
+      "enabled": true,
+      "tags": {
+        "type": "ssrf",
+        "category": "vulnerability_trigger",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.request.headers",
+                "key_path": [
+                  "x-rasp-block"
+                ]
+              }
+            ],
+            "regex": "^block$"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block",
+        "stack_trace"
+      ]
+    },
+    {
       "id": "rasp-sqli-rule-id-2",
       "name": "SQL injection exploit",
       "tags": {

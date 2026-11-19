@@ -11,8 +11,8 @@ const kCodeOriginForSpansTagsSym = Symbol('datadog.codeOriginForSpansTags')
 class FastifyCodeOriginForSpansPlugin extends Plugin {
   static id = 'fastify'
 
-  constructor (...args) {
-    super(...args)
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
 
     this.addSub('apm:fastify:request:handle', ({ req, routeConfig }) => {
       const tags = routeConfig?.[kCodeOriginForSpansTagsSym]

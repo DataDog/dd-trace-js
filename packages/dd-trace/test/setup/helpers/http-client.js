@@ -12,6 +12,18 @@ const { Readable } = require('node:stream')
 
 const MAX_REDIRECTS = 21
 
+/**
+ * @typedef {(url: string, config?: object) => ReturnType<typeof request>} BodylessRequest
+ * @typedef {(url: string, data?: unknown, config?: object) => ReturnType<typeof request>} BodyRequest
+ * @typedef {{
+ *   get: BodylessRequest,
+ *   delete: BodylessRequest,
+ *   post: BodyRequest,
+ *   put: BodyRequest,
+ *   patch: BodyRequest,
+ * }} MethodShorthands
+ */
+
 function isPlainObject (value) {
   return value !== null && typeof value === 'object' && !(
     Buffer.isBuffer(value) ||
@@ -231,7 +243,8 @@ function createInstance (defaults = {}) {
 
   instance.create = (config = {}) => createInstance({ ...defaults, ...config })
 
-  return instance
+  // The method shorthands are added in loops, which type inference does not follow.
+  return /** @type {typeof instance & MethodShorthands} */ (instance)
 }
 
 module.exports = createInstance()
