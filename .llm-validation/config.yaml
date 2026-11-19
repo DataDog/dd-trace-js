@@ -7,6 +7,17 @@ runs: 3
 instruction_files:
   - AGENTS.md
 
+# Agent guidance inventory for the setup comparison: the minimal baseline drops all of it, the candidate keeps it.
+# .claude/skills links pull in their .agents/skills targets; .agents/skills also covers skills without a link.
+# instruction_files above still alone drives PR instruction-change validation.
+setup:
+  files:
+    - AGENTS.md
+    - CLAUDE.md
+  directories:
+    - .agents/skills
+    - .claude/skills
+
 # Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
 # Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
 # right answer and every monitored file is covered. Gate cost scales as cases × runs;
@@ -29,6 +40,19 @@ presets:
       - dd-trace-js-package-manager-001
     runs: 3 # 6 pairwise comparisons.
   full: # Whole suite.
+    runs: 3
+  # Opt-in setup smoke (`--comparison setup --level setup-calibration`, or LLMVAL_SETUP_ENABLED=true in CI).
+  # Compares repository guidance against minimal guidance at the same commit, focused on AGENTS.md through the
+  # gate content cases. No case targets a skill workflow. This is a calibration subset, not proof of benefit.
+  setup-calibration:
+    cases:
+      - dd-trace-js-package-manager-001
+      - dd-trace-js-real-path-tests-007
+      - dd-trace-js-hung-ci-009
+      - dd-trace-js-new-configuration-010
+      - dd-trace-js-production-async-012
+      - dd-trace-js-public-config-surfaces-013
+      - dd-trace-js-production-promises-014
     runs: 3
 
 # A case blocks on a confident regression by default; mark it `only_warn: true` to make it advisory.

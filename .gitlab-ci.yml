@@ -30,7 +30,7 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   - project: "ddoghq/llm-validation-platform"
-    ref: &llmval_platform_sha "68250345c9e358d4345545516f4c180e0370eb76"
+    ref: &llmval_platform_sha "745818b5d65805d5852b07cbdf4d09c29b3da6c9" # v0.1.6
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
@@ -85,6 +85,11 @@ llm validation definitions:
       changes:
         - .llm-validation/config.yaml
         - .llm-validation/suites/**/*
+
+# Opt-in: run it for a pipeline or schedule with LLMVAL_SETUP_ENABLED=true.
+"llm validation (setup smoke)":
+  variables:
+    LLMVAL_SETUP_PRESET: "setup-calibration"
 
 configure_system_tests:
   variables:
