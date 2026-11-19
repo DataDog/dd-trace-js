@@ -4757,6 +4757,14 @@
         "default": "7500"
       }
     ],
+    "OTEL_PROPAGATORS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": "",
+        "transform": "validateOtelPropagators"
+      }
+    ],
     "OTEL_RESOURCE_ATTRIBUTES": [
       {
         "implementation": "A",

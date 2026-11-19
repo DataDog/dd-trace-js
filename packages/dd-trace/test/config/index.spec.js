@@ -999,6 +999,17 @@ describe('Config', () => {
       ])
     })
 
+    it('should report an invalid OTEL_PROPAGATORS hidden by DD_TRACE_PROPAGATION_STYLE', () => {
+      process.env.OTEL_PROPAGATORS = 'not-a-propagator'
+      process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
+
+      getConfig()
+
+      const tags = ['config_datadog:dd_trace_propagation_style', 'config_opentelemetry:otel_propagators']
+      assert.deepStrictEqual(series('otel.env.hiding'), [{ tags, value: 1 }])
+      assert.deepStrictEqual(series('otel.env.invalid'), [{ tags, value: 1 }])
+    })
+
     it('should report a conflict with a single Datadog equivalent', () => {
       process.env.OTEL_SERVICE_NAME = 'otel-service'
       process.env.DD_SERVICE = 'dd-service'
@@ -1083,6 +1094,34 @@ describe('Config', () => {
 
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
+  })
+
+  it('should treat an empty OTEL_PROPAGATORS as unset', () => {
+    process.env.OTEL_PROPAGATORS = ''
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+  })
+
+  it('should disable propagation with an empty DD_TRACE_PROPAGATION_STYLE', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = ''
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
+  })
+
+  it('should prefer an empty DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = ''
+    process.env.OTEL_PROPAGATORS = 'tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
   })
 
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {

@@ -241,6 +241,20 @@ const transformers = {
     }
     return value
   },
+  /**
+   * Validates like `validatePropagationStyles`, but an empty list resolves to unset as the OpenTelemetry
+   * specification requires. `DD_TRACE_PROPAGATION_STYLE=""` keeps disabling propagation.
+   *
+   * @param {string[]} value
+   * @param {string} optionName
+   * @param {string} source
+   * @param {boolean} [reportInvalid]
+   * @returns {string[] | undefined}
+   */
+  validateOtelPropagators (value, optionName, source, reportInvalid) {
+    if (value.length === 0) return
+    return transformers.validatePropagationStyles(value, optionName, source, reportInvalid)
+  },
 }
 
 const telemetryTransformers = {
