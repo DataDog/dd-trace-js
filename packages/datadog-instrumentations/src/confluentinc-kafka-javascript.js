@@ -53,6 +53,8 @@ const ERR__STATE = -172
  * @type {WeakMap<object, string | null>}
  */
 const clusterIds = new WeakMap()
+/** @type {WeakMap<object, Promise<void>>} Running KafkaJS-compatible lookups, shared by concurrent connects. */
+const clusterIdLookups = new WeakMap()
 
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
@@ -350,8 +352,10 @@ function instrumentKafkaJS (kafkaJS) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
-              // Like producers: the brokers of the client, else those of the consumer configuration.
-              const bootstrapServers = kafka._ddBrokers || config?.['bootstrap.servers']
+              // The consumer's own brokers, else those of the client, as the library merges its
+              // configuration. Not kafka._ddBrokers: a producer may have set it to its own brokers.
+              const bootstrapServers =
+                configuredBrokers(config) || brokers || options?.['bootstrap.servers'] || undefined
 
               if (typeof consumer?.connect === 'function') {
                 shimmer.wrap(consumer, 'connect', connect => wrapConnect(connect, consumer))
@@ -545,15 +549,34 @@ function wrapConnect (connect, client) {
  * @returns {Promise<void> | undefined} The lookup, when this call started it.
  */
 function lookUpKafkaJsClusterId (client) {
+  // A concurrent connect waits for the lookup the first one started.
+  const running = clusterIdLookups.get(client)
+  if (running) return running
   if (clusterIds.has(client)) return
   clusterIds.set(client, null)
   if (typeof client.clusterId !== 'function') return
   // An async method: failures arrive as rejections.
-  return client.clusterId({ timeout: 0 }).then((clusterId) => {
+  const lookup = client.clusterId({ timeout: 0 }).then((clusterId) => {
     if (clusterId) clusterIds.set(client, clusterId)
   }, (error) => {
     if (error?.code === ERR__STATE) clusterIds.delete(client)
+  }).finally(() => {
+    clusterIdLookups.delete(client)
   })
+  clusterIdLookups.set(client, lookup)
+  return lookup
+}
+
+/**
+ * The brokers a consumer configuration names, as librdkafka's `bootstrap.servers` or KafkaJS `brokers`.
+ *
+ * @param {object} [config] Consumer configuration.
+ * @returns {string | undefined}
+ */
+function configuredBrokers (config) {
+  if (config?.['bootstrap.servers']) return config['bootstrap.servers']
+  const brokers = config?.kafkaJS?.brokers
+  return Array.isArray(brokers) && brokers.length > 0 ? brokers.join(',') : undefined
 }
 
 /**

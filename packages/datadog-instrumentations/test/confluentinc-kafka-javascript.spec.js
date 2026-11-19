@@ -327,6 +327,29 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
         assert.deepStrictEqual(lookups, [{ timeout: 0 }])
       })
 
+      it('makes concurrent connects wait for the same lookup', async () => {
+        const clusterIds = recordClusterIds(producerStart)
+        let lookups = 0
+        let resolveLookup
+        const producer = stageKafka(function () {
+          lookups++
+          return new Promise((resolve) => { resolveLookup = resolve })
+        }).producer()
+
+        let secondConnected = false
+        const first = producer.connect()
+        const second = producer.connect().then(() => { secondConnected = true })
+        await new Promise((resolve) => setImmediate(resolve))
+        assert.strictEqual(secondConnected, false, 'the second connect resolved before the lookup')
+
+        resolveLookup('cluster-1')
+        await Promise.all([first, second])
+        await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+
+        assert.deepStrictEqual(clusterIds, ['cluster-1'])
+        assert.strictEqual(lookups, 1)
+      })
+
       it('reports the cluster id on consumed messages', async () => {
         const clusterIds = recordClusterIds(consumerStart)
         const consumer = stageKafka(async () => 'cluster-1').consumer({ kafkaJS: { groupId: 'group' } })
@@ -432,6 +455,29 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
           })
 
           assert.deepStrictEqual(servers, ['kafka-1:9092'])
+        })
+
+        it('prefers the brokers of the consumer configuration', async () => {
+          const servers = await consumedBootstrapServers(
+            { kafkaJS: { brokers: ['kafka-1:9092'] } },
+            { kafkaJS: { groupId: 'group', brokers: ['kafka-2:9092'] } }
+          )
+
+          assert.deepStrictEqual(servers, ['kafka-2:9092'])
+        })
+
+        it('ignores the brokers of a producer created from the same client', async () => {
+          const servers = []
+          const subscriber = (ctx) => servers.push(ctx.extractedArgs.bootstrapServers)
+          clusterIdSubscribers.push({ channel: consumerStart, subscriber })
+          consumerStart.subscribe(subscriber)
+          const kafka = stageKafka()
+          kafka.producer({ 'bootstrap.servers': 'cluster-a:9092' })
+          const consumer = kafka.consumer({ 'group.id': 'group', 'bootstrap.servers': 'cluster-b:9092' })
+          await consumer.connect()
+          await consumer.run({ eachMessage: async () => {} })
+
+          assert.deepStrictEqual(servers, ['cluster-b:9092'])
         })
 
         it('reports none when neither names brokers', async () => {
