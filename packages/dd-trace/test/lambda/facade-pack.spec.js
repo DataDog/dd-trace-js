@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
-const { mkdtempSync, rmSync } = require('node:fs')
+const { existsSync, mkdtempSync, rmSync } = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -15,6 +15,7 @@ const repoRoot = path.resolve(__dirname, '../../../..')
 describe('packed Lambda facade', () => {
   let temporaryDirectory
   let surface
+  let packedRoot
 
   before(() => {
     temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-lambda-facade-'))
@@ -33,7 +34,8 @@ describe('packed Lambda facade', () => {
     ], { cwd: repoRoot })
     execFileSync('tar', ['-xzf', tarball, '-C', temporaryDirectory])
 
-    const packedFacade = path.join(temporaryDirectory, 'package', 'lambda.js')
+    packedRoot = path.join(temporaryDirectory, 'package')
+    const packedFacade = path.join(packedRoot, 'packages/dd-trace/src/lambda/facade.js')
     const script = `console.log(JSON.stringify(Object.keys(require(${JSON.stringify(packedFacade)})).sort()))`
     surface = JSON.parse(execFileSync(process.execPath, ['-e', script], {
       encoding: 'utf8',
@@ -48,7 +50,12 @@ describe('packed Lambda facade', () => {
     rmSync(temporaryDirectory, { force: true, recursive: true })
   })
 
-  it('ships the stable facade from the npm artifact', () => {
+  it('does not publish a root Lambda entry point or declarations', () => {
+    assert.strictEqual(existsSync(path.join(packedRoot, 'lambda.js')), false)
+    assert.strictEqual(existsSync(path.join(packedRoot, 'lambda.d.ts')), false)
+  })
+
+  it('ships the internal shim bridge in the npm artifact', () => {
     assert.deepStrictEqual(surface, [
       'getTraceHeaders',
       'reportInitFailure',
