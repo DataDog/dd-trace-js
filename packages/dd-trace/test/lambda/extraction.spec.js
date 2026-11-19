@@ -39,10 +39,9 @@ describe('Lambda facade context extraction', () => {
     delete process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
     delete process.env.DD_MERGE_XRAY_TRACES
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
-    // agent.load may rebuild the tracer between specs; refresh the public facade with that instance.
+    // agent.load may rebuild the tracer between specs; refresh the internal facade with that instance.
     delete require.cache[require.resolve('../../src/lambda/facade')]
-    delete require.cache[require.resolve('../../../../lambda')]
-    facade = require('../../../../lambda')
+    facade = require('../../src/lambda/facade')
     traces = []
     exporter = sinon.stub(tracer._tracer._exporter, 'export').callsFake(trace => traces.push(trace))
     clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
