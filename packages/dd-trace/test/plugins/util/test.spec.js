@@ -63,6 +63,7 @@ const {
 } = require('../../../src/plugins/util/test')
 
 const {
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_JOB_NAME,
   CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_URL,
@@ -1729,8 +1730,17 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      assert.strictEqual(JSON.stringify(removeInvalidMetadata(invalidMetadata)), JSON.stringify({}))
+      // A malformed commit SHA is reported as provided; an empty one is removed.
+      const { [GIT_COMMIT_SHA]: sha } = invalidMetadata
+      assert.deepStrictEqual(removeInvalidMetadata(invalidMetadata), sha ? { [GIT_COMMIT_SHA]: sha } : {})
     })
+  })
+
+  it('removes a malformed merge commit SHA', () => {
+    assert.deepStrictEqual(removeInvalidMetadata({
+      [GIT_COMMIT_SHA]: 'invalid',
+      [CI_GIT_MERGE_COMMIT_SHA]: 'invalid',
+    }), { [GIT_COMMIT_SHA]: 'invalid' })
   })
 
   it('should keep valid metadata', () => {

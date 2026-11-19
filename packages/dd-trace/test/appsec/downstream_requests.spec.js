@@ -246,6 +246,211 @@ describe('appsec downstream_requests', () => {
     })
   })
 
+  describe('extractFetchRequestData', () => {
+    it('collects the method and headers of a fetch request', () => {
+      const request = new Request('http://example.com/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Custom': 'a',
+        },
+      })
+
+      assert.deepStrictEqual(downstream.extractFetchRequestData(request), {
+        [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+        [addresses.HTTP_OUTGOING_HEADERS]: {
+          'content-type': 'application/json',
+          'x-custom': 'a',
+        },
+      })
+    })
+
+    it('omits headers when the fetch request has none', () => {
+      assert.deepStrictEqual(downstream.extractFetchRequestData(new Request('http://example.com/')), {
+        [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+      })
+    })
+
+    describe('with options that fetch applies over the request', () => {
+      const getRequest = new Request('http://example.com/', { headers: { 'x-original': 'a' } })
+      const postRequest = new Request('http://example.com/', { method: 'POST' })
+
+      it('keeps the method and headers of the request when the options do not override them', () => {
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(getRequest, { method: undefined, headers: undefined }),
+          {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+            [addresses.HTTP_OUTGOING_HEADERS]: { 'x-original': 'a' },
+          }
+        )
+      })
+
+      it('collects the method of the options over the method of the request', () => {
+        assert.strictEqual(
+          downstream.extractFetchRequestData(getRequest, { method: 'PUT' })[addresses.HTTP_OUTGOING_METHOD],
+          'PUT'
+        )
+        assert.strictEqual(
+          downstream.extractFetchRequestData(postRequest, { method: 'GET' })[addresses.HTTP_OUTGOING_METHOD],
+          'GET'
+        )
+      })
+
+      it('normalizes the method of the options as fetch does', () => {
+        const getMethod = method =>
+          downstream.extractFetchRequestData(getRequest, { method })[addresses.HTTP_OUTGOING_METHOD]
+
+        assert.strictEqual(getMethod('post'), 'POST')
+        assert.strictEqual(getMethod('Delete'), 'DELETE')
+        assert.strictEqual(getMethod('query'), 'QUERY')
+        assert.strictEqual(getMethod('Query'), 'QUERY')
+        assert.strictEqual(getMethod('patch'), 'patch')
+        assert.strictEqual(getMethod('custom'), 'custom')
+        assert.strictEqual(getMethod('constructor'), 'constructor')
+      })
+
+      for (const method of ['TRACE', 'connect', 'bad method', '']) {
+        it(`omits the method when fetch would reject the method ${inspect(method)} of the options`, () => {
+          assert.deepStrictEqual(downstream.extractFetchRequestData(postRequest, { method }), {})
+        })
+      }
+
+      it('omits the method without converting a method of the options that is not a string', () => {
+        const method = { toString: sinon.stub().returns('GET') }
+
+        assert.deepStrictEqual(downstream.extractFetchRequestData(postRequest, { method }), {})
+        sinon.assert.notCalled(method.toString)
+      })
+
+      it('collects the headers of the options instead of the headers of the request', () => {
+        const withHeaders = new Request('http://example.com/')
+
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(getRequest, { headers: { 'X-Override': 'b' } }),
+          {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+            [addresses.HTTP_OUTGOING_HEADERS]: { 'x-override': 'b' },
+          }
+        )
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(withHeaders, { headers: new Headers({ 'X-Override': 'b' }) }),
+          {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+            [addresses.HTTP_OUTGOING_HEADERS]: { 'x-override': 'b' },
+          }
+        )
+      })
+
+      for (const headers of [{}, [], new Headers()]) {
+        it(`omits the headers of the request when the options replace them with ${inspect(headers)}`, () => {
+          assert.deepStrictEqual(downstream.extractFetchRequestData(getRequest, { headers }), {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+          })
+        })
+      }
+
+      it('normalizes the headers of the options as fetch does', () => {
+        const headers = [['X-Dup', ' 1 '], ['x-dup', '2'], ['X-Number', 3]]
+
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(postRequest, { headers })[addresses.HTTP_OUTGOING_HEADERS],
+          { 'x-dup': '1, 2', 'x-number': '3' }
+        )
+      })
+
+      it('converts the primitive header values of the options as fetch does', () => {
+        const headers = {
+          'x-string': 'a',
+          'x-number': 1,
+          'x-true': true,
+          'x-undefined': undefined,
+          'x-null': null,
+          'x-bigint': 2n,
+        }
+
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(postRequest, { headers })[addresses.HTTP_OUTGOING_HEADERS],
+          {
+            'x-string': 'a',
+            'x-number': '1',
+            'x-true': 'true',
+            'x-undefined': 'undefined',
+            'x-null': 'null',
+            'x-bigint': '2',
+          }
+        )
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(postRequest, { headers: [['x-undefined', undefined]] }),
+          {
+            [addresses.HTTP_OUTGOING_METHOD]: 'POST',
+            [addresses.HTTP_OUTGOING_HEADERS]: { 'x-undefined': 'undefined' },
+          }
+        )
+      })
+
+      it('omits the headers without consuming a one-shot iterator in the options', () => {
+        const headers = new Map([['x-override', 'b']]).entries()
+
+        assert.deepStrictEqual(downstream.extractFetchRequestData(getRequest, { headers }), {
+          [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+        })
+        assert.deepStrictEqual(headers.next().value, ['x-override', 'b'])
+      })
+
+      const ownIterators = {
+        'an array of headers': iterator => Object.assign([['x-override', 'b']], { [Symbol.iterator]: iterator }),
+        'a header pair': iterator => [Object.assign(['x-override', 'b'], { [Symbol.iterator]: iterator })],
+        'a Headers object': iterator => Object.assign(new Headers({ 'x-override': 'b' }), {
+          [Symbol.iterator]: iterator,
+        }),
+      }
+
+      for (const [name, createHeaders] of Object.entries(ownIterators)) {
+        it(`omits the headers without calling the own iterator of ${name} in the options`, () => {
+          const iterator = sinon.stub().returns([][Symbol.iterator]())
+
+          assert.deepStrictEqual(downstream.extractFetchRequestData(getRequest, { headers: createHeaders(iterator) }), {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+          })
+          sinon.assert.notCalled(iterator)
+        })
+      }
+
+      it('omits the headers of an object that has the prototype but not the state of Headers', () => {
+        assert.deepStrictEqual(
+          downstream.extractFetchRequestData(getRequest, { headers: Object.create(Headers.prototype) }),
+          { [addresses.HTTP_OUTGOING_METHOD]: 'GET' }
+        )
+      })
+
+      it('does not throw for a proxy of Headers in the options', () => {
+        // Whether a proxy passes the brand checks of Headers depends on the Node.js version.
+        const headers = new Proxy(new Headers({ a: 'b' }), {})
+
+        const addressesMap = downstream.extractFetchRequestData(getRequest, { headers })
+
+        assert.strictEqual(addressesMap[addresses.HTTP_OUTGOING_METHOD], 'GET')
+      })
+
+      for (const headers of [
+        null,
+        'x-override: b',
+        { 'x-override': { toString: () => 'b' } },
+        { 'x-override': Symbol('b') },
+        [['x-override', { toString: () => 'b' }]],
+        [['x-override']],
+        { 'bad name': 'b' },
+        { 'x-override': 'b\r\nx-injected: c' },
+      ]) {
+        it(`omits the headers when fetch can't take ${inspect(headers)} in the options as plain data`, () => {
+          assert.deepStrictEqual(downstream.extractFetchRequestData(getRequest, { headers }), {
+            [addresses.HTTP_OUTGOING_METHOD]: 'GET',
+          })
+        })
+      }
+    })
+  })
+
   describe('extractResponseData', () => {
     let res
 

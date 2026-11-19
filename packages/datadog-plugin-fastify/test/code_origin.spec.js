@@ -27,7 +27,9 @@ describe('Plugin', () => {
           app = fastify()
 
           if (semver.intersects(version, '>=3')) {
-            await app.register(require('../../../versions/middie').get())
+            // Only plugin test setup installs `versions/`, so the type check cannot resolve this module.
+            const middiePath = '../../../versions/middie'
+            await app.register(require(middiePath).get())
           }
         })
 

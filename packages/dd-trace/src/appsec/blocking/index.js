@@ -136,6 +136,14 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
       throw new Error('Headers have already been sent')
     }
 
+    // A destroyed response accepts the writes without sending anything to the client.
+    if (res.destroyed) {
+      log.warn('[ASM] Cannot send blocking response when the response has been destroyed')
+      abortController?.abort(new BlockedRequestError())
+
+      throw new Error('Response has been destroyed')
+    }
+
     const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
 
     for (const headerName of res.getHeaderNames()) {

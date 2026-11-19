@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { beforeEach, describe, it } = require('mocha')
+const http = require('node:http')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -259,6 +260,132 @@ describe('OpenFeature configuration source', () => {
     assert.ok(source instanceof AgentlessConfigurationSource)
     assert.strictEqual(AgentlessConfigurationSource.firstCall.args[0].apiKey, undefined)
     sinon.assert.notCalled(log.error)
+  })
+
+  it('passes the tracer service so the CDN can attribute usage to it', () => {
+    config.service = 'checkout'
+
+    assert.strictEqual(createSourceConfig().service, 'checkout')
+  })
+
+  it('passes the service to a custom endpoint, unlike the API key', () => {
+    config.service = 'checkout'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc'
+
+    const resolved = createSourceConfig()
+
+    assert.strictEqual(resolved.service, 'checkout')
+    assert.strictEqual(resolved.apiKey, undefined)
+  })
+
+  // The tests of normalizeService cover its rules. These rows check only that the source passes the normalized name,
+  // and passes none when nothing is left of it. normalizeService changes each non-ASCII character to `_`.
+  const NORMALIZED_SERVICES = [
+    ['checkout', 'checkout'],
+    ['My Service', 'my_service'],
+    ['Default Web Site/Shop', 'default_web_site/shop'],
+    ['caf\u00E9-api', 'caf_-api'],
+    ['\u652F\u4ED8-api', 'api'],
+    ['\u652F\u4ED8', undefined],
+    ['___', undefined],
+    ['   ', undefined],
+  ]
+
+  it('passes the normalized service, or none when nothing is left of it', () => {
+    for (const [service, sent] of NORMALIZED_SERVICES) {
+      AgentlessConfigurationSource.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, sent, JSON.stringify(service))
+    }
+  })
+
+  it('derives only the service it sends, not the tracer service', () => {
+    config.service = 'My Service'
+
+    assert.strictEqual(createSourceConfig().service, 'my_service')
+    assert.strictEqual(config.service, 'My Service')
+  })
+
+  it('logs a service that has no normalized name', () => {
+    for (const service of ['支付', '___']) {
+      AgentlessConfigurationSource.resetHistory()
+      log.debug.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, undefined, service)
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Feature Flags: service %s has no normalized name; DD-Service header not sent',
+        service
+      )
+    }
+  })
+
+  it('does not pass an empty service', () => {
+    config.service = ''
+
+    assert.strictEqual(createSourceConfig().service, undefined)
+    sinon.assert.calledOnce(log.debug)
+  })
+
+  describe('with the agentless source polling', () => {
+    let clock
+    let requests
+    let source
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+      requests = []
+      const RealAgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+        '../exporters/common/request': (data, options) => { requests.push(options) },
+        '../log': log,
+      })
+      configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+        '../log': log,
+        './agentless_configuration_source': RealAgentlessConfigurationSource,
+      })
+    })
+
+    afterEach(() => {
+      source?.stop()
+      clock.restore()
+    })
+
+    async function firstRequestHeaders () {
+      source = configurationSource.create(config, sinon.spy())
+      source.start()
+      for (let i = 0; i < 10; i++) await clock.tickAsync(0)
+      assert.strictEqual(requests.length, 1)
+      return requests[0].headers
+    }
+
+    it('sends the normalized service in DD-Service', async () => {
+      config.service = 'My Service'
+
+      assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
+    })
+
+    it('sends a non-ASCII service as its normalized name, which Node.js accepts in a header', async () => {
+      config.service = 'caf\u00E9-api'
+
+      const headers = await firstRequestHeaders()
+
+      assert.strictEqual(headers['DD-Service'], 'caf_-api')
+      // Node.js throws here on a value that it refuses in a header.
+      http.validateHeaderValue('DD-Service', headers['DD-Service'])
+    })
+
+    it('still polls, without DD-Service, when the service has no normalized name', async () => {
+      for (const service of ['支付', '___']) {
+        source?.stop()
+        requests = []
+        config.service = service
+
+        assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false, service)
+      }
+    })
   })
 
   for (const apiKey of [undefined, '', '   ']) {

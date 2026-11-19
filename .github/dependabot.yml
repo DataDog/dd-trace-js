@@ -242,7 +242,7 @@ updates:
           - "@google-cloud/vertexai"
           - "@google/genai"
           - "@langchain/*"
-          - "@modelcontextprotocol/sdk"
+          - "@modelcontextprotocol/*"
           - "@openai/*"
           - "@typesafe-ai/sdk"
           - "ai"
@@ -441,6 +441,9 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 3
+    ignore:
+      - dependency-name: "graphql"
+        update-types: ["version-update:semver-major"]
     groups:
       startup-benchmark:
         patterns:

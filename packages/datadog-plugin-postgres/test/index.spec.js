@@ -108,7 +108,7 @@ describe('Plugin', () => {
       plugin.configure(false)
     })
 
-    withVersions('postgres', 'postgres', version => {
+    withVersions('postgres', 'postgres', '>=3 <4', version => {
       let postgres
       let resolvedVersion
       let sql
