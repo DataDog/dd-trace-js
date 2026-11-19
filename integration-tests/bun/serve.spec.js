@@ -26,7 +26,7 @@ function request (url, options) {
 
 describe('Bun.serve', function () {
   this.timeout(30_000)
-  useSandbox(['hono'])
+  useSandbox(['hono', 'elysia@1.4.32'])
 
   let agent, child, spans
 
@@ -150,6 +150,75 @@ describe('Bun.serve', function () {
     assert.strictEqual(b.status, 502)
   })
 
+  it('keeps custom error handlers in their request context when an Error is shared', async () => {
+    const url = await start('custom-error')
+    const received = agent.assertMessageReceived(() => {
+      const servers = spans.filter(span => span.name === 'web.request')
+      const handlers = spans.filter(span => span.name === 'custom.error')
+      assert.strictEqual(servers.length, 2)
+      assert.strictEqual(handlers.length, 2)
+      for (const id of ['1', '2']) {
+        const server = servers.find(span => span.meta['http.url'] === `${url}/shared-error/${id}`)
+        const handler = handlers.find(span => span.trace_id.toString() === id)
+        assert.ok(server && handler)
+        assert.strictEqual(server.trace_id.toString(), id)
+        assert.strictEqual(handler.parent_id, server.span_id)
+        assert.strictEqual(server.meta['http.status_code'], '502')
+        assert.strictEqual(server.meta['error.message'], 'shared failure')
+      }
+    }, 10_000)
+    const responses = await Promise.all([
+      ...['1', '2'].map(id => request(`${url}/shared-error/${id}`, {
+        headers: { 'x-datadog-trace-id': id, 'x-datadog-parent-id': '10' },
+      })),
+      received,
+    ])
+    assert.strictEqual(responses[0].body, '1')
+    assert.strictEqual(responses[1].body, '2')
+  })
+
+  it('records successful WebSocket upgrades as 101 without an error', async () => {
+    const url = await start()
+    const received = serverSpan(span => {
+      assert.strictEqual(span.meta['http.status_code'], '101')
+      assert.strictEqual(span.error, 0)
+      assert.strictEqual(span.meta['error.message'], undefined)
+    })
+    await Promise.all([
+      spawnProcAndExpectExit(join(sandboxCwd(), 'bun/serve/websocket-client.js'), {
+        execPath: BUN,
+        env: { ...process.env, SERVER_URL: url },
+      }),
+      received,
+    ])
+  })
+
+  it('finishes client aborts like Node HTTP without inventing a 500', async () => {
+    const url = await start()
+    const received = serverSpan(span => {
+      assert.strictEqual(span.meta['http.status_code'], '200')
+      assert.strictEqual(span.meta['test.aborted'], 'true')
+      assert.strictEqual(span.error, 0)
+      assert.strictEqual(span.meta['error.message'], undefined)
+    })
+    await Promise.all([
+      new Promise((resolve, reject) => {
+        const req = http.get(url + '/abort')
+        const onMessage = ({ event }) => {
+          if (event !== 'pending') return
+          child.off('message', onMessage)
+          req.destroy()
+        }
+        child.on('message', onMessage)
+        req.once('error', error => {
+          if (error.code === 'ECONNRESET') resolve()
+          else reject(error)
+        })
+      }),
+      received,
+    ])
+  })
+
   for (const [path, testCase, status, message] of [
     ['/unavailable', '', 503],
     ['/throw', '', 500, 'sync failure'],
@@ -206,9 +275,40 @@ describe('Bun.serve', function () {
       assert.ok(spans.some(span => span.name === 'disabled.control'))
       assert.ok(spans.every(span => span.meta['span.kind'] !== 'server'))
     }, 10_000)
+    const staticResult = await request(url + '/static')
+    assert.strictEqual(staticResult.body, 'static')
     const [response] = await Promise.all([request(url), received])
     assert.strictEqual(response.body, 'disabled')
   })
+
+  it('leaves static Response routes and method maps on the native fast path', async () => {
+    const url = await start('routes')
+    for (const path of ['/static', '/static-method']) {
+      const response = await request(url + path)
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(response.body, 'static')
+    }
+    const received = serverSpan(span => assert.strictEqual(span.meta['http.url'], url + '/'))
+    await Promise.all([request(url), received])
+  })
+
+  for (const [path, route, status, body] of [
+    ['/', undefined, 200, 'reloaded'],
+    ['/reloaded/42', '/reloaded/:id', 200, '42'],
+    ['/reload-error', '/reload-error', 502, 'reload failure'],
+  ]) {
+    it(`traces replacement handlers installed with server.reload (${path})`, async () => {
+      const url = await start('reload')
+      const received = serverSpan(span => {
+        assert.strictEqual(span.meta['http.status_code'], String(status))
+        assert.strictEqual(span.meta['http.route'], route)
+        if (status === 502) assert.strictEqual(span.meta['error.message'], 'reload failure')
+      })
+      const [response] = await Promise.all([request(url + path), received])
+      assert.strictEqual(response.status, status)
+      assert.strictEqual(response.body, body)
+    })
+  }
 
   it('does not wrap Bun-like globals on Node', () => {
     return spawnProcAndExpectExit(join(sandboxCwd(), 'bun/serve/node-gating.js'), {
@@ -231,9 +331,26 @@ describe('Bun.serve', function () {
     })
   }
 
+  it('traces Elysia native routes after its automatic server.reload', async () => {
+    const url = await start('', 'elysia.mjs')
+    const first = await request(url + '/users/41')
+    assert.strictEqual(first.body, '41')
+    const received = agent.assertMessageReceived(() => {
+      const servers = spans.filter(span => span.meta['span.kind'] === 'server')
+      assert.strictEqual(servers.length, 2)
+      for (const span of servers) {
+        assert.strictEqual(span.name, 'web.request')
+        assert.strictEqual(span.resource, 'GET /users/:id')
+        assert.strictEqual(span.meta['http.route'], '/users/:id')
+        assert.strictEqual(span.meta['http.status_code'], '200')
+      }
+    }, 10_000)
+    const [second] = await Promise.all([request(url + '/users/42'), received])
+    assert.strictEqual(second.body, '42')
+  })
+
   for (const [path, route, method, body, status] of [
     ['/native/42', '/native/:id', 'GET', '42', 200],
-    ['/static', '/static', 'GET', 'static', 200],
     ['/method', '/method', 'POST', 'POST', 200],
     ['/route-error', '/route-error', 'GET', undefined, 500],
   ]) {

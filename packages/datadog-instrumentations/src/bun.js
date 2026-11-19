@@ -15,18 +15,43 @@ const finish = channel('apm:http:server:request:finish')
 const errorChannel = channel('apm:bun:server:request:error')
 const routeChannel = channel('apm:bun:server:request:route')
 const load = channel('dd-trace:instrumentation:load')
+const incomingRequest = channel('dd-trace:incomingHttpRequestStart')
 
 // Bun.serve is a native runtime function, so source rewriting cannot intercept it.
 shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
   load.publish({ name: 'http' })
-  if (!options ||
-    (options.fetch !== undefined && typeof options.fetch !== 'function') ||
-    (options.error && typeof options.error !== 'function')) {
-    return serve.call(this, options, ...args)
-  }
+  if (!start.hasSubscribers) return serve.call(this, options, ...args)
 
   const errors = new Map()
-  const onError = options.error
+  const upgraded = new WeakSet()
+  const handlers = {}
+  const server = serve.call(this, wrapOptions(options, errors, upgraded, handlers), ...args)
+  shimmer.wrap(server, 'upgrade', upgrade => function (request) {
+    const result = upgrade.apply(this, arguments)
+    if (result) upgraded.add(request)
+    return result
+  })
+  shimmer.wrap(server, 'reload', reload => function (options) {
+    return reload.call(this, wrapOptions(options, errors, upgraded, handlers))
+  })
+  return server
+})
+
+/**
+ * @param {{ fetch?: (request: Request, server: object) => unknown, error?: (error: unknown) => unknown,
+ * routes?: Record<string, unknown> }} options
+ * @param {Map<Request, { error: unknown, handle: (error: unknown) => unknown }>} errors
+ * @param {WeakSet<Request>} upgraded
+ * @param {{ error?: (error: unknown) => unknown }} handlers
+ */
+function wrapOptions (options, errors, upgraded, handlers) {
+  if (!start.hasSubscribers || !options ||
+    (options.fetch !== undefined && typeof options.fetch !== 'function') ||
+    (options.error && typeof options.error !== 'function')) {
+    return options
+  }
+
+  if (options.error) handlers.error = options.error
   const wrapHandler = (fetch, route) => function (request, server) {
     if (!start.hasSubscribers) return fetch.apply(this, arguments)
 
@@ -39,49 +64,62 @@ shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
       socket: { encrypted: url.protocol === 'https:', remoteAddress: address?.address },
     }
     const res = new ResponseAdapter()
-    const ctx = { req, res, abortController: new AbortController() }
+    const ctx = { req, res }
+    if (incomingRequest.hasSubscribers) ctx.abortController = new AbortController()
     requests.set(request, req)
     let finished = false
-    let failure
+    let signal
 
     const complete = response => {
       if (!finished) {
         finished = true
-        if (errors.get(failure)?.complete === complete) errors.delete(failure)
-        request.signal.removeEventListener('abort', onAbort)
+        errors.delete(request)
+        signal?.removeEventListener('abort', onAbort)
         if (response instanceof Response) {
-          res.headers = new Headers(response.headers)
+          res.headers = response.headers
           res.writeHead(response.status)
-          // Redirects and fetch() responses can have immutable headers.
-          if ([...res.headers].some(([key, value]) => response.headers.get(key) !== value)) {
-            response = new Response(response.body, {
-              status: response.status,
-              statusText: response.statusText,
-              headers: res.headers,
-            })
-          }
-        } else {
+        } else if (upgraded.has(request)) {
+          res.statusCode = 101
+        } else if (!req.aborted) {
           res.statusCode = 500
         }
         finish.publish(ctx)
+        if (response instanceof Response && res.headersChanged) {
+          // Redirects and fetch() responses can have immutable headers.
+          response = new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: res.headers,
+          })
+        }
       }
       return response
     }
-    const onAbort = () => complete()
-    request.signal.addEventListener('abort', onAbort, { once: true })
+    const onAbort = () => {
+      req.aborted = true
+      complete()
+    }
+
+    const wait = (result, onError = fail) => {
+      if (!finished && !signal) {
+        signal = request.signal
+        signal.addEventListener('abort', onAbort, { once: true })
+        if (signal.aborted) onAbort()
+      }
+      return result.then(complete, onError)
+    }
 
     const fail = error => {
       errorChannel.publish({ req, error })
-      failure = error
       if (!finished) {
-        errors.set(error, {
-          complete,
+        errors.set(request, {
+          error,
           // Bun invokes its error callback outside the fetch handler's async context.
           handle: AsyncResource.bind(function () {
             try {
-              const result = onError?.apply(this, arguments)
+              const result = handlers.error?.apply(this, arguments)
               return result && typeof result.then === 'function'
-                ? result.then(complete, error => { complete(); throw error })
+                ? wait(result, error => { complete(); throw error })
                 : complete(result)
             } catch (error) {
               complete()
@@ -100,7 +138,7 @@ shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
       try {
         const result = fetch.call(this, request, server)
         return result && typeof result.then === 'function'
-          ? result.then(complete, fail)
+          ? wait(result)
           : complete(result)
       } catch (error) {
         return fail(error)
@@ -113,9 +151,15 @@ shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
   const wrappedOptions = {
     ...options,
     error (error) {
-      const entry = errors.get(error)
-      errors.delete(error)
-      return entry ? entry.handle.apply(this, arguments) : onError?.apply(this, arguments)
+      // Bun dispatches error callbacks in rejection order, without a Request argument.
+      // Keep one entry per request, including when applications reuse an Error.
+      for (const [request, entry] of errors) {
+        if (Object.is(entry.error, error)) {
+          errors.delete(request)
+          return entry.handle.apply(this, arguments)
+        }
+      }
+      return handlers.error?.apply(this, arguments)
     },
   }
 
@@ -124,7 +168,7 @@ shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
     wrappedOptions.routes = Object.fromEntries(Object.entries(options.routes).map(([route, handler]) => {
       const wrapRoute = handler => {
         if (typeof handler === 'function') return wrapHandler(handler, route)
-        if (handler instanceof Response) return wrapHandler(() => handler.clone(), route)
+        // Static Responses must stay on Bun's native zero-JavaScript fast path.
         return handler
       }
       if (handler && Object.getPrototypeOf(handler) === Object.prototype) {
@@ -136,12 +180,13 @@ shimmer.wrap(globalThis.Bun, 'serve', serve => function (options, ...args) {
     }))
   }
 
-  return serve.call(this, wrappedOptions, ...args)
-})
+  return wrappedOptions
+}
 
 // The HTTP plugin consumes this small ServerResponse contract, not a Node socket.
 class ResponseAdapter {
-  headers = new Headers()
+  headers
+  headersChanged = false
   statusCode = 200
 
   /** @param {number} statusCode */
@@ -151,7 +196,7 @@ class ResponseAdapter {
 
   /** @param {string} name */
   getHeader (name) {
-    return this.headers.get(name) ?? undefined
+    return this.headers?.get(name) ?? undefined
   }
 
   /**
@@ -159,6 +204,11 @@ class ResponseAdapter {
    * @param {string} value
    */
   setHeader (name, value) {
+    if (this.getHeader(name) === value) return
+    if (!this.headersChanged) {
+      this.headers = new Headers(this.headers)
+      this.headersChanged = true
+    }
     this.headers.set(name, value)
   }
 }
