@@ -591,6 +591,7 @@ module.exports = {
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
+  getNonDependencyStackFramesFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
@@ -1907,6 +1908,29 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
     return [location.file, location.line, topRelevantFrameIndex]
   }
   return []
+}
+
+function getNonDependencyStackFramesFromError (error, repositoryRoot) {
+  if (!error?.stack) {
+    return []
+  }
+
+  const stackLines = error.stack.split('\n')
+  const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))
+  const locations = []
+
+  for (const frame of frames) {
+    if (DEPENDENCY_FOLDERS.some(pattern => frame.includes(pattern))) {
+      continue
+    }
+
+    const location = parseStackFrameLocation(frame, repositoryRoot)
+    if (location) {
+      locations.push(location)
+    }
+  }
+
+  return locations
 }
 
 function getFormattedError (error, repositoryRoot) {

@@ -204,9 +204,8 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
-      // might be wrongly overwritten.
       if (mightHitProbe) {
+        this.queueDiBreakpointHitSpan(span)
         this.activeTestSpan = span
       }
 
