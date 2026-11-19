@@ -295,6 +295,69 @@ describe('vitest main instrumentation', () => {
     })
   }
 
+  for (const { name, cachedSpecs, expectedReason } of [
+    {
+      name: 'empty sharded runs with cached specifications',
+      cachedSpecs: new Map([['/repo/test.mjs', {}]]),
+      expectedReason: 'zero_test_shard',
+    },
+    {
+      name: 'sharded runs with no candidate specifications',
+      cachedSpecs: new Map(),
+      expectedReason: 'zero_tests',
+    },
+  ]) {
+    it(`reports ${name} correctly`, async () => {
+      const hooks = []
+      const finishes = []
+      const testSessionFinishCh = { hasSubscribers: true }
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './helpers/channel': {
+          getChannelPromise (channel, payload) {
+            if (channel === testSessionFinishCh) finishes.push(payload)
+            return Promise.resolve()
+          },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh,
+        },
+      })
+      class Vitest {
+        config = { passWithNoTests: true, shard: { index: 2, count: 2 } }
+        specifications = { _cachedSpecs: cachedSpecs }
+        state = {
+          pathsSet: new Set(),
+          getFailedFilepaths: () => [],
+          getFiles: () => [],
+          getCountOfFailedTests: () => 0,
+          getUnhandledErrors: () => [],
+        }
+
+        start () { return Promise.resolve() }
+        close () {}
+        exit () {}
+        reportCoverage () {}
+        runFiles () {}
+      }
+      const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+      hook({ Vitest, startVitest () {} })
+      const vitest = new Vitest()
+
+      await vitest.start()
+      await vitest.close()
+
+      assert.strictEqual(finishes.length, 1)
+      assert.strictEqual(finishes[0].status, 'skip')
+      assert.strictEqual(finishes[0].testSessionEmptyReason, expectedReason)
+      assert.strictEqual(finishes[0].error, undefined)
+    })
+  }
+
   for (const method of ['start', 'runFiles']) {
     for (const reason of [null, undefined, false, 0, '', 'startup failure', new Error('startup failure')]) {
       it(`preserves ${method} rejection ${String(reason) || 'empty string'} and reports a failed session`, async () => {
