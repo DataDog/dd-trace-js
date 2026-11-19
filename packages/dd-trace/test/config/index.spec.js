@@ -1108,6 +1108,38 @@ describe('Config', () => {
     sinon.assert.notCalled(log.warn)
   })
 
+  it('should disable propagation with OTEL_PROPAGATORS=none', () => {
+    process.env.OTEL_PROPAGATORS = 'none'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should disable propagation and warn when OTEL_PROPAGATORS combines none with other propagators', () => {
+    process.env.OTEL_PROPAGATORS = 'tracecontext,None'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    sinon.assert.calledWith(log.warn,
+      "'none' cannot be combined with other propagators: 'tracecontext,none' for OTEL_PROPAGATORS " +
+      '(source: env_var), disabled propagation'
+    )
+  })
+
+  it('should keep other propagators when DD_TRACE_PROPAGATION_STYLE combines none with them', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'none,tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none', 'tracecontext'])
+  })
+
   it('should prefer an invalid DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE = 'not-a-propagator'
     process.env.OTEL_PROPAGATORS = 'tracecontext'
