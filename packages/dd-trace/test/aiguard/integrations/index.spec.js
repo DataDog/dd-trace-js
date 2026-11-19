@@ -74,7 +74,7 @@ describe('AIGuard integration wiring', () => {
   ]) {
     it(`only subscribes enabled integrations with disabled list ${JSON.stringify(disabled)}`, async () => {
       aiguard.enable({}, {
-        aiguard: { ...config.aiguard, DD_AIGUARD_DISABLED_INTEGRATIONS: disabled },
+        aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: disabled },
       })
 
       const cases = [
@@ -115,7 +115,7 @@ describe('AIGuard integration wiring', () => {
 
   it('applies a new disabled list after disabling and re-enabling AI Guard', async () => {
     aiguard.enable({}, {
-      aiguard: { ...config.aiguard, DD_AIGUARD_DISABLED_INTEGRATIONS: ['openai'] },
+      aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: ['openai'] },
     })
     assert.strictEqual(publishChatIntercept().intercepted, false)
 
@@ -126,7 +126,7 @@ describe('AIGuard integration wiring', () => {
 
     aiguard.disable()
     aiguard.enable({}, {
-      aiguard: { ...config.aiguard, DD_AIGUARD_DISABLED_INTEGRATIONS: ['openai'] },
+      aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: ['openai'] },
     })
     assert.strictEqual(publishChatIntercept().intercepted, false)
     sinon.assert.calledOnce(evaluate)

@@ -146,7 +146,7 @@ describe('AIGuard SDK integration tests', () => {
 
   describe('disabled integrations', () => {
     before(() => {
-      envOverrides = { DD_AIGUARD_DISABLED_INTEGRATIONS: 'anthropic,openai' }
+      envOverrides = { DD_AI_GUARD_DISABLED_INTEGRATIONS: 'anthropic,openai' }
     })
 
     after(() => {

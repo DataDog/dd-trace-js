@@ -1346,13 +1346,13 @@ describe('Config', () => {
     })
   })
 
-  describe('DD_AIGUARD_DISABLED_INTEGRATIONS', () => {
+  describe('DD_AI_GUARD_DISABLED_INTEGRATIONS', () => {
     it('defaults to no disabled integrations and reports default telemetry', () => {
       const config = getConfig()
 
-      assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, [])
+      assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, [])
       assertConfigUpdateContains(updateConfig.lastCall.args[0], [
-        { name: 'DD_AIGUARD_DISABLED_INTEGRATIONS', value: '', origin: 'default' },
+        { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value: '', origin: 'default' },
       ])
     })
 
@@ -1365,13 +1365,13 @@ describe('Config', () => {
       ['openai,openai,unknown,OpenAI', ['openai', 'openai', 'unknown', 'OpenAI']],
     ]) {
       it(`parses ${JSON.stringify(value)} and reports environment telemetry`, () => {
-        process.env.DD_AIGUARD_DISABLED_INTEGRATIONS = value
+        process.env.DD_AI_GUARD_DISABLED_INTEGRATIONS = value
 
         const config = getConfig()
 
-        assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, expected)
+        assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, expected)
         assertConfigUpdateContains(updateConfig.lastCall.args[0], [
-          { name: 'DD_AIGUARD_DISABLED_INTEGRATIONS', value, origin: 'env_var' },
+          { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value, origin: 'env_var' },
         ])
       })
     }
@@ -1379,12 +1379,12 @@ describe('Config', () => {
     for (const enabled of [false, true]) {
       it(`preserves the global AI Guard setting (${enabled})`, () => {
         process.env.DD_AI_GUARD_ENABLED = String(enabled)
-        process.env.DD_AIGUARD_DISABLED_INTEGRATIONS = 'anthropic,openai,ai'
+        process.env.DD_AI_GUARD_DISABLED_INTEGRATIONS = 'anthropic,openai,ai'
 
         const config = getConfig()
 
         assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, enabled)
-        assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, ['anthropic', 'openai', 'ai'])
+        assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, ['anthropic', 'openai', 'ai'])
       })
     }
   })

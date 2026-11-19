@@ -8,13 +8,13 @@ The module exported by this library is an instance of the [Tracer](./interfaces/
 
 <h2 id="ai-guard-integrations">AI Guard integrations</h2>
 
-Set `DD_AIGUARD_DISABLED_INTEGRATIONS` before tracer initialization to disable AI Guard automatic evaluation for
+Set `DD_AI_GUARD_DISABLED_INTEGRATIONS` before tracer initialization to disable AI Guard automatic evaluation for
 specific integrations. It accepts a comma-separated list of names: `anthropic`, `openai`, and `ai` (Vercel AI SDK).
 Names are case-sensitive; surrounding whitespace and empty entries are ignored. Unknown names have no effect.
 The default is an empty list, so all supported integrations are evaluated when AI Guard is enabled.
 
 ```bash
-DD_AI_GUARD_ENABLED=true DD_AIGUARD_DISABLED_INTEGRATIONS=anthropic,openai node app.js
+DD_AI_GUARD_ENABLED=true DD_AI_GUARD_DISABLED_INTEGRATIONS=anthropic,openai node app.js
 ```
 
 APM spans, LLMObs traces, other AI Guard integrations, and manual `tracer.aiguard.evaluate()` calls remain enabled.

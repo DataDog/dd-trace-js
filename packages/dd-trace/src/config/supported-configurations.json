@@ -185,9 +185,9 @@
         ]
       }
     ],
-    "DD_AIGUARD_DISABLED_INTEGRATIONS": [
+    "DD_AI_GUARD_DISABLED_INTEGRATIONS": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "array",
         "namespace": "aiguard",
         "default": "",
