@@ -13,6 +13,7 @@ require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
+const { OtlpProfilesExporter } = require('../../src/profiling/exporters/otlp')
 const { getActivation } = require('../../src/profiling/exporters/event_serializer')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
@@ -598,6 +599,39 @@ describe('config', () => {
 
       assert.deepStrictEqual(config.exporters.map(exporter => exporter.constructor), expected)
     }
+  })
+
+  it('should send profiles as OTLP in place of the agent with OTEL_PROFILES_EXPORTER=otlp', () => {
+    /** @type {Array<[string, (typeof FileExporter | typeof OtlpProfilesExporter)[]]>} */
+    const checks = [
+      ['agent', [OtlpProfilesExporter]],
+      ['agent,file', [OtlpProfilesExporter, FileExporter]],
+      ['file', [FileExporter]],
+    ]
+
+    for (const [exporters, expected] of checks) {
+      process.env = {
+        DD_PROFILING_EXPORTERS: exporters,
+        OTEL_PROFILES_EXPORTER: 'otlp',
+      }
+
+      const { config } = getProfilerConfig()
+
+      assert.deepStrictEqual(config.exporters.map(exporter => exporter.constructor), expected)
+      assert.strictEqual(config.otlpExportEnabled, true)
+    }
+  })
+
+  it('should not collect timeline events when profiles are sent as OTLP', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_TIMELINE_ENABLED: '1',
+      OTEL_PROFILES_EXPORTER: 'otlp',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [WallProfiler])
   })
 
   it('should allow configuring profilers through DD_PROFILING_PROFILERS', () => {
