@@ -32,6 +32,7 @@ const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
+  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -715,7 +716,10 @@ class Config extends ConfigBase {
 
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
-      if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
+      if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias) &&
+        // A Datadog variable that is set takes precedence over its OpenTelemetry fallback, even when its value
+        // is invalid and its own default applies, as it does for plain aliases.
+        !(configName.startsWith('DD_') && getConfiguredEnvName(configName) === configName)) {
         setAndTrack(this, configName, this[alias])
       }
     }

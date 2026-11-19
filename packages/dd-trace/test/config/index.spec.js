@@ -1103,6 +1103,20 @@ describe('Config', () => {
 
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'default')
+    assert.strictEqual(config.getOrigin('tracePropagationStyle.extract'), 'default')
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should prefer an invalid DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'not-a-propagator'
+    process.env.OTEL_PROPAGATORS = 'tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.getOrigin('DD_TRACE_PROPAGATION_STYLE'), 'default')
   })
 
   it('should disable propagation with an empty DD_TRACE_PROPAGATION_STYLE', () => {
