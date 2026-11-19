@@ -26,6 +26,8 @@ const NO_PEER_TAGS = []
 const BASE_SERVICE_PEER_TAG_KEYS = [BASE_SERVICE]
 // What the Agent's span concentrator collapses over-limit peer tags to on the tracer side.
 const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
+// Distinct peer tag combinations per bucket, the default of libdatadog's span concentrator.
+const PEER_TAGS_CARDINALITY_LIMIT = 512
 // Span kinds the Agent computes stats for even when a span is neither top-level nor measured.
 const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
 
@@ -329,7 +331,6 @@ class SpanStatsProcessor {
     const {
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
-        DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: peerTagsCardinalityLimit,
         interval = 10,
       } = {},
       hostname,
@@ -347,7 +348,7 @@ class SpanStatsProcessor {
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
-    this.buckets = new TimeBuckets(Boolean(otlpExporter), peerTagsCardinalityLimit)
+    this.buckets = new TimeBuckets(Boolean(otlpExporter), PEER_TAGS_CARDINALITY_LIMIT)
     // A non-empty client hostname takes precedence over the agent's own hostname for the resulting
     // metrics, so only send it when explicitly requested.
     this.hostname = reportHostname ? os.hostname() : ''

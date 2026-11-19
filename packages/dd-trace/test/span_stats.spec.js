@@ -1145,18 +1145,18 @@ describe('SpanStatsProcessor', () => {
       assert.deepStrictEqual(exportedPeerTags(p), [[]])
     })
 
-    it('should apply DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT', () => {
+    it('should collapse peer tags beyond 512 combinations per bucket', () => {
       fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
 
-      const p = new SpanStatsProcessor({
-        ...config,
-        stats: { ...config.stats, DD_TRACE_STATS_PEER_TAGS_CARDINALITY_LIMIT: 1 },
-      })
+      const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
-      p.onSpanFinished(clientSpan)
-      p.onSpanFinished({ ...clientSpan, meta: { ...clientSpan.meta, 'peer.service': 'payments' } })
+      for (let i = 0; i < 513; i++) {
+        p.onSpanFinished({ ...clientSpan, meta: { ...clientSpan.meta, 'peer.service': `peer-${i}` } })
+      }
 
-      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing'], ['tracer_blocked_value']])
+      const peerTags = exportedPeerTags(p)
+      assert.strictEqual(peerTags.length, 513)
+      assert.deepStrictEqual(peerTags.filter(tags => tags[0] === 'tracer_blocked_value'), [['tracer_blocked_value']])
     })
 
     it('should not read /info without an Agent URL', () => {
