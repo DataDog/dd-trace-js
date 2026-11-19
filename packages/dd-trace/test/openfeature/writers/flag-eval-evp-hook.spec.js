@@ -116,7 +116,7 @@ describe('FlagEvalEVPHook', () => {
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 0)
   })
 
-  it('captures staged prerequisite evaluations before the root', () => {
+  it('defers staged prerequisite evaluations until finally and captures them before the root', () => {
     enable()
     dependencyTelemetrySidecar.takeDependencyEvaluations.onFirstCall().returns([
       { flagKey: 'prerequisite', details: details() },
@@ -127,8 +127,12 @@ describe('FlagEvalEVPHook', () => {
     const result = details()
     hook.after(hookContext, result)
 
-    sinon.assert.calledOnce(writer.enqueue)
-    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'prerequisite')
+    sinon.assert.notCalled(writer.enqueue)
+    sinon.assert.calledOnceWithExactly(
+      dependencyTelemetrySidecar.associateDependencyEvaluations,
+      hookContext,
+      result.flagMetadata
+    )
 
     hook.finally(hookContext, result)
 

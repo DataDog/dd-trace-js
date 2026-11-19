@@ -390,8 +390,8 @@ describe('evaluation telemetry opt-out', () => {
         },
         after () { optedOut = !initial },
       })
-      assert.strictEqual(await client.getBooleanValue('flag', false, { targetingKey: 'subject' }), true)
-      assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 1, customerHooks: 1 })
+      assert.strictEqual(await client.getBooleanValue('dependent', false, { targetingKey: 'subject' }), true)
+      assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 2, customerHooks: 1 })
     })
   }
 

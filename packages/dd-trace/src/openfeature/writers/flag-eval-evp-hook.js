@@ -46,7 +46,6 @@ class FlagEvalEVPHook {
     } catch {
       recordHookError()
     }
-    this.#captureDependencies(hookContext, evaluationDetails)
   }
 
   /**
@@ -62,7 +61,7 @@ class FlagEvalEVPHook {
   }
 
   /**
-   * Drain once on the normal after path and again as an idempotent finally fallback.
+   * Drain after every application after hook has run and the terminal opt-out decision permits publication.
    *
    * @param {import('@openfeature/core').HookContext} hookContext
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
