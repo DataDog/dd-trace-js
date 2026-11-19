@@ -254,8 +254,11 @@ function patch (http, methodName) {
                 ctx.res = arg
                 finish()
                 break
-              case 'error':
               case 'timeout':
+                // Node.js does not end the request on 'timeout'. The default agent's idle socket timeout
+                // is not one the app set, so keep the span open until the response, error, or close.
+                if (!customRequestTimeout && !options.agent?.options?.timeout) break
+              case 'error':
                 ctx.error = arg
                 ctx.customRequestTimeout = customRequestTimeout
                 errorChannel.publish(ctx)

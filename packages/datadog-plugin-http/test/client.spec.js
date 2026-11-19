@@ -1002,6 +1002,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 0)
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
               }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
@@ -1012,6 +1013,44 @@ describe('Plugin', () => {
               })
 
               req.on('error', () => {})
+
+              req.end()
+            })
+          }).timeout(10000)
+
+          node20Test('should record error if request is destroyed on default HTTP agent timeout with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000)
+              })
+              res.status(200).send()
+            })
+
+            const error = new Error('Request timed out')
+
+            agent
+              .assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_TYPE]: error.name,
+                  },
+                })
+                assert.ok(!('http.status_code' in traces[0][0].meta))
+              }, { timeoutMs: 9000 })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+              req.on('timeout', () => req.destroy(error))
 
               req.end()
             })
