@@ -141,7 +141,7 @@
     ],
     "DD_MCP_CAPTURE_SESSION": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "false",
         "namespace": "mcp"
