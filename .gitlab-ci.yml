@@ -1,7 +1,6 @@
 # TEMPORARY (DataDog/dd-trace-js#11256, revert before merge): run only `benchmark: [24, 6]`,
 # looping its candidate run until a variant exceeds the time limit. All other jobs removed.
 stages:
-  - ci-image
   - benchmarks
   - benchmarks-pr-comment
 
