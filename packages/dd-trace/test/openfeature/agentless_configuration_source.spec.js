@@ -538,6 +538,31 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.notCalled(applyConfiguration)
   })
 
+  it('sends the service in DD-Service on every poll', async () => {
+    config.service = 'checkout'
+    responses.push(
+      { statusCode: 200, headers: { etag: 'W/"ufc-v1"' }, body: responseBody() },
+      { statusCode: 304 }
+    )
+
+    source().start()
+    await flush()
+    await tick(30_000)
+
+    assert.strictEqual(requests.length, 2)
+    assert.strictEqual(requests[0].options.headers['DD-Service'], 'checkout')
+    assert.strictEqual(requests[1].options.headers['DD-Service'], 'checkout')
+  })
+
+  it('omits DD-Service when no service is configured', async () => {
+    responses.push({ statusCode: 200, body: responseBody() })
+
+    source().start()
+    await flush()
+
+    assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-Service'), false)
+  })
+
   it('uses fixed-delay polling after a request completes', async () => {
     responses.push(
       { pending: true },

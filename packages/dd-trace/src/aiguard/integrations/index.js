@@ -7,18 +7,19 @@ const vercelAi = require('./vercel-ai')
 let isEnabled = false
 
 /**
- * Enables all AI Guard provider integrations.
+ * Enables AI Guard provider integrations except those explicitly disabled.
  *
  * @param {object} aiguard
  * @param {boolean} block
  * @param {boolean} analyzeStreamResponses
+ * @param {string[]} [disabledIntegrations]
  */
-function enable (aiguard, block, analyzeStreamResponses) {
+function enable (aiguard, block, analyzeStreamResponses, disabledIntegrations = []) {
   if (isEnabled) return
 
-  anthropic.enable(aiguard, block, analyzeStreamResponses)
-  openai.enable(aiguard, block, analyzeStreamResponses)
-  vercelAi.enable(aiguard, block, analyzeStreamResponses)
+  if (!disabledIntegrations.includes('anthropic')) anthropic.enable(aiguard, block, analyzeStreamResponses)
+  if (!disabledIntegrations.includes('openai')) openai.enable(aiguard, block, analyzeStreamResponses)
+  if (!disabledIntegrations.includes('ai')) vercelAi.enable(aiguard, block, analyzeStreamResponses)
 
   isEnabled = true
 }

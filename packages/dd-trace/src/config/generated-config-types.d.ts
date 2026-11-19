@@ -9,6 +9,7 @@ export interface GeneratedConfig {
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
     DD_AI_GUARD_BLOCK: boolean;
+    DD_AI_GUARD_DISABLED_INTEGRATIONS: string[] | undefined;
     DD_AI_GUARD_ENABLED: boolean;
     DD_AI_GUARD_ENDPOINT: string | undefined;
     DD_AI_GUARD_MAX_CONTENT_SIZE: number;
@@ -529,7 +530,7 @@ export interface GeneratedConfig {
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
-  OTEL_SDK_DISABLED: boolean;
+  OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
@@ -645,6 +646,7 @@ export interface GeneratedEnvVarConfig {
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_AI_GUARD_BLOCK: boolean;
+  DD_AI_GUARD_DISABLED_INTEGRATIONS: string[] | undefined;
   DD_AI_GUARD_ENABLED: boolean;
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
@@ -1224,7 +1226,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_PROPAGATORS: string[];
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
-  OTEL_SDK_DISABLED: boolean;
+  OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_SERVICE_NAME: string | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
