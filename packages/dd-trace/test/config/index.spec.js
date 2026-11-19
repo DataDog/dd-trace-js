@@ -388,6 +388,18 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_MCP_CAPTURE_SESSION', () => {
+    it('defaults to false', () => {
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_SESSION, false)
+    })
+
+    it('can be enabled with the environment variable', () => {
+      process.env.DD_MCP_CAPTURE_SESSION = 'true'
+
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_SESSION, true)
+    })
+  })
+
   describe('DD_TRACE_REACT_ROUTER_ENABLED', () => {
     it('defaults to true', () => {
       const config = getConfig()

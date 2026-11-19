@@ -134,19 +134,32 @@ function getClientInfoTags (envelope, server) {
 
 const TELEMETRY_KEY = 'telemetry'
 const INTENT_KEY = 'intent'
-// The client writes the intent, so a cap keeps the span event under the intake size limit.
+const CONVERSATION_ID_KEY = 'conversation_id'
+// The client writes these values, so a cap keeps the span event under the intake size limit.
 const MAX_INTENT_LENGTH = 1024
-const TELEMETRY_SCHEMA = {
-  type: 'object',
-  properties: {
-    [INTENT_KEY]: {
-      type: 'string',
-      description: 'Briefly describe the wider context task, and why this tool was chosen. Omit argument values, ' +
-        'PII/secrets. Use English.',
-    },
-  },
-  required: [INTENT_KEY],
-  additionalProperties: false,
+const MAX_CONVERSATION_ID_LENGTH = 256
+const INTENT_PROPERTY = {
+  type: 'string',
+  description: 'Briefly describe the wider context task, and why this tool was chosen. Omit argument values, ' +
+    'PII/secrets. Use English.',
+}
+const CONVERSATION_ID_PROPERTY = {
+  type: 'string',
+  description: 'The conversation_id from an earlier result of this server. Omit it if you have none.',
+}
+
+/**
+ * @typedef {{ intent?: boolean, session?: boolean }} TelemetryOptions
+ */
+
+/**
+ * @param {TelemetryOptions} options
+ */
+function getTelemetrySchema ({ intent, session }) {
+  const properties = {}
+  if (intent) properties[INTENT_KEY] = INTENT_PROPERTY
+  if (session) properties[CONVERSATION_ID_KEY] = CONVERSATION_ID_PROPERTY
+  return { type: 'object', properties, required: intent ? [INTENT_KEY] : [], additionalProperties: false }
 }
 
 /**
@@ -168,13 +181,17 @@ function isModelCallable (tool) {
 }
 
 /**
- * Returns a copy of a tools/list result where each model-callable tool requires a `telemetry` argument with the
- * caller's intent. The SDK's own tool objects are not changed, because it validates calls against them.
+ * Returns a copy of a tools/list result where each model-callable tool gets a `telemetry` argument: a required intent
+ * with intent capture, and an optional conversation ID with session capture. The SDK's own tool objects are not
+ * changed, because it validates calls against them.
  *
  * @param {{ tools?: unknown }} result
+ * @param {TelemetryOptions} options
  */
-function injectTelemetrySchema (result) {
+function injectTelemetrySchema (result, options) {
   if (!isObject(result) || !Array.isArray(result.tools)) return result
+
+  const telemetrySchema = getTelemetrySchema(options)
 
   const tools = result.tools.map(tool => {
     if (!isObject(tool) || !isModelCallable(tool)) return tool
@@ -188,8 +205,8 @@ function injectTelemetrySchema (result) {
       inputSchema: {
         type: 'object',
         ...inputSchema,
-        properties: { ...properties, [TELEMETRY_KEY]: TELEMETRY_SCHEMA },
-        required: required.includes(TELEMETRY_KEY) ? required : [...required, TELEMETRY_KEY],
+        properties: { ...properties, [TELEMETRY_KEY]: telemetrySchema },
+        required: !options.intent || required.includes(TELEMETRY_KEY) ? required : [...required, TELEMETRY_KEY],
       },
     }
   })
@@ -198,33 +215,54 @@ function injectTelemetrySchema (result) {
 
 /**
  * @param {unknown} telemetry
- * @returns {telemetry is { intent: string }}
+ * @returns {telemetry is { intent?: string, conversation_id?: string }}
  */
 function isInjectedTelemetry (telemetry) {
-  if (!isObject(telemetry) || typeof telemetry[INTENT_KEY] !== 'string') return false
-  for (const key of Object.keys(telemetry)) {
-    if (key !== INTENT_KEY) return false
+  if (!isObject(telemetry)) return false
+  const keys = Object.keys(telemetry)
+  if (keys.length === 0) return false
+  for (const key of keys) {
+    if ((key !== INTENT_KEY && key !== CONVERSATION_ID_KEY) || typeof telemetry[key] !== 'string') return false
   }
   return true
 }
 
 /**
- * Returns a copy of a tools/call request without the `telemetry` argument, and the intent it carried, or `undefined`
+ * Returns a copy of a tools/call request without the `telemetry` argument, and the values it carried, or `undefined`
  * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
- * @returns {{ request: object, intent?: string } | undefined}
+ * @returns {{ request: object, intent?: string, conversationId?: string } | undefined}
  */
 function stripTelemetry (request) {
   const args = request?.params?.arguments
   if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
-  const intent = telemetry.intent.slice(0, MAX_INTENT_LENGTH) || undefined
-  return { request: { ...request, params: { ...request.params, arguments: rest } }, intent }
+  return {
+    request: { ...request, params: { ...request.params, arguments: rest } },
+    intent: telemetry.intent?.slice(0, MAX_INTENT_LENGTH) || undefined,
+    conversationId: telemetry.conversation_id?.slice(0, MAX_CONVERSATION_ID_LENGTH) || undefined,
+  }
+}
+
+/**
+ * Returns a copy of a tools/call result with one more text block that asks the agent to send the conversation ID on
+ * later calls.
+ *
+ * @param {unknown} result
+ * @param {string} conversationId
+ */
+function addConversationIdInstruction (result, conversationId) {
+  if (!isObject(result) || !Array.isArray(result.content)) return result
+
+  const text = `Pass telemetry.conversation_id="${conversationId}" in all later tool calls to this server in this ` +
+    'conversation.'
+  return { ...result, content: [...result.content, { type: 'text', text }] }
 }
 
 module.exports = {
+  addConversationIdInstruction,
   formatInput,
   formatOutput,
   formatServerInput,
