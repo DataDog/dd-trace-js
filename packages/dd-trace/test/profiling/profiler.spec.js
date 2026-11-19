@@ -33,6 +33,7 @@ describe('profiler', function () {
   let interval
   let flushInterval
   let buildProfilingRuntimeError
+  let yieldToEventLoop
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
@@ -65,9 +66,8 @@ describe('profiler', function () {
       spaceProfilePromise,
       exporterPromise,
     ])
-    // The profiles resolving is not enough: _collect still has to reach its
-    // _submit call, which happens one microtask tick later.
-    await Promise.resolve()
+    // Drain the fake scheduler and microtasks through encoding, yielding, and submission.
+    await clock.tickAsync(0)
   }
 
   function waitForStopped () {
@@ -76,6 +76,7 @@ describe('profiler', function () {
 
   function setUpProfiler () {
     buildProfilingRuntimeError = undefined
+    yieldToEventLoop = sinon.stub().resolves()
     flushInterval = 65 * 1000
     interval = flushInterval
     clock = sinon.useFakeTimers({
@@ -147,6 +148,7 @@ describe('profiler', function () {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
         },
+        'node:timers/promises': { setImmediate: yieldToEventLoop },
         ...stubs,
       }).Profiler
 
@@ -422,6 +424,145 @@ describe('profiler', function () {
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
       sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('captures and restarts every profiler before yielding outside the serialization guard', async () => {
+      let serializing = false
+      let resume
+      initProfiler({
+        '../crashtracking': {
+          withProfilerSerializing: fn => {
+            serializing = true
+            try { fn() } finally { serializing = false }
+          },
+        },
+      })
+      yieldToEventLoop.onFirstCall().callsFake(() => {
+        assert.strictEqual(serializing, false)
+        return new Promise(resolve => { resume = resolve })
+      })
+      await profiler.start(makeStartOptions())
+      const capture = sinon.spy(profiler, '_capture')
+
+      const collection = profiler._collect('periodic')
+
+      sinon.assert.calledOnceWithMatch(wallProfiler.profile, true)
+      sinon.assert.calledOnceWithMatch(spaceProfiler.profile, true)
+      sinon.assert.calledOnce(capture)
+      sinon.assert.notCalled(wallProfiler.encode)
+      sinon.assert.notCalled(spaceProfiler.encode)
+      resume()
+      await collection
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('staggers encoder starts without waiting for the previous encoding to finish', async () => {
+      let resumeNext
+      let resolveWall
+      yieldToEventLoop.onSecondCall().callsFake(() => new Promise(resolve => { resumeNext = resolve }))
+      wallProfiler.encode.returns(new Promise(resolve => { resolveWall = resolve }))
+      await profiler.start(makeStartOptions())
+
+      const collection = profiler._collect('periodic')
+      await Promise.resolve()
+      sinon.assert.calledOnce(wallProfiler.encode)
+      sinon.assert.notCalled(spaceProfiler.encode)
+
+      resumeNext()
+      await Promise.resolve()
+      sinon.assert.calledOnce(spaceProfiler.encode)
+      sinon.assert.notCalled(exporter.export)
+      resolveWall(wallProfile)
+      await collection
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('keeps compression concurrent while staggering encoder starts', async () => {
+      const callbacks = []
+      const gzip = sinon.stub().callsFake((data, options, callback) => { callbacks.push(callback) })
+      initProfiler({ zlib: { gzip } })
+      wallProfiler.encode.resolves(Buffer.from('wall'))
+      spaceProfiler.encode.resolves(Buffer.from('space'))
+      const env = process.env
+      process.env = { ...env, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+      try {
+        await profiler.start(makeStartOptions())
+      } finally {
+        process.env = env
+      }
+
+      const collection = profiler._collect('periodic')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(wallProfiler.encode)
+      sinon.assert.calledOnce(spaceProfiler.encode)
+      sinon.assert.calledTwice(gzip)
+      sinon.assert.notCalled(exporter.export)
+      for (const callback of callbacks) callback(null, Buffer.from('compressed'))
+      await collection
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    for (const failure of ['throws', 'rejects']) {
+      it(`continues encoding later profiles when an earlier encoder ${failure}`, async () => {
+        const error = new Error('wall encoding failed')
+        wallProfiler.encode[failure](error)
+        await profiler.start(makeStartOptions())
+
+        await profiler._collect('periodic')
+
+        sinon.assert.calledOnce(wallProfiler.encode)
+        sinon.assert.calledOnce(spaceProfiler.encode)
+        sinon.assert.calledOnce(exporter.export)
+        sinon.assert.calledOnceWithExactly(consoleLogger.error, error)
+        assert.deepStrictEqual(exporter.export.firstCall.args[0].profiles, { space: spaceProfile })
+        sinon.assert.notCalled(wallProfiler.stop)
+        sinon.assert.notCalled(spaceProfiler.stop)
+      })
+    }
+
+    it('captures shutdown synchronously and waits for export across the initial yield', async () => {
+      let resume
+      yieldToEventLoop.onFirstCall().callsFake(() => new Promise(resolve => { resume = resolve }))
+      await profiler.start(makeStartOptions())
+      const stopped = waitForStopped()
+
+      profiler.stop()
+
+      sinon.assert.calledOnceWithMatch(wallProfiler.profile, false)
+      sinon.assert.calledOnceWithMatch(spaceProfiler.profile, false)
+      sinon.assert.callOrder(wallProfiler.profile, spaceProfiler.profile, wallProfiler.stop, spaceProfiler.stop)
+      sinon.assert.notCalled(wallProfiler.encode)
+      sinon.assert.notCalled(spaceProfiler.encode)
+      assert.strictEqual(profiler.enabled, false)
+      assert.strictEqual(profiler.isStopping(), true)
+      assert.throws(() => profiler.start(makeStartOptions()), {
+        message: 'Cannot start the profiler while a shutdown collection is still in flight',
+      })
+      resume()
+      await stopped
+      sinon.assert.calledOnce(exporter.export)
+      assert.strictEqual(profiler.isStopping(), false)
+    })
+
+    it('can stop while a periodic collection is paused before encoding', async () => {
+      let resumePeriodic
+      yieldToEventLoop.onFirstCall().callsFake(() => new Promise(resolve => { resumePeriodic = resolve }))
+      await profiler.start(makeStartOptions())
+      const collection = profiler._collect('periodic')
+      const stopped = waitForStopped()
+
+      profiler.stop()
+      await stopped
+
+      sinon.assert.calledTwice(wallProfiler.profile)
+      sinon.assert.calledTwice(spaceProfiler.profile)
+      assert.strictEqual(profiler.enabled, false)
+      resumePeriodic()
+      await collection
+      sinon.assert.calledTwice(exporter.export)
+      sinon.assert.calledOnce(wallProfiler.stop)
+      sinon.assert.calledOnce(spaceProfiler.stop)
     })
 
     it('should flush when the interval is reached', async () => {
@@ -740,6 +881,7 @@ describe('profiler', function () {
       const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
         './config': configStub,
         '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
+        'node:timers/promises': { setImmediate: yieldToEventLoop },
       }).Profiler
       const realProfiler = new RealLogProfiler()
       const { debugChannel } = require('../../src/log/channels')
@@ -939,6 +1081,7 @@ describe('profiler', function () {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
         },
+        'node:timers/promises': { setImmediate: yieldToEventLoop },
       }).ServerlessProfiler
 
       interval = 1 * 1000

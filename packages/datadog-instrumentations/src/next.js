@@ -44,6 +44,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
  * @property {boolean} [responseFinished]
  * @property {unknown} [error]
  * @property {NextRequest} [nextRequest]
+ * @property {(error: object) => void} ignoreError
  *
  * @typedef {object} ResponseGeneratorContext
  * @property {boolean} [hasResolved]
@@ -71,6 +72,15 @@ const encounteredMiddleware = new WeakSet()
 const abortReasons = new WeakSet()
 const incomingRequests = new WeakSet()
 const blockableApiModules = new WeakMap()
+
+/**
+ * Keeps an error a subscriber raised to stop the request, such as a blocked request, out of the request errors.
+ *
+ * @param {object} error
+ */
+function ignoreError (error) {
+  abortReasons.add(error)
+}
 
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -221,7 +231,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
   const isMiddleware = req.headers[MIDDLEWARE_HEADER] || getRequestMeta(req, META_IS_MIDDLEWARE)
   if ((isMiddleware && !encounteredMiddleware.has(req)) || requests.has(req)) {
     encounteredMiddleware.add(req)
-    if (error) {
+    if (error && !isIgnoredError(error)) {
       errorChannel.publish({ error })
     }
     return handler()
@@ -229,7 +239,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
 
   requests.add(req)
 
-  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse, ignoreError } : { req, res, ignoreError }
   if (finishOnResponse) {
     const onResponseFinish = () => {
       res.removeListener('finish', onResponseFinish)
@@ -319,9 +329,18 @@ function isNoFallbackError (error) {
   return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
 }
 
-/** @param {unknown} error */
+/**
+ * An error that keeps an abort reason as its own `cause`, whether it is a native error or not, comes from the same
+ * stop. Reading the own data property runs no getter of the application.
+ *
+ * @param {unknown} error
+ */
 function isIgnoredError (error) {
-  return abortReasons.has(/** @type {object} */ (error)) || isNoFallbackError(error)
+  if (typeof error !== 'object' || error === null) return false
+
+  return abortReasons.has(error) ||
+    abortReasons.has(Object.getOwnPropertyDescriptor(error, 'cause')?.value) ||
+    isNoFallbackError(error)
 }
 
 /**
