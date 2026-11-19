@@ -80,7 +80,7 @@ describe('Lambda timeout monitor', () => {
       const invocationHandler = Object.freeze(() => 'invocation')
       const monitored = Object.freeze(withTimeoutMonitor(monitoredHandler))
       const invocation = Object.freeze(wrapHandler(invocationHandler))
-      const { wrap } = require(${JSON.stringify(require.resolve('../../../../lambda'))})
+      const { wrap } = require(${JSON.stringify(require.resolve('../../src/lambda/facade'))})
       const wrapped = wrap(monitored)
       assert.strictEqual(wrap(monitoredHandler), wrapped)
       assert.strictEqual(withTimeoutMonitor(monitoredHandler), wrapped)

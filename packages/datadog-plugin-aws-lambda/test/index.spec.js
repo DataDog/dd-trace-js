@@ -23,7 +23,7 @@ function lambdaEnv (extra) {
 }
 
 function invoke (config) {
-  const { wrap } = require('../../../lambda')
+  const { wrap } = require('../../dd-trace/src/lambda/facade')
   const context = {
     functionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
     getRemainingTimeInMillis: () => 30_000,
