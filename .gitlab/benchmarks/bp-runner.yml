@@ -22,17 +22,7 @@ experiments:
           TOLERATE_NEW_BENCHMARK_FAILURES: "1"
         how_to_run_benchmarks: |
           cd ./benchmark/sirun
-          # TEMPORARY (DataDog/dd-trace-js#11256): repro loop, revert before merge.
-          if [ "$BASELINE_OR_CANDIDATE" = "candidate" ] && [ -n "$REPRO_LOOP" ]; then
-            for i in $(seq 1 "$REPRO_LOOP"); do
-              echo "REPRO iteration $i/$REPRO_LOOP"
-              rm -f results.ndjson
-              ./runall.sh || { echo "REPRO: failed at iteration $i/$REPRO_LOOP"; exit 1; }
-            done
-            echo "REPRO: no failure in $REPRO_LOOP iterations"
-          else
-            ./runall.sh
-          fi
+          ./runall.sh
           # analyze_microbenchmarks' default input_filter_pattern only matches
           # "$ARTIFACTS_DIR/$BASELINE_OR_CANDIDATE*.json", so the result must end
           # in .json (not .ndjson) or it is never converted and the downstream

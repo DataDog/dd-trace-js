@@ -68,7 +68,6 @@ benchmarks-pr-comment:
   stage: benchmarks-pr-comment
   needs: [ benchmark, benchmark-serverless ]
   rules:
-    - when: never  # TEMPORARY: repro loop
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
     - if: '$CI_COMMIT_REF_NAME =~ /^mq-working-branch-master-/'
@@ -84,7 +83,6 @@ check-big-regressions:
   stage: benchmarks-pr-comment
   needs: [ benchmark, benchmark-serverless ]
   rules:
-    - when: never  # TEMPORARY: repro loop
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
     - if: $CI_COMMIT_BRANCH == 'master'
@@ -101,12 +99,50 @@ benchmark:
   # one, change the other — otherwise variants get silently skipped.
   parallel:
     matrix:
+      - MAJOR_VERSION: 20
+        GROUP: 1
+      - MAJOR_VERSION: 20
+        GROUP: 2
+      - MAJOR_VERSION: 20
+        GROUP: 3
+      - MAJOR_VERSION: 20
+        GROUP: 4
+      - MAJOR_VERSION: 20
+        GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
+      - MAJOR_VERSION: 20
+        GROUP: 7
+      - MAJOR_VERSION: 24
+        GROUP: 1
+      - MAJOR_VERSION: 24
+        GROUP: 2
+      - MAJOR_VERSION: 24
+        GROUP: 3
+      - MAJOR_VERSION: 24
+        GROUP: 4
+      - MAJOR_VERSION: 24
+        GROUP: 5
       - MAJOR_VERSION: 24
         GROUP: 6
-  timeout: 4h  # TEMPORARY: repro loop
+      - MAJOR_VERSION: 24
+        GROUP: 7
+      - MAJOR_VERSION: 26
+        GROUP: 1
+      - MAJOR_VERSION: 26
+        GROUP: 2
+      - MAJOR_VERSION: 26
+        GROUP: 3
+      - MAJOR_VERSION: 26
+        GROUP: 4
+      - MAJOR_VERSION: 26
+        GROUP: 5
+      - MAJOR_VERSION: 26
+        GROUP: 6
+      - MAJOR_VERSION: 26
+        GROUP: 7
   variables:
     SPLITS: 7
-    REPRO_LOOP: "150"  # TEMPORARY: repro loop
 
 benchmark-serverless:
   stage: benchmarks
@@ -116,7 +152,6 @@ benchmark-serverless:
     branch: $SLS_CI_BRANCH
     strategy: depend
   rules:
-    - when: never  # TEMPORARY: repro loop
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
     - if: $RELEASE_ALLOW_BENCHMARK_FAILURES == "true"
@@ -160,7 +195,6 @@ benchmark-serverless-pr-performance:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
     UPSTREAM_DEFAULT_BRANCH: $CI_DEFAULT_BRANCH
   rules:
-    - when: never  # TEMPORARY: repro loop
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
     # Codesync creates push pipelines; serverless-tools resolves the open GitHub PR.
