@@ -198,10 +198,10 @@ function injectTelemetrySchema (result) {
 
 /**
  * @param {unknown} telemetry
- * @returns {telemetry is { intent: string }}
+ * @returns {telemetry is { intent?: unknown }}
  */
 function isInjectedTelemetry (telemetry) {
-  if (!isObject(telemetry) || typeof telemetry[INTENT_KEY] !== 'string') return false
+  if (!isObject(telemetry)) return false
   for (const key of Object.keys(telemetry)) {
     if (key !== INTENT_KEY) return false
   }
@@ -220,8 +220,9 @@ function stripTelemetry (request) {
   if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
-  const intent = telemetry.intent.slice(0, MAX_INTENT_LENGTH) || undefined
-  return { request: { ...request, params: { ...request.params, arguments: rest } }, intent }
+  const { intent } = telemetry
+  const capped = typeof intent === 'string' ? intent.slice(0, MAX_INTENT_LENGTH) || undefined : undefined
+  return { request: { ...request, params: { ...request.params, arguments: rest } }, intent: capped }
 }
 
 module.exports = {

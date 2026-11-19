@@ -173,6 +173,15 @@ describe('integrations', () => {
         })
       })
 
+      it('removes an empty telemetry argument', async () => {
+        const result = await client.callTool({ name: 'weather', arguments: { city: 'Oslo', telemetry: {} } })
+
+        assert.equal(result.isError, undefined)
+        assert.deepStrictEqual(receivedArguments, { city: 'Oslo' })
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'weather')
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
       it('cuts a long intent', async () => {
         await client.callTool({ name: 'weather', arguments: { city: 'Oslo', telemetry: { intent: 'a'.repeat(2000) } } })
 
