@@ -144,6 +144,47 @@ describe('AIGuard SDK integration tests', () => {
     })
   })
 
+  describe('disabled integrations', () => {
+    before(() => {
+      envOverrides = { DD_AIGUARD_DISABLED_INTEGRATIONS: 'anthropic,openai' }
+    })
+
+    after(() => {
+      envOverrides = {}
+    })
+
+    for (const [endpoint, spanName] of [
+      ['/anthropic-stream-after-deny', 'anthropic.request'],
+      ['/openai-chat?deny=true', 'openai.request'],
+    ]) {
+      it(`skips AI Guard evaluation but keeps APM spans at ${endpoint}`, async () => {
+        await Promise.all([
+          executeRequest(`${url}${endpoint}`).then(response => {
+            assert.strictEqual(response.status, 200)
+          }),
+          agent.assertMessageReceived(({ payload }) => {
+            assert.ok(payload[0].some(span => span.name === spanName))
+            assert.ok(!payload[0].some(span => span.name === 'ai_guard'))
+          }),
+        ])
+      })
+    }
+
+    it('keeps automatic evaluation enabled for unlisted integrations', async () => {
+      const response = await executeRequest(`${url}/auto?mode=point1&deny=true`)
+
+      assert.strictEqual(response.status, 403)
+      assert.strictEqual(JSON.parse(response.body).blocked, true)
+    })
+
+    it('keeps manual SDK evaluation enabled', async () => {
+      const response = await executeRequest(`${url}/deny-default-options`)
+
+      assert.strictEqual(response.status, 403)
+      assertObjectContains(response.body, 'I am feeling suspicious today')
+    })
+  })
+
   describe('with APM tracing disabled', () => {
     before(() => {
       envOverrides = {

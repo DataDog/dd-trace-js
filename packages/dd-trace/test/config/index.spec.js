@@ -1337,6 +1337,49 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_AIGUARD_DISABLED_INTEGRATIONS', () => {
+    it('defaults to no disabled integrations and reports default telemetry', () => {
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, [])
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_AIGUARD_DISABLED_INTEGRATIONS', value: '', origin: 'default' },
+      ])
+    })
+
+    for (const [value, expected] of [
+      ['', []],
+      [' , , ', []],
+      ['anthropic', ['anthropic']],
+      ['anthropic,openai', ['anthropic', 'openai']],
+      [' anthropic, , openai, ai, ', ['anthropic', 'openai', 'ai']],
+      ['openai,openai,unknown,OpenAI', ['openai', 'openai', 'unknown', 'OpenAI']],
+    ]) {
+      it(`parses ${JSON.stringify(value)} and reports environment telemetry`, () => {
+        process.env.DD_AIGUARD_DISABLED_INTEGRATIONS = value
+
+        const config = getConfig()
+
+        assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, expected)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_AIGUARD_DISABLED_INTEGRATIONS', value, origin: 'env_var' },
+        ])
+      })
+    }
+
+    for (const enabled of [false, true]) {
+      it(`preserves the global AI Guard setting (${enabled})`, () => {
+        process.env.DD_AI_GUARD_ENABLED = String(enabled)
+        process.env.DD_AIGUARD_DISABLED_INTEGRATIONS = 'anthropic,openai,ai'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, enabled)
+        assert.deepStrictEqual(config.aiguard.DD_AIGUARD_DISABLED_INTEGRATIONS, ['anthropic', 'openai', 'ai'])
+      })
+    }
+  })
+
   describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
     // RFC-1113: reported verbatim in configuration telemetry, always emitted
     // (empty value with origin=default when unset). No effect on tracer behavior.

@@ -15,6 +15,7 @@ export interface GeneratedConfig {
     DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
     DD_AI_GUARD_REDACTION_ENABLED: boolean;
     DD_AI_GUARD_TIMEOUT: number;
+    DD_AIGUARD_DISABLED_INTEGRATIONS: string[];
   };
   apmTracingEnabled: boolean;
   appsec: {
@@ -651,6 +652,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
   DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
+  DD_AIGUARD_DISABLED_INTEGRATIONS: string[];
   DD_API_KEY: string | undefined;
   DD_API_KEY_SECRET_ARN: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;

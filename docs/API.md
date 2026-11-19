@@ -6,6 +6,21 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/Tracer.html) class.
 
+<h2 id="ai-guard-integrations">AI Guard integrations</h2>
+
+Set `DD_AIGUARD_DISABLED_INTEGRATIONS` before tracer initialization to disable AI Guard automatic evaluation for
+specific integrations. It accepts a comma-separated list of names: `anthropic`, `openai`, and `ai` (Vercel AI SDK).
+Names are case-sensitive; surrounding whitespace and empty entries are ignored. Unknown names have no effect.
+The default is an empty list, so all supported integrations are evaluated when AI Guard is enabled.
+
+```bash
+DD_AI_GUARD_ENABLED=true DD_AIGUARD_DISABLED_INTEGRATIONS=anthropic,openai node app.js
+```
+
+APM spans, LLMObs traces, other AI Guard integrations, and manual `tracer.aiguard.evaluate()` calls remain enabled.
+Setting `DD_AI_GUARD_ENABLED=false` disables AI Guard entirely, regardless of this list.
+AI Guard is disabled by default and requires its API and application keys when enabled.
+
 <h2 id="agentless-mode">Agentless mode</h2>
 
 Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
