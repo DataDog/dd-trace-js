@@ -279,6 +279,15 @@ describe('test visibility with dynamic instrumentation', () => {
     })
   })
 
+  it('keeps setting probes after setting one failed', async () => {
+    childProcess = fork(path.join(__dirname, 'target-app', 'failed-probe-script.js'))
+
+    const [message] = await once(childProcess, 'message')
+
+    assert.strictEqual(message.exitCode, undefined)
+    assert.strictEqual(message.snapshot.captures.lines[10].locals.localVar.value, '1')
+  })
+
   it('does not acknowledge drains before queued breakpoint hits', async () => {
     const breakpointSetChannel = new EventEmitter()
     const breakpointHitChannel = new EventEmitter()
@@ -481,7 +490,7 @@ describe('test visibility with dynamic instrumentation', () => {
     const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
     session.post = sinon.stub()
     session.post.withArgs('Debugger.enable').rejects(enableError)
-    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointSetChannel.postMessage = (message) => breakpointSetChannel.emit('acknowledged', message)
     breakpointHitChannel.postMessage = sinon.stub()
     breakpointRemoveChannel.postMessage = sinon.stub()
 
@@ -511,13 +520,147 @@ describe('test visibility with dynamic instrumentation', () => {
         warn: () => {},
       },
     })
-    const [onSetBreakpoint] = breakpointSetChannel.listeners('message')
-
-    await assert.rejects(onSetBreakpoint({ id: 'probe-1', file: 'file.js', line: 10 }), enableError)
-    await assert.rejects(onSetBreakpoint({ id: 'probe-2', file: 'file.js', line: 10 }), enableError)
+    const acknowledgements = []
+    for (const id of ['probe-1', 'probe-2']) {
+      const acknowledged = once(breakpointSetChannel, 'acknowledged')
+      breakpointSetChannel.emit('message', { id, file: 'file.js', line: 10 })
+      const [acknowledgement] = await acknowledged
+      acknowledgements.push(acknowledgement)
+    }
 
     sinon.assert.calledTwice(session.post.withArgs('Debugger.enable'))
-    sinon.assert.notCalled(breakpointSetChannel.postMessage)
+    assert.deepStrictEqual(acknowledgements, [
+      { probeId: 'probe-1', error: enableError },
+      { probeId: 'probe-2', error: enableError },
+    ])
+  })
+
+  it('acknowledges failed probe operations with their errors and keeps handling probes', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const session = new EventEmitter()
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').resolves()
+    session.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId: 'breakpoint-id' })
+    session.post.withArgs('Debugger.removeBreakpoint').resolves()
+    breakpointSetChannel.postMessage = (message) => breakpointSetChannel.emit('acknowledged', message)
+    breakpointHitChannel.postMessage = sinon.stub()
+    breakpointRemoveChannel.postMessage = (message) => breakpointRemoveChannel.emit('acknowledged', message)
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          config: {},
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/state': {
+        findScriptFromPartialPath: (file) => file === 'file.js' ? { url: 'file.js', scriptId: 'script-id' } : undefined,
+        getStackFromCallFrames: sinon.stub(),
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+    })
+
+    /**
+     * @param {EventEmitter} channel
+     * @param {object|string} message
+     */
+    const request = async (channel, message) => {
+      const acknowledged = once(channel, 'acknowledged')
+      channel.emit('message', message)
+      const [acknowledgement] = await acknowledged
+      return acknowledgement
+    }
+
+    assert.deepStrictEqual(await request(breakpointRemoveChannel, 'probe-1'), {
+      probeId: 'probe-1',
+      error: new Error('Cannot remove probe probe-1: Debugger not started'),
+    })
+    assert.deepStrictEqual(await request(breakpointSetChannel, { id: 'probe-1', file: 'missing.js', line: 10 }), {
+      probeId: 'probe-1',
+      error: new Error('No loaded script found for missing.js'),
+    })
+    assert.deepStrictEqual(await request(breakpointRemoveChannel, 'probe-1'), {
+      probeId: 'probe-1',
+      error: new Error('Unknown probe id: probe-1'),
+    })
+    assert.deepStrictEqual(await request(breakpointSetChannel, { id: 'probe-2', file: 'file.js', line: 10 }), {
+      probeId: 'probe-2',
+      error: undefined,
+    })
+    assert.deepStrictEqual(await request(breakpointRemoveChannel, 'probe-2'), {
+      probeId: 'probe-2',
+      error: undefined,
+    })
+    sinon.assert.calledOnceWithExactly(
+      session.post.withArgs('Debugger.removeBreakpoint'),
+      'Debugger.removeBreakpoint',
+      { breakpointId: 'breakpoint-id' }
+    )
+  })
+
+  it('logs the errors of failed probe operations and still settles them', async () => {
+    const worker = new EventEmitter()
+    worker.unref = sinon.stub()
+    const log = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
+      warn: sinon.stub(),
+    }
+    const createDynamicInstrumentation = proxyquire('../../../src/ci-visibility/dynamic-instrumentation', {
+      worker_threads: {
+        Worker: sinon.stub().returns(worker),
+        threadId: 0,
+      },
+      '../../config/helper': {
+        getEnvironmentVariables: sinon.stub().returns({}),
+      },
+      '../../debugger/config': sinon.stub().returns({}),
+      '../../log': log,
+    })
+    const dynamicInstrumentation = createDynamicInstrumentation({})
+    const { breakpointSetChannel, breakpointHitChannel, breakpointRemoveChannel } = dynamicInstrumentation
+
+    const [probeId, setPromise] = dynamicInstrumentation.addLineProbe({ file: 'test.js', line: 23 }, sinon.stub())
+    const setError = new Error('No loaded script found for test.js')
+    const removeError = new Error(`Unknown probe id: ${probeId}`)
+    breakpointSetChannel.port1.postMessage({ probeId, error: setError })
+    await setPromise
+
+    const removalRequested = once(breakpointRemoveChannel.port1, 'message')
+    const removePromise = dynamicInstrumentation.removeProbe(probeId)
+    await removalRequested
+    const drainRequested = once(breakpointHitChannel.port1, 'message')
+    breakpointRemoveChannel.port1.postMessage({ probeId, error: removeError })
+    const [{ drainRequestId }] = await drainRequested
+    breakpointHitChannel.port1.postMessage({ drainRequestId })
+    await removePromise
+
+    // The errors arrive as structured clones, so the assertion compares their messages rather than their identities.
+    assert.deepStrictEqual(log.error.args, [
+      ['Test Optimization - Dynamic Instrumentation failed to set probe', setError],
+      ['Test Optimization - Dynamic Instrumentation failed to remove probe', removeError],
+    ])
+
+    breakpointSetChannel.port1.close()
+    breakpointSetChannel.port2.close()
+    breakpointHitChannel.port1.close()
+    breakpointHitChannel.port2.close()
+    breakpointRemoveChannel.port1.close()
+    breakpointRemoveChannel.port2.close()
   })
 
   it('serializes probe replacement, cancels queued setup, and releases removed state', async () => {
@@ -568,7 +711,7 @@ describe('test visibility with dynamic instrumentation', () => {
       dynamicInstrumentation.removeProbe(),
     ])
 
-    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(firstProbeId)
+    dynamicInstrumentation.breakpointSetChannel.port1.postMessage({ probeId: firstProbeId })
     await firstSetPromise
     await setImmediatePromise()
 
@@ -581,7 +724,7 @@ describe('test visibility with dynamic instrumentation', () => {
     sinon.assert.calledOnceWithExactly(onHitFirstProbe, { snapshot: firstProbeSnapshot })
 
     const drainRequestPromise = once(dynamicInstrumentation.breakpointHitChannel.port1, 'message')
-    dynamicInstrumentation.breakpointRemoveChannel.port1.postMessage(firstProbeId)
+    dynamicInstrumentation.breakpointRemoveChannel.port1.postMessage({ probeId: firstProbeId })
     const [{ drainRequestId }] = await drainRequestPromise
     dynamicInstrumentation.breakpointHitChannel.port1.postMessage({ drainRequestId })
     await firstRemovePromise

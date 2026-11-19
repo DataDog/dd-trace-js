@@ -155,15 +155,31 @@ breakpointHitChannel.on('message', ({ drainRequestId }) => {
   scheduleBreakpointHitDrain()
 })
 
-breakpointRemoveChannel.on('message', async (probeId) => {
-  await removeBreakpoint(probeId)
-  breakpointRemoveChannel.postMessage(probeId)
+breakpointRemoveChannel.on('message', (probeId) => {
+  acknowledge(breakpointRemoveChannel, probeId, removeBreakpoint(probeId))
 })
 
-breakpointSetChannel.on('message', async (probe) => {
-  await addBreakpoint(probe)
-  breakpointSetChannel.postMessage(probe.id)
+breakpointSetChannel.on('message', (probe) => {
+  acknowledge(breakpointSetChannel, probe.id, addBreakpoint(probe))
 })
+
+/**
+ * Acknowledges a probe operation once it settles, along with its error if it failed. Rejecting instead would end the
+ * worker, and only the main thread's logs reach telemetry.
+ *
+ * @param {import('node:worker_threads').MessagePort} channel - The channel that requested the operation
+ * @param {string} probeId - The ID of the probe the operation was for
+ * @param {Promise<void>} operation - The pending operation
+ */
+async function acknowledge (channel, probeId, operation) {
+  let error
+  try {
+    await operation
+  } catch (err) {
+    error = err
+  }
+  channel.postMessage({ probeId, error })
+}
 
 async function removeBreakpoint (probeId) {
   if (!sessionStarted) {
