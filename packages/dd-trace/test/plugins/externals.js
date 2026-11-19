@@ -104,6 +104,12 @@ module.exports = {
       versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
+  bull: [
+    {
+      name: 'redis',
+      versions: ['>=4'],
+    },
+  ],
   bullmq: [
     {
       name: 'ioredis',
