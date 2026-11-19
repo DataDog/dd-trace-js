@@ -725,6 +725,12 @@ describe('selected checkout context', () => {
         overrides: { 'git.commit.sha': 'explicit' },
         files: ['explicit-test.js'],
       },
+      {
+        name: 'malformed checkout SHA',
+        custom: true,
+        overrides: { 'git.commit.sha': 'invalid' },
+        files: ['checkout-test.js'],
+      },
     ]) {
       it(`selects impacted-test diff revisions for ${scenario.name} (${consumer})`, async () => {
         const base = git(nested, ['rev-parse', 'HEAD'])

@@ -100,7 +100,10 @@ const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
 const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
-const { getUserProviderGitMetadata } = require('../../dd-trace/src/plugins/util/user-provided-git')
+const {
+  getUserProviderGitMetadata,
+  validateGitCommitSha,
+} = require('../../dd-trace/src/plugins/util/user-provided-git')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
@@ -372,7 +375,8 @@ function getModifiedFiles (testEnvironmentMetadata, gitRoot) {
     [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
     [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
   } = diffMetadata
-  const targetCommit = commitHeadSha || (isCustomCheckout ? testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
+  const commitSha = testEnvironmentMetadata[GIT_COMMIT_SHA]
+  const targetCommit = commitHeadSha || (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
 
   const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch, gitRoot)
 
@@ -606,7 +610,8 @@ class CypressPlugin {
 
     this.testConfiguration = {
       repositoryUrl,
-      sha,
+      // The `git.commit.sha` tag reports malformed values as provided, but they must not select backend data.
+      sha: validateGitCommitSha(sha) ? sha : undefined,
       gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,
