@@ -1,5 +1,7 @@
 'use strict'
 
+const { types } = require('node:util')
+
 const web = require('../../plugins/util/web')
 const {
   setUncaughtExceptionCaptureCallbackStart,
@@ -15,7 +17,13 @@ const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
 
-const { DatadogRaspAbortError, markToBlockOnDetection } = require('./utils')
+const { DatadogRaspAbortError, hasBlockingAbort, markToBlockOnDetection } = require('./utils')
+
+// Same bound as the `cause` chain; libraries keep the abort error one or two errors deep.
+const MAX_WRAPPING_ERRORS = 10
+
+// Error.isError is available from Node.js 24, and util.types.isNativeError is deprecated from 24.2.0 (DEP0197).
+const isError = Error.isError ?? types.isNativeError
 
 function removeAllListeners (emitter, event) {
   const listeners = emitter.listeners(event)
@@ -41,6 +49,36 @@ function findDatadogRaspAbortError (err, deep = 10) {
 
   if (err?.cause && deep > 0) {
     return findDatadogRaspAbortError(err.cause, deep - 1)
+  }
+}
+
+/**
+ * Finds the abort error of the request in the errors held by the own data properties of an error, for libraries that
+ * throw their own error and keep the original one outside of `cause` (sequelize's `parent`, typeorm's `driverError`).
+ * Only native errors are walked, and getters are not called.
+ *
+ * @param {unknown} error
+ * @param {import('http').IncomingMessage} req
+ * @returns {DatadogRaspAbortError | undefined}
+ */
+function findWrappedDatadogRaspAbortError (error, req) {
+  if (!isError(error)) return
+
+  const errors = [error]
+  for (let i = 0; i < errors.length; i++) {
+    for (const key of Reflect.ownKeys(errors[i])) {
+      // Before Node.js 22, reading the descriptor of `stack` formats the stack trace and calls Error.prepareStackTrace.
+      if (key === 'stack') continue
+
+      const value = Reflect.getOwnPropertyDescriptor(errors[i], key)?.value
+      if (!isError(value)) continue
+
+      if (value instanceof DatadogRaspAbortError) {
+        if (value.req === req) return value
+      } else if (errors.length < MAX_WRAPPING_ERRORS) {
+        errors.push(value)
+      }
+    }
   }
 }
 
@@ -85,8 +123,9 @@ function handleUncaughtExceptionMonitor (error) {
   }
 }
 
-function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
-  const abortError = findDatadogRaspAbortError(error)
+function blockOnDatadogRaspAbortError ({ error, req: failedRequest, isTopLevel }) {
+  const abortError = findDatadogRaspAbortError(error) ??
+    (hasBlockingAbort(failedRequest) ? findWrappedDatadogRaspAbortError(error, failedRequest) : undefined)
   if (!abortError) return false
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
