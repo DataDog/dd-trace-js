@@ -135,7 +135,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     // Before 4.0 a subscription created with an auto-detected project keeps `{{projectId}}` in its name; the
     // subscriber resolved it to open the stream that delivered this message.
     const subscriptionFullName = getSubscriptionName(subscription.name) ??
-      getSubscriptionName(message._subscriber.name)
+      getSubscriptionName(message._subscriber?.name)
     if (subscriptionFullName) meta['gcp.pubsub.subscription.name'] = subscriptionFullName
 
     let batchContext
