@@ -1261,6 +1261,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
     sinon.assert.notCalled(log.warn)
@@ -1998,23 +1999,17 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+  it('should fall back to http/protobuf when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/xml'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+    const warnCall = log.warn.getCalls().find(
+      (call) => call.args[0]?.includes?.("'http/xml' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
+    )
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
+    assert.ok(warnCall)
   })
 
-  it('should keep the http/json traces default when OTEL_EXPORTER_OTLP_PROTOCOL is unsupported for traces', () => {
-    process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
-    const config = getConfig()
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
-    sinon.assert.notCalled(log.warn)
-  })
-
-  for (const protocol of ['http/json', 'http/protobuf']) {
+  for (const protocol of ['grpc', 'http/json', 'http/protobuf']) {
     it(`should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ${protocol} casing without warning`, () => {
       process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = protocol.toUpperCase()
       const config = getConfig()

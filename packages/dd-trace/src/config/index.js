@@ -713,14 +713,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
-    // Apply all fallbacks to the calculated config. A fallback value the specific option does not allow
-    // (e.g. a grpc OTEL_EXPORTER_OTLP_PROTOCOL for traces) keeps the specific default without warning,
-    // because the value is valid for the generic option.
+    // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
-        const transformer = configurationsTable[configName].transformer
-        const value = transformer ? transformer(this[alias], configName, 'calculated', false) : this[alias]
-        setAndTrack(this, configName, value)
+        setAndTrack(this, configName, this[alias])
       }
     }
 
