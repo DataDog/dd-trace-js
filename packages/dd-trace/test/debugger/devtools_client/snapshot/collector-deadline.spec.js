@@ -207,6 +207,8 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
 })
 
 async function getObjectIdForObject (obj) {
-  const { result: { objectId } } = await session.post('Runtime.evaluate', { expression: `(${JSON.stringify(obj)})` })
+  const { result: { objectId } } = /** @type {import('node:inspector').Runtime.EvaluateReturnType} */ (
+    await session.post('Runtime.evaluate', { expression: `(${JSON.stringify(obj)})` })
+  )
   return objectId
 }

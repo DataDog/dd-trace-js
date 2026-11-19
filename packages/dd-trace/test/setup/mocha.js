@@ -417,7 +417,7 @@ function withVersions (plugin, modules, range, cb) {
 
 /**
  * @callback withExportsCallback
- * @param {() => import('module').Module} getExport - A function that returns the module export to test
+ * @param {() => Function} getExport - A function that returns the module export to test
  */
 /**
  * @overload

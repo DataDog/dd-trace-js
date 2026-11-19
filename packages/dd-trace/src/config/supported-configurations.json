@@ -4767,9 +4767,9 @@
     ],
     "OTEL_SDK_DISABLED": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": null
       }
     ],
     "OTEL_TRACES_EXPORTER": [

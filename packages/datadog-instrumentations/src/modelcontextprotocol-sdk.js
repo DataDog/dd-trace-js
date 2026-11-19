@@ -256,3 +256,5 @@ addHook({
   wrapMcpServer(exports.McpServer)
   return exports
 })
+
+module.exports = { addTraceContextToRequest }

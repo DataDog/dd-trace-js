@@ -96,11 +96,20 @@ function formatServerInput (request, mcpReq) {
   const hasEnvelopeKeys = copyMetaKeys(meta, mcpReq?.envelope)
   const hasRequestKeys = copyMetaKeys(meta, params?._meta)
 
-  const { _meta: _, ...rest } = params ?? {}
+  const rest = {}
+  let hasRest = false
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (key === '_meta') continue
+      rest[key] = value
+      hasRest = true
+    }
+  }
   if (hasEnvelopeKeys || hasRequestKeys) {
     params = { ...rest, _meta: meta }
-  } else if (params) {
-    params = rest
+  } else if (params?._meta !== undefined) {
+    // `_meta` held only the trace context that the client tracer added, so drop `params` if nothing else is left.
+    params = hasRest ? rest : undefined
   }
 
   return safeStringify({ method: request?.method, params, jsonrpc: '2.0', id: request?.id ?? mcpReq?.id })
