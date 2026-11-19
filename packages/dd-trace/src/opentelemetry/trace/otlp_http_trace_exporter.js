@@ -42,6 +42,9 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
   constructor (url, headers, timeout, protocol, resourceAttributes, otelTraceSemanticsEnabled) {
     super(url, headers, timeout, protocol, 'traces', resourceAttributes)
     this.#transformer = new OtlpTraceTransformer(resourceAttributes, protocol, otelTraceSemanticsEnabled)
+    // Expose the protocol actually used after transformer fallback (grpc -> http/protobuf) so
+    // startup reporting describes the exporter rather than the requested protocol.
+    this.protocol = this.#transformer.protocol
   }
 
   /**

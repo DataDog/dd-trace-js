@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const https = require('node:https')
+const { format, inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -14,6 +15,7 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
+const log = require('../../src/log')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
@@ -151,6 +153,22 @@ describe('OpenTelemetry Traces', () => {
   function buildExporter (extraEnv) {
     if (extraEnv) Object.assign(process.env, extraEnv)
     return createOtlpTraceExporter(getConfigFresh())
+  }
+
+  /**
+   * Exports one span through an exporter built from `env` and returns the captured request.
+   * Assertions run on the result rather than inside the request stub, where the exporter
+   * would swallow their errors.
+   *
+   * @param {Record<string, string>} env - Extra environment variables
+   */
+  function exportAndCapture (env) {
+    let request
+    const verify = mockOtlpExport((decoded, headers) => { request = { decoded, headers } })
+    const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...env })
+    exporter.export([createMockSpan()])
+    verify()
+    return { exporter, ...request, otlpSpan: request.decoded.resourceSpans[0].scopeSpans[0].spans[0] }
   }
 
   beforeEach(() => {
@@ -958,123 +976,89 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Exporter', () => {
-    it('exports spans via OTLP HTTP with JSON encoding', () => {
-      mockOtlpExport((decoded) => {
-        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
-        assert.strictEqual(otlpSpan.name, '/api/test')
-      })
-
-      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
-
-      const span = createMockSpan({ name: 'http.request' })
-      exporter.export([span])
-    })
-
-    it('sends JSON content-type header', () => {
-      mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['Content-Type'], 'application/json')
-      })
-
-      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
-
-      exporter.export([createMockSpan()])
-    })
-
     for (const env of [
+      {},
       { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
     ]) {
       it(`exports protobuf-encoded spans with ${JSON.stringify(env)}`, () => {
-        const verify = mockOtlpExport((decoded, headers) => {
-          assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
-          const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
-          assert.strictEqual(otlpSpan.name, '/api/test')
-          assert.strictEqual(Buffer.from(otlpSpan.spanId).toString('hex'), 'abcdef1234567890')
-        })
+        const warn = sinon.spy(log, 'warn')
+        const { exporter, headers, otlpSpan } = exportAndCapture(env)
 
-        const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...env })
-        exporter.export([createMockSpan()])
-
-        verify()
+        assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
+        assert.strictEqual(otlpSpan.name, '/api/test')
+        assert.strictEqual(Buffer.from(otlpSpan.spanId).toString('hex'), 'abcdef1234567890')
         assert.strictEqual(exporter.protocol, 'http/protobuf')
         assert.ok(exporter.telemetryTags.includes('encoding:protobuf'))
+        sinon.assert.notCalled(warn)
       })
     }
 
     for (const env of [
+      { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' },
-      { OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc' },
-      { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'grpc' },
     ]) {
       it(`exports JSON-encoded spans with ${JSON.stringify(env)}`, () => {
-        const verify = mockOtlpExport((decoded, headers) => {
-          assert.strictEqual(headers['Content-Type'], 'application/json')
-          assert.strictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].spanId, 'abcdef1234567890')
-        })
+        const { exporter, headers, otlpSpan } = exportAndCapture(env)
 
-        const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...env })
-        exporter.export([createMockSpan()])
-
-        verify()
+        assert.strictEqual(headers['Content-Type'], 'application/json')
+        assert.strictEqual(otlpSpan.name, '/api/test')
+        assert.strictEqual(otlpSpan.spanId, 'abcdef1234567890')
         assert.strictEqual(exporter.protocol, 'http/json')
         assert.ok(exporter.telemetryTags.includes('encoding:json'))
       })
     }
 
+    for (const env of [
+      { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'grpc' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc' },
+      { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'grpc' },
+    ]) {
+      it(`warns and falls back to protobuf-encoded spans with ${JSON.stringify(env)}`, () => {
+        const warn = sinon.spy(log, 'warn')
+        const { exporter, headers, otlpSpan } = exportAndCapture(env)
+
+        assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
+        assert.strictEqual(Buffer.from(otlpSpan.spanId).toString('hex'), 'abcdef1234567890')
+        assert.strictEqual(exporter.protocol, 'http/protobuf')
+        const expected = 'OTLP gRPC protocol is not supported for traces. ' +
+          'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
+        const messages = warn.getCalls().map(call => format(...call.args))
+        assert.ok(messages.includes(expected), inspect(messages))
+      })
+    }
+
     it('includes custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
-      mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['x-api-key'], 'secret123')
-      })
+      const { headers } = exportAndCapture({ OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-api-key=secret123' })
 
-      const exporter = buildExporter({
-        OTEL_TRACES_EXPORTER: 'otlp',
-        OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-api-key=secret123',
-      })
-
-      exporter.export([createMockSpan()])
+      assert.strictEqual(headers['x-api-key'], 'secret123')
     })
 
     it('includes multiple comma-separated custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
-      mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['x-api-key'], 'secret123')
-        assert.strictEqual(headers['other-config-value'], 'value')
-      })
-
-      const exporter = buildExporter({
-        OTEL_TRACES_EXPORTER: 'otlp',
+      const { headers } = exportAndCapture({
         OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-api-key=secret123,other-config-value=value',
       })
 
-      exporter.export([createMockSpan()])
+      assert.strictEqual(headers['x-api-key'], 'secret123')
+      assert.strictEqual(headers['other-config-value'], 'value')
     })
 
     it('includes custom headers from OTEL_EXPORTER_OTLP_HEADERS when traces-specific header is not set', () => {
-      mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['x-generic-key'], 'generic-value')
-      })
+      const { headers } = exportAndCapture({ OTEL_EXPORTER_OTLP_HEADERS: 'x-generic-key=generic-value' })
 
-      const exporter = buildExporter({
-        OTEL_TRACES_EXPORTER: 'otlp',
-        OTEL_EXPORTER_OTLP_HEADERS: 'x-generic-key=generic-value',
-      })
-
-      exporter.export([createMockSpan()])
+      assert.strictEqual(headers['x-generic-key'], 'generic-value')
     })
 
     it('uses OTEL_EXPORTER_OTLP_TRACES_HEADERS over OTEL_EXPORTER_OTLP_HEADERS when both are set', () => {
-      mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['x-traces-key'], 'traces-value')
-        assert.strictEqual(headers['x-generic-key'], undefined)
-      })
-
-      const exporter = buildExporter({
-        OTEL_TRACES_EXPORTER: 'otlp',
+      const { headers } = exportAndCapture({
         OTEL_EXPORTER_OTLP_HEADERS: 'x-generic-key=generic-value',
         OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-traces-key=traces-value',
       })
 
-      exporter.export([createMockSpan()])
+      assert.strictEqual(headers['x-traces-key'], 'traces-value')
+      assert.strictEqual(headers['x-generic-key'], undefined)
     })
 
     it('does not export empty span arrays', () => {
@@ -1151,7 +1135,7 @@ describe('OpenTelemetry Traces', () => {
       }).finish()
 
       sinon.assert.calledOnce(sendPayload)
-      const payload = JSON.parse(sendPayload.firstCall.args[0])
+      const payload = decodeProtobufPayload(sendPayload.firstCall.args[0])
       const [span] = payload.resourceSpans[0].scopeSpans[0].spans
       assert.strictEqual(span.name, 'GET /wire')
       assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.request.method').value,
@@ -1192,10 +1176,9 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Configurations', () => {
-    // http/json remains the default; http/protobuf is opt-in and grpc is not implemented.
-    it('uses default http/json protocol', () => {
+    it('uses default http/protobuf protocol', () => {
       const config = getConfigFresh()
-      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
     })
 
     it('uses port 4318 for default OTLP HTTP endpoint', () => {
@@ -1252,35 +1235,30 @@ describe('OpenTelemetry Traces', () => {
       process.env.DD_ENV = 'staging'
       process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
 
-      mockOtlpExport((decoded) => {
-        const resource = decoded.resourceSpans[0].resource
-        const resourceAttrs = {}
-        resource.attributes.forEach(attr => {
-          resourceAttrs[attr.key] = attr.value.stringValue
-        })
-
-        assert.deepStrictEqual(
-          {
-            'service.name': resourceAttrs['service.name'],
-            'service.version': resourceAttrs['service.version'],
-            'deployment.environment.name': resourceAttrs['deployment.environment.name'],
-            'telemetry.sdk.name': resourceAttrs['telemetry.sdk.name'],
-            'telemetry.sdk.language': resourceAttrs['telemetry.sdk.language'],
-          },
-          {
-            'service.name': 'my-trace-service',
-            'service.version': 'v2.0.0',
-            'deployment.environment.name': 'staging',
-            'telemetry.sdk.name': 'datadog',
-            'telemetry.sdk.language': 'nodejs',
-          }
-        )
-        assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
+      const { decoded } = exportAndCapture({})
+      const resource = decoded.resourceSpans[0].resource
+      const resourceAttrs = {}
+      resource.attributes.forEach(attr => {
+        resourceAttrs[attr.key] = attr.value.stringValue
       })
 
-      const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
-
-      exporter.export([createMockSpan()])
+      assert.deepStrictEqual(
+        {
+          'service.name': resourceAttrs['service.name'],
+          'service.version': resourceAttrs['service.version'],
+          'deployment.environment.name': resourceAttrs['deployment.environment.name'],
+          'telemetry.sdk.name': resourceAttrs['telemetry.sdk.name'],
+          'telemetry.sdk.language': resourceAttrs['telemetry.sdk.language'],
+        },
+        {
+          'service.name': 'my-trace-service',
+          'service.version': 'v2.0.0',
+          'deployment.environment.name': 'staging',
+          'telemetry.sdk.name': 'datadog',
+          'telemetry.sdk.language': 'nodejs',
+        }
+      )
+      assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
     })
 
     describe('SDK adoption markers', () => {
@@ -1477,7 +1455,9 @@ describe('OpenTelemetry Traces', () => {
           once: () => response,
         }
         const request = {
-          write: data => payloads.set(options.path, JSON.parse(data.toString())),
+          write: data => payloads.set(options.path, options.headers['Content-Type'] === 'application/x-protobuf'
+            ? decodeProtobufPayload(data)
+            : JSON.parse(data.toString())),
           end: () => {},
           on: () => request,
           once: () => request,

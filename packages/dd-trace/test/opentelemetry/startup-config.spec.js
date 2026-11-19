@@ -98,7 +98,7 @@ describe('effective OTel startup configuration', () => {
     assert.equal(c.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://collector.example/base/v1/traces')
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://collector.example/base/v1/metrics')
     assert.equal(c.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://logs.example/custom')
-    assert.equal(c.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+    assert.equal(c.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
     assert.equal(c.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'http/json')
     assert.equal(c.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 1234)
@@ -586,9 +586,9 @@ describe('effective OTel startup configuration', () => {
           assert.equal(c.OTEL_RESOURCE_ATTRIBUTES['host.name'], scenario.hostname)
           assert.equal(flare.OTEL_RESOURCE_ATTRIBUTES['host.name'], scenario.hostname)
         }
-        const { protoLogsService, protoMetricsService } = getProtobufTypes()
+        const { protoLogsService, protoMetricsService, protoTraceService } = getProtobufTypes()
         for (const [signal, decoder, resourceKey] of [
-          ['TRACES', undefined, 'resourceSpans'], ['LOGS', protoLogsService, 'resourceLogs'],
+          ['TRACES', protoTraceService, 'resourceSpans'], ['LOGS', protoLogsService, 'resourceLogs'],
           ['METRICS', protoMetricsService, 'resourceMetrics'],
         ]) {
           const request = received.get(`/v1/${signal.toLowerCase()}`)
@@ -596,8 +596,8 @@ describe('effective OTel startup configuration', () => {
           assert.equal(c[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`], `${origin}/v1/${signal.toLowerCase()}`)
           assert.equal(request.headers.authorization, 'wire-secret')
           assert.deepEqual(c[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { authorization: '<redacted>' })
-          assert.equal(request.headers['content-type'], decoder ? 'application/x-protobuf' : 'application/json')
-          const payload = decoder ? decoder.decode(request.body) : JSON.parse(request.body)
+          assert.equal(request.headers['content-type'], 'application/x-protobuf')
+          const payload = decoder.decode(request.body)
           const attributes = payload[resourceKey][0].resource.attributes
           if ('hostname' in scenario) {
             const expected = signal === 'TRACES'

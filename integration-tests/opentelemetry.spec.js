@@ -514,7 +514,7 @@ describe('opentelemetry', function () {
     }
     assert.strictEqual(messages.length, 2)
     for (const { headers } of messages) {
-      assert.strictEqual(headers['content-type'], 'application/json')
+      assert.strictEqual(headers['content-type'], 'application/x-protobuf')
     }
     const trace = messages.flatMap(({ payload }) => payload.resourceSpans
       .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
