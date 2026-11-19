@@ -1,6 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('events')
+const { setImmediate: yieldToEventLoop } = require('node:timers/promises')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
@@ -440,6 +441,9 @@ class Profiler extends EventEmitter {
       const encodedProfiles = {}
       const infos = this.#createInitialInfos()
       const compressionFn = this.#getCompressionFn()
+
+      // Capture this collection's configuration before yielding; keep profile capture/restart synchronous.
+      await yieldToEventLoop()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
