@@ -47,7 +47,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       // Creates a standard span and an inferred proxy span if headers are present
       if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
         req.headers.host = url.host
-        req.url = `${path}${url.search}`
+        req.url = path + getTraceQuery(url)
         req.socket = { encrypted: url.protocol === 'https:' }
         span = web.startSpan(
           this.tracer,
@@ -57,7 +57,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
           operationName,
           ctx
         )
-        web.setRoute(req, path)
+        const route = ctx.invocationContext.options.trigger.route?.trim() || ctx.functionName
+        web.setRoute(req, route.startsWith('/') ? route : `/${route}`)
       } else {
         webContext.config = this.config
         webContext.tracer = this.tracer
@@ -117,6 +118,19 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+/**
+ * @param {URL} url
+ */
+function getTraceQuery (url) {
+  const search = url.search
+  if (search) {
+    for (const name of url.searchParams.keys()) {
+      if (name.toLowerCase() === 'code') return ''
+    }
+  }
+  return search
 }
 
 function getMetaForTrigger ({ functionName, methodName, invocationContext }) {

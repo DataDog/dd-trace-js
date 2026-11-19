@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 require('../../dd-trace/test/setup/core')
 
+const { defaults } = require('../../dd-trace/src/config/defaults')
 const web = require('../../dd-trace/src/plugins/util/web')
 const AzureFunctionsPlugin = require('../src')
 
@@ -47,6 +48,7 @@ describe('azure-functions plugin', () => {
     const ctx = {
       currentStore: {},
       functionName: 'test-function',
+      invocationContext: { options: { trigger: { route: 'items/{id}' } } },
       httpRequest: {
         headers: new Map([
           ['host', 'original-host'],
@@ -118,35 +120,76 @@ describe('azure-functions plugin', () => {
       'azure.functions.invoke',
       ctx
     )
-    sinon.assert.calledOnceWithExactly(web.setRoute, req, '/path')
+    sinon.assert.calledOnceWithExactly(web.setRoute, req, '/items/{id}')
     sinon.assert.notCalled(web.startServerlessSpanWithInferredProxy)
   })
 })
 
 describe('azure-functions HTTP invocation lifecycle', () => {
+  let tracer
+  let plugin
+
+  beforeEach(() => {
+    tracer = require('../../dd-trace').init({ plugins: false })
+    plugin = new AzureFunctionsPlugin(tracer)
+  })
+
   afterEach(() => {
     sinon.restore()
   })
 
+  function bindHttpStart (search, config, route) {
+    plugin.configure({ enabled: false, ...config })
+    const ctx = {
+      currentStore: {},
+      functionName: 'test-function',
+      invocationContext: { options: { trigger: { route } } },
+      methodName: 'http',
+      httpRequest: {
+        headers: new Map([['host', 'request-host']]),
+        method: 'GET',
+        url: `https://request-host/api/items/42${search}`,
+      },
+    }
+
+    plugin.bindStart(ctx)
+    return ctx
+  }
+
+  for (const [route, expectedRoute] of [
+    [undefined, '/test-function'],
+    ['', '/test-function'],
+    ['/items/{id}', '/items/{id}'],
+  ]) {
+    it(`sets the route and resource at start for template ${JSON.stringify(route)}`, () => {
+      const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, route)
+      const tags = span.context().getTags()
+      assert.strictEqual(tags['http.route'], expectedRoute)
+      assert.strictEqual(tags['resource.name'], `GET ${expectedRoute}`)
+    })
+  }
+
+  for (const [search, obfuscation, expectedSearch] of [
+    ['?page=2&token=fake-token', defaults.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP, '?page=2&<redacted>'],
+    ['?page=2&private=fake-value', 'private=[^&]+', '?page=2&<redacted>'],
+    ['?postcode=123&label=code%3Dexample', '', '?postcode=123&label=code%3Dexample'],
+    ['?page=2&code=fake-function-key', defaults.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP, ''],
+    ['?C%4FDE=fake-function-key&C%4FDE=another-key&page=2', '', ''],
+  ]) {
+    it(`tags the expected URL for ${search}`, () => {
+      const { span } = bindHttpStart(search, {
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+        queryStringObfuscation: obfuscation,
+      })
+      assert.strictEqual(span.context().getTag('http.url'), `https://request-host/api/items/42${expectedSearch}`)
+    })
+  }
+
   for (const semanticsEnabled of [false, true]) {
     for (const status of [200, 500]) {
       it(`keeps serverless type with semantics=${semanticsEnabled} and status=${status}`, () => {
-        const tracer = require('../../dd-trace').init({ plugins: false })
         const exportSpan = sinon.stub(tracer._tracer._exporter, 'export')
-        const plugin = new AzureFunctionsPlugin(tracer)
-        plugin.configure({ enabled: false, DD_TRACE_OTEL_SEMANTICS_ENABLED: semanticsEnabled })
-        const ctx = {
-          currentStore: {},
-          functionName: 'test-function',
-          methodName: 'http',
-          httpRequest: {
-            headers: new Map([['host', 'request-host']]),
-            method: 'GET',
-            url: 'https://request-host/path?query=value',
-          },
-        }
-
-        plugin.bindStart(ctx)
+        const ctx = bindHttpStart('?query=value', { DD_TRACE_OTEL_SEMANTICS_ENABLED: semanticsEnabled })
         assert.strictEqual(ctx.span.context().getTags()['span.type'], 'serverless')
 
         ctx.result = { status }

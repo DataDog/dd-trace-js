@@ -66,7 +66,7 @@ describe('esm', () => {
       }).timeout(60_000)
 
       it('propagates context to child http requests', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ payload }) => {
+        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2/42', ({ payload }) => {
           assert.strictEqual(payload.length, 2)
           assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
         })
@@ -83,7 +83,7 @@ describe('esm', () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
           DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
           DD_TRACE_SAMPLING_RULES: JSON.stringify([
-            { resource: 'GET /api/httptest2', sample_rate: 0.5 },
+            { resource: 'GET /httptest2/{id}', sample_rate: 0.5 },
           ]),
           OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
           PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
@@ -97,8 +97,8 @@ describe('esm', () => {
 
       it('uses the route for sampling before outbound propagation', async () => {
         const [span, response] = await Promise.all([
-          waitForOtlpSpan(agent, 'GET /api/httptest2', 50_000),
-          fetch('http://127.0.0.1:7071/api/httptest2?page=2', {
+          waitForOtlpSpan(agent, 'GET /httptest2/{id}', 50_000),
+          fetch('http://127.0.0.1:7071/api/httptest2/42?page=2&token=fake-token', {
             headers: {
               'x-datadog-parent-id': '2',
               'x-datadog-trace-id': '1',
@@ -112,11 +112,28 @@ describe('esm', () => {
         const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
         assertObjectContains(attributes, {
           '_dd.p.ksr': { stringValue: '0.5' },
+          'http.route': { stringValue: '/httptest2/{id}' },
           'url.scheme': { stringValue: 'http' },
-          'url.path': { stringValue: '/api/httptest2' },
-          'url.query': { stringValue: 'page=2' },
+          'url.path': { stringValue: '/api/httptest2/42' },
+          'url.query': { stringValue: 'page=2&<redacted>' },
           _sampling_priority_v1: { intValue: 2 },
         })
+      }).timeout(60_000)
+
+      it('omits queries containing Azure function keys', async () => {
+        const [span, response] = await Promise.all([
+          waitForOtlpSpan(agent, 'GET /httptest', 50_000),
+          fetch('http://127.0.0.1:7071/api/httptest?page=2&code=fake-function-key'),
+        ])
+        assert.strictEqual(response.status, 200)
+        await response.text()
+
+        const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+        assertObjectContains(attributes, {
+          'http.route': { stringValue: '/httptest' },
+          'url.path': { stringValue: '/api/httptest' },
+        })
+        assert.strictEqual(attributes['url.query'], undefined)
       }).timeout(60_000)
     })
   })
