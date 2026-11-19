@@ -228,20 +228,16 @@ async function addBreakpoint (probe) {
     }
   }
 
-  try {
-    const { breakpointId } = await session.post('Debugger.setBreakpoint', {
-      location: {
-        scriptId,
-        lineNumber: lineNumber - 1,
-        columnNumber,
-      },
-    })
+  const { breakpointId } = await session.post('Debugger.setBreakpoint', {
+    location: {
+      scriptId,
+      lineNumber: lineNumber - 1,
+      columnNumber,
+    },
+  })
 
-    breakpointIdToProbe.set(breakpointId, probe)
-    probeIdToBreakpointId.set(probe.id, breakpointId)
-  } catch (e) {
-    log.error('Error setting breakpoint at %s:%s', url, line, e)
-  }
+  breakpointIdToProbe.set(breakpointId, probe)
+  probeIdToBreakpointId.set(probe.id, breakpointId)
 }
 
 async function start () {

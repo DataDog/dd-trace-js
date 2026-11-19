@@ -540,9 +540,12 @@ describe('test visibility with dynamic instrumentation', () => {
     const breakpointHitChannel = new EventEmitter()
     const breakpointRemoveChannel = new EventEmitter()
     const session = new EventEmitter()
+    const setBreakpointError = new Error('Could not resolve breakpoint')
     session.post = sinon.stub()
     session.post.withArgs('Debugger.enable').resolves()
-    session.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId: 'breakpoint-id' })
+    session.post.withArgs('Debugger.setBreakpoint')
+      .onFirstCall().rejects(setBreakpointError)
+      .onSecondCall().resolves({ breakpointId: 'breakpoint-id' })
     session.post.withArgs('Debugger.removeBreakpoint').resolves()
     breakpointSetChannel.postMessage = (message) => breakpointSetChannel.emit('acknowledged', message)
     breakpointHitChannel.postMessage = sinon.stub()
@@ -599,10 +602,14 @@ describe('test visibility with dynamic instrumentation', () => {
     })
     assert.deepStrictEqual(await request(breakpointSetChannel, { id: 'probe-2', file: 'file.js', line: 10 }), {
       probeId: 'probe-2',
+      error: setBreakpointError,
+    })
+    assert.deepStrictEqual(await request(breakpointSetChannel, { id: 'probe-3', file: 'file.js', line: 10 }), {
+      probeId: 'probe-3',
       error: undefined,
     })
-    assert.deepStrictEqual(await request(breakpointRemoveChannel, 'probe-2'), {
-      probeId: 'probe-2',
+    assert.deepStrictEqual(await request(breakpointRemoveChannel, 'probe-3'), {
+      probeId: 'probe-3',
       error: undefined,
     })
     sinon.assert.calledOnceWithExactly(
