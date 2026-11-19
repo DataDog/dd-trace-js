@@ -214,15 +214,20 @@ function injectTelemetrySchema (result, options) {
 }
 
 /**
+ * Only the keys of the enabled captures count, so a tool's own `telemetry` argument is not taken.
+ *
  * @param {unknown} telemetry
+ * @param {TelemetryOptions} options
  * @returns {telemetry is { intent?: string, conversation_id?: string }}
  */
-function isInjectedTelemetry (telemetry) {
+function isInjectedTelemetry (telemetry, { intent, session }) {
   if (!isObject(telemetry)) return false
   const keys = Object.keys(telemetry)
-  if (keys.length === 0) return false
+  // Without intent capture, the schema has no required keys, so an agent can send an empty object.
+  if (keys.length === 0) return Boolean(session)
   for (const key of keys) {
-    if ((key !== INTENT_KEY && key !== CONVERSATION_ID_KEY) || typeof telemetry[key] !== 'string') return false
+    const enabled = key === INTENT_KEY ? intent : key === CONVERSATION_ID_KEY && session
+    if (!enabled || typeof telemetry[key] !== 'string') return false
   }
   return true
 }
@@ -232,11 +237,12 @@ function isInjectedTelemetry (telemetry) {
  * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
+ * @param {TelemetryOptions} options
  * @returns {{ request: object, intent?: string, conversationId?: string } | undefined}
  */
-function stripTelemetry (request) {
+function stripTelemetry (request, options) {
   const args = request?.params?.arguments
-  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
+  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY], options)) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
   return {

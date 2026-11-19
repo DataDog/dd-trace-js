@@ -108,10 +108,10 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     if (method === 'tools/list') {
       ctx.transformResult = result => injectTelemetrySchema(result, options)
     } else if (method === 'tools/call') {
-      const stripped = stripTelemetry(ctx.request)
+      const stripped = stripTelemetry(ctx.request, options)
       if (stripped) {
         ctx.request = stripped.request
-        if (options.intent) ctx.llmobs.intent = stripped.intent
+        ctx.llmobs.intent = stripped.intent
       }
       if (options.session) this.#captureSession(ctx, stripped?.conversationId)
     }

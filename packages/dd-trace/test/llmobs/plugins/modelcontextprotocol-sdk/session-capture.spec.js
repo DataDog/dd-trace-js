@@ -99,6 +99,14 @@ describe('integrations', () => {
           assert.equal(findServerToolSpan(await getEvents(2)).session_id, conversationId)
         })
 
+        it('removes an empty telemetry argument and generates a session ID', async () => {
+          const result = await client.callTool({ name: 'weather', arguments: { city: 'Lima', telemetry: {} } })
+
+          assert.equal(result.isError, undefined)
+          assert.deepStrictEqual(receivedArguments, { city: 'Lima' })
+          assert.equal(findServerToolSpan(await getEvents(2)).session_id, getInstructedConversationId(result))
+        })
+
         it('uses the echoed conversation ID and removes the telemetry argument', async () => {
           const result = await client.callTool({
             name: 'weather',
