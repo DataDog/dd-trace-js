@@ -924,6 +924,15 @@ declare namespace tracer {
          */
         redactionEnabled?: boolean,
         /**
+         * Whether AI Guard checks client-managed MCP tool calls before they run, and sends the
+         * metadata of their MCP servers with the evaluations.
+         * When `false`, conversation and tool call evaluations continue without MCP metadata.
+         * @default true
+         * @env DD_AI_GUARD_MCP_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        mcpEnabled?: boolean,
+        /**
          * Max size of the content property set in the meta-struct
          * @env DD_AI_GUARD_MAX_CONTENT_SIZE
          * Programmatic configuration takes precedence over the environment variables listed above.

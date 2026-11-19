@@ -2058,6 +2058,7 @@ describe('Config', () => {
         DD_AI_GUARD_ENABLED: false,
         DD_AI_GUARD_ENDPOINT: undefined,
         DD_AI_GUARD_MAX_MESSAGES_LENGTH: 16,
+        DD_AI_GUARD_MCP_ENABLED: true,
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 10_000,
         DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
@@ -2202,6 +2203,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_MCP_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: false, origin: 'default' },
@@ -2374,6 +2376,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
+    process.env.DD_AI_GUARD_MCP_ENABLED = 'false'
     process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '2000'
     process.env.DD_API_SECURITY_ENABLED = 'true'
@@ -2559,6 +2562,7 @@ describe('Config', () => {
         DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
         DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
         DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_MCP_ENABLED: false,
         DD_AI_GUARD_REDACTION_ENABLED: false,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
@@ -2695,6 +2699,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
+      { name: 'DD_AI_GUARD_MCP_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
       { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: true, origin: 'env_var' },
@@ -2704,6 +2709,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2000, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'env_var' },
+      { name: 'DD_AI_GUARD_MCP_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: 'log', origin: 'env_var' },
@@ -3141,6 +3147,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          mcpEnabled: false,
           redactionEnabled: true,
           timeout: 2000,
         },
@@ -3248,6 +3255,7 @@ describe('Config', () => {
         DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
         DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
         DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_MCP_ENABLED: false,
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
@@ -3403,6 +3411,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'code' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'code' },
+      { name: 'DD_AI_GUARD_MCP_ENABLED', value: false, origin: 'code' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2_000, origin: 'code' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: true, origin: 'code' },
@@ -3732,6 +3741,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '16'
+    process.env.DD_AI_GUARD_MCP_ENABLED = 'true'
     process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '1000'
     process.env.DD_API_KEY = '123'
@@ -3871,6 +3881,7 @@ describe('Config', () => {
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
           maxMessagesLength: 32,
+          mcpEnabled: false,
           redactionEnabled: true,
           timeout: 2000,
         },
@@ -3978,6 +3989,7 @@ describe('Config', () => {
         DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
         DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
         DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_MCP_ENABLED: false,
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
