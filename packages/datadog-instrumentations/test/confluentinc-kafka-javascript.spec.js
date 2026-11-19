@@ -422,6 +422,48 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
         assert.deepStrictEqual(clusterIds, [undefined])
       })
+      describe('producer bootstrap servers', () => {
+        /**
+         * @param {object | undefined} kafkaOptions
+         * @param {object} [producerConfig]
+         * @returns {Promise<Array<string | undefined>>}
+         */
+        async function producedBootstrapServers (kafkaOptions, producerConfig) {
+          const servers = []
+          const subscriber = (ctx) => servers.push(ctx.bootstrapServers)
+          clusterIdSubscribers.push({ channel: producerStart, subscriber })
+          producerStart.subscribe(subscriber)
+          const producer = stageKafka(undefined, undefined, kafkaOptions).producer(producerConfig)
+          await producer.connect()
+          await producer.send({ topic: 'topic', messages: [{ value: 'a' }] })
+          return servers
+        }
+
+        it('reports the bootstrap.servers of the client', async () => {
+          const servers = await producedBootstrapServers({ 'bootstrap.servers': 'kafka-1:9092' })
+
+          assert.deepStrictEqual(servers, ['kafka-1:9092'])
+        })
+
+        it('prefers the bootstrap.servers of the client over the brokers of the producer', async () => {
+          const servers = await producedBootstrapServers(
+            { 'bootstrap.servers': 'cluster-a:9092' },
+            { kafkaJS: { brokers: ['cluster-b:9092'] } }
+          )
+
+          assert.deepStrictEqual(servers, ['cluster-a:9092'])
+        })
+
+        it('prefers the bootstrap.servers of the producer over the brokers of the client', async () => {
+          const servers = await producedBootstrapServers(
+            { kafkaJS: { brokers: ['cluster-a:9092'] } },
+            { 'bootstrap.servers': 'cluster-b:9092' }
+          )
+
+          assert.deepStrictEqual(servers, ['cluster-b:9092'])
+        })
+      })
+
       describe('consumer bootstrap servers', () => {
         /**
          * @param {object | undefined} kafkaOptions
@@ -478,6 +520,15 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
           await consumer.run({ eachMessage: async () => {} })
 
           assert.deepStrictEqual(servers, ['cluster-b:9092'])
+        })
+
+        it('prefers the bootstrap.servers of the client over the brokers of the consumer', async () => {
+          const servers = await consumedBootstrapServers(
+            { 'bootstrap.servers': 'cluster-a:9092' },
+            { kafkaJS: { groupId: 'group', brokers: ['cluster-b:9092'] } }
+          )
+
+          assert.deepStrictEqual(servers, ['cluster-a:9092'])
         })
 
         it('reports none when neither names brokers', async () => {

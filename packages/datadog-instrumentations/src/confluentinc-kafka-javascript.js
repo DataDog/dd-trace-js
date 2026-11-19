@@ -249,21 +249,13 @@ function instrumentKafkaJS (kafkaJS) {
     shimmer.wrap(kafkaJS, 'Kafka', function wrapKafka (OriginalKafka) {
       return function KafkaWrapper (options) {
         const kafka = new OriginalKafka(options)
-        const kafkaJSOptions = options?.kafkaJS || options
-        const brokers = kafkaJSOptions?.brokers ? kafkaJSOptions.brokers.join(',') : ''
-
-        // Store brokers for later use
-        kafka._ddBrokers = brokers
 
         // Wrap the producer method if it exists
         if (typeof kafka?.producer === 'function') {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
             return function wrappedProducerMethod (...args) {
               const producer = producerMethod.apply(this, args)
-
-              if (!brokers && args?.[0]?.['bootstrap.servers']) {
-                kafka._ddBrokers = args[0]['bootstrap.servers']
-              }
+              const bootstrapServers = mergedBrokers(options, args[0])
 
               if (typeof producer?.connect === 'function') {
                 shimmer.wrap(producer, 'connect', connect => wrapConnect(connect, producer))
@@ -297,7 +289,7 @@ function instrumentKafkaJS (kafkaJS) {
                     const ctx = {
                       topic: outgoingPayload?.topic,
                       messages: outgoingPayload?.messages || [],
-                      bootstrapServers: kafka._ddBrokers,
+                      bootstrapServers,
                       clusterId: clusterIds.get(producer) ?? undefined,
                       disableHeaderInjection,
                     }
@@ -352,10 +344,7 @@ function instrumentKafkaJS (kafkaJS) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
-              // The consumer's own brokers, else those of the client, as the library merges its
-              // configuration. Not kafka._ddBrokers: a producer may have set it to its own brokers.
-              const bootstrapServers =
-                configuredBrokers(config) || brokers || options?.['bootstrap.servers'] || undefined
+              const bootstrapServers = mergedBrokers(options, config)
 
               if (typeof consumer?.connect === 'function') {
                 shimmer.wrap(consumer, 'connect', connect => wrapConnect(connect, consumer))
@@ -568,13 +557,24 @@ function lookUpKafkaJsClusterId (client) {
 }
 
 /**
- * The brokers a consumer configuration names, as librdkafka's `bootstrap.servers` or KafkaJS `brokers`.
+ * The brokers a producer or consumer connects to. The library merges its configuration over that of
+ * the `Kafka` client, then lays the native configuration over the one converted from `kafkaJS`, so a
+ * `bootstrap.servers` of either wins over any `kafkaJS.brokers`.
  *
- * @param {object} [config] Consumer configuration.
+ * @param {object} [options] `Kafka` constructor options.
+ * @param {object} [config] Producer or consumer configuration.
  * @returns {string | undefined}
  */
-function configuredBrokers (config) {
-  if (config?.['bootstrap.servers']) return config['bootstrap.servers']
+function mergedBrokers (options, config) {
+  return config?.['bootstrap.servers'] || options?.['bootstrap.servers'] ||
+    kafkaJSBrokers(config) || kafkaJSBrokers(options)
+}
+
+/**
+ * @param {object} [config]
+ * @returns {string | undefined}
+ */
+function kafkaJSBrokers (config) {
   const brokers = config?.kafkaJS?.brokers
   return Array.isArray(brokers) && brokers.length > 0 ? brokers.join(',') : undefined
 }
