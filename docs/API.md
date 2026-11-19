@@ -303,6 +303,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="azure-service-bus"></h5>
 <h5 id="azure-durable-functions"></h5>
 <h5 id="browser-bunyan"></h5>
+<h5 id="bull"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -453,6 +454,7 @@ Playback with missing per-response start events remains a live validation gap.
 * [azure-service-bus](./interfaces/plugins.azure_service_bus.html)
 * [azure-durable-functions](./interfaces/plugins.azure_durable_functions.html)
 * [browser-bunyan](./interfaces/plugins.browser_bunyan.html)
+* [bull](./interfaces/plugins.bull.html)
 * [bullmq](./interfaces/plugins.bullmq.html)
 * [bunyan](./interfaces/plugins.bunyan.html)
 * [cassandra-driver](./interfaces/plugins.cassandra_driver.html)

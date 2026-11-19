@@ -130,6 +130,7 @@
     "body-parser": "2.4.0",
     "browser-bunyan": "1.8.0",
     "bson": "7.3.4",
+    "bull": "4.16.5",
     "bullmq": "6.7.6",
     "bunyan": "2.0.5",
     "cassandra-driver": "4.10.0",

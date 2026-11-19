@@ -69,6 +69,8 @@
   "async-mutex/es6/Semaphore.js": "async-mutex",
   "async-mutex/index.mjs": "async-mutex",
   "async-mutex/lib/Semaphore.js": "async-mutex",
+  "bull/lib/job.js": "bull",
+  "bull/lib/queue.js": "bull",
   "bullmq/dist/cjs/classes/flow-producer.js": "bullmq",
   "bullmq/dist/cjs/classes/queue.js": "bullmq",
   "bullmq/dist/cjs/classes/worker.js": "bullmq",

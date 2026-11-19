@@ -52,6 +52,7 @@ const missingInstrumentationHooks = [
   'async-mutex',
   'aws-lambda', // AWS Lambda is activated by the serverless bootstrap rather than a module load
   'azure-cosmos',
+  'bull',
   'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
   'langchain',
@@ -66,6 +67,7 @@ const missingInstrumentationHooks = [
 const hooklessOrchestrionPlugins = new Set([
   'async-mutex',
   'azure-cosmos',
+  'bull',
   'bullmq',
   'langchain',
   'langgraph',
@@ -225,6 +227,7 @@ describe('Plugin Structure Validation', () => {
       '@wdio/jasmine-framework',
       '@wdio/local-runner',
       '@wdio/utils',
+      'bull',
       'bullmq',
       'mercurius',
       'postgres',

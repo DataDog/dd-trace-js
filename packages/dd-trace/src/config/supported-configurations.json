@@ -2850,6 +2850,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BULL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_BULLMQ_ENABLED": [
       {
         "implementation": "A",
