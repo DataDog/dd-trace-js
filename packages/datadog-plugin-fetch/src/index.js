@@ -1,9 +1,7 @@
 'use strict'
 
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
-const { readDsmBase64 } = require('../../dd-trace/src/carrier')
-
-const DSM_HEADER = 'dd-pathway-ctx-base64'
+const { dsmBase64Name, readDsmBase64 } = require('../../dd-trace/src/carrier')
 
 class FetchPlugin extends HttpClientPlugin {
   static id = 'fetch'
@@ -32,7 +30,7 @@ class FetchPlugin extends HttpClientPlugin {
     // A pathway header the caller forwards describes an upstream hop, so this request's own one replaces it.
     const pathway = readDsmBase64(options.headers)
     if (pathway !== undefined) {
-      req.headers.set(DSM_HEADER, pathway)
+      req.headers.set(dsmBase64Name, pathway)
     }
 
     return store

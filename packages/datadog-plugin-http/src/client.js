@@ -107,7 +107,8 @@ class HttpClientPlugin extends ClientPlugin {
 
     message.span = span
     message.parentStore = store
-    message.currentStore = dataStreamsContext ? { ...store, span, dataStreamsContext } : { ...store, span }
+    message.currentStore = { ...store, span }
+    if (dataStreamsContext) message.currentStore.dataStreamsContext = dataStreamsContext
 
     return message.currentStore
   }
