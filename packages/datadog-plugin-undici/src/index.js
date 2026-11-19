@@ -2,7 +2,7 @@
 
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 const { storage } = require('../../datadog-core')
-const { readDsmBase64 } = require('../../dd-trace/src/carrier')
+const { dsmBase64Name, readDsmBase64 } = require('../../dd-trace/src/carrier')
 const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -16,8 +16,6 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-
-const DSM_HEADER = 'dd-pathway-ctx-base64'
 
 const {
   HTTP_STATUS_CODE,
@@ -129,7 +127,7 @@ class UndiciPlugin extends HttpClientPlugin {
         allowed &&
         !isAwsSdkRequest(store?.span, normalizeHeaders(request.headers)['amz-sdk-invocation-id'])
       ) {
-        removeHeader(request, DSM_HEADER)
+        removeHeader(request, dsmBase64Name)
         setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, headers)
       }
 
@@ -252,7 +250,7 @@ class UndiciPlugin extends HttpClientPlugin {
     // A pathway header the caller forwards describes an upstream hop, so this request's own one replaces it.
     const pathway = readDsmBase64(options.headers)
     if (pathway !== undefined) {
-      req.headers.set(DSM_HEADER, pathway)
+      req.headers.set(dsmBase64Name, pathway)
     }
 
     return store
