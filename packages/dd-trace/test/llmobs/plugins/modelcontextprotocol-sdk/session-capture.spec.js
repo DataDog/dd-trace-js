@@ -4,13 +4,14 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const { describe, it, before, after } = require('mocha')
+const sinon = require('sinon')
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 const { useLlmObs } = require('../../util')
 
 const TOOL_RESULT = { content: [{ type: 'text', text: 'sunny' }] }
-const CONVERSATION_ID_PATTERN = /telemetry\.conversation_id="([0-9a-f]{32})"/
+const CONVERSATION_ID_PATTERN = /conversation_id for this server is "([0-9a-f]{32})"/
 
 /**
  * @param {{ llmobsSpans: Array<{ name: string, session_id?: string, meta: { input: { value: string } } }> }} events
@@ -119,6 +120,54 @@ describe('integrations', () => {
           const span = findServerToolSpan(await getEvents(2))
           assert.equal(span.session_id, 'abc')
           assert.deepStrictEqual(JSON.parse(span.meta.input.value).params.arguments, { city: 'Rome' })
+        })
+      })
+
+      describe('first calls on one connection', () => {
+        let client
+        let server
+
+        before(async () => {
+          ({ client, server } = await connect())
+        })
+
+        after(async () => {
+          await client?.close()
+          await server?.close()
+        })
+
+        it('reuses one new ID for parallel first calls', async () => {
+          const results = await Promise.all([
+            client.callTool({ name: 'weather', arguments: { city: 'Paris' } }),
+            client.callTool({ name: 'weather', arguments: { city: 'Rome' } }),
+          ])
+
+          const [first, second] = results.map(getInstructedConversationId)
+          assert.ok(first)
+          assert.equal(second, first)
+
+          const { llmobsSpans } = await getEvents(4)
+          const sessionIds = llmobsSpans.filter(span => span.name === 'weather').map(span => span.session_id)
+          assert.deepStrictEqual(sessionIds, [first, first])
+        })
+
+        it('generates another ID once the pending one is 2 seconds old', async () => {
+          const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ['performance'] })
+          try {
+            const first = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+            await getEvents(2)
+            clock.tick(1999)
+            const second = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+            await getEvents(2)
+            clock.tick(2000)
+            const third = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+            await getEvents(2)
+
+            assert.equal(getInstructedConversationId(second), getInstructedConversationId(first))
+            assert.notEqual(getInstructedConversationId(third), getInstructedConversationId(second))
+          } finally {
+            clock.restore()
+          }
         })
       })
 

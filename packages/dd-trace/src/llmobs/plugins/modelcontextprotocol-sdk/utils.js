@@ -145,7 +145,8 @@ const INTENT_PROPERTY = {
 }
 const CONVERSATION_ID_PROPERTY = {
   type: 'string',
-  description: 'The conversation_id from an earlier result of this server. Omit it if you have none.',
+  description: 'Required on every call after your first call to this server: the conversation_id from an earlier ' +
+    'result of this server. Omit it only on your first call.',
 }
 
 /**
@@ -262,8 +263,9 @@ function stripTelemetry (request, options) {
 function addConversationIdInstruction (result, conversationId) {
   if (!isObject(result) || !Array.isArray(result.content)) return result
 
-  const text = `Pass telemetry.conversation_id="${conversationId}" in all later tool calls to this server in this ` +
-    'conversation.'
+  const text = `Your conversation_id for this server is "${conversationId}". Add "telemetry": ` +
+    `{"conversation_id": "${conversationId}"} to the arguments of every later tool call to this server, including ` +
+    'calls you make in parallel.'
   return { ...result, content: [...result.content, { type: 'text', text }] }
 }
 

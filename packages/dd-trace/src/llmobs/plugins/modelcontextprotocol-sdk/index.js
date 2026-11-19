@@ -14,6 +14,11 @@ const {
   stripTelemetry,
 } = require('./utils')
 
+// Parallel first calls of a conversation arrive together, before the agent has seen any ID
+const PENDING_CONVERSATION_ID_MS = 2000
+/** @type {WeakMap<object, { conversationId: string, time: number }>} */
+const pendingConversationIds = new WeakMap()
+
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
   static integration = 'modelcontextprotocol-sdk'
@@ -128,9 +133,14 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span || getTransportSessionId(ctx) || this._tagger.getSessionId(span)) return
 
-    if (!conversationId) {
-      conversationId = randomUUID().replaceAll('-', '')
-      ctx.transformResult = result => addConversationIdInstruction(result, conversationId)
+    if (conversationId) {
+      if (pendingConversationIds.get(ctx.server)?.conversationId === conversationId) {
+        pendingConversationIds.delete(ctx.server)
+      }
+    } else {
+      const id = getNewConversationId(ctx.server)
+      conversationId = id
+      ctx.transformResult = result => addConversationIdInstruction(result, id)
     }
     this._tagger.tagSessionId(span, conversationId)
   }
@@ -157,6 +167,21 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     const output = ctx.error ? undefined : safeStringify(ctx.result)
     this._tagger.tagTextIO(span, formatServerInput(request, extra?.mcpReq), output)
   }
+}
+
+/**
+ * Reuses the ID generated for a call on the same connection that the agent has not sent back yet.
+ *
+ * @param {object} [server]
+ */
+function getNewConversationId (server) {
+  const now = performance.now()
+  const pending = server && pendingConversationIds.get(server)
+  const conversationId = pending && now - pending.time < PENDING_CONVERSATION_ID_MS
+    ? pending.conversationId
+    : randomUUID().replaceAll('-', '')
+  if (server) pendingConversationIds.set(server, { conversationId, time: now })
+  return conversationId
 }
 
 /**
