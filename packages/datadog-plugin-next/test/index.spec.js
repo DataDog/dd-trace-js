@@ -12,7 +12,7 @@ const http = require('node:http')
 const path = require('node:path')
 
 const dc = require('dc-polyfill')
-const { after, before, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
@@ -29,6 +29,7 @@ const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
+const compiledRuntimeVersion = '15.4.1'
 
 /**
  * @param {'app-page'|'app-route'|'pages-api'} runtime
@@ -36,7 +37,7 @@ const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
  */
 function applyCompiledRuntimeHook (runtime, runtimeExports) {
   const hook = instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
-  hook(runtimeExports)
+  hook(runtimeExports, compiledRuntimeVersion)
 }
 
 /** @param {{ NoFallbackError: typeof Error }} runtimeExports */
@@ -1317,7 +1318,7 @@ describe('compiled Next runtimes', () => {
       const routeModule = new RouteModule()
 
       const hook = getHook(runtime)
-      hook({ [exportName]: RouteModule })
+      hook({ [exportName]: RouteModule }, compiledRuntimeVersion)
 
       if (runtime !== 'pages-api') {
         assert.strictEqual(routeModule.prepare(...args), returned.prepare)
@@ -1355,6 +1356,136 @@ describe('compiled Next runtimes', () => {
       responseGenerator: () => Promise.resolve('response'),
     })
     assert.strictEqual(result, 'response')
+  })
+
+  describe('Pages API body blocking', () => {
+    const bodyParsedChannel = dc.channel('apm:next:body-parsed')
+    /** @type {{ res: object, body?: { key?: string }, abortController: AbortController }[]} */
+    let published
+
+    /** @param {{ res: object, body?: { key?: string }, abortController: AbortController }} ctx */
+    function blockAttacks (ctx) {
+      published.push(ctx)
+      if (ctx.body?.key === 'blockattack') ctx.abortController.abort()
+    }
+
+    beforeEach(() => {
+      published = []
+      bodyParsedChannel.subscribe(blockAttacks)
+    })
+
+    afterEach(() => {
+      bodyParsedChannel.unsubscribe(blockAttacks)
+    })
+
+    /**
+     * @param {string} version
+     * @param {object} runtimeExports
+     */
+    function applyPagesApiRuntimeHook (version, runtimeExports) {
+      instrumentations.next.find(hook => hook.filePattern?.includes('pages-api[')).hook(runtimeExports, version)
+    }
+
+    const userlandShapes = {
+      'an own property': userland => class PagesAPIRouteModule {
+        userland = userland
+
+        /**
+         * @param {object} req
+         * @param {object} res
+         */
+        render (req, res) {
+          return this.userland.default(req, res)
+        }
+      },
+      'a prototype getter': userland => class PagesAPIRouteModule {
+        get userland () {
+          return userland
+        }
+
+        /**
+         * @param {object} req
+         * @param {object} res
+         */
+        render (req, res) {
+          return this.userland.default(req, res)
+        }
+      },
+    }
+
+    for (const [shape, createRouteModule] of Object.entries(userlandShapes)) {
+      it(`does not run the compiled runtime handler on a blocked body, with userland as ${shape}`, async () => {
+        const received = []
+        const userland = {
+          default: req => { received.push(req.body) },
+          config: { api: { bodyParser: true } },
+        }
+        const PagesAPIRouteModule = createRouteModule(userland)
+        applyPagesApiRuntimeHook('13.5.11', { PagesAPIRouteModule })
+        const routeModule = new PagesAPIRouteModule()
+        const res = {}
+
+        await routeModule.render({ body: { key: 'safe' } }, res)
+        await routeModule.render({ body: { key: 'blockattack' } }, res)
+        await routeModule.render({ body: { key: 'safe-again' } }, res)
+
+        assert.deepStrictEqual(received, [{ key: 'safe' }, { key: 'safe-again' }])
+        assert.deepStrictEqual(published.map(ctx => ctx.body), [
+          { key: 'safe' },
+          { key: 'blockattack' },
+          { key: 'safe-again' },
+        ])
+        assert.strictEqual(published[1].res, res)
+        assert.strictEqual(routeModule.userland.config, userland.config)
+      })
+    }
+
+    it('does not publish an empty body of the compiled runtime', async () => {
+      const received = []
+      const PagesAPIRouteModule = userlandShapes['an own property']({ default: req => { received.push(req.body) } })
+      applyPagesApiRuntimeHook('13.5.11', { PagesAPIRouteModule })
+      const routeModule = new PagesAPIRouteModule()
+
+      await routeModule.render({ body: '' }, {})
+      await routeModule.render({}, {})
+
+      assert.deepStrictEqual(received, ['', undefined])
+      assert.deepStrictEqual(published, [])
+    })
+
+    const apiModules = {
+      'an ES module': handler => ({ default: handler, config: { api: { bodyParser: true } } }),
+      'a CommonJS module': handler => Object.assign(handler, { config: { api: { bodyParser: true } } }),
+    }
+
+    for (const [moduleType, createApiModule] of Object.entries(apiModules)) {
+      it(`does not run the API resolver handler of ${moduleType} on a blocked body`, async () => {
+        const received = []
+        const configs = []
+        const apiModule = createApiModule(req => { received.push(req.body) })
+        const apiUtils = {
+          /**
+           * @param {object} req
+           * @param {object} res
+           * @param {object} query
+           * @param {{ default?: Function, config?: object } | Function} resolverModule
+           */
+          apiResolver (req, res, query, resolverModule) {
+            configs.push(resolverModule.config)
+            const resolver = /** @type {Function} */ (resolverModule.default || resolverModule)
+            return resolver(req, res)
+          },
+        }
+        instrumentations.next.find(hook => hook.file === 'dist/server/api-utils/node.js').hook(apiUtils)
+
+        await apiUtils.apiResolver({ body: { key: 'safe' } }, {}, {}, apiModule)
+        await apiUtils.apiResolver({ body: { key: 'blockattack' } }, {}, {}, apiModule)
+
+        assert.deepStrictEqual(received, [{ key: 'safe' }])
+        assert.deepStrictEqual(published.map(ctx => ctx.body), [{ key: 'safe' }, { key: 'blockattack' }])
+        assert.deepStrictEqual(configs, [apiModule.config, apiModule.config])
+      })
+    }
   })
 
   describe('with tracing enabled', () => {

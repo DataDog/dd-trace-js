@@ -43,6 +43,7 @@ const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
   normalizeProfilingHeapLimitExtensionSize: "number | 'auto'",
   normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
+  parseOtelExporterList: '"none" | "otlp"',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
   setGRPCRange: 'number[]',

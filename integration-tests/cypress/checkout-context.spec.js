@@ -30,6 +30,21 @@ describe('Cypress selected checkout context', () => {
     assert.strictEqual(plugin.testConfiguration.commitMessage, 'explicit commit message')
   })
 
+  for (const [sha, requestSha] of [['a'.repeat(40), 'a'.repeat(40)], ['invalid', undefined]]) {
+    it(`uses only a valid commit SHA in backend requests (${sha})`, () => {
+      const metadata = { 'git.checkout.root': process.cwd(), 'git.commit.sha': sha }
+      const plugin = proxyquire('../../packages/datadog-plugin-cypress/src/cypress-plugin', {
+        '../../dd-trace/src/plugins/util/test': {
+          getTestEnvironmentMetadata: () => metadata,
+          getCodeOwnersFileEntries: () => [],
+        },
+      })
+
+      assert.strictEqual(plugin.testConfiguration.sha, requestSha)
+      assert.strictEqual(plugin.testEnvironmentMetadata['git.commit.sha'], sha)
+    })
+  }
+
   for (const hasBaseSha of [false, true]) {
     it(`keeps modified-file Git reads in the selected root (hasBaseSha=${hasBaseSha})`, async () => {
       const root = path.join(process.cwd(), 'tools')
@@ -72,7 +87,7 @@ describe('Cypress selected checkout context', () => {
         'git.checkout.is_custom': custom ? 'true' : undefined,
         'ci.workspace_path': process.cwd(),
         'git.repository_url': 'https://example.com/tools.git',
-        'git.commit.sha': 'selected-sha',
+        'git.commit.sha': 'c'.repeat(40),
         'git.commit.message': 'selected message',
         'git.commit.head.sha': 'outer-pr-head',
         'git.commit.head.message': 'outer PR message',
@@ -90,7 +105,7 @@ describe('Cypress selected checkout context', () => {
       sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, root)
       assert.strictEqual(plugin.testConfiguration.gitRoot, root)
       assert.strictEqual(plugin.testConfiguration.repositoryUrl, metadata['git.repository_url'])
-      assert.strictEqual(plugin.testConfiguration.sha, 'selected-sha')
+      assert.strictEqual(plugin.testConfiguration.sha, metadata['git.commit.sha'])
       assert.strictEqual(plugin.testConfiguration.commitHeadSha, custom ? undefined : 'outer-pr-head')
       assert.strictEqual(plugin.testConfiguration.commitHeadMessage, custom ? undefined : 'outer PR message')
       assert.strictEqual(plugin.testEnvironmentMetadata['ci.workspace_path'], process.cwd())
