@@ -176,7 +176,9 @@ describe('test suite', () => {
 
         describe('with a blocking rule', () => {
           const appDirTest = appName === 'app-dir' ? it : it.skip
+          const pagesDirTest = appName === 'pages-dir' ? it : it.skip
           const appDirBodyBlockingTest = appName === 'app-dir' && satisfies(realVersion, '>=13.3') ? it : it.skip
+          const bodyBlockingTest = appName === 'pages-dir' || satisfies(realVersion, '>=13.3') ? it : it.skip
 
           async function assertBlocked (request) {
             const [response] = await Promise.all([
@@ -218,7 +220,7 @@ describe('test suite', () => {
             })
           }
 
-          appDirBodyBlockingTest('should block an attack in request body', () => {
+          bodyBlockingTest('should block an attack in request body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
                 key: 'blockattack',
@@ -226,13 +228,44 @@ describe('test suite', () => {
             )
           })
 
-          appDirBodyBlockingTest('should block an attack in form data body', () => {
+          bodyBlockingTest('should block an attack in form data body', () => {
             return assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-formdata`, new URLSearchParams({
                 key: 'blockattack',
               }), { validateStatus: false })
             )
           })
+
+          pagesDirTest('should block an attack in a plain text request body', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, 'key=blockattack', {
+                headers: { 'content-type': 'text/plain' },
+                validateStatus: false,
+              })
+            )
+          })
+
+          // Next.js 13.5 to 15 reject an API route that has no default export.
+          const commonJsHandlerTest = appName === 'pages-dir' && !satisfies(realVersion, '>=13.5 <16') ? it : it.skip
+          const handlerRoutes = [
+            ['an ES module', 'test-handler', pagesDirTest],
+            ['a CommonJS module', 'test-cjs-handler', commonJsHandlerTest],
+          ]
+
+          for (const [moduleType, route, handlerTest] of handlerRoutes) {
+            handlerTest(`should not run the API route handler of ${moduleType} on a blocked body`, async () => {
+              const url = `http://127.0.0.1:${serverData.port}/api/${route}`
+
+              const response = await httpRequest.post(url, { id: `${route}-safe` })
+              await assertBlocked(httpRequest.post(url, { id: `${route}-blocked`, key: 'blockattack' }, {
+                validateStatus: false,
+              }))
+
+              assert.strictEqual(response.status, 200)
+              assert.match(serverData.stderr, new RegExp(`pages api handler executed: ${route}-safe`))
+              assert.doesNotMatch(serverData.stderr, new RegExp(`pages api handler executed: ${route}-blocked`))
+            })
+          }
 
           appDirBodyBlockingTest('should block an attack in request body with .text() function', () => {
             return assertBlocked(
