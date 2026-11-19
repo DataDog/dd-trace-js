@@ -1350,9 +1350,9 @@ describe('Config', () => {
     it('defaults to no disabled integrations and reports default telemetry', () => {
       const config = getConfig()
 
-      assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, [])
+      assert.strictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, undefined)
       assertConfigUpdateContains(updateConfig.lastCall.args[0], [
-        { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value: '', origin: 'default' },
+        { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value: null, origin: 'default' },
       ])
     })
 

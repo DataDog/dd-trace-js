@@ -190,7 +190,7 @@
         "implementation": "A",
         "type": "array",
         "namespace": "aiguard",
-        "default": "",
+        "default": null,
         "description": "Comma-separated integration names for which AI Guard automatic evaluation is disabled."
       }
     ],

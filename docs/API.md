@@ -11,7 +11,7 @@ The module exported by this library is an instance of the [Tracer](./interfaces/
 Set `DD_AI_GUARD_DISABLED_INTEGRATIONS` before tracer initialization to disable AI Guard automatic evaluation for
 specific integrations. It accepts a comma-separated list of names: `anthropic`, `openai`, and `ai` (Vercel AI SDK).
 Names are case-sensitive; surrounding whitespace and empty entries are ignored. Unknown names have no effect.
-The default is an empty list, so all supported integrations are evaluated when AI Guard is enabled.
+When unset or empty, all supported integrations are evaluated when AI Guard is enabled.
 
 ```bash
 DD_AI_GUARD_ENABLED=true DD_AI_GUARD_DISABLED_INTEGRATIONS=anthropic,openai node app.js
