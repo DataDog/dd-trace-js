@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto')
 
 const { describe, it } = require('mocha')
 
-const { createClientServer } = require('../../src/aiguard/mcp')
+const { createClientServer, createServer } = require('../../src/aiguard/mcp')
 
 /** @typedef {import('../../src/aiguard/mcp').TransportInfo} TransportInfo */
 
@@ -172,16 +172,85 @@ describe('AI Guard MCP helpers', () => {
     ])) {
       it(`keeps ${JSON.stringify(expected)} of ${command} ${JSON.stringify(args)}`, () => {
         const server = createClientServer({ type: 'stdio', command, args })
+        const program = command.split(/[\\/]/).pop()?.toLowerCase().replace(/\.(exe|cmd)$/, '')
 
         assert.deepStrictEqual(server, {
-          id: serverId(['stdio', command, ...expected].join('|')),
+          id: serverId(['stdio', program, ...expected].join('|')),
           managed_by: 'client',
           transport: 'stdio',
-          command,
+          command: program,
           ...(expected.length > 0 ? { args: expected } : {}),
         })
       })
     }
+  })
+
+  describe('stdio command', () => {
+    for (const [command, program] of [
+      ['/Users/alice/.nvm/versions/node/v22.1.0/bin/npx', 'npx'],
+      ['C:\\Users\\alice\\AppData\\Roaming\\npm\\npx.cmd', 'npx'],
+      ['C:/Program Files/nodejs/NPX.CMD', 'npx'],
+      ['/usr/bin/Python3.12', 'python3.12'],
+      ['uvx.exe', 'uvx'],
+      ['node', 'node'],
+    ]) {
+      it(`reports and hashes the program name ${program} of ${command}`, () => {
+        const server = createClientServer({ type: 'stdio', command, args: [] })
+
+        assert.strictEqual(server?.command, program)
+        assert.strictEqual(server?.id, serverId(`stdio|${program}`))
+      })
+    }
+
+    it('matches the cross-tracer vector of a command given as a path', () => {
+      const command = '/Users/alice/.nvm/versions/node/v22.1.0/bin/npx'
+      const server = createClientServer({ type: 'stdio', command, args: ['-y', '@acme/docs'] })
+
+      assert.strictEqual(server?.id, 'mcp_ebcb9861e648b910')
+      assert.ok(!JSON.stringify(server).includes('alice'))
+    })
+
+    it('uses the next key for a command with no program name', () => {
+      assert.strictEqual(createClientServer({ type: 'stdio', command: '/usr/bin/', args: [] }), undefined)
+      const named = createClientServer({ type: 'stdio', command: '/usr/bin/' }, 'atlassian')
+      assert.strictEqual(named?.id, 'mcp_4b1df2a2d821278c')
+    })
+  })
+
+  describe('provider-managed server', () => {
+    it('matches the cross-tracer vector of a connector', () => {
+      const server = createServer('provider', 'unknown', { name: 'dropbox', connectorId: 'connector_dropbox' })
+
+      assert.deepStrictEqual(server, {
+        id: 'mcp_abe2e7cd19597a09',
+        managed_by: 'provider',
+        name: 'dropbox',
+        transport: 'unknown',
+      })
+    })
+
+    it('prefers the URL origin to the connector and the name', () => {
+      const server = createServer('provider', 'unknown', {
+        name: 'example',
+        url: 'https://user:secret@mcp.example.com/mcp?token=abc',
+        connectorId: 'connector_dropbox',
+      })
+
+      assert.deepStrictEqual(server, {
+        id: 'mcp_b77bc22583ac5006',
+        managed_by: 'provider',
+        name: 'example',
+        url: 'https://mcp.example.com',
+        transport: 'unknown',
+      })
+    })
+
+    it('gives the same ID to the same URL whichever side runs the client', () => {
+      const hosted = createServer('provider', 'unknown', { url: 'https://mcp.example.com/mcp' })
+      const local = createClientServer({ type: 'streamable_http', url: 'https://mcp.example.com/sse' })
+
+      assert.strictEqual(hosted?.id, local?.id)
+    })
   })
 
   describe('server entry', () => {
