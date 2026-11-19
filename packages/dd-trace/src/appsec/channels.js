@@ -37,6 +37,7 @@ module.exports = {
   mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
+  nextRequestStart: dc.channel('apm:next:request:start'),
   nextResponseBody: dc.channel('tracing:orchestrion:next:responseBody:start'),
   nextJsonResponse: dc.channel('apm:next:response:json'),
   nextAppRouteResponse: dc.channel('tracing:orchestrion:next:appRouteResponse:asyncEnd'),

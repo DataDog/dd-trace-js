@@ -14,7 +14,7 @@ const {
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
-const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -198,6 +198,7 @@ function normalizeClientConfig (config) {
 
   return {
     ...config,
+    queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
     validateStatus,
     filter,
     propagationFilter,
