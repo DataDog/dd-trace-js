@@ -55,8 +55,9 @@ describe('Bun Orchestrion CommonJS rewrites', function () {
    * @param {string} fixture - Fixture name in `bun/orchestrion-cjs/`
    * @param {string} spanName
    * @param {(span: { resource: string, error: number, meta: Record<string, string> }) => void} [assertSpan]
+   * @param {Record<string, string>} [env]
    */
-  async function assertSpan (fixture, spanName, assertSpan) {
+  async function assertSpan (fixture, spanName, assertSpan, env) {
     const messagePromise = agent.assertMessageReceived(({ payload }) => {
       const span = payload.flat().find(span => span.name === spanName)
 
@@ -65,7 +66,7 @@ describe('Bun Orchestrion CommonJS rewrites', function () {
     }, 20_000)
 
     const [{ code, stdout, stderr }] = await Promise.all([
-      runBun(`bun/orchestrion-cjs/${fixture}.js`, { DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}` }),
+      runBun(`bun/orchestrion-cjs/${fixture}.js`, { ...env, DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}` }),
       messagePromise,
     ])
 
@@ -97,4 +98,14 @@ describe('Bun Orchestrion CommonJS rewrites', function () {
       assert.strictEqual(span.error, 1)
     })
   })
+
+  for (const order of ['before', 'after']) {
+    for (const style of ['compile', 'prototype']) {
+      it(`should keep a ${style}-style .js hook registered ${order} dd-trace and still rewrite`, async () => {
+        await assertSpan('extension-hook', 'graphql.execute', (span) => {
+          assert.strictEqual(span.meta.component, 'graphql')
+        }, { HOOK_ORDER: order, HOOK_STYLE: style })
+      })
+    }
+  }
 })
