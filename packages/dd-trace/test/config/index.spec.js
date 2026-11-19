@@ -7104,6 +7104,37 @@ rules:
         versionsStub.restore()
       })
 
+      if (runtime === 'Deno') {
+        for (const value of [undefined, 'true', 'false']) {
+          it(`should preserve metrics, heap and IAST configuration with enabled=${value}`, () => {
+            if (value !== undefined) {
+              process.env.DD_RUNTIME_METRICS_NATIVE = value
+              process.env.DD_PROFILING_HEAP_ENABLED = value
+              process.env.DD_IAST_ENABLED = value
+            }
+
+            const config = getConfig()
+            const origin = value === undefined ? 'default' : 'env_var'
+
+            for (const [name, configPath] of [
+              ['DD_RUNTIME_METRICS_NATIVE', 'runtimeMetrics.native'],
+              ['DD_PROFILING_HEAP_ENABLED', 'DD_PROFILING_HEAP_ENABLED'],
+              ['DD_IAST_ENABLED', 'iast.DD_IAST_ENABLED'],
+            ]) {
+              assert.strictEqual(config.getOrigin(configPath), origin)
+              assertObjectContains(getLatestConfigUpdate(name), {
+                value: value === undefined ? defaults[configPath] ?? null : value === 'true',
+                origin,
+              })
+            }
+            assert.strictEqual(config.runtimeMetrics.native, value === undefined || value === 'true')
+            assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, value === undefined ? undefined : value === 'true')
+            assert.strictEqual(config.iast.DD_IAST_ENABLED, value === 'true')
+            sinon.assert.notCalled(logWriter.warn)
+          })
+        }
+      }
+
       it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
         process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
@@ -7252,6 +7283,7 @@ rules:
       { DD_PROFILING_PROFILERS: 'space,wall' },
       { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'wall' },
       { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'false', DD_PROFILING_PROFILERS: 'space,wall' },
     ]) {
       it(`should report heap profiling disabled with ${JSON.stringify(heapEnv)}`, () => {
         Object.assign(process.env, heapEnv)
@@ -7269,6 +7301,23 @@ rules:
         }
       })
     }
+
+    it('should retain the default heap origin when no space profiler is selected', () => {
+      process.env.DD_PROFILING_PROFILERS = 'wall'
+      const config = getConfig()
+
+      for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remoteConfig)
+
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, undefined)
+        assert.strictEqual(config.getOrigin('DD_PROFILING_HEAP_ENABLED'), 'default')
+        assertObjectContains(getLatestConfigUpdate('DD_PROFILING_HEAP_ENABLED'), {
+          value: null,
+          origin: 'default',
+        })
+      }
+      sinon.assert.notCalled(logWriter.warn)
+    })
 
     it('should retain the effective metrics and heap configuration across updates and explain only once', () => {
       process.env.DD_RUNTIME_METRICS_NATIVE = 'true'

@@ -85,6 +85,7 @@ describe('Bun runtime safety', function () {
     {},
     { DD_PROFILING_HEAP_ENABLED: 'true' },
     { DD_PROFILING_PROFILERS: 'space,wall' },
+    { DD_PROFILING_PROFILERS: 'wall' },
     { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' },
   ]) {
     it(`should upload wall and timeline profiles without heap profiling with ${JSON.stringify(env)}`, async () => {
