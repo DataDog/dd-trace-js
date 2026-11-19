@@ -36,8 +36,10 @@ once their services and Bun results have been reviewed; they are not yet in this
 
 `known-failures.json` is keyed by repository-relative spec file and **full Mocha
 test title**, including dependency version and import variant. Every listed test
-still executes. A failure in its test body is reported as pending with
-`known Bun failure` and its reason. An unexpected pass fails the run and instructs
+still executes. Entries record the error name, code and full message, with ANSI colors
+removed and repository-root paths normalized. Only a matching test-body failure is
+reported as pending with `known Bun failure` and its reason. A different error remains
+a failure. An unexpected pass fails the run and instructs
 the developer to remove the entry. Unlisted failures and setup/teardown failures
 remain failures. Explicit skips remain skips, not proof that a known failure is fixed.
 

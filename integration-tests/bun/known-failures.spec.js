@@ -15,7 +15,14 @@ describe('Bun known failures', () => {
     test.file = join(process.cwd(), 'case.spec.js')
     collectFailure(failures, test, new assert.AssertionError({ message: 'original' }))
     collectFailure(failures, test, new Error('done() called multiple times'))
-    assert.deepStrictEqual(failures, { 'case.spec.js': { case: 'test assertion failed under Bun' } })
+    assert.deepStrictEqual(failures, {
+      'case.spec.js': {
+        case: {
+          reason: 'test assertion failed under Bun',
+          signature: { name: 'AssertionError', code: 'ERR_ASSERTION', message: 'original' },
+        },
+      },
+    })
   })
 
   it('records stable timeout reasons without machine-specific paths', () => {
@@ -26,7 +33,14 @@ describe('Bun known failures', () => {
     const error = new Error(`Timed out at ${test.file}`)
     error.code = 'ERR_MOCHA_TIMEOUT'
     collectFailure(failures, test, error)
-    assert.deepStrictEqual(failures, { 'case.spec.js': { case: 'test timed out under Bun' } })
+    assert.deepStrictEqual(failures, {
+      'case.spec.js': {
+        case: {
+          reason: 'test timed out under Bun',
+          signature: { name: 'Error', code: 'ERR_MOCHA_TIMEOUT', message: 'Timed out at <root>/case.spec.js' },
+        },
+      },
+    })
   })
 
   for (const [name, body] of [
@@ -41,6 +55,43 @@ describe('Bun known failures', () => {
       assert.match(result.test.title, /known Bun failure: missing hook/)
     })
   }
+
+  for (const error of [
+    new Error('different failure'),
+    Object.assign(new Error('not instrumented'), { code: 'ERR_REGRESSION' }),
+    new TypeError('not instrumented'),
+  ]) {
+    it(`preserves a different signature: ${error.name} ${error.code ?? error.message}`, async () => {
+      const result = await runCase(() => { throw error }, true)
+      assert.strictEqual(result.failures, 1)
+      assert.strictEqual(result.stats.pending, 0)
+      assert.strictEqual(result.error, error)
+    })
+  }
+
+  it('matches signatures after JSON round trips and normalizes only root paths and ANSI colors', async () => {
+    const failures = {}
+    const test = new Mocha.Test('case', () => {})
+    new Mocha().suite.addTest(test)
+    test.file = join(process.cwd(), 'integration-tests/bun/case.spec.js')
+    collectFailure(failures, test, new Error(`\u001b[31m${process.cwd()}/missing.js\u001b[39m`))
+    const result = await runCase(() => { throw new Error(`${process.cwd()}/missing.js`) }, false,
+      undefined, undefined, JSON.parse(JSON.stringify(failures)))
+    assert.strictEqual(result.failures, 0)
+    assert.strictEqual(result.stats.pending, 1)
+  })
+
+  it('preserves differing assertion messages even with the same assertion code', async () => {
+    const failures = {}
+    const test = new Mocha.Test('case', () => {})
+    new Mocha().suite.addTest(test)
+    test.file = join(process.cwd(), 'integration-tests/bun/case.spec.js')
+    collectFailure(failures, test, new assert.AssertionError({ message: 'original' }))
+    const error = new assert.AssertionError({ message: 'regression' })
+    const result = await runCase(() => { throw error }, false, undefined, undefined, failures)
+    assert.strictEqual(result.failures, 1)
+    assert.strictEqual(result.error, error)
+  })
 
   it('fails when a listed test unexpectedly passes', async () => {
     const result = await runCase(() => {}, true)
@@ -74,16 +125,20 @@ describe('Bun known failures', () => {
   })
 
   it('does not mask teardown failures after an expected failure', async () => {
-    const result = await runCase(() => { throw new Error('known') }, true, undefined,
+    const result = await runCase(() => { throw new Error('not instrumented') }, true, undefined,
       () => { throw new Error('cleanup broken') })
     assert.strictEqual(result.failures, 1)
     assert.strictEqual(result.stats.pending, 1)
   })
 
   it('matches both the spec file and full title', async () => {
+    const failure = {
+      reason: 'missing hook',
+      signature: { name: 'Error', code: '', message: 'regression' },
+    }
     const result = await runCase(() => { throw new Error('regression') }, false, undefined, undefined, {
-      'other.spec.js': { case: 'missing hook' },
-      'integration-tests/bun/case.spec.js': { other: 'missing hook' },
+      'other.spec.js': { case: failure },
+      'integration-tests/bun/case.spec.js': { other: failure },
     })
     assert.strictEqual(result.failures, 1)
   })
@@ -94,11 +149,18 @@ describe('Bun known failures', () => {
  * @param {boolean} [listed]
  * @param {import('mocha').Func} [before]
  * @param {import('mocha').Func} [after]
- * @param {Record<string, Record<string, string>>} [failures]
+ * @param {Record<string, Record<string, import('./known-failures').KnownFailure>>} [failures]
  */
 async function runCase (body, listed = false, before, after, failures = {}) {
   const file = 'integration-tests/bun/case.spec.js'
-  if (listed) failures[file] = { case: 'missing hook' }
+  if (listed) {
+    failures[file] = {
+      case: {
+        reason: 'missing hook',
+        signature: { name: 'Error', code: '', message: 'not instrumented' },
+      },
+    }
+  }
   const mocha = new Mocha({ reporter: function () {}, timeout: 0 })
   mocha.rootHooks(knownFailureHooks(failures))
   const test = new Mocha.Test('case', body)

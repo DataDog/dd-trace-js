@@ -81,11 +81,11 @@ bun --preload dd-trace/init app.js
 
 Alternatively, call `require('dd-trace').init()` before loading instrumented modules.
 
-- Supported paths include compatible CommonJS-loaded instrumentations, `node:http`/`fetch`, log injection for supported
-  CommonJS loggers, and wall/timeline profiling uploads. Versions with the corresponding Bun-specific instrumentation
-  also support `Bun.serve` server spans and Orchestrion-based CommonJS integrations.
-- Automatic instrumentation of native ES modules loaded with `import` is not supported. CommonJS packages imported from
-  ESM are not reliably instrumented either.
+- Verified working: `Bun.serve` server spans, Express, fetch clients, `pg`, winston,
+  CommonJS-loaded pino/OpenAI/ai/LangChain/graphql, and manual LLMObs.
+  Wall/timeline profiling uploads work, but without JavaScript stack samples.
+- ESM-imported packages are generally not instrumented, including CommonJS packages loaded via `import`. Not supported:
+  `node:http` clients from ESM, pino/OpenAI/ai/postgres via `import`, Hono route names via ESM, and Elysia.
 - `Bun.SQL`, `bun:sqlite`, IAST, heap profiling, and JavaScript stack samples in wall profiles are not supported.
   With Bun runtime safety support, IAST and heap profiling are disabled automatically, and runtime metrics use the
   JavaScript collector instead of the unsupported native collector.
