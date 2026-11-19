@@ -665,7 +665,10 @@ function removeInvalidMetadata (metadata) {
     }
     if ((tag === GIT_COMMIT_SHA || tag === CI_GIT_MERGE_COMMIT_SHA) && !validateGitCommitSha(metadata[tag])) {
       log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[tag])
-      return filteredTags
+      // A malformed commit SHA is reported as provided; consumers validate it before using it for Git or requests.
+      if (tag === CI_GIT_MERGE_COMMIT_SHA || !metadata[tag]) {
+        return filteredTags
+      }
     }
     if (tag === CI_PIPELINE_URL && !validateUrl(metadata[CI_PIPELINE_URL])) {
       return filteredTags
