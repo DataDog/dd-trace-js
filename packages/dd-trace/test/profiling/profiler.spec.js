@@ -456,6 +456,53 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
+    it('staggers encoder starts without waiting for the previous encoding to finish', async () => {
+      let resumeNext
+      let resolveWall
+      yieldToEventLoop.onSecondCall().callsFake(() => new Promise(resolve => { resumeNext = resolve }))
+      wallProfiler.encode.returns(new Promise(resolve => { resolveWall = resolve }))
+      await profiler.start(makeStartOptions())
+
+      const collection = profiler._collect('periodic')
+      await Promise.resolve()
+      sinon.assert.calledOnce(wallProfiler.encode)
+      sinon.assert.notCalled(spaceProfiler.encode)
+
+      resumeNext()
+      await Promise.resolve()
+      sinon.assert.calledOnce(spaceProfiler.encode)
+      sinon.assert.notCalled(exporter.export)
+      resolveWall(wallProfile)
+      await collection
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('keeps compression concurrent while staggering encoder starts', async () => {
+      const callbacks = []
+      const gzip = sinon.stub().callsFake((data, options, callback) => { callbacks.push(callback) })
+      initProfiler({ zlib: { gzip } })
+      wallProfiler.encode.resolves(Buffer.from('wall'))
+      spaceProfiler.encode.resolves(Buffer.from('space'))
+      const env = process.env
+      process.env = { ...env, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+      try {
+        await profiler.start(makeStartOptions())
+      } finally {
+        process.env = env
+      }
+
+      const collection = profiler._collect('periodic')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(wallProfiler.encode)
+      sinon.assert.calledOnce(spaceProfiler.encode)
+      sinon.assert.calledTwice(gzip)
+      sinon.assert.notCalled(exporter.export)
+      for (const callback of callbacks) callback(null, Buffer.from('compressed'))
+      await collection
+      sinon.assert.calledOnce(exporter.export)
+    })
+
     for (const failure of ['throws', 'rejects']) {
       it(`continues encoding later profiles when an earlier encoder ${failure}`, async () => {
         const error = new Error('wall encoding failed')
