@@ -1,5 +1,8 @@
 'use strict'
 
+// Install before loading modules that subscribe to diagnostics channels.
+require('./bun/diagnostics-channel')
+
 const { channel } = require('dc-polyfill')
 const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')

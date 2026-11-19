@@ -13,6 +13,7 @@
 
 # Shared tracer infrastructure; product-specific rules below take precedence.
 /packages/dd-trace/src/agent/ @DataDog/lang-platform-js
+/packages/dd-trace/src/bun/ @DataDog/lang-platform-js
 /packages/dd-trace/src/encode/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/log/ @DataDog/lang-platform-js
@@ -22,6 +23,7 @@
 /packages/dd-trace/src/guardrails/ @DataDog/lang-platform-js
 /packages/dd-trace/src/msgpack/ @DataDog/lang-platform-js
 /packages/dd-trace/src/noop/ @DataDog/lang-platform-js
+/packages/dd-trace/test/bun/ @DataDog/lang-platform-js
 /packages/dd-trace/test/encode/ @DataDog/lang-platform-js
 /packages/dd-trace/test/fixtures/esm/ @DataDog/lang-platform-js
 
