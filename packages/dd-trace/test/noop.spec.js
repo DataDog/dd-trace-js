@@ -16,6 +16,7 @@ describe('NoopTracer', () => {
     ['a Jest worker', 'globalThis.jest = {}'],
     ['DD_TRACE_ENABLED=false', "process.env.DD_TRACE_ENABLED = 'false'"],
     ['OTEL_TRACES_EXPORTER=none', "process.env.OTEL_TRACES_EXPORTER = 'none'"],
+    ['OTEL_SDK_DISABLED=true', "process.env.OTEL_SDK_DISABLED = 'true'"],
   ]) {
     it(`should not subscribe to identity updates with ${name}`, () => {
       const script = `
@@ -25,6 +26,7 @@ describe('NoopTracer', () => {
         delete process.env.DD_AGENTLESS_ENABLED
         delete process.env._DD_APM_TRACING_AGENTLESS_ENABLED
         delete process.env.OTEL_TRACES_EXPORTER
+        delete process.env.OTEL_SDK_DISABLED
         ${setup}
         const identity = channel('datadog:identity:update')
         assert.strictEqual(identity.hasSubscribers, false)

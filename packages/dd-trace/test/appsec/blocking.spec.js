@@ -84,6 +84,36 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
 
+    it('should log warn and not send blocking response when the response has been destroyed', () => {
+      res.destroyed = true
+      const blocked = block(req, res, rootSpan)
+
+      assert.strictEqual(blocked, false)
+      sinon.assert.calledOnceWithExactly(
+        log.warn,
+        '[ASM] Cannot send blocking response when the response has been destroyed'
+      )
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+      sinon.assert.notCalled(res.writeHead)
+      sinon.assert.notCalled(res.constructor.prototype.end)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
+    })
+
+    it('should still abort the blocked operation when the response has been destroyed', () => {
+      res.destroyed = true
+      const abortController = new AbortController()
+
+      const blocked = block(req, res, rootSpan, abortController)
+
+      assert.strictEqual(blocked, false)
+      assert.strictEqual(abortController.signal.aborted, true)
+      assert.strictEqual(abortController.signal.reason.name, 'BlockedRequestError')
+      sinon.assert.notCalled(res.writeHead)
+      sinon.assert.notCalled(res.constructor.prototype.end)
+      sinon.assert.neverCalledWith(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+    })
+
     it('should send blocking response with html type if present in the headers', () => {
       req.headers.accept = 'text/html'
       const blocked = block(req, res, rootSpan)
@@ -224,6 +254,16 @@ describe('blocking', () => {
           done()
         }, 100)
       })
+    })
+
+    it('should resolve a delegation as not blocked when the response was destroyed before it ran', async () => {
+      const promise = registerBlockDelegation(req, res, rootSpan)
+      res.destroyed = true
+
+      assert.strictEqual(callBlockDelegation(res), false)
+      assert.strictEqual(await promise, false)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+      sinon.assert.notCalled(res.writeHead)
     })
 
     it('should do nothing if no blocking delegation exists', () => {

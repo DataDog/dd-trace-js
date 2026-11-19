@@ -359,6 +359,7 @@
       "APPVEYOR_REPO_PROVIDER": "github"
     },
     {
+      "ci.git.merge_commit_sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "ci.job.url": "https://ci.appveyor.com/project/appveyor-repo-name/builds/appveyor-build-id",
       "ci.pipeline.id": "appveyor-build-id",
       "ci.pipeline.name": "appveyor-repo-name",

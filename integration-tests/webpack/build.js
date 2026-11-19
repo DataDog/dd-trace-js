@@ -28,6 +28,7 @@ const compiler = webpack({
     'better-sqlite3',
     'sqlite3',
     'mysql',
+    'mariadb/callback',
     'oracledb',
     'pg-query-stream',
     'tedious',

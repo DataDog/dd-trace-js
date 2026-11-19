@@ -24,7 +24,7 @@ if (workerData.probeCountBuffer !== undefined) {
   probeCounts = new Int32Array(workerData.probeCountBuffer)
   const sendPath = require.resolve('../../../packages/dd-trace/src/debugger/devtools_client/send')
   send = require(sendPath)
-  require.cache[sendPath] = { exports: sendAndCount }
+  require.cache[sendPath] = /** @type {import('node:module').Module} */ ({ exports: sendAndCount })
 }
 
 loadDevtoolsClient()
@@ -51,7 +51,7 @@ function loadDevtoolsClient () {
   /**
    * @param {string | symbol} eventName
    * @param {(...args: unknown[]) => void} listener
-   * @returns {import('node:events').EventEmitter}
+   * @returns {typeof session}
    */
   session.on = function benchmarkOn (eventName, listener) {
     if (eventName !== 'Debugger.paused' || probeCounts === undefined) {
@@ -77,8 +77,10 @@ function loadDevtoolsClient () {
 }
 
 function markProbeHandled () {
-  Atomics.add(probeCounts, HANDLED_PROBE_INDEX, 1)
-  Atomics.notify(probeCounts, HANDLED_PROBE_INDEX)
+  // The pause handler is only wrapped when the parent shares a probe count buffer.
+  const counts = /** @type {Int32Array} */ (probeCounts)
+  Atomics.add(counts, HANDLED_PROBE_INDEX, 1)
+  Atomics.notify(counts, HANDLED_PROBE_INDEX)
 }
 
 /**
@@ -94,17 +96,20 @@ function markProbeHandled () {
  * @param {number} incompleteReasons
  */
 function sendAndCount (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
+  // This replaces `send` only when the parent shares a probe count buffer, after both are set.
+  const counts = /** @type {Int32Array} */ (probeCounts)
   const captureKind = getCaptureKind(snapshot)
   if (preflightPending) {
     preflightPending = false
-    Atomics.store(probeCounts, CAPTURE_KIND_INDEX, captureKind)
+    Atomics.store(counts, CAPTURE_KIND_INDEX, captureKind)
   } else {
-    send(message, logger, dd, snapshot, processTags, eventType, incompleteReasons)
-    if (captureKind === EXPECTED_CAPTURE_KIND) Atomics.add(probeCounts, MATCHED_CAPTURE_KIND_INDEX, 1)
+    const sendPayload = /** @type {NonNullable<typeof send>} */ (send)
+    sendPayload(message, logger, dd, snapshot, processTags, eventType, incompleteReasons)
+    if (captureKind === EXPECTED_CAPTURE_KIND) Atomics.add(counts, MATCHED_CAPTURE_KIND_INDEX, 1)
   }
 
-  Atomics.add(probeCounts, COMPLETED_PROBE_INDEX, 1)
-  Atomics.notify(probeCounts, COMPLETED_PROBE_INDEX)
+  Atomics.add(counts, COMPLETED_PROBE_INDEX, 1)
+  Atomics.notify(counts, COMPLETED_PROBE_INDEX)
 }
 
 /**

@@ -131,9 +131,49 @@ describe('provider PR merge identity', () => {
       TRAVIS_EVENT_TYPE: 'api',
       TRAVIS_PULL_REQUEST: '123',
     }, false],
-    ['AppVeyor PR without merge evidence', {
+    ['AppVeyor PR merge', {
       APPVEYOR: 'true',
       APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_HEAD_COMMIT: sourceSha,
+      APPVEYOR_PULL_REQUEST_NUMBER: '123',
+    }, true],
+    ['AppVeyor branch build', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_HEAD_COMMIT: sourceSha,
+    }, false],
+    ['AppVeyor PR head checkout', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_HEAD_COMMIT: providerSha.toUpperCase(),
+      APPVEYOR_PULL_REQUEST_NUMBER: '123',
+    }, false],
+    ['AppVeyor PR without head commit', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_NUMBER: '123',
+    }, false],
+    ['AppVeyor PR with malformed head commit', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_HEAD_COMMIT: 'invalid',
+      APPVEYOR_PULL_REQUEST_NUMBER: '123',
+    }, false],
+    ['AppVeyor PR with malformed number', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'github',
+      APPVEYOR_REPO_COMMIT: providerSha,
+      APPVEYOR_PULL_REQUEST_HEAD_COMMIT: sourceSha,
+      APPVEYOR_PULL_REQUEST_NUMBER: 'invalid',
+    }, false],
+    ['AppVeyor non-GitHub PR', {
+      APPVEYOR: 'true',
+      APPVEYOR_REPO_PROVIDER: 'gitlab',
       APPVEYOR_REPO_COMMIT: providerSha,
       APPVEYOR_PULL_REQUEST_HEAD_COMMIT: sourceSha,
       APPVEYOR_PULL_REQUEST_NUMBER: '123',
@@ -149,7 +189,10 @@ describe('provider PR merge identity', () => {
     it(`reports a separate provider merge SHA only with positive evidence: ${name}`, () => {
       const metadata = removeInvalidMetadata(ciFor(env).getCIMetadata())
       assert.strictEqual(metadata['ci.git.merge_commit_sha'], isMerge ? providerSha : undefined)
-      if (name === 'Azure PR merge') assert.strictEqual(metadata['git.commit.sha'], sourceSha)
+      if (name === 'Azure PR merge') {
+        assert.strictEqual(metadata['git.commit.sha'], sourceSha)
+        assert.strictEqual(metadata['git.commit.head.sha'], sourceSha)
+      }
     })
   }
 })
@@ -681,6 +724,12 @@ describe('selected checkout context', () => {
         custom: true,
         overrides: { 'git.commit.sha': 'explicit' },
         files: ['explicit-test.js'],
+      },
+      {
+        name: 'malformed checkout SHA',
+        custom: true,
+        overrides: { 'git.commit.sha': 'invalid' },
+        files: ['checkout-test.js'],
       },
     ]) {
       it(`selects impacted-test diff revisions for ${scenario.name} (${consumer})`, async () => {

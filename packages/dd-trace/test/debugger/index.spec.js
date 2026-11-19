@@ -17,7 +17,8 @@ const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/gu
 const { PauseDurationHistogram } = require('../../src/debugger/pause-duration-histogram')
 const telemetryLogs = require('../../src/telemetry/logs')
 const logCollector = require('../../src/telemetry/logs/log-collector')
-const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+/** @typedef {typeof import('../../../../vendor/node_modules/@datadog/sketches-js')} Sketches */
+const { DDSketch } = /** @type {Sketches} */ (require('../../../../vendor/dist/@datadog/sketches-js'))
 
 describe('debugger/index', () => {
   let DynamicInstrumentation
@@ -118,7 +119,9 @@ describe('debugger/index', () => {
 
     beforeEach(() => {
       logCollector.reset(10_000)
-      telemetryLogs.start({ telemetry: { DD_TELEMETRY_LOG_COLLECTION_ENABLED: true } })
+      telemetryLogs.start(/** @type {import('../../src/config/config-base')} */ ({
+        telemetry: { DD_TELEMETRY_LOG_COLLECTION_ENABLED: true },
+      }))
       DynamicInstrumentation.start(config, rc)
       worker = Worker.lastCall.returnValue
     })
