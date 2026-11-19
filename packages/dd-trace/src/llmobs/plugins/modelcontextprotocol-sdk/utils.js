@@ -219,16 +219,13 @@ function injectTelemetrySchema (result, options) {
  *
  * @param {unknown} telemetry
  * @param {TelemetryOptions} options
- * @returns {telemetry is { intent?: string, conversation_id?: string }}
+ * @returns {telemetry is { intent?: unknown, conversation_id?: unknown }}
  */
 function isInjectedTelemetry (telemetry, { intent, session }) {
   if (!isObject(telemetry)) return false
-  const keys = Object.keys(telemetry)
-  // Without intent capture, the schema has no required keys, so an agent can send an empty object.
-  if (keys.length === 0) return Boolean(session)
-  for (const key of keys) {
+  for (const key of Object.keys(telemetry)) {
     const enabled = key === INTENT_KEY ? intent : key === CONVERSATION_ID_KEY && session
-    if (!enabled || typeof telemetry[key] !== 'string') return false
+    if (!enabled) return false
   }
   return true
 }
@@ -248,9 +245,17 @@ function stripTelemetry (request, options) {
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
   return {
     request: { ...request, params: { ...request.params, arguments: rest } },
-    intent: telemetry.intent?.slice(0, MAX_INTENT_LENGTH) || undefined,
-    conversationId: telemetry.conversation_id?.slice(0, MAX_CONVERSATION_ID_LENGTH) || undefined,
+    intent: capString(telemetry.intent, MAX_INTENT_LENGTH),
+    conversationId: capString(telemetry.conversation_id, MAX_CONVERSATION_ID_LENGTH),
   }
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} maxLength
+ */
+function capString (value, maxLength) {
+  return typeof value === 'string' ? value.slice(0, maxLength) || undefined : undefined
 }
 
 /**
