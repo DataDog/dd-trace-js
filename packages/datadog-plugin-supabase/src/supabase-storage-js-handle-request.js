@@ -8,6 +8,7 @@ const {
 const {
   buildClientHttpUrl,
   extractPathFromUrl,
+  getQsObfuscator,
 } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const getHostname = require('./url')
@@ -56,6 +57,14 @@ function getStorageRoute (url) {
 class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/storage-js:handleRequest'
+
+  configure (config) {
+    if (typeof config === 'boolean') return super.configure(config)
+    return super.configure({
+      ...config,
+      queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
+    })
+  }
 
   /** @param {StorageContext} ctx */
   bindStart (ctx) {
