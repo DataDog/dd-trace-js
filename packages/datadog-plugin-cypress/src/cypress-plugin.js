@@ -100,7 +100,10 @@ const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
 const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
-const { getUserProviderGitMetadata } = require('../../dd-trace/src/plugins/util/user-provided-git')
+const {
+  getUserProviderGitMetadata,
+  validateGitCommitSha,
+} = require('../../dd-trace/src/plugins/util/user-provided-git')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
@@ -372,7 +375,8 @@ function getModifiedFiles (testEnvironmentMetadata, gitRoot) {
     [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
     [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
   } = diffMetadata
-  const targetCommit = commitHeadSha || (isCustomCheckout ? testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
+  const commitSha = testEnvironmentMetadata[GIT_COMMIT_SHA]
+  const targetCommit = commitHeadSha || (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
 
   const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch, gitRoot)
 
@@ -522,6 +526,12 @@ function reconcileNativeRetries (native, baseline, configured, actual) {
 
 class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
+  // Cypress 16.3.0+ runs every after:spec handler, including user handlers that forward to the
+  // legacy helper after the plugin's own handler, so each spec execution is finalized once.
+  #specFinalizations = new WeakMap()
+  // Cypress 16.3.0+ also runs user after:screenshot handlers after the plugin's, so a renamed screenshot
+  // reaches after:spec under a new path. Its capture time still identifies the uploaded screenshot.
+  #uploadedScreenshotCaptures = new Set()
 
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
@@ -600,7 +610,8 @@ class CypressPlugin {
 
     this.testConfiguration = {
       repositoryUrl,
-      sha,
+      // The `git.commit.sha` tag reports malformed values as provided, but they must not select backend data.
+      sha: validateGitCommitSha(sha) ? sha : undefined,
       gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,
@@ -670,6 +681,7 @@ class CypressPlugin {
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.#uploadedScreenshotCaptures = new Set()
     this.uploadedVideoPaths = new Set()
     this.pendingVideoUploads = []
     this.screenshotUploadPromisesByTraceId = new Map()
@@ -1719,6 +1731,17 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error, finishTime) {
+    // Cypress passes the same results object to every chained handler for one spec execution,
+    // while each execution, including an interactive rerun, receives a new one.
+    if (results && this.#specFinalizations.has(results)) {
+      return this.#specFinalizations.get(results)
+    }
+    const finalization = this.#afterSpec(spec, results, error, finishTime)
+    if (results) this.#specFinalizations.set(results, finalization)
+    return finalization
+  }
+
+  #afterSpec (spec, results, error, finishTime) {
     const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
     if (cypressTests.length > 0 || stats?.tests > 0) this.hasTestsReported = true
@@ -2113,10 +2136,13 @@ class CypressPlugin {
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
-      if (!filePath || this.uploadedScreenshotPaths.has(filePath)) {
+      const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
+      const captureKey = takenAt ? `${traceId}:${takenAt}` : undefined
+      if (!filePath || this.uploadedScreenshotPaths.has(filePath) || this.#uploadedScreenshotCaptures.has(captureKey)) {
         continue
       }
       this.uploadedScreenshotPaths.add(filePath)
+      if (captureKey) this.#uploadedScreenshotCaptures.add(captureKey)
       // Stable per-artifact key (trace + filename) so an upload retry overwrites the
       // same stored object instead of duplicating; the Cypress filename encodes the
       // test name and attempt, so it is unique within the trace.

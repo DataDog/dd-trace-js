@@ -1,7 +1,9 @@
 'use strict'
 
 const { join, dirname } = require('path')
-const { normalize } = require('../../../../../vendor/dist/source-map/lib/util')
+const { normalize } = /** @type {{ normalize: (path: string) => string }} */ (
+  require('../../../../../vendor/dist/source-map/lib/util')
+)
 const { loadSourceMapSync, getOriginalPosition } = require('./source-maps')
 const session = require('./session')
 const log = require('./log')

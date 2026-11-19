@@ -185,6 +185,15 @@
         ]
       }
     ],
+    "DD_AI_GUARD_DISABLED_INTEGRATIONS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "namespace": "aiguard",
+        "default": null,
+        "description": "Comma-separated integration names for which AI Guard automatic evaluation is disabled."
+      }
+    ],
     "DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED": [
       {
         "implementation": "A",
@@ -4767,18 +4776,17 @@
     ],
     "OTEL_SDK_DISABLED": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": null
       }
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "H",
-        "type": "string",
+        "implementation": "J",
+        "type": "array",
         "default": null,
-        "allowed": "none|otlp",
-        "transform": "toLowerCase"
+        "transform": "parseOtelExporterList"
       }
     ],
     "OTEL_TRACES_SAMPLER": [
