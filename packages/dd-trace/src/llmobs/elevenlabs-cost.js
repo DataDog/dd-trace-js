@@ -20,7 +20,7 @@ function delay (ms) {
 }
 
 /**
- * Use the application's client, but bound even a custom transport that ignores SDK timeouts.
+ * Request cancellation without releasing an underlying operation that is still pending.
  * @param {object} conversations
  * @param {string} id
  * @param {number} ms
@@ -29,25 +29,26 @@ async function request (conversations, id, ms) {
   const controller = new AbortController()
   let timer
   try {
-    return await Promise.race([
-      Promise.resolve().then(() => conversations.get(id, undefined, {
-        maxRetries: 0, timeoutInSeconds: ms / 1000, abortSignal: controller.signal,
-      })),
-      new Promise((resolve, reject) => {
-        timer = setTimeout(() => {
-          controller.abort()
-          reject(new Error('ElevenLabs billing timeout'))
-        }, ms)
-        timer.unref?.()
-      }),
-    ])
+    let timedOut = false
+    timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, ms)
+    timer.unref?.()
+    // Cancellation is cooperative. Retain admission capacity until even a custom
+    // fetcher that ignores abort has settled, rather than admitting more I/O.
+    const response = await conversations.get(id, undefined, {
+      maxRetries: 0, timeoutInSeconds: ms / 1000, abortSignal: controller.signal,
+    })
+    if (timedOut) throw new Error('ElevenLabs billing timeout')
+    return response
   } finally {
     clearTimeout(timer)
   }
 }
 
 /**
- * Start best-effort collection once per active client/conversation, without extending process lifetime.
+ * Start best-effort collection once per active client/conversation, using unreferenced retry waits.
  * Retain only the existing client and billing attribution, never a voice session or its audio.
  * @param {object} client
  * @param {string} id
@@ -83,7 +84,7 @@ function collectConversationCost (client, id, config, routing, enabled) {
         try {
           // eslint-disable-next-line no-await-in-loop
           const response = await request(conversations, id, Math.min(3000, deadline - performance.now()))
-          if (!enabled()) return
+          if (!enabled() || performance.now() >= deadline) return
           const event = buildConversationCostEvent(response, options)
           if (!event) continue
           if (event.session_id !== id) return

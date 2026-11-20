@@ -3,7 +3,8 @@
 const { pcm16ToWav } = require('../audio-codec')
 const { fitsInlineAudioBudget, formatAudioPartWithGuard } = require('../audio-utils')
 const { AUDIO_FALLBACK, LLMOBS_AUDIO_INLINE_MAX_BYTES } = require('../constants/audio')
-const { SESSION_ID } = require('../constants/tags')
+const { SESSION_ID, ML_APP, PROPAGATED_ML_APP_KEY } = require('../constants/tags')
+const LLMObsTagger = require('../tagger')
 const { storage } = require('../storage')
 const { collectConversationCost } = require('../elevenlabs-cost')
 const LLMObsPlugin = require('./base')
@@ -33,10 +34,14 @@ class ElevenLabsLLMObsPlugin extends LLMObsPlugin {
       if (scope.conversation && this._llmobsEnabled && this.config.conversationCostEnabled !== false &&
           this._tracerConfig.llmobs.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED) {
         // Copy only attribution. Billing must not retain the voice context or its spans.
+        const parent = store?.span || this.tracer.scope().active()
+        const mlApp = LLMObsTagger.tagMap.get(store?.span)?.[ML_APP] ||
+          parent?.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+          this._tracerConfig.llmobs.DD_LLMOBS_ML_APP || this._tracerConfig.service
         scope.billing = {
           routing: store?.routingContext,
           config: {
-            llmobs: { DD_LLMOBS_ML_APP: this._tracerConfig.llmobs.DD_LLMOBS_ML_APP },
+            llmobs: { DD_LLMOBS_ML_APP: mlApp },
             service: this._tracerConfig.service,
             env: this._tracerConfig.env,
             version: this._tracerConfig.version,

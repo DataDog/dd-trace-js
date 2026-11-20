@@ -151,6 +151,47 @@ describe('integrations', () => {
         }
       })
 
+      for (const inherited of ['local', 'distributed']) {
+        it(`attributes automatic billing to the ${inherited} voice application`, async () => {
+          const tracer = require('../../../..')
+          const SpanWriter = require('../../../../src/llmobs/writers/spans')
+          const append = sinon.stub(SpanWriter.prototype, 'append').returns(true)
+          const get = sinon.stub(conversation.client.conversationalAi.conversations, 'get').resolves({
+            conversationId: 'conv-test',
+            status: 'done',
+            metadata: {
+              startTimeUnixSecs: 1000,
+              callDurationSecs: 10,
+              costFiat: 0.12,
+              charging: { llmPrice: 0.02, platformPrice: 0.1 },
+            },
+          })
+          clock.restore()
+          clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+          tracer.use('elevenlabs', {})
+          try {
+            if (inherited === 'local') {
+              await tracer.llmobs.trace({ kind: 'workflow', name: 'caller', mlApp: 'voice-app' }, start)
+            } else {
+              const parent = tracer.startSpan('distributed-parent')
+              parent.context()._trace.tags['_dd.p.llmobs_ml_app'] = 'voice-app'
+              await tracer.scope().activate(parent, start)
+              parent.finish()
+            }
+            conversation.endSession()
+            await clock.tickAsync(1000)
+            const billing = append.getCalls().map(call => call.args[0])
+              .find(event => event.name === 'elevenlabs conversation billing')
+            assert.ok(billing)
+            assert.ok(billing.tags.includes('ml_app:voice-app'))
+          } finally {
+            tracer.use('elevenlabs', { conversationCostEnabled: false })
+            append.restore()
+            get.restore()
+          }
+        })
+      }
+
       it('retains session-start tenant routing after its context exits', async () => {
         const tracer = require('../../../..')
         const { storage } = require('../../../../src/llmobs/storage')

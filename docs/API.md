@@ -541,8 +541,9 @@ With LLM Observability enabled, conversation billing is collected automatically 
 The tracer uses the conversation's existing SDK client and credentials to request conversation details: up to five
 requests within a 30-second retry window, with SDK retries disabled and a three-second request timeout. Up to eight
 collections may run concurrently; additional conversations are skipped. Credentials must permit reading conversation
-details. Requests and retries run in the background and do not keep the process alive. Authentication failures stop
-collection, and collection errors do not affect the conversation. Missing or late billing, a closed client, process
+details. Retry timers do not keep the process alive, but in-flight HTTP can delay exit until completion or timeout.
+A custom fetcher that ignores cancellation continues to occupy collection capacity until it settles. Authentication
+failures stop collection, and collection errors do not affect the conversation. Missing or late billing, a closed client, process
 exit, or capacity limits can leave costs unavailable. Use a verified post-call webhook and
 [`submitConversationCost`](#llmobs-submit-conversation-cost) when delivery must survive process exit.
 
@@ -1161,10 +1162,13 @@ tracer.llmobs.submitConversationCost(details)
 
 // In an application-verified post-call transcription webhook handler:
 tracer.llmobs.submitConversationCost(verifiedEvent.data, {
-  source: 'post_call_transcription'
+  source: 'post_call_transcription',
+  mlApp: 'voice-app'
 })
 ```
 
+For webhook submissions, replace `voice-app` with the originating voice application. First acceptance fixes the billing application, so a webhook service must pass it explicitly when its configured application differs. Verify the webhook before submission.
+
 Options are `provider` (`'elevenlabs'`), `source` (`'conversation_details'` or `'post_call_transcription'`), `mlApp`, and `totalCost` (a finite, nonnegative USD override, including zero). The application name defaults to the configured LLMObs application, then the service name. Supply an override on the first submission. The boolean result reports whether the observation was queued locally; backend acceptance, conflict rejection, and delivery are asynchronous.
 
-The provider's conversation total includes its reported LLM and platform prices. Datadog records it once on a dedicated workflow, preserves unknown values and per-amount provenance, and rejects changes to accepted amounts. Repeated and late observations use stable IDs. Delivery and component enrichment are supported for 24 hours after Datadog first accepts a known total; retries do not reset that window. An initial report may describe an older conversation. Expired enrichment is rejected without changing the accepted charge. This API does not allocate the total to turns or backfill per-turn token usage. Backend availability and released tracer versions are required before enabling this feature.
+The provider's conversation total includes its reported LLM and platform prices. Datadog records it once on a dedicated workflow, preserves unknown values and per-amount provenance, and rejects changes to accepted amounts. Repeated and late observations use stable IDs. Component enrichment is supported for 24 hours after Datadog first accepts a known total; retries do not reset that window. Initial metric delivery has a shorter deadline of 3 hours and 55 minutes, leaving transport time before the metric intake cutoff. Expired or uncertain delivery remains pending without automatic backfill. An initial report may describe an older conversation. Expired enrichment is rejected without changing the accepted charge. This API does not allocate the total to turns or backfill per-turn token usage. Backend availability and released tracer versions are required before enabling this feature.

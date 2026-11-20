@@ -95,27 +95,38 @@ describe('ElevenLabs automatic billing', () => {
       assert.equal(events.length, 0)
     })
   }
-  it('bounds a transport that never resolves and aborts requests', async () => {
-    get.returns(new Promise(() => {}))
-    start()
-    await clock.tickAsync(40000)
-    assert.ok(get.callCount <= 5)
-    assert.ok(get.callCount > 0)
-    assert.ok(get.getCalls().every(call => call.args[2].abortSignal.aborted))
-    assert.equal(events.length, 0)
-  })
-  it('keeps the retry deadline monotonic when the wall clock changes', async () => {
-    get.returns(new Promise(() => {}))
-    start()
-    await clock.tickAsync(6000)
-    clock.setSystemTime(Date.now() - 60000)
-    await clock.tickAsync(34000)
-    const calls = get.callCount
-    assert.ok(calls <= 5)
+  it('retains capacity until timed-out underlying requests settle', async () => {
+    const pending = []
+    get.callsFake(() => new Promise(resolve => pending.push(resolve)))
+    try {
+      for (let n = 0; n < 20; n++) start(`conv-${n}`)
+      await clock.tickAsync(40000)
+      assert.equal(get.callCount, 8)
+      assert.ok(get.getCalls().every(call => call.args[2].abortSignal.aborted))
+      clock.setSystemTime(Date.now() - 60000)
+      for (let n = 20; n < 40; n++) start(`conv-${n}`)
+      await clock.tickAsync(40000)
+      assert.equal(get.callCount, 8)
+      assert.equal(events.length, 0)
+    } finally {
+      for (const resolve of pending) resolve(completed())
+      await clock.tickAsync(0)
+    }
     get.resolves(completed())
     start()
     await clock.tickAsync(1000)
-    assert.equal(get.callCount, calls + 1)
+    assert.equal(get.callCount, 9)
+    assert.equal(events.length, 1)
+  })
+  it('retries a request only after cancellation has settled it', async () => {
+    get.callsFake((id, unused, options) => new Promise((resolve, reject) => {
+      options.abortSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+    }))
+    start()
+    await clock.tickAsync(40000)
+    assert.ok(get.callCount > 1)
+    assert.ok(get.callCount <= 5)
+    assert.equal(events.length, 0)
   })
   it('skips work disabled before lookup or after a pending request', async () => {
     start()
