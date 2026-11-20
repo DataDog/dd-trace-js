@@ -388,6 +388,22 @@ class LLMObsTagger {
     this._setTag(span, INTENT, intent)
   }
 
+  /**
+   * @param {import('../opentracing/span')} span
+   * @returns {string | undefined}
+   */
+  getSessionId (span) {
+    return registry.get(span)?.[SESSION_ID]
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {string} sessionId
+   */
+  tagSessionId (span, sessionId) {
+    this._setTag(span, SESSION_ID, sessionId)
+  }
+
   tagMetadata (span, metadata) {
     const existingMetadata = registry.get(span)?.[METADATA]
     if (existingMetadata) {
