@@ -16,13 +16,6 @@ const log = require('./log')
 const getRequestOptions = require('./request-options')
 const buildTags = require('./tags')
 
-module.exports = {
-  ackReceived,
-  ackInstalled,
-  ackEmitting,
-  ackError,
-}
-
 const ddsource = 'dd_debugger'
 const service = config.service
 const runtimeId = config.runtimeId
@@ -38,6 +31,14 @@ const jsonBuffer = new JSONBuffer({
   timeout: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS * 1000,
   onFlush,
 })
+
+module.exports = {
+  ackReceived,
+  ackInstalled,
+  ackEmitting,
+  ackError,
+  drain: jsonBuffer.drain.bind(jsonBuffer),
+}
 
 const STATUSES = {
   RECEIVED: 'RECEIVED',
