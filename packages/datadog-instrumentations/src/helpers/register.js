@@ -2,6 +2,7 @@
 
 const path = require('path')
 const { channel } = require('dc-polyfill')
+const shimmer = require('../../../datadog-shimmer')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
@@ -170,7 +171,10 @@ for (const name of names) {
         try {
           loadChannel.publish({ name })
 
-          moduleExports = hook(moduleExports, moduleVersion, isIitm, { moduleBaseDir, moduleName }) ?? moduleExports
+          moduleExports = shimmer.runHook(instrumentation, hook, moduleExports, moduleVersion, isIitm, {
+            moduleBaseDir,
+            moduleName,
+          }) ?? moduleExports
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [
