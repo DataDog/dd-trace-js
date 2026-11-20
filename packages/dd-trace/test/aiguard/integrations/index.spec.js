@@ -62,6 +62,76 @@ describe('AIGuard integration wiring', () => {
     sinon.assert.calledTwice(evaluate)
   })
 
+  for (const disabled of [
+    [],
+    ['anthropic'],
+    ['openai'],
+    ['ai'],
+    ['anthropic', 'openai'],
+    ['anthropic', 'openai', 'ai'],
+    ['openai', 'openai', 'unknown'],
+    ['unknown', 'OpenAI'],
+  ]) {
+    it(`only subscribes enabled integrations with disabled list ${JSON.stringify(disabled)}`, async () => {
+      aiguard.enable({}, {
+        aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: disabled },
+      })
+
+      const cases = [
+        ['anthropic', 'dd-trace:anthropic:messages:intercept', { messages: [{ role: 'user', content: 'Hello' }] }],
+        ['openai', 'dd-trace:openai:chat.completions:intercept', { messages: [{ role: 'user', content: 'Hello' }] }],
+        ['openai', 'dd-trace:openai:responses:intercept', { input: 'Hello' }],
+        ['ai', 'dd-trace:vercel-ai:model:intercept', {
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+        }],
+      ]
+
+      let evaluations = 0
+      for (const [name, channelName, options] of cases) {
+        const interceptChannel = channel(channelName)
+        const ctx = { arguments: [options], method: 'doGenerate' }
+        interceptChannel.publish(ctx)
+        if (disabled.includes(name)) {
+          assert.strictEqual(interceptChannel.hasSubscribers, false)
+          assert.strictEqual(ctx.beforeResult, undefined)
+          assert.strictEqual(ctx.onResult, undefined)
+        } else {
+          assert.strictEqual(typeof ctx.onResult, 'function')
+          await ctx.beforeResult()
+          evaluations++
+          assert.strictEqual(evaluate.lastCall.args[1].integration, name)
+        }
+      }
+      sinon.assert.callCount(evaluate, evaluations)
+      assert.strictEqual(channel('dd-trace:anthropic:messages:prepare').hasSubscribers, !disabled.includes('anthropic'))
+
+      aiguard.disable()
+      for (const [, channelName] of cases) {
+        assert.strictEqual(channel(channelName).hasSubscribers, false)
+      }
+      assert.strictEqual(channel('dd-trace:anthropic:messages:prepare').hasSubscribers, false)
+    })
+  }
+
+  it('applies a new disabled list after disabling and re-enabling AI Guard', async () => {
+    aiguard.enable({}, {
+      aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: ['openai'] },
+    })
+    assert.strictEqual(publishChatIntercept().intercepted, false)
+
+    aiguard.disable()
+    aiguard.enable({}, config)
+    await publishChatIntercept().ctx.beforeResult()
+    sinon.assert.calledOnce(evaluate)
+
+    aiguard.disable()
+    aiguard.enable({}, {
+      aiguard: { ...config.aiguard, DD_AI_GUARD_DISABLED_INTEGRATIONS: ['openai'] },
+    })
+    assert.strictEqual(publishChatIntercept().intercepted, false)
+    sinon.assert.calledOnce(evaluate)
+  })
+
   it('enables and disables providers through the integrations index', () => {
     const anthropicIntegration = {
       enable: sinon.stub(),

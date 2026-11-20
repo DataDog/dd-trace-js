@@ -166,6 +166,16 @@ describe('CiPlugin', () => {
     })
   }
 
+  for (const [sha, requestSha] of [['a'.repeat(40), 'a'.repeat(40)], ['invalid', undefined]]) {
+    it(`uses only a valid commit SHA in backend requests (${sha})`, () => {
+      getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), [GIT_COMMIT_SHA]: sha })
+      const plugin = createPlugin('jest_worker')
+
+      assert.strictEqual(plugin.testConfiguration.sha, requestSha)
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_SHA], sha)
+    })
+  }
+
   it('preserves an explicit PR-head SHA and commit message in custom checkout requests', () => {
     const head = 'b'.repeat(40)
     getUserProviderGitMetadata.returns({ [GIT_COMMIT_HEAD_SHA]: head })

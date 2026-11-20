@@ -52,7 +52,7 @@ const REPOSITORY_METADATA_KEYS = [
 
 const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
-const { getUserProviderGitMetadata } = require('./util/user-provided-git')
+const { getUserProviderGitMetadata, validateGitCommitSha } = require('./util/user-provided-git')
 const {
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -483,8 +483,9 @@ module.exports = class CiPlugin extends Plugin {
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
         [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
       } = diffMetadata
+      const commitSha = this.testEnvironmentMetadata[GIT_COMMIT_SHA]
       const targetCommit = commitHeadSha ||
-        (isCustomCheckout ? this.testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
+        (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
 
       const baseBranchSha = pullRequestBaseBranchSha ||
         getPullRequestBaseBranch(pullRequestBaseBranch, this.repositoryRoot)
@@ -894,7 +895,8 @@ module.exports = class CiPlugin extends Plugin {
 
     this.testConfiguration = {
       repositoryUrl,
-      sha,
+      // The `git.commit.sha` tag reports malformed values as provided, but they must not select backend data.
+      sha: validateGitCommitSha(sha) ? sha : undefined,
       gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,

@@ -73,6 +73,37 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
+        it('applies query obfuscation after configuration reloads and repeated requests', async () => {
+          appListener = server((req, res) => res.end(), () => {})
+          await once(appListener, 'listening')
+          const base = `${protocol}://localhost:${appListener.address().port}/user`
+
+          for (const [queryStringObfuscation, query] of [
+            [undefined, 'active=true&<redacted>'],
+            [false, 'active=true&password=secret'],
+            ['', 'active=true&password=secret'],
+            [true, undefined],
+            ['.*', undefined],
+            ['[', undefined],
+            ['password=[^&]*', 'active=true&<redacted>'],
+            ['active=[^&]*', '<redacted>&password=secret'],
+          ]) {
+            const config = { server: false }
+            if (queryStringObfuscation !== undefined) config.queryStringObfuscation = queryStringObfuscation
+            agent.reload('http', config)
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const traceReceived = agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], query === undefined ? base : `${base}?${query}`)
+              })
+              const request = http.get(`${base}?active=true&password=secret`, response => {
+                assert.strictEqual(response.statusCode, 200)
+                response.resume()
+              })
+              await Promise.all([traceReceived, once(request, 'close')])
+            }
+          }
+        })
+
         it('emits OpenTelemetry client attributes and omits the Datadog ones', async () => {
           const app = express()
           app.all('/user', (req, res) => {
