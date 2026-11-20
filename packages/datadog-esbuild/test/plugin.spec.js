@@ -441,4 +441,75 @@ describe('datadog-esbuild plugin', () => {
       assert.equal(initialOptions.banner.js.includes('DD_GIT_REPOSITORY_URL'), false)
     })
   })
+
+  describe('entry points of packages with a hooked file', () => {
+    const repoRoot = path.join(__dirname, '../../..')
+    // express hooks `lib/express.js`, so its other entry points are pinned to the Node.js resolution.
+    const expectedPath = require.resolve('express/lib/utils', { paths: [repoRoot] })
+
+    /**
+     * @param {string[]} external
+     * @param {string} specifier
+     * @param {string} [resolveDir]
+     * @param {object} [options] Extra esbuild build options, such as `packages` or `alias`.
+     */
+    function resolve (external, specifier, resolveDir = repoRoot, options = {}) {
+      let onResolve
+      ddPlugin.setup({
+        initialOptions: { external, ...options },
+        onEnd () {},
+        onResolve (options, callback) {
+          onResolve = callback
+        },
+        onLoad () {},
+      })
+      return onResolve({
+        path: specifier,
+        importer: path.join(repoRoot, 'app.js'),
+        namespace: 'file',
+        kind: 'require-call',
+        resolveDir,
+      })
+    }
+
+    it('resolves them with the Node.js conditions', () => {
+      assert.deepEqual(resolve([], 'express/lib/utils'), { path: expectedPath })
+    })
+
+    it('keeps the sideEffects: false metadata of the package', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-side-effects-'))
+      try {
+        const pkgDir = path.join(dir, 'node_modules/express')
+        fs.mkdirSync(path.join(pkgDir, 'lib'), { recursive: true })
+        fs.writeFileSync(path.join(pkgDir, 'package.json'), '{"name":"express","version":"4.0.0","sideEffects":false}')
+        fs.writeFileSync(path.join(pkgDir, 'lib/utils.js'), 'module.exports = {}')
+        const result = resolve([], 'express/lib/utils', dir)
+        assert.deepEqual(result, { path: fs.realpathSync(path.join(pkgDir, 'lib/utils.js')), sideEffects: false })
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('leaves subpaths of an external package to esbuild', () => {
+      assert.equal(resolve(['express'], 'express/lib/utils'), undefined)
+    })
+
+    it('leaves paths matching an external wildcard to esbuild', () => {
+      assert.equal(resolve(['express/lib/*'], 'express/lib/utils'), undefined)
+    })
+
+    it('leaves them to esbuild when all packages are external', () => {
+      assert.equal(resolve([], 'express/lib/utils', repoRoot, { packages: 'external' }), undefined)
+    })
+
+    it('leaves aliased paths to esbuild', () => {
+      const alias = { 'express/lib/utils': './custom-utils.js' }
+      assert.equal(resolve([], 'express/lib/utils', repoRoot, { alias }), undefined)
+      assert.equal(resolve([], 'express/lib/utils/x', repoRoot, { alias }), undefined)
+    })
+
+    it('does not treat a package with the same prefix as external', () => {
+      assert.deepEqual(resolve(['expres'], 'express/lib/utils'), { path: expectedPath })
+    })
+  })
 })
