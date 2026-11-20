@@ -89,6 +89,31 @@ describe('storage', () => {
     assert.strictEqual(testStorage.getStore(), undefined)
   })
 
+  it('should run with a store and restore the previous context after async work', async () => {
+    const outer = { span: 'outer' }
+    const inner = { span: 'inner' }
+    testStorage.enterWith(outer)
+
+    const result = testStorage.run(inner, async value => {
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(testStorage.getStore(), inner)
+      return value
+    }, 42)
+
+    assert.strictEqual(testStorage.getStore(), outer)
+    assert.strictEqual(await result, 42)
+    assert.strictEqual(testStorage.getStore(), outer)
+  })
+
+  it('should restore the previous context when run throws', () => {
+    const outer = { span: 'outer' }
+    const error = new Error('application error')
+    testStorage.enterWith(outer)
+
+    assert.throws(() => testStorage.run({ span: 'inner' }, () => { throw error }), error)
+    assert.strictEqual(testStorage.getStore(), outer)
+  })
+
   it('should guard missing trigger resources for every legacy AsyncLocalStorage', () => {
     assert.strictEqual(Object.hasOwn(testStorage.constructor.prototype, '_propagate'), false)
 

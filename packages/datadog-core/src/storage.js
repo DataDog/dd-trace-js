@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
+const { AsyncLocalStorage } = require('node:async_hooks')
 
 /**
  * `AsyncLocalStorage` with a `getHandle()` escape hatch: a span stashes the
@@ -64,18 +64,23 @@ if (!isACFActive) {
   // the store through a WeakMap, then reversing the lookup on read.
   const stores = new WeakMap()
 
-  /**
-   * Node can omit the trigger resource while the inspector is paused. Guard
-   * the shared hook because every enabled AsyncLocalStorage receives the call.
-   *
-   * @param {object} resource
-   * @param {object | undefined} triggerResource
-   * @param {string} type
-   */
-  AsyncLocalStorage.prototype._propagate = function _propagate (resource, triggerResource, type) {
-    if (triggerResource) {
-      superPropagate.call(this, resource, triggerResource, type)
-    }
+  const patched = Symbol.for('dd-trace.storage.propagate')
+  if (!superPropagate[patched]) {
+    // This process-wide hook must not retain the VM context that loaded us
+    // (for example a Jest environment). Compile it in Node's main context and
+    // install it once, retaining only the original native hook.
+    const { compileFunction } = require('node:vm')
+    const createPropagate = compileFunction(`
+      return function _propagate (resource, triggerResource, type) {
+        // Node can omit the trigger resource while the inspector is paused.
+        if (triggerResource) {
+          superPropagate.call(this, resource, triggerResource, type)
+        }
+      }
+    `, ['superPropagate'])
+    const propagate = createPropagate(superPropagate)
+    propagate[patched] = true
+    AsyncLocalStorage.prototype._propagate = propagate
   }
 
   /**
@@ -139,7 +144,11 @@ const storages = Object.create(null)
  */
 function storage (namespace) {
   if (!storages[namespace]) {
-    storages[namespace] = new DatadogStorage()
+    const instance = new DatadogStorage()
+    // Some legacy ALS implementations enable instances in the constructor.
+    // Keep unused namespaces out of Node's storageList until run/enterWith.
+    if (!isACFActive) instance.disable()
+    storages[namespace] = instance
   }
   return storages[namespace]
 }
