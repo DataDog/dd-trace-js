@@ -1,0 +1,65 @@
+{
+    "requestContext": {
+        "elb": {
+            "targetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:1234567890:targetgroup/nhulston-alb-test/dcabb42f66a496e0"
+        }
+    },
+    "httpMethod": "GET",
+    "path": "/",
+    "multiValueQueryStringParameters": {},
+    "multiValueHeaders": {
+        "accept": [
+            "*/*"
+        ],
+        "accept-encoding": [
+            "gzip, deflate"
+        ],
+        "accept-language": [
+            "*"
+        ],
+        "connection": [
+            "keep-alive"
+        ],
+        "host": [
+            "nhulston-test-0987654321.us-east-1.elb.amazonaws.com"
+        ],
+        "sec-fetch-mode": [
+            "cors"
+        ],
+        "traceparent": [
+            "00-68126c4300000000125a7f065cf9a530-1c6dcc8ab8a6e99d-01"
+        ],
+        "tracestate": [
+            "dd=t.dm:-0;t.tid:68126c4300000000;s:1;p:1c6dcc8ab8a6e99d"
+        ],
+        "user-agent": [
+            "node"
+        ],
+        "x-amzn-trace-id": [
+            "Root=1-68126c45-01b175997ab51c4c47a2d643"
+        ],
+        "x-datadog-parent-id": [
+            "1234567890"
+        ],
+        "x-datadog-sampling-priority": [
+            "1"
+        ],
+        "x-datadog-tags": [
+            "_dd.p.tid=68126c4300000000,_dd.p.dm=-0"
+        ],
+        "x-datadog-trace-id": [
+            "0987654321"
+        ],
+        "x-forwarded-for": [
+            "18.204.55.6"
+        ],
+        "x-forwarded-port": [
+            "80"
+        ],
+        "x-forwarded-proto": [
+            "http"
+        ]
+    },
+    "body": "",
+    "isBase64Encoded": false
+}
