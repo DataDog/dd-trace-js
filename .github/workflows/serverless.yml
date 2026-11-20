@@ -216,6 +216,10 @@ jobs:
           ACCEPT_EULA: "Y"
           BLOB_SERVER: azurite
           METADATA_SERVER: azurite
+        # Temporary: the image runs `tdnf distro-sync` at boot, which replaces the PostgreSQL files under the
+        # running server (plpgsql.so: undefined symbol heap_datum_update_type) and breaks database deletes.
+        # Blocking its package repository keeps the image's own consistent PostgreSQL until a real fix lands.
+        options: --add-host=packages.microsoft.com:127.0.0.1
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
@@ -325,6 +329,10 @@ jobs:
           ACCEPT_EULA: "Y"
           BLOB_SERVER: azurite
           METADATA_SERVER: azurite
+        # Temporary: the image runs `tdnf distro-sync` at boot, which replaces the PostgreSQL files under the
+        # running server (plpgsql.so: undefined symbol heap_datum_update_type) and breaks database deletes.
+        # Blocking its package repository keeps the image's own consistent PostgreSQL until a real fix lands.
+        options: --add-host=packages.microsoft.com:127.0.0.1
     env:
       PLUGINS: azure-cosmos
       SERVICES: azurite,azurecosmosemulator
