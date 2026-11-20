@@ -3,13 +3,14 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { warn } = require('./log/writer')
+const { info, infoStderr, warn } = require('./log/writer')
 const startupConfig = require('./opentelemetry/startup-config')
 
 const errors = {}
 let config
 let otelConfig
 let pluginManager
+let writeSummary = warn
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
 let configAlreadyRan = false
@@ -29,7 +30,7 @@ function startupLog () {
 
   const out = configInfo()
 
-  warn('DATADOG TRACER CONFIGURATION - ' + out)
+  writeSummary('DATADOG TRACER CONFIGURATION - ' + out)
 }
 
 /**
@@ -43,7 +44,7 @@ function logIntegrations () {
 
   integrationsAlreadyRan = true
 
-  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+  writeSummary('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
 }
 
 /**
@@ -132,6 +133,16 @@ function tracerInfo () {
  */
 function setStartupLogConfig (aConfig, pipelines) {
   config = aConfig
+  switch (config.startupLogsOutput) {
+    case 'stdout':
+      writeSummary = info
+      break
+    case 'stderr-json':
+      writeSummary = infoStderr
+      break
+    default:
+      writeSummary = warn
+  }
   otelConfig ??= startupConfig(config, samplingRules, pipelines)
 }
 
