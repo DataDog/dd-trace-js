@@ -58,6 +58,18 @@ function normalizeCallback (inputOptions, callback, inputURL) {
 }
 
 /**
+ * Whether the request uses an agent with a timeout the app chose. The global agent counts as the default
+ * agent even when it's passed explicitly, since its timeout comes from Node.js.
+ *
+ * @param {import('http').Agent & { options?: { timeout?: number } } | false | undefined} agent - The `agent`
+ *   request option.
+ * @param {typeof import('http')} http - The patched `http` or `https` module.
+ */
+function hasCustomAgentTimeout (agent, http) {
+  return Boolean(agent && agent.options?.timeout) && agent !== http.globalAgent
+}
+
+/**
  * Wires the downstream response so we can observe when the customer consumes
  * the body and when the stream finishes
  *
@@ -257,7 +269,7 @@ function patch (http, methodName) {
               case 'timeout':
                 // Node.js does not end the request on 'timeout'. The default agent's idle socket timeout
                 // is not one the app set, so keep the span open until the response, error, or close.
-                if (!customRequestTimeout && !options.agent?.options?.timeout) break
+                if (!customRequestTimeout && !hasCustomAgentTimeout(options.agent, http)) break
               case 'error':
                 ctx.error = arg
                 ctx.customRequestTimeout = customRequestTimeout

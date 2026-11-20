@@ -1056,6 +1056,35 @@ describe('Plugin', () => {
             })
           }).timeout(10000)
 
+          node20Test('should not record default HTTP agent timeout as error when the global agent is passed', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000) // over 5s default
+              })
+              res.status(200).send()
+            })
+
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].error, 0)
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              }, { timeoutMs: 9000 })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, { agent: http.globalAgent }, res => {
+                res.on('data', () => { })
+              })
+
+              req.on('error', () => {})
+
+              req.end()
+            })
+          }).timeout(10000)
+
           node20Test('should record error if custom Agent timeout is used with Node 20', done => {
             const app = express()
 
