@@ -2276,7 +2276,7 @@ describe('TextMapPropagator', () => {
           config.getOrigin = undefined
         }
         const getValidatedConfiguredEnvName = sinon.stub()
-        getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE').returns(envName)
+        getValidatedConfiguredEnvName.withArgs(envName).returns(envName)
         getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE_INJECT').returns(injectEnvName)
         const V5TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
           '../../config/helper': {

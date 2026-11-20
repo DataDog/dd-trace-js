@@ -4083,13 +4083,10 @@
     ],
     "DD_TRACE_PROPAGATION_STYLE": [
       {
-        "implementation": "D",
+        "implementation": "E",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
-        "transform": "validatePropagationStyles",
-        "aliases": [
-          "OTEL_PROPAGATORS"
-        ]
+        "transform": "validatePropagationStyles"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
