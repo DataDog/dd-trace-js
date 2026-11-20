@@ -3,6 +3,7 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getAmqpMessageSize, DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
+const { normalizeRabbitMQName } = require('../../dd-trace/src/datastreams/rabbitmq')
 
 class RheaProducerPlugin extends ProducerPlugin {
   static id = 'rhea'
@@ -44,8 +45,8 @@ function addDeliveryAnnotations (msg, tracer, span) {
     if (tracer._config.dsmEnabled) {
       const targetName = span.context().getTag('amqp.link.target.address')
       const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
-      const dataStreamsContext = tracer
-        .setCheckpoint(['direction:out', `exchange:${targetName}`, 'type:rabbitmq'], span, payloadSize)
+      const edgeTags = ['direction:out', `exchange:${normalizeRabbitMQName(targetName)}`, 'type:rabbitmq']
+      const dataStreamsContext = tracer.setCheckpoint(edgeTags, span, payloadSize)
       DsmPathwayCodec.encode(dataStreamsContext, msg.delivery_annotations)
     }
   }
