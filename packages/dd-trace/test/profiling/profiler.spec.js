@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 require('../setup/core')
+const { Profile } = require('../../../../vendor/dist/pprof-format')
 
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
@@ -1028,6 +1029,30 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.hasMissingSourceMaps, false)
+    })
+
+    it('exports and logs an encoded wall profile with missing source maps', async () => {
+      profilers = [wallProfiler]
+      const payload = Buffer.from(new Profile({ period: 300 }).encode())
+      const encodeAsync = sinon.stub().resolves(payload)
+      wallProfiler.profile.returns({ hasMissingSourceMaps: true, encodeAsync })
+      wallProfiler.encode.callsFake(profile => profile.encodeAsync())
+      let collected
+      consoleLogger.debug = sinon.stub().callsFake(message => {
+        if (typeof message === 'function') collected = message()
+      })
+
+      await profiler.start(makeStartOptions())
+      await profiler._collect('on_shutdown', false)
+
+      sinon.assert.calledOnce(exporter.export)
+      const { infos, profiles } = exporter.export.firstCall.args[0]
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
+      assert.deepStrictEqual(profiles.wall, payload)
+      sinon.assert.calledOnce(encodeAsync)
+      assert.match(collected, /^Collected wall profile: /)
+      const logged = JSON.parse(collected.slice(collected.indexOf(': ') + 2))
+      assert.strictEqual(String(logged.period), '300')
     })
 
     it('uses the tags captured at each snapshot start', async () => {

@@ -156,6 +156,17 @@ describe('profilers/native/space', () => {
     assert.strictEqual(profile, 'profile')
   })
 
+  it('should prefer the native package’s encoded heap profile', () => {
+    const encoded = { encodeAsync: sinon.stub(), hasMissingSourceMaps: false }
+    pprof.heap.profileEncoded = sinon.stub().returns(encoded)
+    const profiler = makeSpace(NativeSpaceProfiler)
+    profiler.start()
+
+    assert.strictEqual(profiler.profile(false), encoded)
+    sinon.assert.calledOnceWithExactly(pprof.heap.profileEncoded, undefined, undefined, sinon.match.func, 'pack')
+    sinon.assert.notCalled(pprof.heap.profile)
+  })
+
   it('should encode profiles using their encodeAsync method', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 

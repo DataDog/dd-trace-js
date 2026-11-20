@@ -30,6 +30,7 @@ function findWebSpan (startedSpans, spanId) {
 const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
 
 function profileHasMissingSourceMaps (profile) {
+  if (profile?.hasMissingSourceMaps !== undefined) return profile.hasMissingSourceMaps
   const strings = profile?.stringTable?.strings
   if (!strings) return false
   return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
@@ -456,7 +457,10 @@ class Profiler extends EventEmitter {
           processInfo(infos, info, profiler.type)
           // eslint-disable-next-line eslint-rules/eslint-log-printf-style
           log.debug(() => {
-            const profileJson = JSON.stringify(profile, (_, value) => {
+            const profileForLog = profile.hasMissingSourceMaps === undefined
+              ? profile
+              : require('../../../../vendor/dist/pprof-format').Profile.decode(encoded)
+            const profileJson = JSON.stringify(profileForLog, (_, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
             return `Collected ${profiler.type} profile: ` + profileJson

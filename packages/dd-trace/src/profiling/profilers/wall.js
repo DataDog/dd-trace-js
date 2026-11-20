@@ -324,10 +324,13 @@ class NativeWallProfiler {
       }
     }
 
-    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+    const { time } = this.#pprof
+    const profile = time.stopEncoded === undefined
+      ? time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+      : time.stopEncoded(restart, this.#boundGenerateLabels, lowCardinalityLabels)
 
     if (restart) {
-      const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
+      const v8BugDetected = time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
         this.#reportV8bug(v8BugDetected === 1)
       }
