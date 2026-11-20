@@ -5,6 +5,10 @@ const log = require('../../../dd-trace/src/log')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 const { extractPrimaryKeys, generatePointerHash } = require('../util')
 
+// Requests may name the table by ARN, which cross-account access requires:
+// arn:<partition>:dynamodb:<region>:<account>:table/<name>
+const TABLE_ARN = /^arn:[^:]+:dynamodb:[^:]+:[^:]+:table\/[^/]+$/
+
 class DynamoDb extends BaseAwsSdkPlugin {
   static id = 'dynamodb'
   static peerServicePrecursors = ['tablename']
@@ -31,6 +35,9 @@ class DynamoDb extends BaseAwsSdkPlugin {
         tags['resource.name'] = `${operation} ${tableName}`
         tags['aws.dynamodb.table_name'] = tableName
         tags.tablename = tableName
+        if (TABLE_ARN.test(tableName)) {
+          tags['aws.table.arn'] = tableName
+        }
       }
 
       // TODO: DynamoDB.DocumentClient does batches on multiple tables

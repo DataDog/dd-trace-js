@@ -10,6 +10,7 @@ const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastre
 const id = require('../../dd-trace/src/id')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const { getTopicName } = require('./resource-names')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
@@ -104,6 +105,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         '_dd.serviceoverride.type': 'integration',
         'pubsub.linked_message_count': spanLinks.length || undefined,
         operation: messageCount > 1 ? 'batched.pubsub.request' : 'pubsub.request',
+        'gcp.pubsub.topic.name': getTopicName(topic),
       },
       metrics: {
         'pubsub.batch.message_count': messageCount,
