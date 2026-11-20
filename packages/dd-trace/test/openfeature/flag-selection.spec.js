@@ -241,7 +241,7 @@ describe('OpenFeature flag selection', () => {
       )
       assert.strictEqual(
         packages['@datadog/flagging-core'][0],
-        `@datadog/flagging-core@${dependencies['@datadog/flagging-core']}`
+        `@datadog/flagging-core@${dependencies['@datadog/flagging-core'].replace(/^file:/, '')}`
       )
     })
 

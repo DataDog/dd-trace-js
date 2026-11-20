@@ -2,7 +2,10 @@
 
 const { channel } = require('dc-polyfill')
 
-const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
+const {
+  DatadogNodeServerProvider,
+  DependencyTelemetrySidecar,
+} = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const { debugChannel } = require('../log/channels')
 const { warn } = require('../log/writer')
@@ -47,8 +50,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
+    const evaluationCountsEnabled = config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false
+    const dependencyTelemetrySidecar = new DependencyTelemetrySidecar(evaluationCountsEnabled)
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
+      dependencyTelemetrySidecar,
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
@@ -82,8 +88,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       this.constructor.name, config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, config.env ?? 'unset',
       this.#initializationTimeoutMs)
 
-    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
-      this.#flagEvalEVPHook = new FlagEvalEVPHook(config)
+    if (evaluationCountsEnabled) {
+      this.#flagEvalEVPHook = new FlagEvalEVPHook(config, dependencyTelemetrySidecar)
       this.hooks.push(telemetryHook(this.#flagEvalEVPHook))
     }
 

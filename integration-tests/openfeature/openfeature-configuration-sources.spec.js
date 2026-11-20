@@ -339,7 +339,12 @@ function assertDeliveryTraffic (testCase) {
     assert.ok(cdnRequests.every(wasAfterAccess), testCase.label)
     assert.ok(rcRequests.every(withoutFfeProduct), testCase.label)
     for (const request of cdnRequests) {
-      assert.strictEqual(request.url, `${AGENTLESS_PATH}?case=${testCase.identifier}`, testCase.label)
+      const url = new URL(request.url, backendUrl)
+      assert.strictEqual(url.pathname, AGENTLESS_PATH, testCase.label)
+      assert.deepStrictEqual([...url.searchParams].sort(), [
+        ['cap_dependent-flags-variant-key', 'v1'],
+        ['case', testCase.identifier],
+      ], testCase.label)
       assert.strictEqual(request.headers['accept-encoding'], 'gzip', testCase.label)
       assert.strictEqual(request.headers['dd-api-key'], undefined, testCase.label)
       assert.strictEqual(request.headers['dd-client-library-language'], 'nodejs', testCase.label)
