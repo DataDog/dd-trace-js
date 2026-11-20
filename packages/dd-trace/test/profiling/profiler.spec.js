@@ -425,10 +425,16 @@ describe('profiler', function () {
       })
       otlp = true
       const wall = { type: 'wall', unit: 'nanoseconds' }
+      const cpu = { type: 'cpu', unit: 'nanoseconds' }
       wallProfiler.visit = sinon.stub().callsFake((restart, visitor) => {
-        visitor.metadata({ sampleTypes: [wall], periodType: wall, period: 10_000_000, timeNanos: 0n })
+        visitor.metadata({ sampleTypes: [wall, cpu], periodType: wall, period: 10_000_000, timeNanos: 0n })
         const stackId = visitor.stack([visitor.frame({ name: 'work', file: 'app.js', missingMapFile: false })])
-        visitor.sample({ stackId, values: [10_000_000], labels: [['thread name', 'Main Event Loop']], timestamp: 1n })
+        visitor.sample({
+          stackId,
+          values: [10_000_000, 2_000_000],
+          labels: [['thread name', 'Main Event Loop']],
+          timestamp: 1n,
+        })
         visitor.end({ hasMissingMapFiles: false })
         return { hasMissingMapFiles: false }
       })
@@ -456,7 +462,11 @@ describe('profiler', function () {
       assert.strictEqual(resource['telemetry.sdk.language'], 'nodejs')
       assert.ok(!Object.keys(resource).some(key => key.startsWith('datadog.')), Object.keys(resource).join())
       assert.strictEqual(resource['service.name'], 'otlp-service')
-      const [profile] = resourceProfiles.scopeProfiles[0].profiles
+      const { profiles } = resourceProfiles.scopeProfiles[0]
+      // Sample types have the eBPF profiler's names, but wall time, which it doesn't have, keeps its own
+      const { strings } = request.dictionary.stringTable
+      assert.deepStrictEqual(profiles.map(p => strings[p.sampleType.typeStrindex]), ['wall', 'cpu-time'])
+      const [profile] = profiles
       assert.strictEqual(profile.originalPayloadFormat, '')
       assert.strictEqual(profile.originalPayload.length, 0)
       assert.deepStrictEqual(profile.attributeIndices, [])

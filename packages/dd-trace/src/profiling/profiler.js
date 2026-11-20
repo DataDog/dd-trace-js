@@ -60,6 +60,24 @@ function buildOtlpResourceAttributes (config) {
   return transformAttributes(attributes)
 }
 
+// The eBPF host profiler's names of the sample types it shares with pprof profiles, so OTLP profiles of a measure have
+// one name whichever profiler made them. Wall time has no eBPF counterpart and keeps its name.
+const OTLP_SAMPLE_TYPE_NAMES = new Map([
+  ['cpu/nanoseconds', 'cpu-time'],
+  ['inuse_objects/count', 'heap-live-samples'],
+  ['inuse_space/bytes', 'heap-live-size'],
+  ['alloc_objects/count', 'alloc-samples'],
+  ['alloc_space/bytes', 'alloc-size'],
+])
+
+/**
+ * @param {{ type: string, unit: string }} sampleType
+ * @returns {{ type: string, unit: string }}
+ */
+function renameOtlpSampleType ({ type, unit }) {
+  return { type: OTLP_SAMPLE_TYPE_NAMES.get(`${type}/${unit}`) ?? type, unit }
+}
+
 function processInfo (infos, info, type) {
   if (info !== undefined) {
     infos[type] = info
@@ -510,6 +528,7 @@ class Profiler extends EventEmitter {
       // Only frames for server-side unminification carry their columns, as in pprof uploads
       columns: 'missing-source-maps',
       extractLink: createOtelLinkExtractor(),
+      renameSampleType: renameOtlpSampleType,
     })
   }
 
