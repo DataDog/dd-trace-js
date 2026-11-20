@@ -210,6 +210,17 @@ describe('AI Guard MCP helpers', () => {
       assert.ok(!JSON.stringify(server).includes('alice'))
     })
 
+    it('matches the cross-tracer vector of a drive-relative command, with no drive-letter rule', () => {
+      const server = createClientServer({ type: 'stdio', command: 'C:npx', args: ['-y', 'private-value'] })
+
+      assert.deepStrictEqual(server, {
+        id: 'mcp_728353ed9e10df60',
+        managed_by: 'client',
+        transport: 'stdio',
+        command: 'c:npx',
+      })
+    })
+
     it('uses the next key for a command with no program name', () => {
       assert.strictEqual(createClientServer({ type: 'stdio', command: '/usr/bin/', args: [] }), undefined)
       const named = createClientServer({ type: 'stdio', command: '/usr/bin/' }, 'atlassian')
