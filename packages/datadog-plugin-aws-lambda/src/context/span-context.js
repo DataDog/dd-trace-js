@@ -8,7 +8,7 @@ const SpanContext = require('../../../dd-trace/src/opentracing/span_context')
  * Converts the shim's custom context contract to the core tracer's context.
  * Numeric sampling follows datadog-lambda-js #850 (13e2f4ca).
  *
- * @param {import('../../../../index').plugins.LambdaTraceContext} context Custom extractor result.
+ * @param {import('./types').TraceContext} context Custom extractor result.
  * @returns {SpanContext|null}
  */
 function fromTraceContext (context) {

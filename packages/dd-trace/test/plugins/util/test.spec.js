@@ -60,6 +60,7 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   getTestLineStart,
   getFileAndLineNumberFromError,
+  getNonDependencyStackFramesFromError,
 } = require('../../../src/plugins/util/test')
 
 const {
@@ -2334,5 +2335,27 @@ describe('getFileAndLineNumberFromError', () => {
   it('stays linear on an attacker-shaped newline-free frame', () => {
     const error = { stack: `at (${'a'.repeat(200_000)} /repo/src/x.js:5:1)` }
     assert.strictEqual(getFileAndLineNumberFromError(error, '/repo')[1], 5)
+  })
+})
+
+describe('getNonDependencyStackFramesFromError', () => {
+  it('returns non-dependency frames under the repo root', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at dep (/repo/node_modules/x/index.js:9:9)',
+        '    at handler (/repo/src/server.js:128:20)',
+        '    at test (/repo/test/server.spec.js:7:5)',
+      ].join('\n'),
+    }
+
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError(error, '/repo'), [
+      { file: '/repo/src/server.js', line: 128 },
+      { file: '/repo/test/server.spec.js', line: 7 },
+    ])
+  })
+
+  it('returns an empty list when the error has no stack', () => {
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError({}, '/repo'), [])
   })
 })

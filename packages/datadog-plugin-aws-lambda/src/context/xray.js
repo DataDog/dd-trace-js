@@ -4,6 +4,12 @@
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const { fromTraceContext } = require('./span-context')
 
+/** Reads invocation-specific X-Ray context on every call, without caching tracer configuration. */
+function getAWSTraceHeader () {
+  // eslint-disable-next-line eslint-rules/eslint-non-prefix-env-names -- Per-invocation input; not cached config.
+  return getEnvironmentVariable('_X_AMZN_TRACE_ID')
+}
+
 /**
  * @param {string} header AWS trace header.
  * @returns {{ traceId: string, parentId: string, sampled: string }|undefined}
@@ -40,7 +46,7 @@ function extractDatadogContext (header) {
 
 /** @returns {import('../../../dd-trace/src/opentracing/span_context')|null} */
 function extractXrayContext () {
-  const header = getEnvironmentVariable('_X_AMZN_TRACE_ID')
+  const header = getAWSTraceHeader()
   if (header === undefined) return null
   const context = parseAWSTraceHeader(header)
   if (!context || context.parentId.length !== 16) return null
@@ -58,4 +64,4 @@ function extractXrayContext () {
   }
 }
 
-module.exports = { parseAWSTraceHeader, extractDatadogContext, extractXrayContext }
+module.exports = { parseAWSTraceHeader, extractDatadogContext, extractXrayContext, getAWSTraceHeader }

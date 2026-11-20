@@ -1,7 +1,6 @@
 'use strict'
 
 // Ported from datadog-lambda-js at da9fc3c0; propagation itself stays core-owned.
-const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')
 const guards = require('../event-type-guards')
 const {
@@ -16,7 +15,7 @@ const {
 const { extractHTTP } = require('./http')
 const { fromTraceContext } = require('./span-context')
 const { getStepFunctionContext, extractStepFunctionContext } = require('./step-functions')
-const { extractDatadogContext, extractXrayContext } = require('./xray')
+const { extractDatadogContext, extractXrayContext, getAWSTraceHeader } = require('./xray')
 
 /**
  * @typedef {object} ExtractedContext
@@ -32,7 +31,7 @@ class TraceContextExtractor {
   /**
    * One extractor per invocation keeps source first-use Step Functions caching invocation-local.
    * @param {import('../../../dd-trace/src/opentracing/tracer')} tracer Core tracer.
-   * @param {import('../../../../index').plugins.aws_lambda} config Lambda configuration.
+   * @param {import('./types').ExtractorConfig} config Lambda configuration.
    */
   constructor (tracer, config) {
     this.#tracer = tracer
@@ -101,7 +100,7 @@ class TraceContextExtractor {
       return extractHTTP(event, this.#tracer, this.#config.decodeAuthorizerContext)
     }
     if (guards.isSNSEvent(event)) {
-      return this.#extractMessage(getSNSHeaders(event.Records[0]), getEnvironmentVariable('_X_AMZN_TRACE_ID'))
+      return this.#extractMessage(getSNSHeaders(event.Records[0]), getAWSTraceHeader())
     }
     if (guards.isSNSSQSEvent(event)) {
       return this.#extractMessage(getSNSSQSHeaders(event.Records[0]), event.Records[0]?.attributes?.AWSTraceHeader)

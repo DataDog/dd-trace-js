@@ -255,6 +255,32 @@ describe('Lambda facade context extraction', () => {
     })
   }
 
+  for (const [name, event, source] of [
+    ['X-Ray fallback', {}, 'xray'],
+    ['SNS Java-injected context', { Records: [{ Sns: {} }] }, 'event'],
+  ]) {
+    it(`reads changing invocation headers without rebuilding the tracer: ${name}`, async () => {
+      const wrapped = facade.wrap(() => 'done', { mergeXrayTraces: true })
+      for (const [parent, sampled] of [['0000000000000001', '1'], ['0000000000000002', '0'], [undefined]]) {
+        traces.length = 0
+        if (parent === undefined) delete process.env._X_AMZN_TRACE_ID
+        else {
+          process.env._X_AMZN_TRACE_ID =
+            `Root=1-663934f8-0000000045c5da17458c9910;Parent=${parent};Sampled=${sampled}`
+        }
+        assert.strictEqual(await wrapped(structuredClone(event), context), 'done')
+        const span = assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(span.parent_id.toString(10), parent === undefined ? '0' : BigInt(`0x${parent}`).toString())
+        assert.strictEqual(span.meta['_dd.parent_source'], parent === undefined ? undefined : source)
+        if (parent !== undefined) {
+          const priority = source === 'xray' ? (sampled === '1' ? 2 : -1) : Number(sampled)
+          assert.strictEqual(span.metrics._sampling_priority_v1, priority)
+        }
+      }
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+  }
+
   for (const [name, options, expectedParent] of [
     ['legacy shim spelling', { mergeDatadogXrayTraces: true }, '797643193680388254'],
     ['canonical spelling precedence', { mergeDatadogXrayTraces: true, mergeXrayTraces: false }, '0'],

@@ -5,7 +5,6 @@
     "": {
       "name": "dd-trace",
       "dependencies": {
-        "@types/aws-lambda": "^8.10.83",
         "dc-polyfill": "^0.1.11",
         "import-in-the-middle": "3.5.3",
         "opentracing": ">=0.14.7",

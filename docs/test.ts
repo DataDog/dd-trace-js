@@ -1,7 +1,4 @@
 import { performance } from 'perf_hooks'
-
-import type { Context as AwsLambdaContext } from 'aws-lambda'
-
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
 import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
@@ -385,32 +382,6 @@ tracer.use('async-mutex', { service: 'mutex' });
 tracer.use('avsc');
 tracer.use('aws-lambda');
 tracer.use('aws-lambda', { serviceRepresentationEnabled: false });
-// Compile-only checks: existing shim extractors remain valid plugin options.
-function checkLambdaExtractorTypes() {
-  const extractor: plugins.aws_lambda['traceExtractor'] = async (event, context) => {
-    const requestId: string = context.awsRequestId;
-    const remaining: number = context.getRemainingTimeInMillis();
-    // @ts-expect-error AWS Lambda Context has no arbitrary parentId property.
-    context.parentId;
-    return { traceId: event.traceId, parentId: event.parentId, sampleMode: 2, source: 'event' };
-  };
-  const typedExtractor = (event: { traceId: string; parentId: string }, context: AwsLambdaContext):
-    plugins.LambdaTraceContext => ({
-      traceId: event.traceId, parentId: event.parentId, sampleMode: 2, source: 'event',
-    });
-  const asyncExtractor = async (event: string, context: AwsLambdaContext): Promise<plugins.LambdaTraceContext> => ({
-    traceID: event, parentID: context.awsRequestId, sampleMode: 0, source: 'event',
-  });
-  tracer.use('aws-lambda', { traceExtractor: typedExtractor });
-  tracer.use('aws-lambda', { traceExtractor: asyncExtractor });
-  tracer.use('aws-lambda', { traceExtractor: extractor, mergeXrayTraces: true });
-  // @ts-expect-error Propagation headers are not an extractor's TraceContext result.
-  tracer.use('aws-lambda', { traceExtractor: () => ({ 'x-datadog-trace-id': '123' }) });
-  // @ts-expect-error Sampling priorities remain numeric.
-  tracer.use('aws-lambda', { traceExtractor: () => ({ sampleMode: '2', source: 'event' }) });
-}
-void checkLambdaExtractorTypes;
-
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);

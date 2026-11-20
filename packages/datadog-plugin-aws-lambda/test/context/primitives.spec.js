@@ -53,6 +53,35 @@ describe('Lambda Step Functions context', () => {
     })
   }
 
+  for (const name of ['lambda-root-step-function-event', 'legacy-lambda-root-step-function-event']) {
+    for (const value of ['123', '']) {
+      it(`accepts scalar Lambda-root schema fields for ${name}: ${JSON.stringify(value)}`, () => {
+        const event = structuredClone(require(`../fixtures/${name}.json`))._datadog
+        const fields = name.startsWith('legacy-') ? event.Execution.Input._datadog : event
+        fields['x-datadog-trace-id'] = value
+        fields['x-datadog-tags'] = ''
+        Object.freeze(fields)
+        const parsed = getStepFunctionContext(event)
+        assert.strictEqual(parsed.trace_id, value)
+        assert.strictEqual(parsed.dd_p_tid, '')
+      })
+    }
+    for (const field of ['x-datadog-trace-id', 'x-datadog-tags']) {
+      for (const value of [undefined, null, 123, [], ['123']]) {
+        it(`rejects non-string ${field} for ${name}: ${JSON.stringify(value)}`, () => {
+          const event = structuredClone(require(`../fixtures/${name}.json`))._datadog
+          const fields = name.startsWith('legacy-') ? event.Execution.Input._datadog : event
+          fields[field] = value
+          const parsed = getStepFunctionContext(event)
+          if (name.startsWith('legacy-')) {
+            assert.strictEqual(parsed.trace_id, undefined)
+            assert.strictEqual(parsed.serverless_version, undefined)
+          } else assert.strictEqual(parsed, undefined)
+        })
+      }
+    }
+  }
+
   it('preserves source rejection of array-valued Lambda-root schema fields', () => {
     const event = {
       ...legacy,

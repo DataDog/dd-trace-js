@@ -2,7 +2,7 @@
 
 const { createHash } = require('node:crypto')
 
-const { readStepFunctionTraceContext } = require('../../../dd-trace/src/carrier')
+const { readDatadogTraceId, readDatadogTags } = require('../../../dd-trace/src/carrier')
 const id = require('../../../dd-trace/src/id')
 const { fromTraceContext, AUTO_KEEP } = require('./span-context')
 
@@ -73,6 +73,22 @@ function getStepFunctionContext (event) {
   return context
 }
 /* eslint-enable eslint-rules/eslint-safe-typeof-object */
+
+/**
+ * These are scalar Step Functions schema fields, not list-valued HTTP propagation headers.
+ * @param {Record<string, unknown>} context Step Functions payload.
+ * @returns {{ traceId: string, tags: string }|undefined}
+ */
+function readStepFunctionTraceContext (context) {
+  const fields = {}
+  for (const field of Object.keys(context)) {
+    const value = context[field]
+    if (typeof value === 'string') fields[field] = value
+  }
+  const traceId = readDatadogTraceId(fields)
+  const tags = readDatadogTags(fields)
+  if (typeof traceId === 'string' && typeof tags === 'string') return { traceId, tags }
+}
 
 /** @param {string} tags Datadog propagation tags. */
 function parseTraceIdHigh (tags) {
