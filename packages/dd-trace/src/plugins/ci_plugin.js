@@ -227,11 +227,7 @@ function getNonDependencySnapshotStackFrames (snapshot, repositoryRoot) {
     }
 
     const file = normalizeSnapshotFileName(frame.fileName)
-    if (!file.includes(repositoryRoot)) {
-      continue
-    }
-
-    if (DI_SNAPSHOT_DEPENDENCY_FOLDERS.some(pattern => file.includes(pattern))) {
+    if (!file.includes(repositoryRoot) || DI_SNAPSHOT_DEPENDENCY_FOLDERS.some(pattern => file.includes(pattern))) {
       continue
     }
 
@@ -1017,7 +1013,7 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    if (!this.#isExpectedDiBreakpointHit(snapshot)) {
+    if (this.filterDiBreakpointHitByStack && !this.#isExpectedDiBreakpointHit(snapshot)) {
       log.debug('Ignoring Dynamic Instrumentation snapshot because it does not match the failed test stack')
       return
     }
@@ -1053,7 +1049,6 @@ module.exports = class CiPlugin extends Plugin {
         span_id: activeTestSpanContext.toSpanId(),
       },
     })
-
   }
 
   #isExpectedDiBreakpointHit (snapshot) {

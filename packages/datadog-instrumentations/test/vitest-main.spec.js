@@ -339,13 +339,13 @@ describe('vitest main instrumentation', () => {
         }
 
         start () { return Promise.resolve() }
-        close () {}
-        exit () {}
-        reportCoverage () {}
-        runFiles () {}
+        close () { return undefined }
+        exit () { return undefined }
+        reportCoverage () { return undefined }
+        runFiles () { return undefined }
       }
       const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
-      hook({ Vitest, startVitest () {} })
+      hook({ Vitest, startVitest () { return undefined } })
       const vitest = new Vitest()
 
       await vitest.start()

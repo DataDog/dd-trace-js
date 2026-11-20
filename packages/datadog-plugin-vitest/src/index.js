@@ -96,6 +96,8 @@ class VitestPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
+    this.filterDiBreakpointHitByStack = true
+
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
