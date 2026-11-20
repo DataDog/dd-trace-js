@@ -7,7 +7,7 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-const { buildClientHttpUrl, extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, extractPathFromUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const log = require('../../dd-trace/src/log')
 const normalizeError = require('./error')
@@ -26,6 +26,14 @@ const getHostname = require('./url')
 class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/functions-js:FunctionsClient_invoke'
+
+  configure (config) {
+    if (typeof config === 'boolean') return super.configure(config)
+    return super.configure({
+      ...config,
+      queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
+    })
+  }
 
   /** @param {FunctionsContext} ctx */
   bindStart (ctx) {

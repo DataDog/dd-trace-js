@@ -21,7 +21,7 @@ function enable (tracer, config) {
     const analyzeStreamResponses = config.aiguard.DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    integrations.enable(aiguard, block, analyzeStreamResponses)
+    integrations.enable(aiguard, block, analyzeStreamResponses, config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS)
 
     isEnabled = true
   } catch (err) {

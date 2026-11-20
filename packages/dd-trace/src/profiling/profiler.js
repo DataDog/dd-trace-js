@@ -1,6 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('events')
+const { setImmediate: yieldToEventLoop } = require('node:timers/promises')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
@@ -442,7 +443,7 @@ class Profiler extends EventEmitter {
       const compressionFn = this.#getCompressionFn()
 
       // encode and export asynchronously
-      await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
+      const encodeProfile = async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
           const compressed = encoded instanceof Buffer && compressionFn !== undefined
@@ -466,7 +467,16 @@ class Profiler extends EventEmitter {
           // encode and submit the other profile types.
           log.error(error)
         }
-      }))
+      }
+
+      const encodings = []
+      for (const profile of profiles) {
+        // Separate synchronous encoder prefixes without waiting for compression/export to finish.
+        // eslint-disable-next-line no-await-in-loop -- Encoder starts must yield, not their entire async tasks.
+        await yieldToEventLoop()
+        encodings.push(encodeProfile(profile))
+      }
+      await Promise.all(encodings)
 
       if (hasEncoded) {
         await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotTags, snapshotKind)

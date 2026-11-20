@@ -74,6 +74,48 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
+        it('applies query obfuscation after configuration reloads and repeated requests', async () => {
+          appListener = server(stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }, () => {})
+          await once(appListener, 'listening')
+          const origin = `${protocol}://localhost:${appListener.address().port}`
+          const client = http2.connect(origin)
+          try {
+            await once(client, 'connect')
+            for (const [queryStringObfuscation, query] of [
+              [undefined, 'active=true&<redacted>'],
+              [false, 'active=true&password=secret'],
+              ['', 'active=true&password=secret'],
+              [true, undefined],
+              ['.*', undefined],
+              ['[', undefined],
+              ['password=[^&]*', 'active=true&<redacted>'],
+              ['active=[^&]*', '<redacted>&password=secret'],
+            ]) {
+              const config = { server: false }
+              if (queryStringObfuscation !== undefined) config.queryStringObfuscation = queryStringObfuscation
+              agent.reload('http2', config)
+              for (let attempt = 0; attempt < 2; attempt++) {
+                const traceReceived = agent.assertFirstTraceSpan(span => {
+                  const base = `${origin}/user`
+                  assert.strictEqual(span.meta['url.full'], query === undefined ? base : `${base}?${query}`)
+                })
+                const request = client.request({ ':path': '/user?active=true&password=secret' })
+                const responseReceived = once(request, 'response')
+                const requestClosed = once(request, 'close')
+                request.resume()
+                request.end()
+                const [, [headers]] = await Promise.all([traceReceived, responseReceived, requestClosed])
+                assert.strictEqual(headers[':status'], 200)
+              }
+            }
+          } finally {
+            client.close()
+          }
+        })
+
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = (stream, headers) => {
             stream.respond({ ':status': 200 })
