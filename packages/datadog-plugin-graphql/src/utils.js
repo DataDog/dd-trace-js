@@ -249,8 +249,8 @@ function getRequestOperation (document, operationName, calculateSignature) {
  * @param {{ errorExtensions?: string[] }} config Resolved plugin config; `errorExtensions` lists the
  *   GraphQL error `extensions` keys to copy onto the span event.
  * @param {import('../../dd-trace/src/opentracing/span')} span
- * @param {{ name?: string, message?: string, stack?: string, locations?: Array<{ line: number, column: number }>,
- *   path?: Array<string|number>, extensions?: Record<string, unknown> }} exc
+ * @param {Partial<Pick<import('graphql').GraphQLError,
+ *   'name' | 'message' | 'stack' | 'locations' | 'path' | 'extensions' | 'originalError'>>} exc
  */
 function extractErrorIntoSpanEvent (config, span, exc) {
   const attributes = {}
