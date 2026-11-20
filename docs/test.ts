@@ -1091,6 +1091,7 @@ tracer.init({
       maxMessagesLength: 22,
       maxContentSize: 1024,
       redactionEnabled: true,
+      mcpEnabled: true,
       timeout: 1000
     }
   }
