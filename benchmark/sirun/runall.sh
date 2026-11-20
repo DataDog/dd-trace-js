@@ -374,6 +374,12 @@ if [[ -n "${RUN_ASYNC_HOOKS}" && ${GROUP} -eq ${SPLITS} ]]; then
   wait
 fi
 
+# TEMPORARY (DataDog/dd-trace-js#11256, revert before merge): repro loop stop condition. Runs before
+# strip-unwanted-results.js, which drops the profiler suite from results.ndjson.
+if [[ -n "${REPRO_LOOP:-}" ]]; then
+  node ./repro-outlier-check.js ./results.ndjson || { echo "REPRO: outlier iteration" >&2; exit 1; }
+fi
+
 node ./strip-unwanted-results.js
 
 if [ "$DEBUG_RESULTS" == "true" ]; then
