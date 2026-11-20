@@ -7,6 +7,20 @@ const log = require('../../log')
  * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
  */
 
+// OTLP integer fields are signed 64-bit. Larger integers wrap in protobuf and are rejected in JSON,
+// so they are exported as doubles instead.
+const INT64_MIN = -(2 ** 63)
+const INT64_MAX_EXCLUSIVE = 2 ** 63
+
+/**
+ * Whether a number can be exported as an OTLP int64 (or sfixed64) value.
+ *
+ * @param {number} value
+ */
+function isInt64 (value) {
+  return Number.isInteger(value) && value >= INT64_MIN && value < INT64_MAX_EXCLUSIVE
+}
+
 /**
  * Base class for OTLP transformers.
  *
@@ -125,7 +139,7 @@ class OtlpTransformerBase {
     if (typeof value === 'string') {
       return { stringValue: value }
     } else if (typeof value === 'number') {
-      if (Number.isInteger(value)) {
+      if (isInt64(value)) {
         return { intValue: value }
       }
       return { doubleValue: value }
@@ -191,4 +205,5 @@ function stableStringify (attributes) {
 }
 
 module.exports = OtlpTransformerBase
+module.exports.isInt64 = isInt64
 module.exports.stableStringify = stableStringify
