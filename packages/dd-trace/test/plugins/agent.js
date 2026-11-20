@@ -59,6 +59,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
   'AWS_LAMBDA_INITIALIZATION_TYPE',
+  'AzureFunctionsJobHost__extensions__http__routePrefix',
+  'AzureWebJobsScriptRoot',
   'FUNCTION_NAME',
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
