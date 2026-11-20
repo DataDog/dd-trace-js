@@ -997,6 +997,12 @@ respectively). When unset, empty, or invalid, the Early Flake Detection retry se
 used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
 Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
 
+Set `DD_TEST_OPTIMIZATION_RUNTIME_TAGS` to a JSON object to override the detected operating system and runtime tags,
+for example `{"os.version":"6.12.0"}`. Supported keys are `os.platform`, `os.architecture`, `os.version`,
+`runtime.name`, and `runtime.version`. Values are trimmed, and other keys and non-string or blank values are ignored.
+The overridden values are reported on test events and in the configurations sent to Datadog, so Test Impact Analysis
+keeps using earlier coverage when a detected value such as the kernel version changes. An invalid value is ignored.
+
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
 are disabled, quarantined, or run in Attempt to Fix mode.
