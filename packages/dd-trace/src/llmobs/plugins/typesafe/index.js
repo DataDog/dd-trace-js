@@ -6,6 +6,8 @@ const TYPESAFE_MODEL_PROVIDER = 'typesafe'
 const OPENROUTER_MODEL_PROVIDER = 'openrouter'
 const DECISION_PROVIDER_TAG = 'decision_provider'
 const DECISION_PROVIDER = 'typesafe'
+// The SDK sends every key of the request object, but keys other than these can carry credentials
+const REQUEST_KEYS = new Set(['state', 'questions', 'model', 'assets'])
 
 class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'typesafe' // used for llmobs telemetry
@@ -86,16 +88,21 @@ function extractMetrics (result) {
 }
 
 /**
- * The request as `systemOne` received it, with the model the SDK fills in. Serialized at finish, after the SDK has
- * serialized it to send.
+ * The request as `systemOne` received it, with the model the SDK fills in and only request keys. Serialized at finish,
+ * after the SDK has serialized it to send.
  *
  * @param {object} ctx
  */
 function serializeRequest (ctx) {
   const { request } = ctx
   if (!request) return
+  const body = {}
+  for (const key of Object.keys(request)) {
+    if (REQUEST_KEYS.has(key)) body[key] = request[key]
+  }
+  body.model = request.model ?? ctx.self?.defaultModel
   try {
-    return JSON.stringify({ ...request, model: request.model ?? ctx.self?.defaultModel })
+    return JSON.stringify(body)
   } catch {}
 }
 
