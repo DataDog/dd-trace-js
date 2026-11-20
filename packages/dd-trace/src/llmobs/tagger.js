@@ -57,7 +57,6 @@ const {
   PROPAGATED_SAMPLE_RATE_KEY,
   PROPAGATED_SAMPLING_DECISION_KEY,
   TRACE_ID,
-  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { buildAgentDeclaration } = require('./agent-manifest')
 const { storage } = require('./storage')
@@ -68,7 +67,8 @@ const {
   writeBridgeTags,
   validateToolDefinitions,
   generateLlmObsTraceId,
-  normalizeLlmObsTraceId,
+  getPropagatedLlmObsTraceId,
+  getPropagatedValue,
 } = require('./util')
 
 // global registry of LLMObs spans
@@ -128,10 +128,12 @@ class LLMObsTagger {
     // Do not register it in the map if it does not have an LLMObs span kind.
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED || !kind) return
 
+    const traceTags = span.context()._trace.tags
+
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
-      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      getPropagatedValue(traceTags, PROPAGATED_ML_APP_KEY) ||
       this.#config.llmobs.DD_LLMOBS_ML_APP ||
       this.#config.service // this should always have a default
 
@@ -144,11 +146,9 @@ class LLMObsTagger {
 
     this._register(span)
 
-    const traceTags = span.context()._trace.tags
-
     const llmobsTraceId =
       registry.get(parent)?.[TRACE_ID] ??
-      normalizeLlmObsTraceId(traceTags[PROPAGATED_TRACE_ID_KEY]) ??
+      getPropagatedLlmObsTraceId(traceTags) ??
       generateLlmObsTraceId(span._startTime)
     this._setTag(span, TRACE_ID, llmobsTraceId)
 
@@ -169,14 +169,14 @@ class LLMObsTagger {
 
     sessionId ||= registry.get(parent)?.[SESSION_ID] ||
       traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
-      traceTags[PROPAGATED_SESSION_ID_KEY]
+      getPropagatedValue(traceTags, PROPAGATED_SESSION_ID_KEY)
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
     const parentId =
       parent?.context().toSpanId() ??
-      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      getPropagatedValue(traceTags, PROPAGATED_PARENT_ID_KEY) ??
       genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
@@ -278,12 +278,12 @@ class LLMObsTagger {
       // Local LLMObs parent: inherit its decision.
       sampleRate = parentTags[SAMPLE_RATE]
       samplingDecision = parentTags[SAMPLING_DECISION]
-    } else if (traceTags[PROPAGATED_PARENT_ID_KEY]) {
+    } else if (getPropagatedValue(traceTags, PROPAGATED_PARENT_ID_KEY)) {
       // Distributed LLMObs parent: inherit whatever was propagated. This may be
       // absent if the upstream service predates sampling propagation, in which
       // case we make no decision here rather than starting a divergent one.
-      sampleRate = traceTags[PROPAGATED_SAMPLE_RATE_KEY]
-      samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+      sampleRate = getPropagatedValue(traceTags, PROPAGATED_SAMPLE_RATE_KEY)
+      samplingDecision = getPropagatedValue(traceTags, PROPAGATED_SAMPLING_DECISION_KEY)
     } else {
       // Root span: make the trace's one sampling decision.
       const sampler = this.#getSampler()
@@ -311,13 +311,15 @@ class LLMObsTagger {
     if (registry.has(parent)) {
       // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
       ({ name, spanId, version } = resolveAgentAttribution(registry.get(parent), parent))
-    } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
-      // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
-      // name may be absent when the upstream hop ran an older SDK or its name was not
-      // wire-safe; the id-only case is expected and the backend resolves the name by span id.
+    } else {
       const traceTags = span.context()._trace.tags
-      name = traceTags[PROPAGATED_PARENT_AGENT_NAME_KEY]
-      spanId = traceTags[PROPAGATED_PARENT_AGENT_ID_KEY]
+      if (getPropagatedValue(traceTags, PROPAGATED_PARENT_ID_KEY)) {
+        // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
+        // name may be absent when the upstream hop ran an older SDK or its name was not
+        // wire-safe; the id-only case is expected and the backend resolves the name by span id.
+        name = getPropagatedValue(traceTags, PROPAGATED_PARENT_AGENT_NAME_KEY)
+        spanId = getPropagatedValue(traceTags, PROPAGATED_PARENT_AGENT_ID_KEY)
+      }
     }
 
     if (name != null) this._setTag(span, PARENT_AGENT_NAME, name)

@@ -92,6 +92,7 @@ let otelSampling
  * @property {DatadogSpanContext} spanContext
  * @property {Array<string | undefined>} [traceTagReplacements]
  * @property {number} [optionalTraceTagCount]
+ * @property {Record<string, string>} [baggageItems] Extra `baggage` items for this injection only.
  */
 
 /**
@@ -103,6 +104,21 @@ function hasTraceTagReplacement (traceTagReplacements, key) {
     if (traceTagReplacements[index] === key) return true
   }
   return false
+}
+
+/**
+ * Moves overridden keys to the end, so the extra items are the first to be truncated by the baggage limits.
+ * @param {Record<string, string>} baggageItems
+ * @param {Record<string, string>} extraBaggageItems
+ * @returns {Record<string, string>}
+ */
+function appendBaggageItems (baggageItems, extraBaggageItems) {
+  /** @type {Record<string, string>} */
+  const merged = {}
+  for (const key of Object.keys(baggageItems)) {
+    if (!Object.hasOwn(extraBaggageItems, key)) merged[key] = baggageItems[key]
+  }
+  return Object.assign(merged, extraBaggageItems)
 }
 
 /** @param {string} key */
@@ -392,23 +408,28 @@ class TextMapPropagator {
    */
   inject (spanContext, carrier) {
     if (carrier === null) return
-    let injectedCarrier = this.#injectBaggageItems(spanContext, carrier)
-    if (!spanContext) return injectedCarrier
+    if (!spanContext) return this.#injectBaggageItems(spanContext, carrier)
 
     const injectTraceContext = this.#config.apmTracingEnabled !== false ||
       hasTraceSourcePropagationTag(spanContext._trace.tags)
+    const injectBaggage = this.#hasPropagationStyle('inject', 'baggage')
     let traceTagReplacements
     let optionalTraceTagCount = 0
     /** @type {TraceTagInjection | undefined} */
     let traceTagInjection
-    if (injectTraceContext && injectCh.hasSubscribers && (
+    // Baggage does not depend on the APM trace context, so subscribers may contribute baggage items
+    // even when the trace context itself is not injected.
+    if (injectCh.hasSubscribers && (injectBaggage || (injectTraceContext && (
       this.#hasPropagationStyle('inject', 'datadog') || this.#hasPropagationStyle('inject', 'tracecontext')
-    )) {
+    )))) {
       traceTagInjection = { spanContext }
       injectCh.publish(traceTagInjection)
-      traceTagReplacements = traceTagInjection.traceTagReplacements
-      optionalTraceTagCount = traceTagInjection.optionalTraceTagCount ?? 0
+      if (injectTraceContext) {
+        traceTagReplacements = traceTagInjection.traceTagReplacements
+        optionalTraceTagCount = traceTagInjection.optionalTraceTagCount ?? 0
+      }
     }
+    let injectedCarrier = this.#injectBaggageItems(spanContext, carrier, traceTagInjection?.baggageItems)
     if (injectTraceContext) {
       injectedCarrier = this.#injectDatadog(
         spanContext, injectedCarrier ?? carrier, traceTagReplacements, optionalTraceTagCount
@@ -487,9 +508,11 @@ class TextMapPropagator {
   /**
    * @param {DatadogSpanContext | null | undefined} spanContext
    * @param {Record<string, string>} [carrier]
+   * @param {Record<string, string>} [extraBaggageItems] Items for this injection only. They replace
+   *   in-process items with the same key and are written last, so they are the first to be truncated.
    * @returns {Record<string, string> | undefined}
    */
-  #injectBaggageItems (spanContext, carrier) {
+  #injectBaggageItems (spanContext, carrier, extraBaggageItems) {
     let injectedCarrier
     if (this.#config.legacyBaggageEnabled) {
       const baggageItems = spanContext?._baggageItems
@@ -515,7 +538,9 @@ class TextMapPropagator {
       let itemCounter = 0
       let byteCounter = 0
 
-      const baggageItems = getAllBaggageItems()
+      const baggageItems = extraBaggageItems
+        ? appendBaggageItems(getAllBaggageItems(), extraBaggageItems)
+        : getAllBaggageItems()
       for (const key of Object.keys(baggageItems)) {
         const baggageKey = key.trim()
         if (!baggageTokenExpr.test(baggageKey)) continue

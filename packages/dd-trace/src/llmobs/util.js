@@ -1,8 +1,25 @@
 'use strict'
 
+const { getBaggageItem } = require('../baggage')
 const id = require('../id')
 const log = require('../log')
 const {
+  BAGGAGE_ML_APP_KEY,
+  BAGGAGE_PARENT_AGENT_ID_KEY,
+  BAGGAGE_PARENT_AGENT_NAME_KEY,
+  BAGGAGE_PARENT_ID_KEY,
+  BAGGAGE_SAMPLE_RATE_KEY,
+  BAGGAGE_SAMPLING_DECISION_KEY,
+  BAGGAGE_SESSION_ID_KEY,
+  BAGGAGE_TRACE_ID_KEY,
+  PROPAGATED_ML_APP_KEY,
+  PROPAGATED_PARENT_AGENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_NAME_KEY,
+  PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
+  PROPAGATED_SESSION_ID_KEY,
+  PROPAGATED_TRACE_ID_KEY,
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
@@ -17,6 +34,18 @@ const {
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
 const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
 const MAX_UINT_64 = (1n << 64n) - 1n
+
+// The trace ID is absent on purpose: baggage carries it as hex while the tag carries decimal, so it
+// has its own reader, `getPropagatedLlmObsTraceId`.
+const PROPAGATED_TAG_TO_BAGGAGE_KEY = {
+  [PROPAGATED_PARENT_ID_KEY]: BAGGAGE_PARENT_ID_KEY,
+  [PROPAGATED_ML_APP_KEY]: BAGGAGE_ML_APP_KEY,
+  [PROPAGATED_SESSION_ID_KEY]: BAGGAGE_SESSION_ID_KEY,
+  [PROPAGATED_SAMPLE_RATE_KEY]: BAGGAGE_SAMPLE_RATE_KEY,
+  [PROPAGATED_SAMPLING_DECISION_KEY]: BAGGAGE_SAMPLING_DECISION_KEY,
+  [PROPAGATED_PARENT_AGENT_ID_KEY]: BAGGAGE_PARENT_AGENT_ID_KEY,
+  [PROPAGATED_PARENT_AGENT_NAME_KEY]: BAGGAGE_PARENT_AGENT_NAME_KEY,
+}
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
@@ -458,11 +487,34 @@ function normalizeLlmObsTraceId (traceId) {
   return identifier > MAX_UINT_64 ? identifier.toString(16).padStart(32, '0') : traceId
 }
 
+/**
+ * Read one distributed LLMObs value, preferring the W3C `baggage` carrier over the legacy `_dd.p.*` trace tag.
+ * Baggage survives a hop that drops the APM trace headers, which also drops `x-datadog-tags`.
+ * @param {Record<string, string> | undefined} traceTags
+ * @param {string} tagKey a `PROPAGATED_*` trace tag key, other than the trace ID
+ * @returns {string | undefined}
+ */
+function getPropagatedValue (traceTags, tagKey) {
+  return getBaggageItem(PROPAGATED_TAG_TO_BAGGAGE_KEY[tagKey]) ?? traceTags?.[tagKey]
+}
+
+/**
+ * Read the distributed LLMObs trace ID as canonical hex. Baggage already carries hex; only the decimal
+ * tag needs normalizing, which keeps an all-digit 32-character hex ID from being misread as decimal.
+ * @param {Record<string, string> | undefined} traceTags
+ * @returns {string | undefined}
+ */
+function getPropagatedLlmObsTraceId (traceTags) {
+  return getBaggageItem(BAGGAGE_TRACE_ID_KEY) ?? normalizeLlmObsTraceId(traceTags?.[PROPAGATED_TRACE_ID_KEY])
+}
+
 module.exports = {
   agentNameWireSafe,
   encodeUnicode,
   findGenAIAncestorSpanId,
   generateLlmObsTraceId,
+  getPropagatedLlmObsTraceId,
+  getPropagatedValue,
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
   resolveAgentAttribution,
