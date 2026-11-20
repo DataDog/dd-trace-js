@@ -1,16 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('mocha')
+const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 // path-to-regexp is a transitive (vendored) dependency; require it directly to exercise the
 // normalizer against the real Express 5 parser/matcher (path-to-regexp 8).
 // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
 const { parse: rawParse, match: rawMatch } = require('path-to-regexp')
-const {
-  normalizeRouteExpress,
-  normalizeRoute,
-} = require('../../../src/appsec/api_security/normalized-route')
+const { normalizeRoute: normalizeRouteExpress } = require('../../../src/appsec/api_security/normalized-route/express')
 
 // Mirror the getParse instrumentation adapter: TokenData ({ tokens }) or undefined.
 function parse (pattern) {
@@ -259,39 +257,232 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/r' + statics(8) + '{/:id}', {}, '/r/5'), null)
     })
   })
-
-  describe('normalizeRoute(req) dispatcher', () => {
-    // The express path is covered end-to-end by the plugin integration spec; here we only assert
-    // the short-circuit when there is no active web span.
-    it('returns null when there is no active web span', () => {
-      assert.equal(normalizeRoute({ originalUrl: '/x', params: {} }), null)
-    })
-
-    // A process can serve both Express majors while the parser adapters are process-wide, so the
-    // major is decided per request off the serving app.
-    it('returns null for an Express 4 request even when a parser is available', () => {
-      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
-      const req = { originalUrl: '/users/1', params: { id: '1' }, app: { del () {} } }
-      const web = require('../../../src/plugins/util/web')
-      const root = sinon.stub(web, 'root').returns(span)
-      try {
-        assert.equal(normalizeRoute(req), null)
-      } finally {
-        root.restore()
-      }
-    })
-
-    // The host never loaded path-to-regexp 8 here, so there is no parser to read the route with.
-    it('returns null when no path-to-regexp 8 adapter is available', () => {
-      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
-      const req = { originalUrl: '/users/1', params: { id: '1' } }
-      const web = require('../../../src/plugins/util/web')
-      const root = sinon.stub(web, 'root').returns(span)
-      try {
-        assert.equal(normalizeRoute(req), null)
-      } finally {
-        root.restore()
-      }
-    })
-  })
 })
+
+describe('normalizeRoute framework selection', () => {
+  let normalizeRoute, matchedRoutes, req, component, route, context, web, getParse, getMatch
+
+  beforeEach(() => {
+    req = { url: '/items/42', params: {} }
+    component = 'fastify'
+    route = '/items/:id'
+    context = { paths: [route] }
+    web = {
+      root: sinon.stub().returns({
+        context: () => ({ getTag: tag => tag === 'component' ? component : route }),
+      }),
+      getContext: sinon.stub().returns(context),
+    }
+    matchedRoutes = proxyquire('../../../src/appsec/api_security/normalized-route/matched-routes', {
+      '../../../plugins/util/web': web,
+    })
+    captureRoute('/items/:id')
+    getParse = sinon.stub().returns(parse)
+    getMatch = sinon.stub().returns(makeMatcher)
+    normalizeRoute = proxyquire('../../../src/appsec/api_security/normalized-route', {
+      '../../../../../datadog-instrumentations/src/path-to-regexp': { getParse, getMatch },
+      '../../../plugins/util/web': web,
+      './matched-routes': matchedRoutes,
+    }).normalizeRoute
+  })
+
+  /** @param {string | undefined} concrete */
+  function captureRoute (concrete) {
+    route = concrete
+    context.paths = [route]
+    matchedRoutes.onRequest({ req, routeOptions: route === undefined ? undefined : { url: route } })
+    web.getContext.resetHistory()
+  }
+
+  it('normalizes an Express request using the serving app grammar', () => {
+    component = 'express'
+    route = '/items{/:id}'
+    assert.equal(normalizeRoute(req), '/items/{id}')
+    sinon.assert.notCalled(web.getContext)
+  })
+
+  it('prefers the original Express URL over the rewritten request URL', () => {
+    component = 'express'
+    route = '/items{/:id}'
+    req.originalUrl = '/items/42'
+    req.url = '/items'
+    assert.equal(normalizeRoute(req), '/items/{id}')
+  })
+
+  it('returns null for Express 4 even when a parser is available', () => {
+    component = 'express'
+    route = '/items/:id'
+    req.app = { del () {} }
+    assert.equal(normalizeRoute(req), null)
+    sinon.assert.notCalled(getParse)
+  })
+
+  it('returns null when the Express parser adapter is unavailable', () => {
+    component = 'express'
+    route = '/items/:id'
+    getParse.returns(undefined)
+    assert.equal(normalizeRoute(req), null)
+  })
+
+  it('normalizes the Fastify declaration without a version field', () => {
+    assert.equal(normalizeRoute(req), '/items/{id}')
+    captureRoute('/items')
+    assert.equal(normalizeRoute(req), '/items')
+    sinon.assert.notCalled(getParse)
+    sinon.assert.notCalled(getMatch)
+  })
+
+  it('keeps Express and Fastify grammars and caches independent', () => {
+    route = '/braces{literal}'
+    context.paths = [route]
+    captureRoute(route)
+    for (let i = 0; i < 2; i++) {
+      component = 'express'
+      assert.equal(normalizeRoute(req), '/braces')
+      component = 'fastify'
+      assert.equal(normalizeRoute(req), '/braces%7Bliteral%7D')
+    }
+  })
+
+  it('distinguishes unnamed Fastify catch-alls from Express syntax and avoids name collisions', () => {
+    route = '/:param1/*'
+    context.paths = [route]
+    captureRoute(route)
+    assert.equal(normalizeRoute(req), '/{param1}/{param2}')
+    component = 'express'
+    assert.equal(normalizeRoute(req), null)
+  })
+
+  it('does not normalize an unsupported framework', () => {
+    component = 'koa'
+    assert.equal(normalizeRoute(req), null)
+    sinon.assert.notCalled(web.getContext)
+    sinon.assert.notCalled(getParse)
+  })
+
+  it('does not normalize without an HTTP span', () => {
+    web.root.returns(undefined)
+    assert.equal(normalizeRoute(req), null)
+    sinon.assert.notCalled(web.getContext)
+  })
+
+  it('does not normalize without a declared route', () => {
+    route = undefined
+    assert.equal(normalizeRoute(req), null)
+    component = 'express'
+    assert.equal(normalizeRoute(req), null)
+  })
+
+  it('does not normalize without a web context', () => {
+    web.getContext.returns(undefined)
+    assert.equal(normalizeRoute(req), null)
+  })
+
+  it('does not normalize without a Fastify capture', () => {
+    context.paths = [route]
+    assert.equal(normalizeRoute(req), null)
+  })
+
+  for (const paths of [undefined, [], ['/different'], ['/prefix', '/items/:id?']]) {
+    it('omits a Fastify route when its captured declaration differs: ' + JSON.stringify(paths), () => {
+      context.paths = paths
+      matchedRoutes.onRequest({ req, routeOptions: route === undefined ? undefined : { url: route } })
+      assert.equal(normalizeRoute(req), null)
+    })
+  }
+
+  for (const replacement of ['/users/:id', '/items/:id?']) {
+    it('omits a Fastify branch after another route update: ' + replacement, () => {
+      route = replacement
+      context.paths = [replacement]
+      assert.equal(normalizeRoute(req), null)
+    })
+  }
+
+  const unsupported = [undefined, '', '/items/:id(', '/items/*/tail', 'invalid', '/items/:id?', '/items/:id?/']
+  for (const matchedRoute of unsupported) {
+    it('omits an unavailable or unsupported Fastify branch: ' + matchedRoute, () => {
+      captureRoute(matchedRoute)
+      assert.equal(normalizeRoute(req), null)
+      assert.equal(normalizeRoute(req), null)
+    })
+  }
+})
+
+for (const framework of ['express', 'fastify']) {
+  describe(`normalizeRoute ${framework} cache`, () => {
+    let normalizeRoute, renderRoute, parseRoute
+
+    beforeEach(() => {
+      const renderer = require('../../../src/appsec/api_security/normalized-route/renderer')
+      renderRoute = sinon.spy(renderer.renderRoute)
+      parseRoute = sinon.spy(parse)
+      normalizeRoute = proxyquire('../../../src/appsec/api_security/normalized-route/' + framework, {
+        './renderer': { renderRoute },
+      }).normalizeRoute
+    })
+
+    /**
+     * @param {string} route
+     * @param {string} [urlPath]
+     */
+    function normalize (route, urlPath) {
+      return normalizeRoute(route, undefined, urlPath, parseRoute, makeMatcher)
+    }
+
+    it('reuses rendered declarations on repeated requests', () => {
+      assert.equal(normalize('/cached/:id'), '/cached/{id}')
+      assert.equal(normalize('/cached/:id'), '/cached/{id}')
+      sinon.assert.calledOnce(renderRoute)
+    })
+
+    it('bounds retention while keeping recently used routes cached', () => {
+      for (let i = 0; i < 4096; i++) {
+        assert.equal(normalize('/tenant-' + i + '/:id'), '/tenant-' + i + '/{id}')
+      }
+      assert.equal(renderRoute.callCount, 4096)
+      assert.equal(normalize('/tenant-0/:id'), '/tenant-0/{id}')
+      assert.equal(renderRoute.callCount, 4096)
+
+      assert.equal(normalize('/tenant-4096/:id'), '/tenant-4096/{id}')
+      assert.equal(renderRoute.callCount, 4097)
+      assert.equal(normalize('/tenant-0/:id'), '/tenant-0/{id}')
+      assert.equal(normalize('/tenant-4096/:id'), '/tenant-4096/{id}')
+      assert.equal(renderRoute.callCount, 4097)
+
+      // The least recently used declaration was evicted, but recompilation preserves its output.
+      assert.equal(normalize('/tenant-1/:id'), '/tenant-1/{id}')
+      assert.equal(renderRoute.callCount, 4098)
+    })
+
+    it('keeps unsupported declarations omitted before and after eviction', () => {
+      assert.equal(normalize('/broken/:id('), null)
+      assert.equal(normalize('/broken/:id('), null)
+      sinon.assert.notCalled(renderRoute)
+      if (framework === 'express') sinon.assert.calledOnce(parseRoute)
+      for (let i = 0; i < 4096; i++) normalize('/eviction-' + i)
+      assert.equal(normalize('/broken/:id('), null)
+      assert.equal(normalize('/broken/:id('), null)
+      if (framework === 'express') assert.equal(parseRoute.callCount, 4098)
+    })
+
+    if (framework === 'express') {
+      it('rebuilds the matcher and optional variants after eviction', () => {
+        const route = '/optional{/:id}'
+        assert.equal(normalize(route, '/optional/42'), '/optional/{id}')
+        assert.equal(normalize(route, '/optional'), '/optional')
+        assert.equal(normalize(route, '/optional/42'), '/optional/{id}')
+        sinon.assert.calledOnce(parseRoute)
+        sinon.assert.calledTwice(renderRoute)
+
+        for (let i = 0; i < 4096; i++) normalize('/eviction-' + i)
+        const parsed = parseRoute.callCount
+        const rendered = renderRoute.callCount
+        assert.equal(normalize(route, '/optional'), '/optional')
+        assert.equal(normalize(route, '/optional/42'), '/optional/{id}')
+        assert.equal(parseRoute.callCount, parsed + 1)
+        assert.equal(renderRoute.callCount, rendered + 2)
+      })
+    }
+  })
+}

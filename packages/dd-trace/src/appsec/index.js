@@ -10,6 +10,7 @@ const {
   multerParser,
   fastifyBodyParser,
   fastifyCookieParser,
+  fastifyRequestHandle,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   lambdaStartInvocation,
@@ -39,6 +40,7 @@ const {
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecurity = require('./api_security')
+const matchedRoutes = require('./api_security/normalized-route/matched-routes')
 const { setTemplates } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
@@ -51,8 +53,7 @@ const payments = require('./handlers/payments')
 
 let isEnabled = false
 
-// Single source of truth for what enable() subscribes and disable() unsubscribes,
-// so the two can't drift apart.
+// Shared lifecycle for unconditional AppSec subscriptions.
 const channelHandlers = [
   [bodyParser, httpRequest.onRequestBodyParsed],
   [multerParser, httpRequest.onRequestBodyParsed],
@@ -111,6 +112,10 @@ function enable (_config) {
 
     httpRequest.setConfig(_config)
 
+    if (_config.appsec.DD_API_SECURITY_ENABLED) {
+      fastifyRequestHandle.subscribe(matchedRoutes.onRequest)
+    }
+
     for (const [channel, handler] of channelHandlers) {
       channel.subscribe(handler)
     }
@@ -143,6 +148,8 @@ function disable () {
   httpRequest.setConfig(undefined)
 
   // Channel#unsubscribe() is undefined for non active channels
+  if (fastifyRequestHandle.hasSubscribers) fastifyRequestHandle.unsubscribe(matchedRoutes.onRequest)
+
   for (const [channel, handler] of channelHandlers) {
     if (channel.hasSubscribers) channel.unsubscribe(handler)
   }
