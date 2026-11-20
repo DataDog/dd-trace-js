@@ -32,6 +32,7 @@ const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
+  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -713,6 +714,14 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
+    // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
+    // propagation on its own. A set DD_TRACE_PROPAGATION_STYLE takes precedence, even when its value is invalid
+    // and its own default applies. Runs before the fallbacks so the inject and extract styles inherit it.
+    if (!trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE') && trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
+      getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') === undefined) {
+      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', this.OTEL_PROPAGATORS)
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
@@ -947,8 +956,7 @@ function warnWrongOtelSettings () {
   for (const [otelEnvVar, ddEnvVars, key = otelEnvVar] of /** @type {Array<[string, string[], string?]>} */ ([
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', ['DD_TRACE_LOG_LEVEL'], 'logLevel'],
-    // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE'], 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE']],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_SERVICE_NAME', ['DD_SERVICE'], 'service'],
     ['OTEL_TRACES_SAMPLER', ['DD_TRACE_SAMPLE_RATE']],

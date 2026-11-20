@@ -4095,10 +4095,7 @@
         "implementation": "D",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
-        "transform": "validatePropagationStyles",
-        "aliases": [
-          "OTEL_PROPAGATORS"
-        ]
+        "transform": "validatePropagationStyles"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
@@ -4764,6 +4761,14 @@
         "type": "int",
         "allowed": "[1-9]\\d*",
         "default": "7500"
+      }
+    ],
+    "OTEL_PROPAGATORS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": "",
+        "transform": "validateOtelPropagators"
       }
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [
