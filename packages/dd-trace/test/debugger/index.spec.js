@@ -15,6 +15,7 @@ require('../setup/mocha')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
 const { PauseDurationHistogram } = require('../../src/debugger/pause-duration-histogram')
+const SafeError = require('../../src/log/safe-error')
 const telemetryLogs = require('../../src/telemetry/logs')
 const logCollector = require('../../src/telemetry/logs/log-collector')
 /** @typedef {typeof import('../../../../vendor/node_modules/@datadog/sketches-js')} Sketches */
@@ -248,6 +249,20 @@ describe('debugger/index', () => {
       assert.strictEqual(entries[0].message,
         '[debugger] worker thread error name=Error code=unknown reason=unsupported_probe_type')
     })
+
+    for (const [safeCause, expected] of [[true, 'SafeError: Unknown probe id'], [undefined, 'Error: redacted']]) {
+      it(`should report a worker log cause as ${expected} when safeCause is ${safeCause}`, () => {
+        const onLog = messageChannels[1].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+        // The worker's message port delivers a structured clone, which turns a SafeError into a plain Error.
+        const cause = structuredClone(new SafeError('Unknown probe id'))
+        onLog({ level: 'error', args: ['ackError for probe %s', 'probe-1', cause], safeCause })
+
+        const entries = logCollector.drain()
+        assert.ok(entries)
+        assert.strictEqual(entries[0].message, 'ackError for probe %s')
+        assert.match(entries[0].stack_trace, new RegExp(`^${expected}\n {4}at `))
+      })
+    }
 
     it('should not report intentional worker shutdown as an unexpected exit', () => {
       DynamicInstrumentation.stop()

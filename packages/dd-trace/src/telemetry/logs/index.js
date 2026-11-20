@@ -1,6 +1,7 @@
 'use strict'
 
 const dc = require('dc-polyfill')
+const SafeError = require('../../log/safe-error')
 const { sendData } = require('../send-data')
 const logCollector = require('./log-collector')
 
@@ -61,6 +62,7 @@ function onErrorLog (msg) {
       return
     }
     telLog.errorType = getErrorType(cause)
+    if (cause instanceof SafeError) telLog.safeErrorMessage = cause.message
   }
 
   onLog(telLog)

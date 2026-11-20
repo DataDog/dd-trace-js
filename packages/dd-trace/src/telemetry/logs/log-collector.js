@@ -59,13 +59,14 @@ function sanitize (logEntry) {
     }
   }
 
-  // ALWAYS redact error messages (RFC requirement: exception type only, no message)
-  // This handles single-line and multi-line error messages
+  // Redact error messages (RFC requirement: exception type only, no message), except the message of a SafeError,
+  // which is certified to not contain customer data. This handles single-line and multi-line error messages.
   if (logEntry.errorType && stackLines.length) {
-    stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
+    stackLines = [`${logEntry.errorType}: ${logEntry.safeErrorMessage ?? 'redacted'}`, ...stackLines]
   }
 
   delete logEntry.errorType
+  delete logEntry.safeErrorMessage
 
   logEntry.stack_trace = stackLines.join(EOL)
   if (logEntry.stack_trace === '' && (!logEntry.message || logEntry.message === 'Generic Error')) {

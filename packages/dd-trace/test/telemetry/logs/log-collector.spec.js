@@ -114,6 +114,24 @@ describe('telemetry log collector', () => {
       }), true)
     })
 
+    it('should keep the constant message of a SafeError', () => {
+      const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
+
+      assert.strictEqual(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `SafeError: Unknown probe id${EOL}${ddFrame}${EOL}    at user (/customer/app.js:1:2)`,
+        errorType: 'SafeError',
+        safeErrorMessage: 'Unknown probe id',
+      }), true)
+
+      assert.deepStrictEqual(logCollector.drain(), [{
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `SafeError: Unknown probe id${EOL}at T (path/to/dd/file.js:1:2)`,
+      }])
+    })
+
     it('should redact error message regardless of whether first frame is DD code', () => {
       const stack = [
         'TypeError: Error 1',

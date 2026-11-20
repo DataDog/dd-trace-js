@@ -11,6 +11,7 @@ const { assertObjectContains } = require('../../../../../integration-tests/helpe
 require('../../setup/mocha')
 
 const { compileBreakpointCondition } = require('../../../src/debugger/devtools_client/probe_sampler')
+const SafeError = require('../../../src/log/safe-error')
 
 describe('breakpoints', function () {
   /** @type {typeof import('../../../src/debugger/devtools_client/breakpoints')} */
@@ -1164,7 +1165,7 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          assert.ok(err instanceof Error)
+          assert.ok(err instanceof SafeError)
           assert.strictEqual(err.message, 'Cannot remove probe probe-1: Debugger not started')
         })
     })
@@ -1176,7 +1177,7 @@ describe('breakpoints', function () {
           throw new Error('Should not resolve')
         })
         .catch((err) => {
-          assert.ok(err instanceof Error)
+          assert.ok(err instanceof SafeError)
           assert.strictEqual(err.message, 'Unknown probe id: unknown-probe')
         })
     })

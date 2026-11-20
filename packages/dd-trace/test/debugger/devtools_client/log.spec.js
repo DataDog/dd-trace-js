@@ -8,6 +8,8 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/mocha')
 
+const SafeError = require('../../../src/log/safe-error')
+
 describe('worker thread logger', function () {
   it('should log to the provided message channel', function (done) {
     const logChannel = new MessageChannel()
@@ -105,6 +107,40 @@ describe('worker thread logger', function () {
     })
 
     log.error(() => 'logged', cause)
+  })
+
+  it('should flag a SafeError cause, whose class the message port drops', function (done) {
+    const logChannel = new MessageChannel()
+    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+      'node:worker_threads': {
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } },
+      },
+    })
+
+    logChannel.port2.on('message', (message) => {
+      assert.strictEqual(message.safeCause, true)
+      assert.strictEqual(message.args[1].message, 'Unknown probe id')
+      assert.ok(!(message.args[1] instanceof SafeError))
+      done()
+    })
+
+    log.error('logged', new SafeError('Unknown probe id'))
+  })
+
+  it('should not flag any other cause', function (done) {
+    const logChannel = new MessageChannel()
+    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+      'node:worker_threads': {
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } },
+      },
+    })
+
+    logChannel.port2.on('message', (message) => {
+      assert.ok(!('safeCause' in message))
+      done()
+    })
+
+    log.error('logged', new Error('customer-secret'))
   })
 
   it('should not resolve the function argument when the level is disabled', function (done) {
