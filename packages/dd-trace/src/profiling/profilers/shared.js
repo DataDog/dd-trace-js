@@ -15,10 +15,15 @@ const TRACE_ID_LABEL = 'trace id'
 // Semantic-convention attributes of OTLP thread labels. thread.id is the managed thread ID: the worker's threadId.
 const OTEL_THREAD_NAME = 'thread.name'
 const OTEL_THREAD_ID = 'thread.id'
-// The OS thread ID has no semantic convention. Datadog labels of execution contexts are sample attributes with this
-// prefix, which the backend turns into the label without "datadog." and with spaces for underscores: "os thread id".
-const OTEL_DATADOG_LABEL_PREFIX = 'process.context.label.datadog.'
+// Labels without a semantic convention are labels of the sample's execution context: sample attributes with this
+// prefix, as the eBPF profiler emits them. The backend strips the prefix; it also strips "datadog." from Datadog
+// labels and turns their underscores into spaces, so "process.context.label.datadog.os_thread_id" is "os thread id".
+const OTEL_CONTEXT_LABEL_PREFIX = 'process.context.label.'
+const OTEL_DATADOG_LABEL_PREFIX = `${OTEL_CONTEXT_LABEL_PREFIX}datadog.`
 const OTEL_OS_THREAD_ID = `${OTEL_DATADOG_LABEL_PREFIX}os_thread_id`
+const OTEL_LOCAL_ROOT_SPAN_ID = `${OTEL_DATADOG_LABEL_PREFIX}local_root_span_id`
+const OTEL_TRACE_ENDPOINT = `${OTEL_DATADOG_LABEL_PREFIX}trace_endpoint`
+const OTEL_ASYNC_ID = `${OTEL_DATADOG_LABEL_PREFIX}async_id`
 
 const threadNamePrefix = isMainThread ? 'Main' : `Worker #${threadId}`
 const eventLoopThreadName = `${threadNamePrefix} Event Loop`
@@ -59,6 +64,27 @@ const nonJSThreadsOtelLabels = { [OTEL_THREAD_NAME]: 'Non-JS threads' }
 
 function getNonJSThreadsOtelLabels () {
   return nonJSThreadsOtelLabels
+}
+
+// The OTLP labels of custom labels objects, which the samples taken in a runWithLabels() call share
+const otelCustomLabels = new WeakMap()
+
+/**
+ * Returns the custom labels of a sample as OTLP sample labels: execution context labels under their own keys.
+ *
+ * @param {Record<string, string | number>} customLabels
+ * @returns {Record<string, string | number>}
+ */
+function getOtelCustomLabels (customLabels) {
+  let labels = otelCustomLabels.get(customLabels)
+  if (labels === undefined) {
+    labels = {}
+    for (const [key, value] of Object.entries(customLabels)) {
+      labels[`${OTEL_CONTEXT_LABEL_PREFIX}${key}`] = value
+    }
+    otelCustomLabels.set(customLabels, labels)
+  }
+  return labels
 }
 
 /**
@@ -115,12 +141,16 @@ module.exports = {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   TRACE_ID_LABEL,
+  OTEL_LOCAL_ROOT_SPAN_ID,
+  OTEL_TRACE_ENDPOINT,
+  OTEL_ASYNC_ID,
   threadNamePrefix,
   eventLoopThreadName,
   getNonJSThreadsLabels,
   getNonJSThreadsOtelLabels,
   getThreadLabels: cacheThreadLabels(),
   getOtelThreadLabels: cacheOtelThreadLabels(),
+  getOtelCustomLabels,
   createOtelLinkExtractor,
   encodeProfileAsync,
 }

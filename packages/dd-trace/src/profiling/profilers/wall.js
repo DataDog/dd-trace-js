@@ -20,8 +20,12 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   TRACE_ID_LABEL,
+  OTEL_LOCAL_ROOT_SPAN_ID,
+  OTEL_TRACE_ENDPOINT,
+  OTEL_ASYNC_ID,
   getNonJSThreadsLabels,
   getNonJSThreadsOtelLabels,
+  getOtelCustomLabels,
   getOtelThreadLabels,
   getThreadLabels,
   encodeProfileAsync,
@@ -415,23 +419,55 @@ class NativeWallProfiler {
   }
 
   /**
-   * The labels of an OTLP sample: only those with a semantic convention, the thread's, and the span's trace and
-   * span IDs, which the profiles builder turns into the sample's link. Its time is a sample timestamp, not a label.
+   * The labels of an OTLP sample: the same as #generateLabels, with semantic-convention attributes where there are
+   * some, and otherwise execution context labels. The span's trace and span IDs become the sample's link, in the
+   * profiles builder, and its time is a sample timestamp, not a label.
    *
    * @param {{ name: string }} node
-   * @param {{ context?: unknown } | undefined} context
+   * @param {{ context?: unknown, asyncId?: number } | undefined} context
    */
   #generateOtelLabels (node, context) {
     if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
       return getNonJSThreadsOtelLabels()
     }
-    const ref = context == null ? undefined : this.#unwrapContext(context)[0]
-    const spanId = ref?.spanId
-    const traceId = ref?.traceId
-    if (spanId === undefined || traceId === undefined) {
+    if (context == null) {
       return getOtelThreadLabels()
     }
-    return { ...getOtelThreadLabels(), [SPAN_ID_LABEL]: toBigInt(spanId), [TRACE_ID_LABEL]: traceId }
+
+    const [ref, customLabels] = this.#unwrapContext(context)
+
+    // As in #generateLabels, internal labels take precedence over custom labels of the same key
+    const labels = customLabels === undefined
+      ? { ...getOtelThreadLabels() }
+      : { ...getOtelCustomLabels(customLabels), ...getOtelThreadLabels() }
+
+    // No end timestamp label: the time is the sample's timestamp
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels[OTEL_ASYNC_ID] = asyncId
+    }
+
+    if (typeof ref !== 'object') {
+      return labels
+    }
+
+    const { spanId, rootSpanId, traceId, webTags, endpoint } = ref
+
+    // The span ID and trace ID become the sample's link
+    if (spanId !== undefined && traceId !== undefined) {
+      labels[SPAN_ID_LABEL] = toBigInt(spanId)
+      labels[TRACE_ID_LABEL] = traceId
+    }
+    if (rootSpanId !== undefined) {
+      labels[OTEL_LOCAL_ROOT_SPAN_ID] = toBigInt(rootSpanId)
+    }
+    if (webTags !== undefined) {
+      labels[OTEL_TRACE_ENDPOINT] = endpointNameFromTags(webTags)
+    } else if (endpoint) {
+      labels[OTEL_TRACE_ENDPOINT] = endpoint
+    }
+
+    return labels
   }
 
   #generateLabels (node, context, withEndTimestamp) {

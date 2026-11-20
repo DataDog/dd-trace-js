@@ -250,26 +250,55 @@ describe('profilers/native/wall', () => {
       'thread.id': 0,
       'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
     }
-    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: {}, context: undefined }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), {
+      ...threadLabels,
+      'process.context.label.datadog.async_id': 7,
+    })
     assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread.name': 'Non-JS threads',
     })
-    // A span's IDs, for the sample's link
+    // A span's IDs, for the sample's link, and its local root span ID and endpoint
     const ref = { spanId: 42n, rootSpanId: 41n, traceId: 9n, endpoint: 'GET /' }
     assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref } } }), {
       ...threadLabels,
       'span id': 42n,
       'trace id': 9n,
+      'process.context.label.datadog.local_root_span_id': 41n,
+      'process.context.label.datadog.trace_endpoint': 'GET /',
     })
     // Without a trace ID there is no link to make
     const refWithoutTrace = { spanId: 42n, rootSpanId: 41n }
     assert.deepStrictEqual(
       generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref: refWithoutTrace } } }),
-      threadLabels
+      { ...threadLabels, 'process.context.label.datadog.local_root_span_id': 41n }
     )
 
     profiler.visit(false, visitor)
     assert.strictEqual(profiler.isStarted(), false)
+  })
+
+  it('should pass custom labels to a visitor as execution context labels', () => {
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true, asyncContextFrameEnabled: true })
+    profiler.start()
+    const visitor = {}
+
+    profiler.visit(true, visitor)
+
+    const { generateLabels } = pprof.time.stopAndVisit.firstCall.args[2]
+    const customLabels = { customer: 'acme', 'datadog.os_thread_id': 'custom' }
+    const context = { timestamp: 1234n, context: [{ rootSpanId: 41n }, customLabels] }
+    const labels = generateLabels({ node: {}, context })
+    assert.deepStrictEqual(labels, {
+      'process.context.label.customer': 'acme',
+      // Internal labels take precedence over custom labels of the same key
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.local_root_span_id': 41n,
+    })
+
+    profiler.visit(false, visitor)
   })
 
   it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {
