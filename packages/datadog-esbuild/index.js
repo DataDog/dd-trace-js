@@ -10,6 +10,7 @@ const {
   createEsmWrapper,
   processModule,
 } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { bundlerMarker } = require('../datadog-instrumentations/src/helpers/bundler-telemetry')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
@@ -96,6 +97,9 @@ module.exports.setup = function (build) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
   }
+
+  build.initialOptions.footer ??= {}
+  build.initialOptions.footer.js = (build.initialOptions.footer.js ?? '') + bundlerMarker('esbuild')
 
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
