@@ -33,7 +33,7 @@ describe('Lambda facade and hook composition', () => {
     }
     delete process.env.DD_LAMBDA_HANDLER
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
-    facade = require('../../../../lambda')
+    facade = require('../../src/lambda/facade')
     traces = []
     // Capture every actual SpanProcessor export, not a matching agent request. This makes the
     // cardinality check deterministic and catches duplicates exported in separate trace chunks.
@@ -208,7 +208,7 @@ describe('Lambda facade and hook composition', () => {
     })
   }
 
-  it('waits for a callback through the public facade despite an incidental sync return', async () => {
+  it('waits for a callback through the internal facade despite an incidental sync return', async () => {
     let complete
     const wrapped = facade.wrap((_event, _context, callback) => {
       complete = callback
@@ -225,7 +225,7 @@ describe('Lambda facade and hook composition', () => {
   })
 
   for (const name of ['done', 'succeed', 'fail']) {
-    it(`waits for context.${name} through the public facade`, async () => {
+    it(`waits for context.${name} through the internal facade`, async () => {
       let customerContext
       const wrapped = facade.wrap((_event, ctx) => { customerContext = ctx })
       const result = wrapped({}, context)
@@ -244,7 +244,7 @@ describe('Lambda facade and hook composition', () => {
   }
 
   for (const completion of ['throw', 'reject']) {
-    it(`cleans up a streaming ${completion} through the public facade`, async () => {
+    it(`cleans up a streaming ${completion} through the internal facade`, async () => {
       const error = new Error('stream failure')
       const handler = () => {
         if (completion === 'throw') throw error
