@@ -61,8 +61,9 @@ function buildOtlpResourceAttributes (config) {
 }
 
 // The eBPF host profiler's names of the sample types it shares with pprof profiles, so OTLP profiles of a measure have
-// one name whichever profiler made them. Wall time has no eBPF counterpart and keeps its name.
+// one name whichever profiler made them. Wall time, which it doesn't have, is named the same way as CPU time.
 const OTLP_SAMPLE_TYPE_NAMES = new Map([
+  ['wall/nanoseconds', 'wall-time'],
   ['cpu/nanoseconds', 'cpu-time'],
   ['inuse_objects/count', 'heap-live-samples'],
   ['inuse_space/bytes', 'heap-live-size'],

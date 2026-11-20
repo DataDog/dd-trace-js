@@ -463,9 +463,10 @@ describe('profiler', function () {
       assert.ok(!Object.keys(resource).some(key => key.startsWith('datadog.')), Object.keys(resource).join())
       assert.strictEqual(resource['service.name'], 'otlp-service')
       const { profiles } = resourceProfiles.scopeProfiles[0]
-      // Sample types have the eBPF profiler's names, but wall time, which it doesn't have, keeps its own
+      // Sample types have the eBPF profiler's names, and wall time, which it doesn't have, one in the same style
       const { strings } = request.dictionary.stringTable
-      assert.deepStrictEqual(profiles.map(p => strings[p.sampleType.typeStrindex]), ['wall', 'cpu-time'])
+      assert.deepStrictEqual(profiles.map(p => strings[p.sampleType.typeStrindex]), ['wall-time', 'cpu-time'])
+      assert.deepStrictEqual(profiles.map(p => strings[p.periodType.typeStrindex]), ['wall-time', 'wall-time'])
       const [profile] = profiles
       assert.strictEqual(profile.originalPayloadFormat, '')
       assert.strictEqual(profile.originalPayload.length, 0)
