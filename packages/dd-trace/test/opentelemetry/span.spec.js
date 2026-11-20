@@ -475,6 +475,46 @@ describe('OTel Span', () => {
     assert.strictEqual(errorCtx.getTag(IGNORE_OTEL_ERROR), false)
   })
 
+  for (const timing of ['at creation', 'before status', 'after status']) {
+    it(`should preserve ERROR status with a false error attribute set ${timing}`, () => {
+      const options = timing === 'at creation' ? { attributes: { error: false } } : {}
+      const span = makeSpan('name', options)
+
+      if (timing === 'before status') span.setAttribute('error', false)
+      span.setStatus({ code: api.SpanStatusCode.ERROR, message: 'boom' })
+      if (timing === 'after status') span.setAttribute('error', false)
+
+      const formatted = spanFormat(span._ddSpan)
+      assert.strictEqual(formatted.error, 1)
+      assert.strictEqual(formatted.meta[ERROR_MESSAGE], 'boom')
+    })
+  }
+
+  it('should keep exception recording neutral with a false error attribute', () => {
+    const span = makeSpan('name', { attributes: { error: false } })
+    const error = new Error('boom')
+
+    span.recordException(error)
+
+    const formatted = spanFormat(span._ddSpan)
+    assert.strictEqual(formatted.error, 0)
+    assert.strictEqual(formatted.meta[ERROR_MESSAGE], error.message)
+    assert.strictEqual(formatted.meta[ERROR_STACK], error.stack)
+  })
+
+  it('should preserve ERROR status when recording an exception with a false error attribute', () => {
+    const span = makeSpan('name', { attributes: { error: false } })
+    const error = new Error('boom')
+
+    span.setStatus({ code: api.SpanStatusCode.ERROR })
+    span.recordException(error)
+
+    const formatted = spanFormat(span._ddSpan)
+    assert.strictEqual(formatted.error, 1)
+    assert.strictEqual(formatted.meta[ERROR_MESSAGE], error.message)
+    assert.strictEqual(formatted.meta[ERROR_STACK], error.stack)
+  })
+
   it('should record exceptions', () => {
     const span = makeSpan('name')
 
