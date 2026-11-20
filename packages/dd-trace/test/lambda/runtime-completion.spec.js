@@ -86,7 +86,7 @@ describe('Lambda runtime completion handoff', () => {
     }
     delete process.env.DD_LAMBDA_HANDLER
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
-    facade = require('../../../../lambda')
+    facade = require('../../src/lambda/facade')
     traces = []
     exporter = sinon.stub(tracer._tracer._exporter, 'export').callsFake(trace => traces.push(trace))
     clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'] })

@@ -20,4 +20,16 @@ minimumReleaseAgeExcludes = [
   "@datadog/pprof",
   "@datadog/sketches-js",
   "@datadog/wasm-js-rewriter",
+
+  # Reviewed release used by the Test Optimization latest-version monitor.
+  "@vitest/browser@5.1.1",
+  "@vitest/browser-playwright@5.1.1",
+  "@vitest/coverage-istanbul@5.1.1",
+  "@vitest/coverage-v8@5.1.1",
+  "@vitest/mocker@5.1.1",
+  "@vitest/pretty-format@5.1.1",
+  "@vitest/spy@5.1.1",
+  "@vitest/ui@5.1.1",
+  "@vitest/utils@5.1.1",
+  "vitest@5.1.1",
 ]

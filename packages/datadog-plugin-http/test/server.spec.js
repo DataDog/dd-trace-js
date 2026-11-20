@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { storage } = require('../../datadog-core')
+const { isACFActive } = require('../../datadog-core/src/storage')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
@@ -231,6 +232,30 @@ describe('Plugin', () => {
           }
 
           httpRequest.get(`http://localhost:${port}/user`).catch(done)
+        })
+
+        it('should keep the request on the store of a raw request body callback', function (done) {
+          // Without AsyncContextFrame, body callbacks run in the connection's async resource with the store the request
+          // left there on exit. With it, they run in the resource's creation context, which has no store at all.
+          if (isACFActive) return this.skip()
+
+          const subscriber = () => {}
+          incomingHttpRequestStart.subscribe(subscriber)
+
+          app = (req) => {
+            req.on('end', () => {
+              incomingHttpRequestStart.unsubscribe(subscriber)
+              try {
+                assert.strictEqual(getRequest(storage('legacy').getStore()), req)
+                done()
+              } catch (error) {
+                done(error)
+              }
+            })
+            req.resume()
+          }
+
+          httpRequest.post(`http://localhost:${appListener.address().port}/user`, 'body').catch(done)
         })
 
         it('should run the request\'s close event in the correct context', done => {

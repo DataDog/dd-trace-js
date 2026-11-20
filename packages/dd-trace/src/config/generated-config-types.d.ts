@@ -9,6 +9,7 @@ export interface GeneratedConfig {
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
     DD_AI_GUARD_BLOCK: boolean;
+    DD_AI_GUARD_DISABLED_INTEGRATIONS: string[] | undefined;
     DD_AI_GUARD_ENABLED: boolean;
     DD_AI_GUARD_ENDPOINT: string | undefined;
     DD_AI_GUARD_MAX_CONTENT_SIZE: number;
@@ -81,6 +82,7 @@ export interface GeneratedConfig {
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
+  DD_DATA_STREAMS_HTTP_ENABLED: boolean;
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
@@ -648,6 +650,7 @@ export interface GeneratedEnvVarConfig {
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_AI_GUARD_BLOCK: boolean;
+  DD_AI_GUARD_DISABLED_INTEGRATIONS: string[] | undefined;
   DD_AI_GUARD_ENABLED: boolean;
   DD_AI_GUARD_ENDPOINT: string | undefined;
   DD_AI_GUARD_MAX_CONTENT_SIZE: number;
@@ -723,6 +726,7 @@ export interface GeneratedEnvVarConfig {
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
   DD_DATA_STREAMS_ENABLED: boolean;
+  DD_DATA_STREAMS_HTTP_ENABLED: boolean;
   DD_DBM_INJECT_SQL_BASEHASH: boolean;
   DD_DBM_PROPAGATION_MODE: "disabled" | "service" | "full" | "dynamic_service";
   DD_DECODE_AUTHORIZER_CONTEXT: boolean;
