@@ -1,5 +1,5 @@
 name: Get Datadog API key
-description: Exchange GitHub OIDC token for a Datadog API key via dd-sts.
+description: Exchange GitHub OIDC token for a Datadog API key via Datadog workload identity federation.
 
 inputs:
   org_uuid:
@@ -14,9 +14,9 @@ outputs:
 runs:
   using: composite
   steps:
-    # Retry once on failure to work around transient dd-sts exchange errors.
+    # Retry once on failure to work around transient exchange errors.
     - id: attempt
-      uses: ./.github/actions/dd-sts-api-key/exchange
+      uses: ./.github/actions/dd-wif/exchange
       continue-on-error: true
       with:
         org_uuid: ${{ inputs.org_uuid }}
@@ -25,6 +25,6 @@ runs:
       run: sleep 60
     - if: steps.attempt.outcome == 'failure'
       id: retry
-      uses: ./.github/actions/dd-sts-api-key/exchange
+      uses: ./.github/actions/dd-wif/exchange
       with:
         org_uuid: ${{ inputs.org_uuid }}

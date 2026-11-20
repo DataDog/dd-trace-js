@@ -1,5 +1,5 @@
 name: Get Datadog API key (exchange)
-description: Internal implementation; exchange OIDC token for API key. Use `./.github/actions/dd-sts-api-key` instead.
+description: Internal implementation; exchange OIDC token for API key. Use `./.github/actions/dd-wif` instead.
 
 inputs:
   org_uuid:

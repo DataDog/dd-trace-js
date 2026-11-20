@@ -140,8 +140,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts-api-key
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
         with:
           org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
       - uses: ./.github/actions/dd-sts-app-key
@@ -150,7 +150,7 @@ jobs:
         id: datadog-static-analysis
         uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
         with:
-          dd_api_key: ${{ steps.dd-sts-api-key.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-wif.outputs.api_key }}
           dd_app_key: ${{ steps.dd-sts-app-key.outputs.app_key }}
           dd_site: datadoghq.com
           cpu_count: 2
