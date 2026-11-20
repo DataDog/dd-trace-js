@@ -132,4 +132,105 @@ function getClientInfoTags (envelope, server) {
   return tags
 }
 
-module.exports = { formatInput, formatOutput, formatServerInput, getClientInfoTags, safeStringify }
+const TELEMETRY_KEY = 'telemetry'
+const INTENT_KEY = 'intent'
+// The client writes the intent, so a cap keeps the span event under the intake size limit.
+const MAX_INTENT_LENGTH = 1024
+const TELEMETRY_SCHEMA = {
+  type: 'object',
+  properties: {
+    [INTENT_KEY]: {
+      type: 'string',
+      description: 'Briefly describe the wider context task, and why this tool was chosen. Omit argument values, ' +
+        'PII/secrets. Use English.',
+    },
+  },
+  required: [INTENT_KEY],
+  additionalProperties: false,
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * UI-only tools cannot be called by the model, so they get no telemetry parameter.
+ *
+ * @param {{ _meta?: { ui?: { visibility?: unknown } } }} tool
+ */
+function isModelCallable (tool) {
+  const visibility = tool._meta?.ui?.visibility
+  return !Array.isArray(visibility) || visibility.includes('model')
+}
+
+/**
+ * Returns a copy of a tools/list result where each model-callable tool requires a `telemetry` argument with the
+ * caller's intent. The SDK's own tool objects are not changed, because it validates calls against them.
+ *
+ * @param {{ tools?: unknown }} result
+ */
+function injectTelemetrySchema (result) {
+  if (!isObject(result) || !Array.isArray(result.tools)) return result
+
+  const tools = result.tools.map(tool => {
+    if (!isObject(tool) || !isModelCallable(tool)) return tool
+
+    const inputSchema = isObject(tool.inputSchema) ? tool.inputSchema : {}
+    const properties = isObject(inputSchema.properties) ? inputSchema.properties : {}
+    if (Object.hasOwn(properties, TELEMETRY_KEY)) return tool
+    const required = Array.isArray(inputSchema.required) ? inputSchema.required : []
+    return {
+      ...tool,
+      inputSchema: {
+        type: 'object',
+        ...inputSchema,
+        properties: { ...properties, [TELEMETRY_KEY]: TELEMETRY_SCHEMA },
+        required: required.includes(TELEMETRY_KEY) ? required : [...required, TELEMETRY_KEY],
+      },
+    }
+  })
+  return { ...result, tools }
+}
+
+/**
+ * @param {unknown} telemetry
+ * @returns {telemetry is { intent?: unknown }}
+ */
+function isInjectedTelemetry (telemetry) {
+  if (!isObject(telemetry)) return false
+  for (const key of Object.keys(telemetry)) {
+    if (key !== INTENT_KEY) return false
+  }
+  return true
+}
+
+/**
+ * Returns a copy of a tools/call request without the `telemetry` argument, and the intent it carried, or `undefined`
+ * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
+ *
+ * @param {{ params?: { arguments?: unknown } }} request
+ * @returns {{ request: object, intent?: string } | undefined}
+ */
+function stripTelemetry (request) {
+  const args = request?.params?.arguments
+  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
+
+  const { [TELEMETRY_KEY]: telemetry, ...rest } = args
+  const { intent } = telemetry
+  const capped = typeof intent === 'string' ? intent.slice(0, MAX_INTENT_LENGTH) || undefined : undefined
+  return { request: { ...request, params: { ...request.params, arguments: rest } }, intent: capped }
+}
+
+module.exports = {
+  formatInput,
+  formatOutput,
+  formatServerInput,
+  getClientInfoTags,
+  injectTelemetrySchema,
+  safeStringify,
+  stripTelemetry,
+}

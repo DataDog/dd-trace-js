@@ -131,6 +131,14 @@
         "default": "false"
       }
     ],
+    "DD_MCP_CAPTURE_INTENT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "mcp"
+      }
+    ],
     "DD_MIN_COLD_START_DURATION": [
       {
         "implementation": "B",

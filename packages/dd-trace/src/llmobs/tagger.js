@@ -25,6 +25,7 @@ const {
   AGENT_VERSION,
   METRICS,
   TOOL_DEFINITIONS,
+  INTENT,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
@@ -377,6 +378,14 @@ class LLMObsTagger {
     } else {
       this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
     }
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {string} intent
+   */
+  tagIntent (span, intent) {
+    this._setTag(span, INTENT, intent)
   }
 
   tagMetadata (span, metadata) {

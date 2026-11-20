@@ -376,6 +376,18 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_MCP_CAPTURE_INTENT', () => {
+    it('defaults to false', () => {
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, false)
+    })
+
+    it('can be enabled with the environment variable', () => {
+      process.env.DD_MCP_CAPTURE_INTENT = 'true'
+
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, true)
+    })
+  })
+
   describe('DD_TRACE_REACT_ROUTER_ENABLED', () => {
     it('defaults to true', () => {
       const config = getConfig()
