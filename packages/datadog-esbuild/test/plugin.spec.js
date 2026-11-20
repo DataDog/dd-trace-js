@@ -254,6 +254,7 @@ describe('datadog-esbuild plugin', () => {
       assert.equal(result.pluginData.rewriteOnly, false)
       const onLoad = captureOnLoad()
       const loaded = await onLoad(result)
+      assert.ok(loaded.contents.includes(`require(${dcModuleLiteral})`))
       assert.match(loaded.contents, /module.exports = payload.module/)
       assert.match(loaded.contents, /package: 'express'/)
       assert.match(loaded.contents, /path: 'express\/lib\/express.js'/)

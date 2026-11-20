@@ -375,7 +375,7 @@ ${build.initialOptions.banner.js}`
 ${fileCode}
         })(module.exports, module);
         {
-          const dc = require('dc-polyfill');
+          const dc = require(${DC_MODULE_LITERAL});
           const ch = dc.channel('${CHANNEL}');
           const mod = module.exports
           const payload = {

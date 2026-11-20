@@ -2,7 +2,7 @@
 
 const os = require('os')
 
-const { metrics } = require('@opentelemetry/api')
+const api = require('../api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
@@ -64,7 +64,7 @@ function initializeOpenTelemetryMetrics (config) {
   )
 
   const meterProvider = new MeterProvider({ reader })
-  const registered = metrics.setGlobalMeterProvider(meterProvider)
+  const registered = api.metrics.setGlobalMeterProvider(meterProvider)
 
   // Include the final metric collection and export in lifecycle retention.
   registerTelemetryFlusher(done => reader.forceFlush(done))
