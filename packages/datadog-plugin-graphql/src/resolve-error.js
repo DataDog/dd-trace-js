@@ -59,9 +59,9 @@ class GraphQLToolsResolveErrorPlugin extends TracingPlugin {
  * @param {unknown} error
  * @param {(string | number)[]} path
  * @param {readonly object[]} [fieldNodes]
+ * @param {object} [rootCtx]
  */
-function recordResolveErrorForPath (error, path, fieldNodes) {
-  const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+function recordResolveErrorForPath (error, path, fieldNodes, rootCtx = legacyStorage.getStore()?.graphqlRootCtx) {
   if (!rootCtx?.config?.collapse || !rootCtx.fields) return
 
   const field = findResolveField(rootCtx.fields, getPathString(path), fieldNodes?.[0])
@@ -126,4 +126,5 @@ module.exports = {
   GraphQLResolveErrorPlugin,
   GraphQLToolsResolveErrorPlugin,
   recordResolveError,
+  recordResolveErrorForPath,
 }

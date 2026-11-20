@@ -2,10 +2,13 @@
 
 Object.defineProperty(exports, '__esModule', { value: true })
 
+const { getGraphqlEntry } = require('../native')
+
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
-const visitor = ddGlobal.graphql_visitor
-const printer = ddGlobal.graphql_printer
-const utilities = ddGlobal.graphql_utilities
+// A require() of GraphQL 17's ES module build hides these files from module hooks, but its entry re-exports them.
+const visitor = ddGlobal.graphql_visitor ?? getGraphqlEntry()
+const printer = ddGlobal.graphql_printer ?? getGraphqlEntry()
+const utilities = ddGlobal.graphql_utilities ?? getGraphqlEntry()
 
 function dropUnusedDefinitions (ast, operationName) {
   const operation = utilities.getOperationAST(ast, operationName)

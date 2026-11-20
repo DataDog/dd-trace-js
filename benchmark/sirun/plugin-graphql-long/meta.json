@@ -26,8 +26,9 @@
     "with-depth-on-max": {
       "iterations": 6,
       "operations_by_node": {
-        "20": "840",
-        "24": "1680"
+        "20": "760",
+        "24": "1200",
+        "26": "1200"
       },
       "env": {
         "COLLAPSE": "1",

@@ -357,13 +357,24 @@ module.exports = {
   await writeFile(filename(name, version, 'index.js'), index)
 }
 
+// graphql-jit and graphql-yoga are hoisted to the root next to the root `graphql`, which would otherwise be the latest
+// major they do not support. A root dependency decides the hoisted version; each `graphql` workspace keeps its own.
+const hoistedDependencies = {
+  graphql: '^16.6.0',
+}
+
 async function assertWorkspaces () {
   await assertFolder()
+  const dependencies = {}
+  for (const [name, range] of Object.entries(hoistedDependencies)) {
+    if (workspaces.has('graphql-jit') || workspaces.has('graphql-yoga')) dependencies[name] = range
+  }
   await writeFile(filename(null, null, 'package.json'), JSON.stringify({
     name: 'versions',
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
+    ...(Object.keys(dependencies).length > 0 && { dependencies }),
     workspaces: {
       packages: [...workspaces].sort(),
     },

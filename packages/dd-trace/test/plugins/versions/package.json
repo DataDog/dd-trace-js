@@ -156,7 +156,7 @@
     "generic-pool": "3.9.0",
     "google-auth-library": "11.3.3",
     "google-gax": "6.10.0",
-    "graphql": "16.14.2",
+    "graphql": "17.1.0",
     "graphql-jit": "0.9.4",
     "graphql-tag": "2.12.7",
     "graphql-tools": "10.0.9",
