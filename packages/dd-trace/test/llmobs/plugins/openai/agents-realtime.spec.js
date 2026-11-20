@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 
 const dc = require('dc-polyfill')
 const { afterEach, describe, it } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
@@ -82,7 +83,7 @@ class ReplaySocket extends EventTarget {
 describe('Agents SDK realtime automatic tracing', () => {
   const { getEvents } = useLlmObs({ plugin: 'openai' })
 
-  withVersions('openai', '@openai/agents-realtime', '>=0.20.0', version => {
+  withVersions('openai', '@openai/agents-realtime', '>=0.20.0', (version, _, realVersion) => {
     let transport
 
     afterEach(() => {
@@ -605,7 +606,9 @@ describe('Agents SDK realtime automatic tracing', () => {
         describe(mode + ' SDK input retrieval with tracer retrieval enabled=' + enabled, () => {
           useEnv({ DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: String(enabled) })
 
-          for (const sdkRetrieves of [true, false]) {
+          // SDK 0.22 retrieves every transcription event with an item id, so only older SDKs can skip it.
+          const sdkSkipsRetrieval = semver.lt(realVersion, '0.22.0')
+          for (const sdkRetrieves of sdkSkipsRetrieval ? [true, false] : [true]) {
             const title = 'captures caller retrieval after generation (SDK parses transcription=' + sdkRetrieves + ')'
             it(title, async () => {
               const sdk = await loadSdk(mode, version)
@@ -622,7 +625,7 @@ describe('Agents SDK realtime automatic tracing', () => {
                 socket.deliver(materialize(fixture.events.find(row => row.event.type === 'session.updated').event))
                 const transcript = materialize(fixture.events.find(row =>
                   row.event.type === 'conversation.item.input_audio_transcription.completed').event)
-                // This protocol-valid shape is parsed as generic by SDK0.20/0.21.
+                // This protocol-valid shape is parsed as generic by SDK 0.20/0.21.
                 if (!sdkRetrieves) delete transcript.usage.input_token_details
                 const itemId = transcript.item_id
                 clock.tick(2000)

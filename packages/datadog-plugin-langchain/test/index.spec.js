@@ -567,7 +567,11 @@ describe('Plugin', () => {
           const parser = new langchainOutputParsers.JsonOutputParser()
           const model = getLangChainOpenAiClient('chat', { model: 'gpt-3.5-turbo' })
 
-          const chain = model.pipe(parser)
+          // @langchain/core 1.4 rejects messages built by the older core the OpenAI package is pinned to,
+          // so hand the parser text, which it accepts from any core.
+          const chain = semifies(realVersion, '>=1.4.0')
+            ? model.pipe(langchainRunnables.RunnableLambda.from(message => message.content)).pipe(parser)
+            : model.pipe(parser)
 
           const response = await chain.invoke('Generate a JSON object with name and age.')
           assert.ok(
