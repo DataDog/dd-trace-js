@@ -75,6 +75,11 @@ const messaging = {
       serviceName: awsServiceV0,
       serviceSource: awsServiceSource,
     },
+    bull: {
+      opName: () => 'bull.add',
+      serviceName: ({ tracerService }) => `${tracerService}-bull`,
+      serviceSource: integrationSource('bull'),
+    },
     bullmq: {
       opName: () => 'bullmq.add',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
@@ -137,6 +142,11 @@ const messaging = {
       opName: () => 'aws.request',
       serviceName: awsServiceV0,
       serviceSource: awsServiceSource,
+    },
+    bull: {
+      opName: () => 'bull.process',
+      serviceName: ({ tracerService }) => `${tracerService}-bull`,
+      serviceSource: integrationSource('bull'),
     },
     bullmq: {
       opName: () => 'bullmq.processJob',

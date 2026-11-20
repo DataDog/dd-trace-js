@@ -304,6 +304,7 @@ interface Plugins {
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "azure-durable-functions": tracer.plugins.azure_durable_functions
   "browser-bunyan": tracer.plugins.browser_bunyan;
+  "bull": tracer.plugins.bull;
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -2722,6 +2723,12 @@ declare namespace tracer {
      * on the tracer.
      */
     interface browser_bunyan extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [bull](https://www.npmjs.com/package/bull) message queue library.
+     */
+    interface bull extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

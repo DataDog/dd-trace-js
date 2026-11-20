@@ -390,6 +390,7 @@ tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('browser-bunyan');
+tracer.use('bull');
 tracer.use('bullmq');
 tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');

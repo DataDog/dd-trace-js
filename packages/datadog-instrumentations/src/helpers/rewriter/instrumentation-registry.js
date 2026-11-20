@@ -26,6 +26,7 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/async-mutex') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
+  { activate: true, instrumentations: require('./instrumentations/bull') },
   { activate: true, instrumentations: require('./instrumentations/bullmq') },
   {
     activate: { setup: () => require('../../claude-agent-sdk') },

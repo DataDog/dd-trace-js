@@ -201,6 +201,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
 
+  bull:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      redis:
+        image: redis@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541 # 7-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: bull
+      SERVICES: redis
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
+
   bullmq:
     runs-on: ubuntu-latest
     permissions:
