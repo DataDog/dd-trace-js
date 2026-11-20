@@ -492,6 +492,7 @@ export interface GeneratedConfig {
   legacyBaggageEnabled: boolean;
   llmobs: {
     DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
+    DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED: boolean;
     DD_LLMOBS_ENABLED: boolean;
     DD_LLMOBS_ML_APP: string | undefined;
     DD_LLMOBS_PROJECT_NAME: string | undefined;
@@ -814,6 +815,7 @@ export interface GeneratedEnvVarConfig {
   DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
   DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
+  DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED: boolean;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
   DD_LLMOBS_PROJECT_NAME: string | undefined;

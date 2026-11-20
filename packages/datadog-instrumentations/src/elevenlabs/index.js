@@ -11,6 +11,7 @@ const spanCh = dc.tracingChannel('apm:elevenlabs:span')
 const finishCh = dc.channel('apm:elevenlabs:finish')
 const captureCh = dc.channel('dd-trace:elevenlabs:capture-context')
 const audioCh = dc.channel('dd-trace:elevenlabs:audio')
+const endedCh = dc.channel('dd-trace:elevenlabs:ended')
 const sessions = new WeakMap()
 const tools = new WeakMap()
 const emitters = new WeakSet()
@@ -101,8 +102,18 @@ function create (conversation) {
     finish: turn => finish(session, turn),
     retain: () => audioCh.hasSubscribers,
   })
-  session.scope = {}
+  session.scope = { conversation: true }
   captureCh.publish(session.scope)
+  // Billing outlives span finalization, including an error preceding socket close.
+  let billing = session.scope.billing
+  let billingStarted = false
+  session.collectCost = () => {
+    if (billingStarted || !conversation.conversationId) return
+    billingStarted = true
+    const context = billing
+    billing = undefined
+    endedCh.publish({ client: conversation.client, conversationId: conversation.conversationId, context })
+  }
   const reference = new WeakRef(session)
   live.add(reference)
   collected.register(session, reference, reference)
@@ -204,14 +215,22 @@ channel('_handleMessage').subscribe({
   },
 })
 channel('endSession').end.subscribe(ctx => {
-  observe(() => sessions.get(ctx.self)?.finalize(Boolean(ctx.error)))
+  observe(() => {
+    const session = sessions.get(ctx.self)
+    session?.finalize(Boolean(ctx.error))
+    session?.collectCost()
+  })
 })
 channel('_onWebSocketOpen').error.subscribe(ctx => {
   observe(() => sessions.get(ctx.self)?.finalize(true))
 })
 channel('_onWebSocketClose').start.subscribe(ctx => {
   const code = ctx.arguments[0]
-  observe(() => sessions.get(ctx.self)?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code)))
+  observe(() => {
+    const session = sessions.get(ctx.self)
+    session?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code))
+    session?.collectCost()
+  })
 })
 channel('executeToolAsync').start.subscribe(ctx => {
   if (handling?.turn && ctx.arguments[1] && typeof ctx.arguments[1] === 'object') {

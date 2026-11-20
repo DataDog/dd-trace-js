@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const telemetryMetrics = require('../../../src/telemetry/metrics')
+
 const { removeDestroyHandler } = require('../util')
 
 describe('LLMObsSpanWriter', () => {
@@ -37,6 +39,28 @@ describe('LLMObsSpanWriter', () => {
 
     assert.strictEqual(writer._eventType, 'span')
   })
+
+  for (const [name, meta, expected] of [
+    ['flat', { 'span.kind': 'llm' }, 'llm'],
+    ['nested', { span: { kind: 'workflow' } }, 'workflow'],
+    ['missing', {}, ''],
+  ]) {
+    it(`reports the ${name} span kind in writer size telemetry`, () => {
+      const distribution = sinon.spy(telemetryMetrics.manager.namespace('mlobs'), 'distribution')
+      writer = new LLMObsSpanWriter(config)
+      try {
+        writer.append({ name: 'test', meta })
+        for (const metric of ['span.raw_size', 'span.size']) {
+          const calls = distribution.getCalls().filter(call => call.args[0] === metric)
+          assert.equal(calls.length, 1)
+          assert.equal(calls[0].args[1].span_kind, expected)
+        }
+        assert.deepEqual(writer.makePayload(writer._buffer.events)[0].spans[0].meta, meta)
+      } finally {
+        distribution.restore()
+      }
+    })
+  }
 
   it('creates an agentless writer', () => {
     writer = new LLMObsSpanWriter(config)
