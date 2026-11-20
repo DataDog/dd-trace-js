@@ -1999,13 +1999,13 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should fall back to http/protobuf when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+  it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/xml'
     const config = getConfig()
     const warnCall = log.warn.getCalls().find(
       (call) => call.args[0]?.includes?.("'http/xml' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
     )
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
     assert.ok(warnCall)
   })
 
