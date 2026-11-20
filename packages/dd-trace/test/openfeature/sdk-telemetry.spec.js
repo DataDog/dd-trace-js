@@ -1,0 +1,317 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+require('../setup/core')
+const { VERSION } = require('../../../../version')
+const { testBooleanAndStringFlags: configuration } =
+  require('../../../../integration-tests/openfeature/fixtures/ufc-payloads')
+
+const NOW = Date.UTC(2026, 10, 5)
+
+describe('Feature Flags SDK diagnostics', () => {
+  let clock, provider, Provider, config, request, selectRoute, stopDelivery, onFetchResult, onFetchStart
+  let handlers, telemetryNow
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({ now: NOW })
+    handlers = new Set(globalThis[Symbol.for('dd-trace')].beforeExitHandlers)
+    config = {
+      service: 'checkout',
+      env: 'staging',
+      version: 'app-version',
+      url: new URL('http://localhost:8126'),
+      featureFlags: {
+        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false,
+        DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: false,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
+      },
+    }
+    request = sinon.stub().callsFake((body, options, callback) => callback(null, '', 202))
+    stopDelivery = sinon.spy()
+    selectRoute = sinon.stub().callsFake((config, notify) => {
+      notify(true, { url: config.url, basePath: '/evp_proxy/v2' })
+      return stopDelivery
+    })
+    const Base = proxyquire('../../src/openfeature/writers/base', {
+      '../../exporters/common/request': request,
+    })
+    const Writer = proxyquire('../../src/openfeature/writers/sdk-diagnostics', {
+      './base': Base,
+      './util': { setEventDeliveryStrategy: selectRoute },
+    })
+    telemetryNow = sinon.spy(clock.performance.now)
+    const Telemetry = proxyquire('../../src/openfeature/sdk-telemetry', {
+      './writers/sdk-diagnostics': Writer,
+    })
+    const upstream = proxyquire('../../../../vendor/dist/@datadog/openfeature-node-server', {
+      'node:perf_hooks': { performance: { now: telemetryNow } },
+    })
+    Provider = proxyquire('../../src/openfeature/flagging_provider', {
+      '../../../../vendor/dist/@datadog/openfeature-node-server': upstream,
+      './sdk-telemetry': Telemetry,
+      './configuration_source': {
+        create: (config, apply, observe, start) => {
+          onFetchResult = observe
+          onFetchStart = start
+        },
+      },
+    })
+  })
+
+  afterEach(async () => {
+    await provider?.onClose()
+    assert.deepStrictEqual(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, handlers)
+    clock.restore()
+  })
+
+  function create () {
+    provider = new Provider({}, config)
+    return provider
+  }
+
+  function events () {
+    return request.getCalls().flatMap(call => JSON.parse(call.args[0]).diagnostics.map(event => {
+      assert.strictEqual(event.type, 'sdk_diagnostic')
+      assert.strictEqual(event.schema_version, 1)
+      assert.deepStrictEqual(Object.keys(event).sort(), ['payload', 'schema_version', 'type'])
+      return event.payload
+    }))
+  }
+
+  function identity () {
+    return { sdk_name: 'dd-trace-js', sdk_version: VERSION, service_id: 'checkout', environment: 'staging' }
+  }
+
+  async function ready () {
+    create().setConfiguration(configuration)
+    await provider.initialize()
+  }
+
+  it('sends the exact initialization contract without evaluations or evaluation counts', async () => {
+    const pending = create().initialize()
+    await clock.tickAsync(20)
+    provider.setConfiguration(configuration)
+    await pending
+    await clock.tickAsync(1000)
+
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), {
+      context: { service: 'checkout', env: 'staging', version: 'app-version' },
+      flagEvaluations: [],
+      diagnostics: [{
+        type: 'sdk_diagnostic',
+        schema_version: 1,
+        payload: {
+          ...identity(),
+          timestamp: NOW + 20,
+          event_type: 'sdk_initialization',
+          initialization: {
+            outcome: 'ready',
+            started_at_ms: NOW,
+            duration_ms: 20,
+            final: true,
+            milestones: { configuration_received: { elapsed_ms: 20 }, provider_ready: { elapsed_ms: 20 } },
+          },
+        },
+      }],
+    })
+    const options = request.firstCall.args[1]
+    assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/flagevaluation')
+    assert.strictEqual(options.headers['Content-Type'], 'application/json')
+    assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+    assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+  })
+
+  for (const outcome of ['failed', 'incomplete']) {
+    it(`delivers the upstream ${outcome} observation on close`, async () => {
+      const pending = create().initialize()
+      const settled = pending.catch(() => {})
+      if (outcome === 'failed') {
+        provider.setError(new Error('private initialization error'))
+        await assert.rejects(pending, /private initialization error/)
+      }
+      await provider.onClose()
+      assert.strictEqual(events().length, 1)
+      assert.strictEqual(events()[0].initialization.outcome, outcome)
+      assert.doesNotMatch(request.firstCall.args[0], /private initialization error/)
+      if (outcome === 'incomplete') provider.setConfiguration(configuration)
+      await settled
+    })
+  }
+
+  it('does not emit for construction and close without initialization', async () => {
+    await create().onClose()
+    sinon.assert.notCalled(selectRoute)
+    sinon.assert.notCalled(request)
+  })
+
+  it('delivers configuration fetch observations measured upstream', async () => {
+    await ready()
+    onFetchStart()
+    onFetchResult(false)
+    await provider.onClose()
+    assert.deepStrictEqual(events()[1], {
+      ...identity(), timestamp: NOW, event_type: 'provider_error', error_code: 'CONFIG_FETCH_FAILED',
+    })
+  })
+
+  for (const field of ['service', 'env']) {
+    for (const value of [undefined, null, 42, '', ' ', ' leading', 'x'.repeat(201), 'contains\ncontrol']) {
+      it(`skips diagnostics work with invalid ${field}: ${String(value).slice(0, 10)}`, async () => {
+        config[field] = value
+        await ready()
+        await provider.onClose()
+        assert.strictEqual(onFetchResult, undefined)
+        assert.strictEqual(onFetchStart, undefined)
+        sinon.assert.notCalled(telemetryNow)
+        sinon.assert.notCalled(selectRoute)
+        sinon.assert.notCalled(request)
+      })
+    }
+
+    for (const outcome of ['ready', 'failed', 'closed']) {
+      it(`preserves ${outcome} initialization without ${field}`, async () => {
+        delete config[field]
+        const pending = create().initialize()
+        const error = new Error('configuration failed')
+        if (outcome === 'failed') {
+          const rejected = assert.rejects(pending, actual => actual === error)
+          provider.setError(error)
+          await rejected
+        } else {
+          if (outcome === 'closed') await provider.onClose()
+          provider.setConfiguration(configuration)
+          await pending
+          assert.strictEqual(provider.getConfiguration(), configuration)
+        }
+        await provider.onClose()
+        assert.strictEqual(onFetchResult, undefined)
+        assert.strictEqual(onFetchStart, undefined)
+        sinon.assert.notCalled(telemetryNow)
+        sinon.assert.notCalled(selectRoute)
+        sinon.assert.notCalled(request)
+      })
+    }
+  }
+
+  it('accepts service and environment names at the schema length limit', async () => {
+    config.service = 's'.repeat(200)
+    config.env = 'e'.repeat(200)
+    await ready()
+    await provider.onClose()
+    assert.strictEqual(events()[0].service_id, config.service)
+    assert.strictEqual(events()[0].environment, config.env)
+  })
+
+  it('keeps initialization successful if diagnostics cannot select a route', async () => {
+    selectRoute.throws(new Error('route failure'))
+    await ready()
+    await provider.initialize()
+    await provider.onClose()
+    sinon.assert.calledOnce(selectRoute)
+    sinon.assert.notCalled(request)
+  })
+
+  it('buffers until discovery, then uses the selected direct route', async () => {
+    selectRoute.returns(stopDelivery)
+    await ready()
+    await clock.tickAsync(1000)
+    sinon.assert.notCalled(request)
+    selectRoute.firstCall.args[1](true, {
+      url: new URL('https://event-platform-intake.datadoghq.com'),
+      basePath: '',
+      headers: { 'DD-API-KEY': 'test-key' },
+    })
+    await clock.tickAsync(1000)
+    assert.strictEqual(request.firstCall.args[1].path, '/api/v2/flagevaluation')
+    assert.strictEqual(request.firstCall.args[1].headers['DD-API-KEY'], 'test-key')
+    assert.strictEqual(events().length, 1)
+  })
+
+  for (const outcome of ['incomplete', 'ready', 'failed']) {
+    it(`discovers a route during initialization before a close-time ${outcome} report`, async () => {
+      const discover = sinon.stub()
+      const strategy = proxyquire('../../src/openfeature/writers/util', {
+        '../../evp_proxy/discovery': { discoverEVPProxy: discover },
+      })
+      selectRoute.callsFake(strategy.setEventDeliveryStrategy)
+      const pending = create().initialize()
+      const settled = pending.catch(() => {})
+      sinon.assert.calledOnce(discover)
+      sinon.assert.notCalled(request)
+
+      // Complete real strategy discovery asynchronously, while initialization is still pending.
+      setTimeout(() => discover.firstCall.args[2](null, { url: config.url, basePath: '/evp_proxy/v2' }), 10)
+      await clock.tickAsync(10)
+      if (outcome === 'ready') {
+        provider.setConfiguration(configuration)
+        await pending
+      } else if (outcome === 'failed') {
+        provider.setError(new Error('initialization failed'))
+        await assert.rejects(pending, /initialization failed/)
+      }
+      await provider.onClose()
+      assert.strictEqual(events().length, 1)
+      assert.strictEqual(events()[0].initialization.outcome, outcome)
+      sinon.assert.calledOnce(discover)
+
+      if (outcome === 'incomplete') provider.setConfiguration(configuration)
+      await settled
+    })
+  }
+
+  it('does not send through an unconfirmed route at shutdown or accept late discovery', async () => {
+    selectRoute.returns(stopDelivery)
+    await ready()
+    await provider.onClose()
+    selectRoute.firstCall.args[1](true, { url: config.url, basePath: '/evp_proxy/v2' })
+    await clock.tickAsync(1000)
+    sinon.assert.notCalled(request)
+    sinon.assert.calledOnce(stopDelivery)
+  })
+
+  it('bounds its unavailable queue and discards stale observations', async () => {
+    selectRoute.returns(stopDelivery)
+    await ready()
+    for (let i = 0; i < 20; i++) {
+      onFetchResult(true)
+      onFetchResult(false)
+      await clock.tickAsync(60_000)
+    }
+    selectRoute.firstCall.args[1](true, { url: config.url, basePath: '/evp_proxy/v2' })
+    await clock.tickAsync(1000)
+    assert.strictEqual(events().length, 16)
+    selectRoute.firstCall.args[1](false)
+    onFetchResult(true)
+    onFetchResult(false)
+    await clock.tickAsync(60 * 60 * 1000)
+    selectRoute.firstCall.args[1](true, { url: config.url, basePath: '/evp_proxy/v2' })
+    await clock.tickAsync(1000)
+    assert.strictEqual(events().length, 16)
+  })
+
+  it('uses safe local rejection fallback without changing the payload', async () => {
+    selectRoute.callsFake((config, notify) => {
+      notify(true, {
+        url: config.url,
+        basePath: '/evp_proxy/v4',
+        fallback: {
+          url: new URL('https://event-platform-intake.datadoghq.com'),
+          basePath: '',
+          headers: { 'DD-API-KEY': 'test-key' },
+        },
+      })
+      return stopDelivery
+    })
+    request.onFirstCall().callsFake((body, options, callback) => callback(null, '', 404))
+    await ready()
+    await provider.onClose()
+    assert.strictEqual(request.callCount, 2)
+    assert.strictEqual(request.firstCall.args[0], request.secondCall.args[0])
+    assert.strictEqual(request.secondCall.args[1].path, '/api/v2/flagevaluation')
+  })
+})

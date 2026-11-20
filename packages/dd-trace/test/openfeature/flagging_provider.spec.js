@@ -37,6 +37,7 @@ describe('FlaggingProvider', () => {
     }
 
     mockConfig = {
+      getOrigin: sinon.stub().returns('default'),
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
