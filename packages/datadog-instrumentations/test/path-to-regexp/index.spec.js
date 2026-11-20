@@ -26,6 +26,7 @@ const v7Module = {
 const v8Module = {
   parse: pattern => ({ tokens: [{ type: 'text', value: pattern }] }),
   match: () => () => ({ params: { id: '1' } }),
+  TokenData: class TokenData {},
   pathToRegexp: () => ({ regexp: /^\/a\/([^/]+)$/, keys: [] }),
 }
 
@@ -35,6 +36,16 @@ describe('path-to-regexp instrumentation', () => {
     const matchBefore = getMatch()
 
     applyHooksFor('7.2.0', v7Module)
+
+    assert.equal(getParse(), parseBefore)
+    assert.equal(getMatch(), matchBefore)
+  })
+
+  it('does not install the adapters when 8.x lacks TokenData', () => {
+    const parseBefore = getParse()
+    const matchBefore = getMatch()
+
+    applyHooksFor('8.4.2', { ...v8Module, TokenData: undefined })
 
     assert.equal(getParse(), parseBefore)
     assert.equal(getMatch(), matchBefore)

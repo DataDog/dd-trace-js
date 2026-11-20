@@ -8,7 +8,7 @@ let compileToRegexp
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
 
-/** @type {((route: string) => ((url: string) => object | undefined) | undefined) | undefined} */
+/** @type {((tokens: object[], options?: object) => ((url: string) => object | undefined) | undefined) | undefined} */
 let makeMatcher
 
 addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
@@ -39,9 +39,9 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
 // `{ tokens }` too, yet its tokens are bare strings rather than typed nodes. Gating on the version
 // keeps those from installing adapters the consumers would misread.
 addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
-  const { parse, match } = moduleExports
+  const { parse, match, TokenData } = moduleExports
 
-  if (typeof parse === 'function' && typeof match === 'function') {
+  if (typeof parse === 'function' && typeof match === 'function' && typeof TokenData === 'function') {
     parseTokens = pattern => {
       let result
       try {
@@ -52,12 +52,12 @@ addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
       if (Array.isArray(result?.tokens)) return result
     }
 
-    makeMatcher = route => {
+    makeMatcher = (tokens, options) => {
       let matcher
       try {
-        // Callers read which params matched, never their values: skipping decode is faster and
+        // Callers read raw param values only: skipping decode is faster and
         // stops a malformed escape ('%ZZ') from throwing URIError, which would read as "no match".
-        matcher = match(route, { decode: false })
+        matcher = match(new TokenData(tokens), { ...options, decode: false })
       } catch {
         return
       }
@@ -98,10 +98,10 @@ function getParse () {
 }
 
 /**
- * Returns the host's path-to-regexp 8.x `match` adapter: a factory `route => (url => params)` that
- * compiles a route once and returns a matcher yielding the captured params (or undefined on no
+ * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) => (url => params)`
+ * that compiles a token sequence once and returns a matcher yielding the captured params (or undefined on no
  * match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
- * @returns {((route: string) => ((url: string) => object | undefined) | undefined) | undefined}
+ * @returns {((tokens: object[], options?: object) => ((url: string) => object | undefined) | undefined) | undefined}
  */
 function getMatch () {
   return makeMatcher

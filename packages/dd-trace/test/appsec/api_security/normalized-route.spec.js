@@ -6,44 +6,24 @@ const sinon = require('sinon')
 // path-to-regexp is a transitive (vendored) dependency; require it directly to exercise the
 // normalizer against the real Express 5 parser/matcher (path-to-regexp 8).
 // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
-const { parse: rawParse, match: rawMatch } = require('path-to-regexp')
+const pathToRegexp = require('path-to-regexp')
+
+const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
+const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
 const {
   normalizeRouteExpress,
   normalizeRoute,
 } = require('../../../src/appsec/api_security/normalized-route')
 
-// Mirror the getParse instrumentation adapter: TokenData ({ tokens }) or undefined.
-function parse (pattern) {
-  let result
-  try {
-    result = rawParse(pattern)
-  } catch {
-    return undefined
-  }
-  return Array.isArray(result?.tokens) ? result : undefined
+// Install the real path-to-regexp 8 adapters, as the loader does when the host requires it.
+for (const { versions, hook } of instrumentations['path-to-regexp']) {
+  if (versions.includes('>=8')) hook(pathToRegexp)
 }
+const parse = getParse()
+const makeMatcher = getMatch()
 
-// Mirror the getMatch instrumentation adapter: route → (url → captured params | undefined).
-function makeMatcher (route) {
-  let matcher
-  try {
-    matcher = rawMatch(route, { decode: false })
-  } catch {
-    return undefined
-  }
-  return url => {
-    let result
-    try {
-      result = matcher(url)
-    } catch {
-      return undefined
-    }
-    return result ? result.params : undefined
-  }
-}
-
-function normalize (route, params, urlPath) {
-  return normalizeRouteExpress(route, params, urlPath, parse, makeMatcher)
+function normalize (route, params, urlPath, options) {
+  return normalizeRouteExpress(route, params, urlPath, parse, makeMatcher, options)
 }
 
 // Register one test per case, named after its inputs so a failure names the exact route.
@@ -54,210 +34,135 @@ function check (route, url, expected, params = {}) {
 }
 
 describe('normalizeRouteExpress', () => {
-  describe('invalid / unsupported inputs', () => {
+  describe('unsupported inputs return null', () => {
     check(null, undefined, null)
     check('', undefined, null)
     check('/users/:"unterminated', undefined, null)
     check('/users{/:id', undefined, null)
-    check('/path(\\.ext)?', undefined, null)
+    check('/users/:id?', undefined, null) // Express 4 syntax
+    check('/files/*', undefined, null) // unnamed catch-all: a parse error in Express 5
+    check('(/^\\/a$/)', '/a', null) // RegExp route
 
     it('returns null when no parse function is provided (Express 4 / path-to-regexp 0.x)', () => {
       assert.equal(normalizeRouteExpress('/users/:id', {}, '/users/1', undefined), null)
     })
   })
 
-  describe('Express 4 syntax is unsupported (parser throws → null)', () => {
-    // A real Express 5 app cannot register these, so omitting the tag is correct.
-    check('/users/:id?', undefined, null)
-    check('/users/:id(\\d+)', undefined, null, { id: '5' })
-    check('/files/*', undefined, null)
-    check('/files/:path*', undefined, null)
-    check('/api/v:major?/users', undefined, null)
-  })
-
-  describe('root and trivial routes', () => {
-    check('/', undefined, '/')
-    check('/users/', undefined, '/users/')
-    check('/users', undefined, '/users')
+  describe('static routes and params', () => {
+    check('/', '/', '/')
+    check('/users', '/users', '/users')
     check('/a//b', '/a/b', '/a/b')
+    check('/users/:id/posts/:postId', '/users/1/posts/2', '/users/{id}/posts/{postId}')
+    check('/users/user-:id', '/users/user-5', '/users/user-{id}')
+    check('/files/:name.json', '/files/report.json', '/files/{name}.json')
+    check('/photos/:id.:format', '/photos/1.jpg', '/photos/{id}.{format}')
   })
 
-  describe('static routes', () => {
-    check('/api/v1/users', undefined, '/api/v1/users')
-    check('/api/v2.0/some-path', undefined, '/api/v2.0/some-path')
+  describe('param names', () => {
+    check('/u/:"user-id"', '/u/1', '/u/{user_id}')
+    check('/:föo', '/1', '/{f_o}')
+    check('/a/:"user-id"/:user_id', '/a/1/2', '/a/{user_id_2}/{user_id}')
+    check('/a/:"x-y"/:x_y/:x_y_2', '/a/1/2/3', '/a/{x_y_3}/{x_y}/{x_y_2}')
+    check('/:id/:id', '/x/y', '/{id_2}/{id}')
   })
 
-  describe('required named params', () => {
-    check('/users/:id', undefined, '/users/{id}', { id: '123' })
-    check('/users/:userId/posts/:postId', undefined, '/users/{userId}/posts/{postId}',
-      { userId: '1', postId: '2' })
-    check('/api/v1/users/:id', undefined, '/api/v1/users/{id}', { id: '42' })
-    check('/users/:id', undefined, '/users/{id}', null)
-    check('/:$foo', '/x', '/{$foo}', { $foo: 'x' })
-    check('/:café', '/x', '/{café}', { café: 'x' })
-  })
-
-  describe('multi-param segments (rule 5)', () => {
-    check('/photos/:id.:format', undefined, '/photos/{id+format}', { id: '1', format: 'jpg' })
-    check('/v/:major.:minor.:patch', undefined, '/v/{major+minor+patch}',
-      { major: '1', minor: '2', patch: '3' })
-    check('/users/user-:id', undefined, '/users/{id}', { id: '5' })
-  })
-
-  describe('Express 5 named wildcard (*name)', () => {
-    check('/*splat', undefined, '/{splat}', { splat: 'anything' })
-    check('/files/*rest', undefined, '/files/{rest}', { rest: 'a/b/c' })
-    check('/:param1/:param2/*', undefined, null, { param1: 'x', param2: 'y' })
-    check('/:param1/:param2/*rest', undefined, '/{param1}/{param2}/{rest}',
-      { param1: 'x', param2: 'y', rest: 'z' })
-  })
-
-  describe('non-terminal catch-all (returns null)', () => {
-    check('/*splat/edit', undefined, null)
-    check('/x{/*rest}/tail', '/x/a/tail', null)
-  })
-
-  describe('wildcard with a prefix in its segment', () => {
-    check('/files/v*rest', '/files/vY/z', '/files/{rest}')
-    check('/x/:a-*rest', '/x/y-z/w', '/x/{a+rest}')
-    check('/files{/:opt}/v*rest', '/files/x/vY/z', '/files/{opt}/{rest}')
-    check('/files{/:opt}/v*rest', '/files/vY/z', '/files/{rest}')
-  })
-
-  describe('mount-prefixed routes and combined cases', () => {
-    check('/app/users/:id', undefined, '/app/users/{id}', { id: '5' })
-    check('/api/:version/*path', undefined, '/api/{version}/{path}', { version: 'v2', path: 'a/b' })
-    check('/users/:id/', undefined, '/users/{id}/', { id: '1' })
-  })
-
-  describe('Express 5 {/:param} optional-group syntax', () => {
-    check('/items{/:id}', '/items/42', '/items/{id}')
-    check('/items{/:id}', '/items', '/items')
-    check('/items{/:id}', undefined, '/items/{id}', { id: '42' })
-    check('/api{/:version}/users', '/api/v1/users', '/api/{version}/users')
-    check('/api{/:version}/users', '/api/users', '/api/users')
-    check('/posts{/:id.:format}', '/posts/1.json', '/posts/{id+format}')
-    check('/posts{/:id.:format}', '/posts', '/posts')
-    check('/files{/*path}', '/files/a/b', '/files/{path}')
-    check('/files{/*path}', '/files', '/files')
-    check('/users{/:"user-id"}', '/users/42', '/users/{user-id}')
-    check('/users{/:"user-id"}', '/users', '/users')
-    check('/a{/:b{/:c}}', '/a/x/y', '/a/{b}/{c}')
-    check('/a{/:b{/:c}}', '/a/x', '/a/{b}')
-    check('/a{/:b{/:c}}', '/a', '/a')
-  })
-
-  describe('intra-segment / multi-segment optional param groups (resolved via match)', () => {
-    check('/photos/:id{.:format}', '/photos/1.jpg', '/photos/{id+format}')
-    check('/photos/:id{.:format}', '/photos/1', '/photos/{id}')
-    check('/:a{.:b}{-:c}', '/x.y-z', '/{a+b+c}')
-    check('/:a{.:b}{-:c}', '/x-z', '/{a+c}')
-    check('/:a{.:b}{-:c}', '/x', '/{a}')
-    check('/:a{.:b}-*rest', '/x.y-/def', '/{a+b+rest}')
-    check('/:a{.:b}-*rest', '/x-/def', '/{a+rest}')
-    check('/x{/:a/:b}', '/x/1/2', '/x/{a}/{b}')
-    check('/x{/:a/:b}', '/x', '/x')
-    check('{/:a}{/:b/:c}', '/B/C', '/{b}/{c}')
-    check('{/:a}{/:b/:c}', '/A/B/C', '/{a}/{b}/{c}')
-  })
-
-  describe('mandatory static sharing a segment with an optional group', () => {
-    // The trailing static is group-0 (mandatory) but shares the optional group's URL segment; it must
-    // survive when the group is absent, not be dropped with the group's leading slash.
+  describe('optional groups', () => {
+    check('/users/:id{/:tab}', '/users/1/posts', '/users/{id}/{tab}')
+    check('/users/:id{/:tab}', '/users/1', '/users/{id}')
+    check('/files/:name{.:ext}', '/files/a.txt', '/files/{name}.{ext}')
+    check('/files/:name{.:ext}', '/files/a', '/files/{name}')
+    check('/a{/:x{/:y}}', '/a/1', '/a/{x}')
+    check('/drafts{/preview}', '/drafts/preview', '/drafts/preview')
+    check('/drafts{/preview}', '/drafts', '/drafts')
     check('/files{/:id}.json', '/files.json', '/files.json')
-    check('/files{/:id}.json', '/files/5.json', '/files/{id}') // single-param segment → just the param
-    check('/a{/:id}b/c', '/ab/c', '/ab/c')
-    check('/a{/:id}b/c', '/a/5b/c', '/a/{id}/c')
-    check('/x{/a}{/b}y', '/xy', '/xy') // static-only groups dropped, mandatory 'y' kept
-    check('/a{/mid}b', '/ab', '/ab')
+    check('/:id{/:id}', '/x/y', '/{id_2}/{id}')
   })
 
-  describe('static-only optional groups are dropped (rendered absent)', () => {
-    // A static-only optional group carries no param for match() to resolve, so it renders as absent —
-    // a stable, minimal route rather than an omitted tag.
-    check('/posts{/draft}', '/posts/draft', '/posts')
-    check('/posts{/draft}', '/posts', '/posts')
-    check('/foo{bar}', '/foobar', '/foo')
-    check('/foo{bar}baz', '/foobaz', '/foobaz')
-    check('/a{b}{c}', '/abc', '/a')
-    check('/a{{/b}}', '/a/b', '/a')
-    check('/a{/:id}/p{q}*rest', '/a/1/pZ/w', '/a/{id}/{rest}') // static group dropped, param resolved
-    check('/users{/}', '/users/', '/users') // bare optional slash dropped
-    check('/items{/:id/}', '/items/42/', '/items/{id}') // optional trailing slash dropped, param kept
+  describe('catch-alls', () => {
+    check('/files/*path', '/files/a/b', '/files/{path}')
+    check('/files/*path', '/files//', '/files/') // captured only slashes → absent
+    check('/files{/*path}', '/files', '/files')
+    check('/a/*mid/b', '/a/x/y/b', '/a/{mid}/b')
+    check('/*id/a/*id', '/foo/a//', '/{id_2}/a/{id}') // shared name → kept present
+    check('/files/*id{.:id}', '/files//', '/files/') // the sharing token is absent → not shared
+    check('/siblings/*id{/:id}', '/siblings//', '/siblings/')
   })
 
-  describe('omitted shapes (returns null, not a wrong tag)', () => {
-    check('/:id{/:id}', '/x', null, { id: 'x' }) // optional group shares a param name → ambiguous
-    check('/a{/:x}/b{/:x}', '/a/b/v', null, { x: 'v' })
-    check('/files/*path.:ext', '/files/a/b.txt', null) // non-terminal catch-all
-    check('/*a-*b', '/x-y', null)
-    check('/a{/b{/:c}}', '/a/b', null) // group detectable only via a nested param → presence ambiguous
+  describe('static encoding', () => {
+    check('/café', '/caf%C3%A9', '/caf%C3%A9')
+    check('/caf%c3%a9', '/caf%C3%A9', '/caf%C3%A9')
+    check('/100%', '/100%', '/100%25')
+    check('/a\\+b/:id', '/a+b/1', '/a%2Bb/{id}')
   })
 
-  describe('URL-based optional resolution (mergeParams=false fix)', () => {
-    // The request URL — not req.params — drives presence, so sub-routers mounted without
-    // mergeParams (which drops the parent's optional param) still resolve correctly.
-    check('/api{/:version}/users', undefined, '/api/users')
-    check('/api{/:version}/users', '/completely/different/path', '/api/{version}/users',
-      { version: 'v2' })
-    check('/a{/:x}{/:y}/b', '/a/1/2/b', '/a/{x}/{y}/b')
-    check('/a{/:x}{/:y}/b', '/a/1/b', '/a/{x}/b')
-    check('/a{/:x}{/:y}/b', '/a/b', '/a/b')
-    check('/api{/:version}/users{/:id}', '/api/v1/users/42', '/api/{version}/users/{id}',
-      { id: '42' })
-    check('/files{/:id}/*rest', '/files/x/y/z', '/files/{id}/{rest}')
-    // '/files/x': the required '*rest' claims the one segment, so {/:id} is absent (not the reverse).
-    check('/files{/:id}/*rest', '/files/x', '/files/{rest}')
+  describe('trailing slash', () => {
+    check('/users/:id/', '/users/1/', '/users/{id}/')
+    check('/users{/}', '/users/', '/users/')
+    check('/users{/}', '/users', '/users')
   })
 
-  describe('static segment encoding (UTF-8 correctness)', () => {
-    check('/path/café', undefined, '/path/caf%C3%A9')
-    check('/a/b c', undefined, '/a/b%20c')
-    check('/a/b,c', undefined, '/a/b%2Cc')
-    check('/path/🚀', undefined, '/path/%F0%9F%9A%80')
-    check('/file/\\{id\\}', '/file/{id}', '/file/%7Bid%7D')
+  describe('routing options', () => {
+    const cases = [
+      ['/posts{/draft}/', '/posts/draft', {}, '/posts/draft/'],
+      ['/posts{/draft}/', '/posts/draft/', { strict: true }, '/posts/draft/'],
+      ['/p{A}{a}', '/pa', {}, '/pA'],
+      ['/p{A}{a}', '/pa', { sensitive: true }, '/pa'],
+    ]
+    for (const [route, url, options, expected] of cases) {
+      it(`${route} on ${url} with ${JSON.stringify(options)} → ${expected}`, () => {
+        assert.equal(normalize(route, {}, url, options), expected)
+      })
+    }
   })
 
-  describe('prototype property safety (:toString, :constructor)', () => {
-    // Only own enumerable params count; inherited Object.prototype props must not read as present.
-    check('/x{/:toString}', undefined, '/x')
-    check('/x{/:constructor}', undefined, '/x')
-    check('/x{/:toString}', undefined, '/x/{toString}', { toString: 'val' })
-  })
+  describe('fallback to req.params without a URL match', () => {
+    check('/api{/:version}/users', undefined, '/api/{version}/users', { version: 'v2' })
+    check('/api{/:version}/users', '/other', '/api/users', { version: '' })
+    check('/posts{/draft}/:id', '/other', '/posts/{id}', { id: '1' }) // static-only group removed
+    check('/:id{/:id}', '/other', '/{id}', { id: 'x' }) // shared name can't be attributed
+    check('/a{/b{/:c}}', '/other', '/a/b/{c}', { c: 'z' })
+    check('/x{/:toString}', '/other', '/x') // inherited properties are not params
+    check('/items{/:id}', '/other', '/items/{id}', { id: '/' }) // a decoded '%2F' is a value
 
-  describe('duplicate param names (shadowed occurrences become paramN)', () => {
-    // Express keeps only the last value for a duplicated name, so earlier occurrences are numbered
-    // paramN in declaration order (RFC rule 4), skipping any surviving framework name.
-    check('/:id/:id', '/x/y', '/{param1}/{id}')
-    check('/:id/:id/:id', '/x/y/z', '/{param1}/{param2}/{id}')
-    check('/:param1/:param1', '/x/y', '/{param2}/{param1}')
-    check('/:"a/b"/:"a%2Fb"', '/x/y', '/{param1}/{a%2Fb}')
-    check('/:"a\\"b"', '/x', '/{a"b}', { 'a"b': 'x' })
-  })
-
-  describe('performance / safety guards', () => {
-    const optionals = (n) => '/r' + Array.from({ length: n }, (_, i) => `{/:p${i}}`).join('')
-    const url = (n) => '/r' + '/x'.repeat(n)
-    const statics = (n) => Array.from({ length: n }, (_, i) => `{s${i}}`).join('')
-
-    it('resolves a route at the optional-group cap (8)', () => {
-      assert.equal(normalize(optionals(8), {}, url(8)), '/r/{p0}/{p1}/{p2}/{p3}/{p4}/{p5}/{p6}/{p7}')
+    it('resolves a route over the optional-group cap from req.params', () => {
+      const route = '/r' + Array.from({ length: 9 }, (_, i) => `{/:p${i}}`).join('')
+      assert.equal(normalize(route, { p0: 'x' }, '/r/x'), '/r/{p0}')
     })
 
-    // 9 > cap → omitted before a matcher (an exponential regexp) is ever built.
-    it('omits a route just over the optional-group cap (9)', () => {
-      assert.equal(normalize(optionals(9), {}, url(9)), null)
+    it('stops caching rendered outputs past the per-route limit', () => {
+      const route = '/c' + Array.from({ length: 7 }, (_, i) => `{/:p${i}}`).join('')
+      const present = mask => [0, 1, 2, 3, 4, 5, 6].filter(i => mask & (1 << i))
+      const paramsFor = mask => Object.fromEntries(present(mask).map(i => [`p${i}`, 'x']))
+      const expectedFor = mask => '/c' + present(mask).map(i => `/{p${i}}`).join('')
+      for (let mask = 0; mask < 70; mask++) assert.equal(normalize(route, paramsFor(mask)), expectedFor(mask))
+      // Past the limit, outputs are rendered again and stay correct.
+      assert.equal(normalize(route, paramsFor(69)), expectedFor(69))
+      assert.equal(normalize(route, paramsFor(63)), expectedFor(63))
     })
 
-    // The cap counts ALL optional groups (match()'s regexp is exponential in the total), not just the
-    // resolvable ones: static groups that render as absent still count.
-    it('counts static groups toward the cap (7 static + 1 param = 8 total → resolves)', () => {
-      assert.equal(normalize('/r' + statics(7) + '{/:id}', {}, '/r/5'), '/r/{id}')
+    it('resolves from req.params when a matcher cannot be built', () => {
+      assert.equal(normalizeRouteExpress('/m{/:id}/:x', { x: '1' }, '/m/1', parse, () => undefined), '/m/{x}')
     })
+  })
 
-    it('counts static groups toward the cap (8 static + 1 param = 9 total → omitted)', () => {
-      assert.equal(normalize('/r' + statics(8) + '{/:id}', {}, '/r/5'), null)
-    })
+  describe('alternative order matches path-to-regexp match()', () => {
+    // The names emitted for uniquely named params must equal the keys match() captured.
+    const cases = [
+      ['/a{/:x}{/:y}', ['/a', '/a/1', '/a/1/2']],
+      ['/:a{.:b}{-:c}', ['/x', '/x.y', '/x-z', '/x.y-z']],
+      ['/files{/:id}/*rest', ['/files/x', '/files/x/y']],
+      ['/a{/:b{/:c}}{/:d}', ['/a', '/a/1', '/a/1/2', '/a/1/2/3']],
+    ]
+    for (const [route, urls] of cases) {
+      for (const url of urls) {
+        it(`${route} on ${url}`, () => {
+          const matcher = pathToRegexp.match(route, { decode: false })
+          const { params } = matcher(url)
+          const names = [...normalize(route, {}, url).matchAll(/\{(\w+)\}/g)].map(m => m[1])
+          assert.deepStrictEqual(names.sort(), Object.keys(params).sort())
+        })
+      }
+    }
   })
 
   describe('normalizeRoute(req) dispatcher', () => {
@@ -272,19 +177,6 @@ describe('normalizeRouteExpress', () => {
     it('returns null for an Express 4 request even when a parser is available', () => {
       const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
       const req = { originalUrl: '/users/1', params: { id: '1' }, app: { del () {} } }
-      const web = require('../../../src/plugins/util/web')
-      const root = sinon.stub(web, 'root').returns(span)
-      try {
-        assert.equal(normalizeRoute(req), null)
-      } finally {
-        root.restore()
-      }
-    })
-
-    // The host never loaded path-to-regexp 8 here, so there is no parser to read the route with.
-    it('returns null when no path-to-regexp 8 adapter is available', () => {
-      const span = { context: () => ({ getTag: tag => (tag === 'component' ? 'express' : '/users/:id') }) }
-      const req = { originalUrl: '/users/1', params: { id: '1' } }
       const web = require('../../../src/plugins/util/web')
       const root = sinon.stub(web, 'root').returns(span)
       try {
