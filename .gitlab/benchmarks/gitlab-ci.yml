@@ -31,7 +31,7 @@ variables:
 .benchmarks:
   stage: benchmarks
   needs: [ ]
-  tags: ["runner:apm-k8s-m7i-metal"]
+  tags: ["runner:apm-k8s-tweaked-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   variables:
     # See https://datadoghq.atlassian.net/wiki/spaces/APMINT/pages/7223313012/Flaky+Benchmarks+Monitoring for more details.
