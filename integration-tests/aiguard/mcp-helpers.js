@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto')
 const path = require('node:path')
 
 const express = require('express')
-const { after, afterEach, before, beforeEach } = require('mocha')
+const { after, afterEach, before, beforeEach, it } = require('mocha')
 
 const { FakeAgent, sandboxCwd, spawnProc, stopProc, useSandbox } = require('../helpers')
 const startApiMock = require('./api-mock')
@@ -108,6 +108,7 @@ function useMcpApp (dependencies) {
         DD_API_KEY: 'DD_API_KEY',
         DD_APP_KEY: 'DD_APP_KEY',
         OPENAI_BASE_URL: `http://127.0.0.1:${modelApi.address().port}/v1`,
+        OPENAI_AGENTS_DISABLE_TRACING: '1',
         MCP_SIDE_EFFECT_FILE: harness.sideEffectFile,
         ...harness.envOverrides,
       }
@@ -224,13 +225,107 @@ function useMcpApp (dependencies) {
  *
  * @param {string} transport
  * @param {{ url?: string }} sent The sent entry. It gives the local origin of a remote server.
+ * @param {string} [name]
  */
-function expectedServer (transport, sent) {
+function expectedServer (transport, sent, name) {
   const server = transport === 'stdio'
     ? { id: serverId(`stdio|${NODE_PROGRAM}`), managed_by: 'client', transport, command: NODE_PROGRAM }
     : { id: serverId(`url|${sent.url}`), managed_by: 'client', transport, url: sent.url }
   if (transport !== 'stdio') assert.match(String(sent.url), LOCAL_ORIGIN)
-  return { ...server, tools: { write_file: 'write_file' } }
+  return { ...server, ...(name && { name }), tools: { write_file: 'write_file' } }
+}
+
+/**
+ * Defines the tests of the configured server name of the MCP tool calls that OpenAI Agents makes.
+ * The name comes from the MCP server object of OpenAI Agents, through the rewriter targets of the
+ * MCP server classes.
+ *
+ * @param {ReturnType<typeof useMcpApp>} harness
+ */
+function itReportsAgentsMcpServerName (harness) {
+  for (const transport of ['stdio', 'streamable_http']) {
+    it(`checks each MCP tool call once, with the configured server name (${transport})`, async () => {
+      const response = await harness.get(`/mcp/agents?transport=${transport}&text=agent`)
+
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(response.body.output, 'done')
+      assert.ok(JSON.stringify(response.body.toolOutputs).includes('wrote agent'))
+      assert.deepStrictEqual(await harness.effects(transport), [`${transport}:agent`])
+      // Agents copies the MCP schema, so its model calls get generic input and output evaluations.
+      // Two model calls make four, and the callTool check makes the fifth.
+      assert.strictEqual(harness.attributes().length, 5)
+      const evaluations = harness.mcpEvaluations()
+      assert.strictEqual(evaluations.length, 1)
+      assert.strictEqual(harness.directCalls().length, 1)
+      const server = harness.assertDirectCall(evaluations[0], 'agent')
+      assert.deepStrictEqual(server, expectedServer(transport, server, 'local-files'))
+      harness.assertNoSecrets()
+    })
+  }
+}
+
+/**
+ * Defines the tests of the MCP tool calls that OpenAI Agents makes through the MCP SDK. The
+ * versions differ only in the tool result that the agent gets for a blocked call.
+ *
+ * @param {ReturnType<typeof useMcpApp>} harness
+ * @param {Record<string, string|RegExp>} blockedToolOutputs The tool result of a blocked call, for each
+ *   transport kind.
+ */
+function itChecksAgentsMcpToolCalls (harness, blockedToolOutputs) {
+  itReportsAgentsMcpServerName(harness)
+
+  for (const transport of ['stdio', 'streamable_http']) {
+    it(`drops the server name that @openai/agents makes from the command or the URL (${transport})`, async () => {
+      const response = await harness.get(`/mcp/agents?transport=${transport}&named=false&text=agent`)
+
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(harness.attributes().length, 5)
+      const evaluations = harness.mcpEvaluations()
+      assert.strictEqual(evaluations.length, 1)
+      const server = harness.assertDirectCall(evaluations[0], 'agent')
+      assert.deepStrictEqual(server, expectedServer(transport, server))
+      harness.assertNoSecrets()
+    })
+
+    it(`keeps the configured server name out of a later direct call (${transport})`, async () => {
+      const response = await harness.get(`/mcp/agents?transport=${transport}&text=agent&direct=true`)
+
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(await harness.effects(transport), [`${transport}:agent`, `${transport}:direct`])
+      const evaluations = harness.mcpEvaluations()
+      assert.strictEqual(evaluations.length, 2)
+      const agentServer = harness.assertDirectCall(evaluations[0], 'agent')
+      const directServer = harness.assertDirectCall(evaluations[1], 'direct')
+      assert.deepStrictEqual(agentServer, expectedServer(transport, agentServer, 'local-files'))
+      assert.deepStrictEqual(directServer, expectedServer(transport, directServer))
+    })
+
+    it(`blocks an MCP tool call before it runs, and the agent gets the block as a tool result (${transport})`,
+      async () => {
+        // Only the callTool evaluation carries MCP metadata, so only it gets the MCP policy.
+        const text = encodeURIComponent('agent [deny-mcp]')
+        const response = await harness.get(`/mcp/agents?transport=${transport}&text=${text}`)
+
+        // Agents turns the tool error into a tool result for the model, and the run completes.
+        assert.strictEqual(response.status, 200)
+        assert.strictEqual(response.body.output, 'done')
+        assert.strictEqual(response.body.toolOutputs.length, 1)
+        const expected = blockedToolOutputs[transport]
+        if (typeof expected === 'string') {
+          assert.strictEqual(response.body.toolOutputs[0], expected)
+        } else {
+          assert.match(response.body.toolOutputs[0], expected)
+        }
+        assert.deepStrictEqual(await harness.effects(transport), [])
+        assert.strictEqual(harness.attributes().length, 5)
+        const evaluations = harness.mcpEvaluations()
+        assert.strictEqual(evaluations.length, 1)
+        assert.strictEqual(harness.directCalls().length, 1)
+        const server = harness.assertDirectCall(evaluations[0], 'agent [deny-mcp]')
+        assert.deepStrictEqual(server, expectedServer(transport, server, 'local-files'))
+      })
+  }
 }
 
 module.exports = {
@@ -238,6 +333,8 @@ module.exports = {
   LOCAL_ORIGIN,
   SECRET,
   expectedServer,
+  itChecksAgentsMcpToolCalls,
+  itReportsAgentsMcpServerName,
   serverId,
   startModelMock,
   useMcpApp,

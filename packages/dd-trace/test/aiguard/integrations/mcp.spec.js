@@ -6,7 +6,7 @@ const { createHash, createSecretKey } = require('node:crypto')
 const { BlockList } = require('node:net')
 const { createHistogram } = require('node:perf_hooks')
 
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -18,6 +18,12 @@ const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
 
 const callToolInterceptChannel = channel('dd-trace:mcp:callTool:intercept')
 const listToolsResultChannel = channel('dd-trace:mcp:listTools:result')
+// The start channels that the rewriter adds to the MCP server classes of @openai/agents-core.
+const agentsMcpServerCallChannels = ['MCPServerStdio', 'MCPServerStreamableHttp', 'MCPServerSSE'].flatMap(className => {
+  return ['callTool', 'callToolResult'].map(method => {
+    return tracingChannel(`orchestrion:@openai/agents-core:${className}_${method}`).start
+  })
+})
 const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
 const responsesInterceptChannel = channel('dd-trace:openai:responses:intercept')
 
@@ -1302,6 +1308,90 @@ describe('AIGuard MCP integration', () => {
           const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: ctx.arguments[0] }
           assert.strictEqual(JSON.parse(JSON.stringify(request)).params.name, 'delete_repo')
         })
+      })
+    })
+
+    describe('configured server name of @openai/agents', () => {
+      const stdio = () => createClient({ type: 'stdio', command: 'npx', args: ['-y', 'pkg'] })
+
+      /**
+       * @param {ReturnType<typeof createClient>} mcpClient
+       * @param {object} server The public MCP server object of the agent.
+       */
+      function callFromAgent (mcpClient, server) {
+        const [startChannel] = agentsMcpServerCallChannels
+        return startChannel.runStores({ self: server, arguments: [] }, () => callTool(mcpClient, { name: 'search' }))
+      }
+
+      for (const startChannel of agentsMcpServerCallChannels) {
+        it(`reads the server object of the call on ${startChannel.name}`, async () => {
+          await startChannel.runStores({ self: { name: 'local-files' } }, () => callTool(stdio(), { name: 'search' }))
+
+          assert.strictEqual(evaluate.firstCall.args[1][MCP_SERVERS][0].name, 'local-files')
+        })
+      }
+
+      it('keeps the configured name out of a later direct call', async () => {
+        const client = stdio()
+
+        await callFromAgent(client, { name: 'local-files' })
+        await callTool(client, { name: 'search' })
+
+        const names = evaluate.getCalls().map(call => call.args[1][MCP_SERVERS][0].name)
+        assert.deepStrictEqual(names, ['local-files', undefined])
+      })
+
+      it('adds the configured name to the server entry', async () => {
+        await callFromAgent(stdio(), { name: 'local-files' })
+
+        assert.deepStrictEqual(evaluate.firstCall.args[1][MCP_SERVERS], [{
+          id: serverId('stdio|npx|pkg'),
+          managed_by: 'client',
+          transport: 'stdio',
+          name: 'local-files',
+          command: 'npx',
+          args: ['pkg'],
+          tools: { search: 'search' },
+        }])
+      })
+
+      for (const name of ['stdio: npx -y pkg --token secret', 'sse: https://user:pass@x/sse', 'streamable-http: x', '']) {
+        it(`drops the name ${JSON.stringify(name)}`, async () => {
+          await callFromAgent(stdio(), { name })
+
+          assert.strictEqual(Object.hasOwn(evaluate.firstCall.args[1][MCP_SERVERS][0], 'name'), false)
+        })
+      }
+
+      it('uses the name in the ID only when no URL or command identifies the server', async () => {
+        await callFromAgent(createClient({ type: 'in_process' }), { name: 'atlassian' })
+
+        assert.strictEqual(evaluate.firstCall.args[1][MCP_SERVERS][0].id, 'mcp_4b1df2a2d821278c')
+      })
+
+      it('keeps one entry for each name on the same transport', async () => {
+        const client = stdio()
+
+        await callFromAgent(client, { name: 'first' })
+        await callTool(client, { name: 'search' })
+        await callFromAgent(client, { name: 'second' })
+
+        const names = evaluate.getCalls().map(call => call.args[1][MCP_SERVERS][0].name)
+        assert.deepStrictEqual(names, ['first', undefined, 'second'])
+      })
+
+      it('fails open when the name getter throws', async () => {
+        await callFromAgent(stdio(), { get name () { throw new Error('closed') } })
+
+        assert.strictEqual(Object.hasOwn(evaluate.firstCall.args[1][MCP_SERVERS][0], 'name'), false)
+      })
+
+      it('unbinds the store when the integration is disabled', () => {
+        assert.ok(agentsMcpServerCallChannels.every(startChannel => startChannel.hasSubscribers))
+
+        mcp.disable()
+
+        assert.ok(agentsMcpServerCallChannels.every(startChannel => !startChannel.hasSubscribers))
       })
     })
 

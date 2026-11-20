@@ -30,6 +30,8 @@
   "@modelcontextprotocol/sdk/dist/cjs/server/mcp.js": "@modelcontextprotocol/sdk",
   "@modelcontextprotocol/sdk/dist/esm/client/index.js": "@modelcontextprotocol/sdk",
   "@modelcontextprotocol/sdk/dist/esm/server/mcp.js": "@modelcontextprotocol/sdk",
+  "@openai/agents-core/dist/mcp.js": "@openai/agents-core",
+  "@openai/agents-core/dist/mcp.mjs": "@openai/agents-core",
   "@openai/agents-openai/dist/openaiChatCompletionsModel.js": "@openai/agents-openai",
   "@openai/agents-openai/dist/openaiChatCompletionsModel.mjs": "@openai/agents-openai",
   "@openai/agents-realtime/dist/openaiRealtimeWebsocket.js": "@openai/agents-realtime",

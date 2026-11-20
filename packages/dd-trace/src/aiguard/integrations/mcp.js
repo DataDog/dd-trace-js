@@ -3,15 +3,29 @@
 const { randomUUID } = require('node:crypto')
 const { types } = require('node:util')
 
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 
+const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { MCP_SERVERS, activeTrace, consumeMark, createClientServer, recordListedTools } = require('../mcp')
 const { SOURCE_AUTO } = require('../tags')
 
 const callToolInterceptChannel = channel('dd-trace:mcp:callTool:intercept')
 const listToolsResultChannel = channel('dd-trace:mcp:listTools:result')
+// The rewriter adds these channels to the public MCP server classes of @openai/agents-core. The tool
+// calls of a server object run in the store that this integration binds on their start channels.
+const agentsMcpServerCallChannels = []
+for (const className of ['MCPServerStdio', 'MCPServerStreamableHttp', 'MCPServerSSE']) {
+  for (const methodName of ['callTool', 'callToolResult']) {
+    agentsMcpServerCallChannels.push(tracingChannel(`orchestrion:@openai/agents-core:${className}_${methodName}`).start)
+  }
+}
 
+const legacyStorage = storage('legacy')
+const AGENTS_MCP_SERVER = Symbol('dd-trace.aiguard.agentsMcpServer')
+
+// @openai/agents makes these names when the application sets no name. They contain the raw command or URL.
+const GENERATED_NAME_PREFIXES = ['stdio: ', 'sse: ', 'streamable-http: ']
 // These transports send the JSON form of the params, so the server gets exactly that form.
 const JSON_TRANSPORTS = new Set(['stdio', 'sse', 'streamable_http', 'websocket'])
 const CYCLE = '[Circular]'
@@ -62,7 +76,7 @@ const LEAVE = 3
  * @property {Set<object>} ancestors
  */
 
-/** @type {WeakMap<object, McpServer|undefined>} */
+/** @type {WeakMap<object, Map<string|undefined, McpServer|undefined>>} */
 const serversByTransport = new WeakMap()
 
 let isEnabled = false
@@ -83,6 +97,7 @@ function enable (aiguardInstance, block) {
 
   callToolInterceptChannel.subscribe(onCallTool)
   listToolsResultChannel.subscribe(onListToolsResult)
+  for (const startChannel of agentsMcpServerCallChannels) startChannel.bindStore(legacyStorage, bindAgentsMcpServer)
 
   isEnabled = true
 }
@@ -92,6 +107,7 @@ function disable () {
 
   callToolInterceptChannel.unsubscribe(onCallTool)
   listToolsResultChannel.unsubscribe(onListToolsResult)
+  for (const startChannel of agentsMcpServerCallChannels) startChannel.unbindStore(legacyStorage)
 
   aiguard = undefined
   opts = undefined
@@ -99,19 +115,59 @@ function disable () {
 }
 
 /**
- * Returns the server of a client transport. The entry stays the same for the life of the
- * transport.
+ * Keeps the current store and adds the MCP server object of `@openai/agents` that makes the call.
+ *
+ * @param {{ self?: object }} ctx The context of the rewritten method.
+ */
+function bindAgentsMcpServer (ctx) {
+  return { ...legacyStorage.getStore(), [AGENTS_MCP_SERVER]: ctx?.self }
+}
+
+/**
+ * Returns the server name that the application configured for the `@openai/agents` MCP server that
+ * makes the current call. It reads only the public name of the server object.
+ *
+ * @returns {string|undefined} undefined without a configured name.
+ */
+function getConfiguredServerName () {
+  const store = /** @type {Record<symbol, { name?: unknown }|undefined>|undefined} */ (legacyStorage.getStore())
+  const server = store?.[AGENTS_MCP_SERVER]
+  if (!server) return
+
+  let name
+  try {
+    name = server.name
+  } catch {
+    return
+  }
+  if (typeof name !== 'string' || name === '') return
+  for (const prefix of GENERATED_NAME_PREFIXES) {
+    if (name.startsWith(prefix)) return
+  }
+  return name
+}
+
+/**
+ * Returns the server of a client transport. The entries stay the same for the life of the
+ * transport, with one entry for each configured name.
  *
  * @param {unknown} transport
  * @param {TransportInfo|undefined} info
+ * @param {string} [name] The configured server name.
  * @returns {McpServer|undefined}
  */
-function resolveServer (transport, info) {
-  if (transport === null || typeof transport !== 'object') return createClientServer(info)
-  if (serversByTransport.has(transport)) return serversByTransport.get(transport)
+function resolveServer (transport, info, name) {
+  if (transport === null || typeof transport !== 'object') return createClientServer(info, name)
 
-  const server = createClientServer(info)
-  serversByTransport.set(transport, server)
+  let servers = serversByTransport.get(transport)
+  if (!servers) {
+    servers = new Map()
+    serversByTransport.set(transport, servers)
+  }
+  if (servers.has(name)) return servers.get(name)
+
+  const server = createClientServer(info, name)
+  servers.set(name, server)
   return server
 }
 
@@ -191,7 +247,7 @@ function evaluateToolCall (ctx) {
   /** @type {{ id: string, function: { name: string, arguments: string }, mcp?: { server_id: string } }} */
   const toolCall = { id: `dd_mcp_${randomUUID().replaceAll('-', '')}`, function: { name, arguments: args } }
   const messages = [{ role: 'assistant', tool_calls: [toolCall] }]
-  const server = resolveServer(ctx.transport, ctx.transportInfo)
+  const server = resolveServer(ctx.transport, ctx.transportInfo, getConfiguredServerName())
   // A server that no key identifies gets the evaluation of an ordinary tool call.
   if (!server) return aiguard.evaluate(messages, opts)
 
