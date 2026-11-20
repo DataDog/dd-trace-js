@@ -38,7 +38,7 @@ describe('OTLP Trace Export', () => {
   })
 
   for (const { protocol, contentType } of [
-    { protocol: undefined, contentType: 'application/json' },
+    { protocol: undefined, contentType: 'application/x-protobuf' },
     { protocol: 'http/protobuf', contentType: 'application/x-protobuf' },
     { protocol: 'http/json', contentType: 'application/json' },
   ]) {
