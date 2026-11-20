@@ -39,6 +39,8 @@ jobs:
           policy: all-green
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
       - uses: ./.github/actions/datadog-ci
       - name: Exclude All Green from Green CI metrics
         run: datadog-ci tag --level pipeline --tags green_ci.excluded:true

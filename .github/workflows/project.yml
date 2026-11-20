@@ -142,6 +142,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts-api-key
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
       - uses: ./.github/actions/dd-sts-app-key
         id: dd-sts-app-key
       - name: Check code meets quality and security standards
