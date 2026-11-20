@@ -1,0 +1,4 @@
+.parity-venv/
+__pycache__/
+captures/
+report.md
