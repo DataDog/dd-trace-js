@@ -50,6 +50,12 @@ class TraceContextExtractor {
   }
 
   /**
+   * Preserve the shim callback contract: pass the original event (of any shape) and AWS Lambda Context unchanged.
+   * Existing typed extractors return a trace context synchronously or through a Promise. It contains decimal
+   * traceId/parentId strings, numeric sampleMode (-1, 0, 1, 2) and source ('event', 'xray', 'ddtrace'); legacy
+   * traceID/parentID names remain accepted. Preparation awaits extraction before the invocation span starts.
+   * Failed extraction resumes the event, Step Functions, Lambda client-context and X-Ray fallback chain.
+   *
    * @param {Record<string, unknown>} event Lambda event.
    * @param {Record<string, unknown>} context Lambda context.
    * @returns {Promise<ExtractedContext>}
