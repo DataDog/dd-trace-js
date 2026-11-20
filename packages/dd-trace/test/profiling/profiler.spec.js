@@ -457,11 +457,15 @@ describe('profiler', function () {
       )
       const request = ExportProfilesServiceRequest.decode(exportSpec.otlp)
       const [resourceProfiles] = request.resourceProfiles
-      const resource = Object.fromEntries(resourceProfiles.resource.attributes.map(a => [a.key, a.value.stringValue]))
-      // Vanilla OTLP: semantic-convention attributes only; the SDK language tells the backend the family
-      assert.strictEqual(resource['telemetry.sdk.language'], 'nodejs')
+      const resource = Object.fromEntries(resourceProfiles.resource.attributes.map(a => [a.key, a.value]))
+      // Vanilla OTLP: semantic-convention attributes only; the SDK's name and language tell the backend the family
+      assert.strictEqual(resource['telemetry.sdk.name'].stringValue, 'datadog')
+      assert.strictEqual(resource['telemetry.sdk.language'].stringValue, 'nodejs')
+      assert.strictEqual(Number(resource['process.pid'].intValue), process.pid)
+      assert.strictEqual(resource['process.runtime.name'].stringValue, 'nodejs')
+      assert.strictEqual(resource['process.runtime.version'].stringValue, process.versions.node)
       assert.ok(!Object.keys(resource).some(key => key.startsWith('datadog.')), Object.keys(resource).join())
-      assert.strictEqual(resource['service.name'], 'otlp-service')
+      assert.strictEqual(resource['service.name'].stringValue, 'otlp-service')
       const { profiles } = resourceProfiles.scopeProfiles[0]
       // Sample types have the eBPF profiler's names, and wall time, which it doesn't have, one in the same style
       const { strings } = request.dictionary.stringTable

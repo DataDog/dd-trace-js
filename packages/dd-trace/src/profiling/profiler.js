@@ -40,8 +40,8 @@ function profileHasMissingSourceMaps (profile) {
 /** @typedef {ReturnType<import('@datadog/pprof').OtelProfilesBuilder['build']>} OtlpProfilesRequest */
 
 /**
- * The OTLP resource of the profiles: the attributes the other OTLP signals send, and the SDK's, leaving out unset
- * values.
+ * The OTLP resource of the profiles: the attributes the other OTLP signals send, the SDK's, and the process's, which
+ * pprof uploads have as the process_id and runtime_version tags, leaving out unset values.
  *
  * @param {import('../config/config-base')} config
  */
@@ -51,6 +51,10 @@ function buildOtlpResourceAttributes (config) {
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.language': 'nodejs',
     'telemetry.sdk.version': version,
+    'process.pid': process.pid,
+    'process.runtime.name': 'nodejs',
+    // Without process.version's "v", as the semantic conventions and the OpenTelemetry SDK have it
+    'process.runtime.version': process.versions.node,
   }
   for (const [key, value] of Object.entries(attributes)) {
     if (value === undefined || value === null) {
