@@ -4083,7 +4083,7 @@
     ],
     "DD_TRACE_PROPAGATION_STYLE": [
       {
-        "implementation": "E",
+        "implementation": "D",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
         "transform": "validatePropagationStyles"
