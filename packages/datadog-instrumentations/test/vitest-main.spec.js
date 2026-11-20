@@ -297,11 +297,16 @@ describe('vitest main instrumentation', () => {
     })
   }
 
-  for (const { name, cachedSpecs, expectedReason, skipAssignedSuite } of [
+  for (const { name, cachedSpecs, expectedReason, skipAssignedSuite, passWithNoTests = true } of [
     {
       name: 'empty sharded runs with cached specifications',
       cachedSpecs: new Map([['/repo/test.mjs', {}]]),
       expectedReason: 'zero_test_shard',
+    },
+    {
+      name: 'empty sharded runs with cached specifications and passWithNoTests disabled',
+      cachedSpecs: new Map([['/repo/test.mjs', {}]]),
+      passWithNoTests: false,
     },
     {
       name: 'sharded runs with every assigned suite skipped by TIA',
@@ -343,7 +348,7 @@ describe('vitest main instrumentation', () => {
         },
       })
       class Vitest {
-        config = { passWithNoTests: true, shard: { index: 2, count: 2 } }
+        config = { passWithNoTests, shard: { index: 2, count: 2 } }
         specifications = { _cachedSpecs: cachedSpecs }
         state = {
           pathsSet: new Set(),
@@ -369,9 +374,9 @@ describe('vitest main instrumentation', () => {
       await vitest.close()
 
       assert.strictEqual(finishes.length, 1)
-      assert.strictEqual(finishes[0].status, 'skip')
+      assert.strictEqual(finishes[0].status, passWithNoTests ? 'skip' : 'fail')
       assert.strictEqual(finishes[0].testSessionEmptyReason, expectedReason)
-      assert.strictEqual(finishes[0].error, undefined)
+      assert.strictEqual(finishes[0].error?.message, passWithNoTests ? undefined : 'No test files were found.')
     })
   }
 

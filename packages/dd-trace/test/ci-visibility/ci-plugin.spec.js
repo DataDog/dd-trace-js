@@ -39,6 +39,8 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_ERROR_DEBUG_INFO_CAPTURED,
 } = require('../../src/plugins/util/test')
 
@@ -984,6 +986,26 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
   })
 
+  it('links the latest matching DI snapshot when the same call site hits the probe twice', () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    plugin.filterDiBreakpointHitByStack = true
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    const snapshot = createDiSnapshot({
+      file: '/repo/failing.spec.js',
+      line: 23,
+      callerFile: '/repo/helper.js',
+      callerLine: 45,
+    })
+    const snapshotTag = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'successful-call' } })
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'failing-call' } })
+
+    sinon.assert.calledTwice(exportDiLogs)
+    assert.deepStrictEqual(testSpan.setTag.withArgs(snapshotTag).lastCall.args, [snapshotTag, 'failing-call'])
+  })
+
   function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
@@ -1014,14 +1036,15 @@ describe('CiPlugin', () => {
   }
 
   function createDiTestSpan (finished = false) {
+    const tags = new Map()
     return {
       context: () => ({
         _isFinished: finished,
-        getTag: sinon.stub().returns(undefined),
+        getTag: key => tags.get(key),
         toTraceId: () => 'trace-id',
         toSpanId: () => 'span-id',
       }),
-      setTag: sinon.spy(),
+      setTag: sinon.spy((key, value) => tags.set(key, value)),
     }
   }
 

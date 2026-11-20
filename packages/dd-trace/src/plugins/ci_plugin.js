@@ -1017,10 +1017,6 @@ module.exports = class CiPlugin extends Plugin {
     const stackIndex = this.testErrorStackIndex
     const activeTestSpanContext = testSpan.context()
 
-    if (activeTestSpanContext.getTag(DI_ERROR_DEBUG_INFO_CAPTURED) === 'true') {
-      return
-    }
-
     testSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
     testSpan.setTag(
       `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
