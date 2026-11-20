@@ -169,7 +169,11 @@ describe('profilers/native/space', () => {
     sinon.assert.notCalled(pprof.heap.profile)
     sinon.assert.calledOnceWithExactly(pprof.heap.visitProfile, visitor, sinon.match({ sourceMapper: mapper }))
     const { generateLabels } = pprof.heap.visitProfile.firstCall.args[1]
-    assert.deepStrictEqual(generateLabels(), { 'thread.name': 'Main Event Loop', 'thread.id': 0 })
+    assert.deepStrictEqual(generateLabels(), {
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+    })
     assert.strictEqual(profiler.isStarted(), true)
 
     profiler.visit(false, visitor)

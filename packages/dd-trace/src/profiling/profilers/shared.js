@@ -15,6 +15,10 @@ const TRACE_ID_LABEL = 'trace id'
 // Semantic-convention attributes of OTLP thread labels. thread.id is the managed thread ID: the worker's threadId.
 const OTEL_THREAD_NAME = 'thread.name'
 const OTEL_THREAD_ID = 'thread.id'
+// The OS thread ID has no semantic convention. Datadog labels of execution contexts are sample attributes with this
+// prefix, which the backend turns into the label without "datadog." and with spaces for underscores: "os thread id".
+const OTEL_DATADOG_LABEL_PREFIX = 'process.context.label.datadog.'
+const OTEL_OS_THREAD_ID = `${OTEL_DATADOG_LABEL_PREFIX}os_thread_id`
 
 const threadNamePrefix = isMainThread ? 'Main' : `Worker #${threadId}`
 const eventLoopThreadName = `${threadNamePrefix} Event Loop`
@@ -42,7 +46,11 @@ function cacheThreadLabels () {
 function cacheOtelThreadLabels () {
   let labels
   return () => {
-    labels ??= { [OTEL_THREAD_NAME]: eventLoopThreadName, [OTEL_THREAD_ID]: threadId }
+    labels ??= {
+      [OTEL_THREAD_NAME]: eventLoopThreadName,
+      [OTEL_THREAD_ID]: threadId,
+      [OTEL_OS_THREAD_ID]: require('@datadog/pprof').getNativeThreadId().toString(),
+    }
     return labels
   }
 }

@@ -243,8 +243,13 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledOnceWithExactly(pprof.time.stopAndVisit, true, visitor, sinon.match({ samplePerContext: true }))
     assert.strictEqual(profiler.isStarted(), true)
     const { generateLabels } = pprof.time.stopAndVisit.firstCall.args[2]
-    // Only semantic-convention attributes, and no end_timestamp_ns: the time is the sample's timestamp
-    const threadLabels = { 'thread.name': 'Main Event Loop', 'thread.id': 0 }
+    // Semantic-convention attributes and Datadog execution context labels, and no end_timestamp_ns: the time is the
+    // sample's timestamp
+    const threadLabels = {
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+    }
     assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), threadLabels)
     assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread.name': 'Non-JS threads',
