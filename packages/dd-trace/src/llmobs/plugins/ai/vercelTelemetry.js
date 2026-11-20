@@ -2,6 +2,8 @@
 
 const { parseModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 const BaseLLMObsPlugin = require('../base')
+const { createGatewayUsageMetrics, isGatewayProvider } = require('./usage-metrics')
+const { languageModelUsage } = require('./usage-tokens')
 const {
   getLlmObsSpanName,
   getGenerationMetadataFromEvent,
@@ -162,10 +164,22 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   /** @type {Map<string, Array<Record<string, unknown>>>} */
   #lastOutputContentByCallId = new Map()
 
+  #usageMetrics
+
   constructor () {
     super(...arguments)
 
+    this.#usageMetrics = createGatewayUsageMetrics(this._tracerConfig)
+
     this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      if (ctx.gatewayUsage) {
+        if (chunk?.type === 'finish') {
+          ctx.gatewayUsage.finish = chunk
+        } else if (chunk?.type === 'response-metadata') {
+          ctx.gatewayUsage.responseModel = chunk.modelId
+        }
+      }
+
       if (!this._llmobsEnabledFor(ctx)) {
         // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies and
         // `ctx.result` are left to the LLMObs path
@@ -221,6 +235,36 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
     super.asyncEnd(ctx)
+
+    this.#recordGatewayUsage(ctx)
+  }
+
+  /**
+   * @override
+   */
+  start (ctx) {
+    super.start(ctx)
+
+    if (this.#usageMetrics && ctx.type === 'languageModelCall' && isGatewayProvider(ctx.event?.provider)) {
+      ctx.gatewayUsage = { start: performance.now() }
+    }
+  }
+
+  #recordGatewayUsage (ctx) {
+    const gatewayUsage = ctx.gatewayUsage
+    if (!gatewayUsage) return
+    ctx.gatewayUsage = undefined
+
+    // a streamed call reports its usage and provider metadata on the `finish` chunk
+    const source = gatewayUsage.finish ?? ctx.result
+    this.#usageMetrics?.record({
+      requestModel: ctx.event.modelId,
+      responseModel: gatewayUsage.responseModel ?? ctx.result?.response?.modelId,
+      providerMetadata: source?.providerMetadata,
+      usage: languageModelUsage(source?.usage),
+      durationSeconds: (performance.now() - gatewayUsage.start) / 1000,
+      error: ctx.error,
+    })
   }
 
   /**
