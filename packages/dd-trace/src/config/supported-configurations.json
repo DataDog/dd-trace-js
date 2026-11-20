@@ -4593,9 +4593,9 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "string",
-        "default": "http/protobuf",
+        "default": "http/json",
         "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
