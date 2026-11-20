@@ -11,6 +11,7 @@ const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 
 const callToolInterceptCh = channel('dd-trace:mcp:callTool:intercept')
+const listToolsResultCh = channel('dd-trace:mcp:listTools:result')
 
 /**
  * Loads the server classes of an MCP v1 SDK directory.
@@ -280,6 +281,20 @@ for (const suite of SUITES) {
           await taskClient.close()
           await taskServer.close()
         }
+      })
+
+      it('publishes the listed tools before the caller gets them', async () => {
+        const published = []
+        subscribe(listToolsResultCh, ctx => published.push(ctx))
+
+        const result = await client.listTools()
+
+        assert.strictEqual(published.length, 1)
+        assert.strictEqual(published[0].client, client)
+        assert.strictEqual(published[0].transport, client.transport)
+        assert.deepStrictEqual(published[0].transportInfo, { type: 'in_process' })
+        assert.strictEqual(published[0].tools, result.tools)
+        assert.strictEqual(published[0].tools[0].inputSchema, result.tools[0].inputSchema)
       })
     })
 

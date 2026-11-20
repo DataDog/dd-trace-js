@@ -17,6 +17,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 const express = require('express')
+const OpenAI = require('openai')
 const { z } = require('zod')
 
 // Every value that AI Guard must never receive contains this marker.
@@ -31,6 +32,7 @@ fs.mkdirSync(npxDir, { recursive: true })
 fs.writeFileSync(path.join(npxDir, 'npx'), `#!/usr/bin/env node\nrequire(${JSON.stringify(STDIO_SERVER)})\n`)
 fs.chmodSync(path.join(npxDir, 'npx'), 0o755)
 
+const openai = new OpenAI({ apiKey: 'test-key', baseURL: process.env.OPENAI_BASE_URL })
 const inProcessEffects = []
 const delayedOutcomes = []
 
@@ -501,6 +503,48 @@ app.get('/mcp/delayed', async (req, res) => {
       error => delayedOutcomes.push({ text, outcome: error.name })
     )
   }, 50)
+})
+
+// The model gets the listed schema object, so AI Guard links the model tool call to the MCP server.
+// With reconnect=true, a new client connects to the stdio server after the model call, and then calls
+// the tool there.
+app.get('/mcp/openai', async (req, res) => {
+  const reconnect = req.query.reconnect === 'true'
+  let client
+  try {
+    if (reconnect) {
+      client = new SDKS[sdkOf(req)].Client({ name: `app-client-${SECRET}`, version: '1.0.0' })
+      await client.connect(createTransport('streamable_http', sdkOf(req)))
+    } else {
+      client = await connect('streamable_http', sdkOf(req))
+    }
+    const { tools } = await client.listTools()
+    const tool = tools.find(candidate => candidate.name === 'write_file')
+    const parameters = req.query.clone === 'true' ? structuredClone(tool.inputSchema) : tool.inputSchema
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `CALL ${JSON.stringify({ text: String(req.query.text) })}` }],
+      tools: [{
+        type: 'function',
+        function: { name: `${req.query.prefix ?? ''}${tool.name}`, description: tool.description, parameters },
+      }],
+    })
+    const toolCall = completion.choices[0].message.tool_calls[0]
+    const params = { name: tool.name, arguments: JSON.parse(toolCall.function.arguments) }
+    if (reconnect) {
+      await client.close()
+      await client.connect(createTransport('stdio', sdkOf(req)))
+    }
+    const call = client.callTool(params)
+    // The application changes the params after the call starts. The server must get the checked values.
+    if (req.query.mutate === 'true') params.arguments.text = 'changed after the call'
+    const result = await call
+    res.json({ blocked: false, toolCallId: toolCall.id, result: result.content[0].text })
+  } catch (error) {
+    sendError(res, error)
+  } finally {
+    if (reconnect) await client?.close()
+  }
 })
 
 app.get('/mcp/state', (req, res) => {

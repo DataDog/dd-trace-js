@@ -11,7 +11,7 @@ const msgpack = require('@msgpack/msgpack')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { spawnProcAndExpectExit } = require('../helpers')
-const { expectedServer, serverId, useMcpApp } = require('./mcp-helpers')
+const { LOCAL_ORIGIN, expectedServer, serverId, useMcpApp } = require('./mcp-helpers')
 
 const SDKS = ['v1']
 
@@ -35,9 +35,10 @@ describe('AIGuard MCP client tool calls', () => {
   const harness = useMcpApp([
     'express',
     '@modelcontextprotocol/sdk@1.32.2',
+    'openai@6',
     'zod',
   ])
-  const { attributes, assertDirectCall, assertNoSecrets, effects, get, mcpEvaluations, state } = harness
+  const { attributes, assertDirectCall, assertNoSecrets, directCalls, effects, get, mcpEvaluations, state } = harness
 
   describe('direct calls', () => {
     beforeEach(harness.startApp)
@@ -367,6 +368,90 @@ describe('AIGuard MCP client tool calls', () => {
     }
   })
 
+  describe('model calls', () => {
+    beforeEach(harness.startApp)
+
+    for (const sdk of SDKS) {
+      it(`links the model tool call to its MCP server and checks the operation once (${sdk})`, async () => {
+        const response = await get(`/mcp/openai?sdk=${sdk}&text=hello&prefix=files__`)
+
+        assert.strictEqual(response.status, 200)
+        assert.strictEqual(response.body.toolCallId, 'call_mcp_1')
+        assert.deepStrictEqual((await state()).inProcess, ['streamable_http:hello'])
+
+        // The input, then the response with the MCP metadata. The callTool that follows needs no evaluation.
+        const evaluations = attributes()
+        assert.strictEqual(evaluations.length, 2)
+        assert.strictEqual(directCalls().length, 0)
+        assert.ok(!Object.hasOwn(evaluations[0], 'mcp_servers'))
+        const [server] = evaluations[1].mcp_servers
+        assert.match(server.url, LOCAL_ORIGIN)
+        assert.deepStrictEqual(evaluations[1].mcp_servers, [{
+          id: serverId(`url|${server.url}`),
+          managed_by: 'client',
+          url: server.url,
+          transport: 'streamable_http',
+          tools: { files__write_file: 'write_file' },
+        }])
+        assert.deepStrictEqual(evaluations[1].messages.at(-1).tool_calls, [{
+          id: 'call_mcp_1',
+          type: 'function',
+          function: { name: 'files__write_file', arguments: '{"text":"hello"}' },
+          mcp: { server_id: server.id },
+        }])
+        assertNoSecrets()
+      })
+
+      it(`checks the call itself when the client calls the tool on another connection (${sdk})`, async () => {
+        const response = await get(`/mcp/openai?sdk=${sdk}&text=hello&reconnect=true`)
+
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(await state(), { inProcess: [], stdio: ['stdio:hello'], delayed: [] })
+        // The response evaluation allowed the call on the streamable HTTP connection. The client then
+        // calls the tool on its stdio connection, so that call gets its own evaluation with that server.
+        const evaluations = mcpEvaluations()
+        assert.strictEqual(attributes().length, 3)
+        assert.strictEqual(evaluations.length, 2)
+        assert.strictEqual(evaluations[0].mcp_servers[0].transport, 'streamable_http')
+        const server = assertDirectCall(evaluations[1], 'hello')
+        assert.deepStrictEqual(server, expectedServer('stdio', server))
+        assertNoSecrets()
+      })
+
+      it(`blocks the model tool call in the response before it runs (${sdk})`, async () => {
+        // The MCP policy applies to the response, which carries the MCP metadata, and not to the prompt.
+        const response = await get(`/mcp/openai?sdk=${sdk}&text=${encodeURIComponent('bad [deny-mcp]')}`)
+
+        assert.strictEqual(response.status, 403)
+        assert.deepStrictEqual((await state()).inProcess, [])
+        assert.strictEqual(mcpEvaluations().length, 1)
+        assert.strictEqual(directCalls().length, 0)
+      })
+
+      it(`checks the call itself when the model gets a copy of the schema (${sdk})`, async () => {
+        const response = await get(`/mcp/openai?sdk=${sdk}&text=hello&clone=true`)
+
+        assert.strictEqual(response.status, 200)
+        const evaluations = attributes()
+        assert.strictEqual(evaluations.length, 3)
+        assert.strictEqual(evaluations[1].messages.at(-1).tool_calls[0].mcp, undefined)
+        assert.strictEqual(mcpEvaluations().length, 1)
+        assertDirectCall(mcpEvaluations()[0], 'hello')
+      })
+
+      it(`sends the checked values of a marked call that the application changes after the call (${sdk})`,
+        async () => {
+          const response = await get(`/mcp/openai?sdk=${sdk}&text=hello&mutate=true`)
+
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(response.body.result, 'wrote hello')
+          assert.deepStrictEqual((await state()).inProcess, ['streamable_http:hello'])
+          assert.strictEqual(attributes().length, 2)
+          assert.strictEqual(directCalls().length, 0)
+        })
+    }
+  })
+
   describe('with the MCP kill switch off', () => {
     before(() => {
       harness.envOverrides = { DD_AI_GUARD_MCP_ENABLED: 'false' }
@@ -379,12 +464,18 @@ describe('AIGuard MCP client tool calls', () => {
     beforeEach(harness.startApp)
 
     for (const sdk of SDKS) {
-      it(`makes no MCP check (${sdk})`, async () => {
+      it(`sends no MCP metadata and makes no MCP check (${sdk})`, async () => {
         const direct = await get(`/mcp/call?sdk=${sdk}&transport=stdio&text=${encodeURIComponent('bad [deny]')}`)
+        const model = await get(`/mcp/openai?sdk=${sdk}&text=hello`)
 
         assert.strictEqual(direct.status, 200)
+        assert.strictEqual(model.status, 200)
         assert.deepStrictEqual((await state()).stdio, ['stdio:bad [deny]'])
-        assert.strictEqual(attributes().length, 0)
+        // Only the generic input and output evaluations of the model call remain.
+        assert.strictEqual(attributes().length, 2)
+        const sent = JSON.stringify(harness.requests())
+        assert.ok(!sent.includes('"mcp"') && !sent.includes('"mcp_servers"'))
+        assert.strictEqual(directCalls().length, 0)
       })
     }
   })
@@ -400,12 +491,18 @@ describe('AIGuard MCP client tool calls', () => {
 
     beforeEach(harness.startApp)
 
-    it('still enforces direct calls', async () => {
+    it('still links model tool calls and enforces direct calls', async () => {
+      const model = await get('/mcp/openai?text=hello')
       const blocked = await get(`/mcp/call?transport=stdio&text=${encodeURIComponent('bad [deny]')}`)
 
+      assert.strictEqual(model.status, 200)
       assert.strictEqual(blocked.status, 403)
-      assert.deepStrictEqual((await state()).stdio, [])
-      assert.strictEqual(mcpEvaluations().length, 1)
+      const { inProcess, stdio } = await state()
+      assert.deepStrictEqual(inProcess, ['streamable_http:hello'])
+      assert.deepStrictEqual(stdio, [])
+      // The model response carries the MCP metadata, so only the stdio call gets a direct check.
+      assert.strictEqual(mcpEvaluations().length, 2)
+      assert.strictEqual(directCalls().length, 1)
     })
   })
 

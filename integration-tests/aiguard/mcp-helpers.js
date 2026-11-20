@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { createHash } = require('node:crypto')
 const path = require('node:path')
 
+const express = require('express')
 const { after, afterEach, before, beforeEach } = require('mocha')
 
 const { FakeAgent, sandboxCwd, spawnProc, stopProc, useSandbox } = require('../helpers')
@@ -27,13 +28,63 @@ function serverId (key) {
 }
 
 /**
- * Sets up the sandbox, the AI Guard mock, and a fake agent for each test. The harness
+ * A chat completions model that calls the first tool with the JSON after "CALL " in the last
+ * user message, and answers "done" once it gets the tool result.
+ *
+ * @returns {Promise<import('node:http').Server>}
+ */
+function startModelMock () {
+  const app = express()
+  app.use(express.json())
+  app.post('/v1/chat/completions', (req, res) => {
+    const { messages = [], tools = [], model } = req.body
+    const base = {
+      id: 'chatcmpl-mcp',
+      object: 'chat.completion',
+      created: 0,
+      model,
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }
+    if (messages.at(-1)?.role === 'tool' || tools.length === 0) {
+      const message = { role: 'assistant', content: 'done' }
+      res.json({ ...base, choices: [{ index: 0, message, finish_reason: 'stop' }] })
+      return
+    }
+
+    const user = messages.findLast(message => message.role === 'user')
+    const content = typeof user?.content === 'string' ? user.content : ''
+    const args = content.startsWith('CALL ') ? content.slice(5) : '{}'
+    res.json({
+      ...base,
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_mcp_1',
+            type: 'function',
+            function: { name: tools[0].function.name, arguments: args },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+    })
+  })
+  return new Promise(resolve => {
+    const server = app.listen(0, '127.0.0.1', () => resolve(server))
+  })
+}
+
+/**
+ * Sets up the sandbox, the AI Guard and model mocks, and a fake agent for each test. The harness
  * starts aiguard/mcp-app.js and reads the evaluate requests that the app sent.
  *
  * @param {string[]} dependencies The packages of the sandbox.
  */
 function useMcpApp (dependencies) {
   let api
+  let modelApi
   let proc
   let run = 0
 
@@ -56,6 +107,7 @@ function useMcpApp (dependencies) {
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
         DD_API_KEY: 'DD_API_KEY',
         DD_APP_KEY: 'DD_APP_KEY',
+        OPENAI_BASE_URL: `http://127.0.0.1:${modelApi.address().port}/v1`,
         MCP_SIDE_EFFECT_FILE: harness.sideEffectFile,
         ...harness.envOverrides,
       }
@@ -102,6 +154,12 @@ function useMcpApp (dependencies) {
       return harness.attributes().filter(evaluation => evaluation.mcp_servers)
     },
 
+    directCalls () {
+      return harness.attributes().filter(evaluation => evaluation.messages.some(message => {
+        return message.tool_calls?.some(toolCall => LOCAL_ID.test(toolCall.id))
+      }))
+    },
+
     assertNoSecrets () {
       const sent = JSON.stringify(api.requests)
       assert.ok(!sent.includes(SECRET), 'an evaluate request contains a secret')
@@ -138,10 +196,12 @@ function useMcpApp (dependencies) {
   before(async () => {
     harness.cwd = sandboxCwd()
     api = await startApiMock()
+    modelApi = await startModelMock()
   })
 
   after(() => {
     api.close()
+    modelApi.close()
   })
 
   beforeEach(async () => {
@@ -179,5 +239,6 @@ module.exports = {
   SECRET,
   expectedServer,
   serverId,
+  startModelMock,
   useMcpApp,
 }

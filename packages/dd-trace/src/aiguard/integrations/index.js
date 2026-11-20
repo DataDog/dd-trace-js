@@ -13,13 +13,13 @@ let isEnabled = false
  * @param {object} aiguard
  * @param {boolean} block
  * @param {boolean} analyzeStreamResponses
- * @param {boolean} [mcpEnabled] Whether to check MCP tool calls.
+ * @param {boolean} [mcpEnabled] Whether to check MCP tool calls and to link them to model requests.
  */
 function enable (aiguard, block, analyzeStreamResponses, mcpEnabled) {
   if (isEnabled) return
 
   anthropic.enable(aiguard, block, analyzeStreamResponses)
-  openai.enable(aiguard, block, analyzeStreamResponses)
+  openai.enable(aiguard, block, analyzeStreamResponses, mcpEnabled)
   vercelAi.enable(aiguard, block, analyzeStreamResponses)
   if (mcpEnabled) mcp.enable(aiguard, block)
 

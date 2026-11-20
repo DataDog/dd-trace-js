@@ -28,6 +28,8 @@ const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 // publishes the call again, with the new transport and the current ctx.arguments, and applies the new
 // hook. Thus one callTool can publish more than once, but the original runs once.
 const callToolInterceptCh = channel('dd-trace:mcp:callTool:intercept')
+// Published when Client.listTools resolves, before the caller gets the tools.
+const listToolsResultCh = channel('dd-trace:mcp:listTools:result')
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
@@ -366,12 +368,41 @@ function wrapCallTool (callTool) {
   }
 }
 
+// Shimmer, not Orchestrion: the transport values must come from this file. To read them on the
+// Orchestrion channel of Client_listTools, this file must subscribe to that channel itself. That
+// subscriber keeps the channel active in every process, also when no subscriber listens to
+// listToolsResultCh. With no subscriber, this wrapper only checks hasSubscribers.
+/**
+ * @param {Function} listTools
+ */
+function wrapListTools (listTools) {
+  return function listToolsWithResult () {
+    const result = listTools.apply(this, arguments)
+    if (!listToolsResultCh.hasSubscribers || typeof result?.then !== 'function') return result
+
+    // The caller gets the tools after the subscribers, so a model request built from them can link to this client.
+    return result.then(listed => {
+      if (listToolsResultCh.hasSubscribers) {
+        const transport = this?.transport
+        listToolsResultCh.publish({
+          client: this,
+          transport,
+          transportInfo: getTransportInfo(transport),
+          tools: listed?.tools,
+        })
+      }
+      return listed
+    })
+  }
+}
+
 /**
  * @param {Function|undefined} Client
  */
 function wrapClient (Client) {
   const prototype = Client?.prototype
   if (typeof prototype?.callTool === 'function') shimmer.wrap(prototype, 'callTool', wrapCallTool)
+  if (typeof prototype?.listTools === 'function') shimmer.wrap(prototype, 'listTools', wrapListTools)
   return Client
 }
 

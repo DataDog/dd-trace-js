@@ -6,10 +6,11 @@ const { types } = require('node:util')
 const { channel } = require('dc-polyfill')
 
 const log = require('../../log')
-const { MCP_SERVERS, createClientServer } = require('../mcp')
+const { MCP_SERVERS, activeTrace, consumeMark, createClientServer, recordListedTools } = require('../mcp')
 const { SOURCE_AUTO } = require('../tags')
 
 const callToolInterceptChannel = channel('dd-trace:mcp:callTool:intercept')
+const listToolsResultChannel = channel('dd-trace:mcp:listTools:result')
 
 // These transports send the JSON form of the params, so the server gets exactly that form.
 const JSON_TRANSPORTS = new Set(['stdio', 'sse', 'streamable_http', 'websocket'])
@@ -81,6 +82,7 @@ function enable (aiguardInstance, block) {
   opts = { block, source: SOURCE_AUTO, integration: 'mcp' }
 
   callToolInterceptChannel.subscribe(onCallTool)
+  listToolsResultChannel.subscribe(onListToolsResult)
 
   isEnabled = true
 }
@@ -89,6 +91,7 @@ function disable () {
   if (!isEnabled) return
 
   callToolInterceptChannel.unsubscribe(onCallTool)
+  listToolsResultChannel.unsubscribe(onListToolsResult)
 
   aiguard = undefined
   opts = undefined
@@ -110,6 +113,17 @@ function resolveServer (transport, info) {
   const server = createClientServer(info)
   serversByTransport.set(transport, server)
   return server
+}
+
+/**
+ * @param {{ client: object, transport: unknown, transportInfo: TransportInfo|undefined, tools: unknown }} ctx
+ */
+function onListToolsResult (ctx) {
+  try {
+    recordListedTools(ctx.transport, resolveServer(ctx.transport, ctx.transportInfo), ctx.tools)
+  } catch (error) {
+    log.debug('AIGuard: unable to record the listed MCP tools: %s', error?.message)
+  }
 }
 
 /**
@@ -148,7 +162,8 @@ function onEvaluationError (error) {
 }
 
 /**
- * Evaluates the tool call as one assistant message.
+ * Evaluates the tool call as one assistant message. A call that a model response evaluation
+ * already checked on the same connection and in the same trace gets no second evaluation.
  *
  * @param {CallToolContext} ctx
  * @returns {Promise<unknown>|undefined}
@@ -169,6 +184,8 @@ function evaluateToolCall (ctx) {
   if (call.name === undefined) return
   const name = typeof call.name === 'string' ? call.name : String(call.name)
   const args = call.args ?? '{}'
+
+  if (consumeMark(activeTrace(), ctx.transport, name, args)) return
 
   // No model call ID exists for a direct call, so the call gets a local ID.
   /** @type {{ id: string, function: { name: string, arguments: string }, mcp?: { server_id: string } }} */

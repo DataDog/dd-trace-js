@@ -86,7 +86,7 @@ describe('AIGuard integration wiring', () => {
     integrations.disable()
 
     sinon.assert.calledOnceWithExactly(anthropic.enable, aiguard, true, true)
-    sinon.assert.calledOnceWithExactly(openai.enable, aiguard, true, true)
+    sinon.assert.calledOnceWithExactly(openai.enable, aiguard, true, true, true)
     sinon.assert.calledOnceWithExactly(vercelAi.enable, aiguard, true, true)
     sinon.assert.calledOnceWithExactly(mcp.enable, aiguard, true)
     sinon.assert.calledOnce(anthropic.disable)
@@ -112,7 +112,7 @@ describe('AIGuard integration wiring', () => {
     integrations.enable(aiguard, true, true, false)
 
     sinon.assert.notCalled(mcp.enable)
-    sinon.assert.calledOnceWithExactly(openai.enable, aiguard, true, true)
+    sinon.assert.calledOnceWithExactly(openai.enable, aiguard, true, true, false)
   })
 
   for (const [value, expected] of [[undefined, true], [true, true], [false, false]]) {
@@ -133,11 +133,13 @@ describe('AIGuard integration wiring', () => {
 
   describe('with the MCP kill switch off', () => {
     const callToolInterceptChannel = channel('dd-trace:mcp:callTool:intercept')
+    const listToolsResultChannel = channel('dd-trace:mcp:listTools:result')
 
     it('subscribes to no MCP channel', () => {
       aiguard.enable({}, { aiguard: { ...config.aiguard, DD_AI_GUARD_MCP_ENABLED: false } })
 
       assert.strictEqual(callToolInterceptChannel.hasSubscribers, false)
+      assert.strictEqual(listToolsResultChannel.hasSubscribers, false)
       assert.strictEqual(publishChatIntercept().intercepted, true)
     })
 
@@ -145,10 +147,12 @@ describe('AIGuard integration wiring', () => {
       aiguard.enable({}, { aiguard: { ...config.aiguard, DD_AI_GUARD_MCP_ENABLED: true } })
 
       assert.strictEqual(callToolInterceptChannel.hasSubscribers, true)
+      assert.strictEqual(listToolsResultChannel.hasSubscribers, true)
 
       aiguard.disable()
 
       assert.strictEqual(callToolInterceptChannel.hasSubscribers, false)
+      assert.strictEqual(listToolsResultChannel.hasSubscribers, false)
     })
   })
 })
