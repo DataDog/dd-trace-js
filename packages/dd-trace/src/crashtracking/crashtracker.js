@@ -141,7 +141,10 @@ class Crashtracker {
 
     return {
       additional_files: [],
-      collect_all_threads: true,
+      // Disabled: when the collector child hangs, the receiver can leave the crashing thread
+      // ptrace-stopped (PTRACE_DETACH before the stop is observed returns ESRCH, which libdatadog
+      // treats as success), so the process never exits. Re-enable once libdatadog fixes the detach.
+      collect_all_threads: false,
       create_alt_stack: true,
       use_alt_stack: true,
       endpoint,

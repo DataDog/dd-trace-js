@@ -111,6 +111,14 @@ describeNotWindows('crashtracker', () => {
       assert.strictEqual(initConfig.resolve_frames, expected)
     })
 
+    it('should not collect all threads', () => {
+      crashtracker.start(config)
+      crashtracker.configure(config)
+
+      assert.strictEqual(binding.init.firstCall.args[0].collect_all_threads, false)
+      assert.strictEqual(binding.updateConfig.firstCall.args[0].collect_all_threads, false)
+    })
+
     it('should handle unix sockets', () => {
       config.url = new URL('unix:///var/datadog/apm/test.socket')
 
