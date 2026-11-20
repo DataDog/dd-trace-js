@@ -42,8 +42,9 @@ function configuration (consent = false) {
 /**
  * @param {string} operator
  * @param {unknown} value
+ * @param {string} [attribute]
  */
-function ruleConfiguration (operator, value) {
+function ruleConfiguration (operator, value, attribute = 'attr') {
   return {
     ...configuration(),
     flags: {
@@ -56,7 +57,7 @@ function ruleConfiguration (operator, value) {
           {
             key: 'rule',
             doLog: false,
-            rules: [{ conditions: [{ attribute: 'attr', operator, value }] }],
+            rules: [{ conditions: [{ attribute, operator, value }] }],
             splits: [{ variationKey: 'on', shards: [] }],
           },
           { key: 'default', doLog: false, splits: [{ variationKey: 'off', shards: [] }] },
@@ -283,6 +284,35 @@ describe('bundled flagging provider smoke tests', () => {
       const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user', attr }, log)
       assert.strictEqual(details.variant, variant)
       assert.strictEqual(details.value, expected)
+      assert.strictEqual(details.errorCode, undefined)
+    })
+  }
+
+  for (const { name, attribute, context, variant } of [
+    {
+      name: 'matches a targetingKey rule',
+      attribute: 'targetingKey',
+      context: { targetingKey: 'user' },
+      variant: 'on',
+    },
+    {
+      name: 'does not match a targetingKey rule for another key',
+      attribute: 'targetingKey',
+      context: { targetingKey: 'other' },
+      variant: 'off',
+    },
+    {
+      name: 'does not match a targetingKey rule without a key',
+      attribute: 'targetingKey',
+      context: {},
+      variant: 'off',
+    },
+    { name: 'keeps matching an id rule', attribute: 'id', context: { targetingKey: 'user' }, variant: 'on' },
+  ]) {
+    it(`${name} against the context targeting key through the bundled provider`, async () => {
+      provider.setConfiguration(ruleConfiguration('ONE_OF', ['user'], attribute))
+      const details = await provider.resolveBooleanEvaluation('flag', false, context, log)
+      assert.strictEqual(details.variant, variant)
       assert.strictEqual(details.errorCode, undefined)
     })
   }
