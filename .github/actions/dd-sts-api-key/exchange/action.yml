@@ -4,23 +4,23 @@ description: Internal implementation; exchange OIDC token for API key. Use `./.g
 outputs:
   api_key:
     description: "Datadog API key"
-    value: ${{ steps.dd-sts.outputs.api_key }}
+    value: ${{ steps.dd-wif.outputs.api_key }}
 
 runs:
   using: composite
   steps:
     - name: Get Datadog API key
-      id: dd-sts
-      uses: DataDog/dd-sts-action@639d841c72f15e4e77747bd726ef8105ce971da2 # v1.0.5
+      id: dd-wif
+      uses: DataDog/datadog-workload-identity-federation-github-action/intake@c9456387851248e0a5452f99085b16ad14fc3acb # v1.0.0
       with:
-        policy: dd-trace-js-api-key
-        retries: 16
+        org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
+        site: datadoghq.com
     - name: Verify API key was returned
       shell: bash
       env:
-        API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+        API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       run: |
         if [ -z "$API_KEY" ]; then
-          echo "dd-sts succeeded but returned no API key"
+          echo "dd-wif succeeded but returned no API key"
           exit 1
         fi
