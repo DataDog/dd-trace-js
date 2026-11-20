@@ -46,6 +46,31 @@ function stageProducer ({ cluster, originalSend, originalSendBatch }) {
   return { kafka, producer: kafka.producer() }
 }
 
+/**
+ * @param {string[] | (() => string[])} brokers `Kafka` constructor brokers.
+ * @returns {{ run: Function, runOptions?: { eachMessage: Function, eachBatch: Function } }}
+ */
+function stageConsumer (brokers) {
+  const fakeConsumer = {
+    events: { COMMIT_OFFSETS: 'consumer.commit_offsets' },
+    on () {},
+    run (options) { fakeConsumer.runOptions = options },
+  }
+
+  class FakeBaseKafka {
+    constructor (options) { this._options = options }
+
+    producer () {}
+
+    consumer () {
+      return fakeConsumer
+    }
+  }
+
+  const WrappedKafka = INDEX_HOOK(FakeBaseKafka)
+  return new WrappedKafka({ brokers }).consumer({ groupId: 'group' })
+}
+
 describe('packages/datadog-instrumentations/src/kafkajs.js', () => {
   const startCh = dc.channel('apm:kafkajs:produce:start')
   const startNoop = () => {}
@@ -536,6 +561,53 @@ describe('packages/datadog-instrumentations/src/kafkajs.js', () => {
       } finally {
         start.unsubscribe()
       }
+    })
+  })
+  describe('consumer bootstrap servers', () => {
+    const consumeStartCh = dc.channel('apm:kafkajs:consume:start')
+    const batchStartCh = dc.channel('apm:kafkajs:consume-batch:start')
+    /** @type {Array<object>} */
+    let extracted
+
+    const captureConsume = (ctx) => extracted.push({ kind: 'message', ...ctx.extractedArgs })
+    const captureBatch = (ctx) => extracted.push({ kind: 'batch', ...ctx.extractedArgs })
+
+    beforeEach(() => {
+      extracted = []
+      consumeStartCh.subscribe(captureConsume)
+      batchStartCh.subscribe(captureBatch)
+    })
+
+    afterEach(() => {
+      consumeStartCh.unsubscribe(captureConsume)
+      batchStartCh.unsubscribe(captureBatch)
+    })
+
+    /**
+     * @param {string[] | (() => string[])} brokers
+     */
+    function consumeOnce (brokers) {
+      const consumer = stageConsumer(brokers)
+      consumer.run({ eachMessage () {}, eachBatch () {} })
+      assert.ok(consumer.runOptions)
+      const { eachMessage, eachBatch } = consumer.runOptions
+      eachMessage({ topic: 'topic', partition: 0, message: { offset: '1' } })
+      eachBatch({ batch: { topic: 'topic', partition: 0, messages: [] } })
+    }
+
+    it('reports the brokers of the client to message and batch consumers', () => {
+      consumeOnce(['kafka-1:9092', 'kafka-2:9092'])
+
+      assert.deepStrictEqual(extracted.map(({ kind, bootstrapServers }) => ({ kind, bootstrapServers })), [
+        { kind: 'message', bootstrapServers: 'kafka-1:9092,kafka-2:9092' },
+        { kind: 'batch', bootstrapServers: 'kafka-1:9092,kafka-2:9092' },
+      ])
+    })
+
+    it('reports no brokers for a broker discovery function', () => {
+      consumeOnce(() => ['kafka-1:9092'])
+
+      assert.deepStrictEqual(extracted.map(({ bootstrapServers }) => bootstrapServers), [undefined, undefined])
     })
   })
 })
