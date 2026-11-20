@@ -8,7 +8,7 @@ const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
 
-const { protoSpanKind } = getProtobufTypes()
+const { protoSpanKind, protoTraceService } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
 const SPAN_KIND_INTERNAL = protoSpanKind.values.SPAN_KIND_INTERNAL
 const SPAN_KIND_SERVER = protoSpanKind.values.SPAN_KIND_SERVER
@@ -81,18 +81,19 @@ const EXCLUDED_META_KEYS = new Set([
 const DD_ERROR_META_KEYS = new Set(['error.message'])
 
 /**
- * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
+ * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace format.
  *
  * This implementation follows the OTLP trace data model:
  * https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/opentelemetry/proto/trace/v1/trace.proto
  *
  * It receives DD-formatted spans (from span_format.js) and produces
- * an ExportTraceServiceRequest serialized as JSON (http/json protocol only).
+ * an ExportTraceServiceRequest serialized as JSON (http/json) or protobuf (http/protobuf).
  *
  * @class OtlpTraceTransformer
  * @augments OtlpTransformerBase
  */
 class OtlpTraceTransformer extends OtlpTransformerBase {
+  #isJson
   #otelTraceSemanticsEnabled
 
   // Span meta entries with the same key and value as a resource attribute are already carried by
@@ -104,10 +105,12 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Creates a new OtlpTraceTransformer instance.
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (resourceAttributes, otelTraceSemanticsEnabled) {
-    super(resourceAttributes, 'http/json', 'traces')
+  constructor (resourceAttributes, protocol, otelTraceSemanticsEnabled) {
+    super(resourceAttributes, protocol, 'traces')
+    this.#isJson = this.protocol === 'http/json'
     this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
     this.#resourceAttributes = resourceAttributes
   }
@@ -122,10 +125,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Transforms DD-formatted spans to OTLP JSON format.
+   * Transforms DD-formatted spans to OTLP format based on the configured protocol.
    *
    * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans to transform
-   * @returns {Buffer} JSON-encoded trace data
+   * @returns {Buffer} JSON- or protobuf-encoded trace data
    */
   transformSpans (spans) {
     const traceData = {
@@ -134,7 +137,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         scopeSpans: this.#transformScopeSpans(spans),
       }],
     }
-    return this.serializeToJson(traceData)
+    return this.#isJson
+      ? this.serializeToJson(traceData)
+      : this.serializeToProtobuf(protoTraceService, traceData)
   }
 
   /**
@@ -182,9 +187,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     const samplingPriority = span.metrics?.[SAMPLING_PRIORITY_KEY]
 
     return {
-      traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
-      spanId: this.#spanIdToHex(span.span_id),
-      parentSpanId: parentId && !parentId.equals(ZERO_ID) ? this.#spanIdToHex(parentId) : undefined,
+      traceId: this.#encodeId(span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0')),
+      spanId: this.#encodeSpanId(span.span_id),
+      parentSpanId: parentId && !parentId.equals(ZERO_ID) ? this.#encodeSpanId(parentId) : undefined,
       traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
@@ -253,14 +258,14 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    // TODO: meta_struct values are logically raw bytes. The OTLP http/json spec encodes the bytesValue
-    // field as base64, but when http/protobuf or gRPC support is added the payload should be sent as
-    // raw bytes directly (no JSON.stringify + base64). The backend decoding side will need to be
-    // updated in parallel to accept the unencoded bytes.
+    // meta_struct values carry their JSON serialization so receivers decode the same bytes for every
+    // protocol; only http/json additionally base64-encodes bytesValue, per the proto JSON mapping.
+    // TODO: meta_struct values are logically raw bytes. Sending them without JSON.stringify requires
+    // the backend decoding side to accept the unencoded bytes first.
     if (span.meta_struct) {
       for (const [key, value] of Object.entries(span.meta_struct)) {
         const bytes = Buffer.from(JSON.stringify(value))
-        attributes.push({ key, value: { bytesValue: bytes.toString('base64') } })
+        attributes.push({ key, value: { bytesValue: this.#isJson ? bytes.toString('base64') : bytes } })
       }
     }
 
@@ -352,8 +357,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    */
   #transformLink (link) {
     return {
-      traceId: this.#hexToBytes(link.trace_id, 16),
-      spanId: this.#hexToBytes(link.span_id, 8),
+      traceId: this.#encodeHexId(link.trace_id, 16),
+      spanId: this.#encodeHexId(link.span_id, 8),
       traceState: link.tracestate || '',
       attributes: this.transformAttributes(link.attributes ?? {}),
       droppedAttributesCount: 0,
@@ -362,22 +367,32 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   }
 
   /** @param {Identifier} identifier */
-  #spanIdToHex (identifier) {
-    return identifier.toString(16).slice(-16)
+  #encodeSpanId (identifier) {
+    return this.#encodeId(identifier.toString(16).slice(-16))
   }
 
   /**
-   * Normalizes a hex string to the specified byte length.
+   * Normalizes a hex string to the specified byte length, then encodes it for the wire.
    * Pads with leading zeros if the hex string is shorter than expected.
-   * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
    *
    * @param {string | undefined} hexString - Hex string to normalize
    * @param {number} targetLength - Target byte length
    */
-  #hexToBytes (hexString, targetLength) {
-    if (!hexString) return '0'.repeat(targetLength * 2)
+  #encodeHexId (hexString, targetLength) {
+    if (!hexString) return this.#encodeId('0'.repeat(targetLength * 2))
     const cleanHex = hexString.startsWith('0x') ? hexString.slice(2) : hexString
-    return cleanHex.padStart(targetLength * 2, '0')
+    return this.#encodeId(cleanHex.padStart(targetLength * 2, '0'))
+  }
+
+  /**
+   * Encodes a trace or span ID. OTLP http/json requires hex-encoded strings instead of the
+   * base64 the proto JSON mapping would use for bytes; http/protobuf carries the raw bytes.
+   *
+   * @param {string} hex - Hex-encoded ID
+   * @returns {string | Buffer}
+   */
+  #encodeId (hex) {
+    return this.#isJson ? hex : Buffer.from(hex, 'hex')
   }
 }
 

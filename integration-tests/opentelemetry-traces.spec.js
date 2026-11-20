@@ -37,120 +37,127 @@ describe('OTLP Trace Export', () => {
     await agent.stop()
   })
 
-  it('should export traces in OTLP JSON format', async () => {
-    const tracesPromise = waitForOtlpTraces(agent, timeout)
-    const beforeNs = Date.now() * 1e6
+  for (const { protocol, contentType } of [
+    { protocol: undefined, contentType: 'application/json' },
+    { protocol: 'http/protobuf', contentType: 'application/x-protobuf' },
+    { protocol: 'http/json', contentType: 'application/json' },
+  ]) {
+    it(`should export traces in OTLP format with protocol ${protocol ?? 'unset'}`, async () => {
+      const tracesPromise = waitForOtlpTraces(agent, timeout)
+      const beforeNs = Date.now() * 1e6
 
-    const proc = fork(join(cwd, 'opentelemetry/otlp-traces.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent.port,
-        OTEL_TRACES_EXPORTER: 'otlp',
-        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
-        DD_SERVICE: 'otlp-test-service',
-        DD_ENV: 'test',
-        DD_VERSION: '1.0.0',
-        DD_TAGS: 'team:core,region:us1',
-      },
-    })
-
-    const exitPromise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Process timed out')), timeout)
-      proc.on('error', reject)
-      proc.on('exit', (code) => {
-        clearTimeout(timer)
-        if (code !== 0) {
-          reject(new Error(`Process exited with status code ${code}`))
-        } else {
-          resolve()
-        }
-      })
-    })
-
-    const [{ headers, payload }] = await Promise.all([tracesPromise, exitPromise])
-
-    assert.strictEqual(headers['content-type'], 'application/json')
-
-    assertObjectContains(payload, {
-      resourceSpans: [{
-        resource: {
-          attributes: [
-            { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
-            { key: 'deployment.environment.name', value: { stringValue: 'test' } },
-            { key: 'service.version', value: { stringValue: '1.0.0' } },
-            { key: 'team', value: { stringValue: 'core' } },
-            { key: 'region', value: { stringValue: 'us1' } },
-          ],
+      const proc = fork(join(cwd, 'opentelemetry/otlp-traces.js'), {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          OTEL_TRACES_EXPORTER: 'otlp',
+          ...(protocol && { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: protocol }),
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
+          DD_SERVICE: 'otlp-test-service',
+          DD_ENV: 'test',
+          DD_VERSION: '1.0.0',
+          DD_TAGS: 'team:core,region:us1',
         },
-        scopeSpans: [{
-          scope: { name: 'dd-trace-js' },
+      })
+
+      const exitPromise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Process timed out')), timeout)
+        proc.on('error', reject)
+        proc.on('exit', (code) => {
+          clearTimeout(timer)
+          if (code !== 0) {
+            reject(new Error(`Process exited with status code ${code}`))
+          } else {
+            resolve()
+          }
+        })
+      })
+
+      const [{ headers, payload }] = await Promise.all([tracesPromise, exitPromise])
+
+      assert.strictEqual(headers['content-type'], contentType)
+
+      assertObjectContains(payload, {
+        resourceSpans: [{
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
+              { key: 'deployment.environment.name', value: { stringValue: 'test' } },
+              { key: 'service.version', value: { stringValue: '1.0.0' } },
+              { key: 'team', value: { stringValue: 'core' } },
+              { key: 'region', value: { stringValue: 'us1' } },
+            ],
+          },
+          scopeSpans: [{
+            scope: { name: 'dd-trace-js' },
+          }],
         }],
-      }],
+      })
+
+      const resourceSpan = payload.resourceSpans[0]
+      assert.ok(resourceSpan.scopeSpans[0].scope.version, 'scope should have a version')
+
+      const spans = resourceSpan.scopeSpans[0].spans
+      assert.strictEqual(spans.length, 3, 'should have 3 spans')
+
+      // Sort by name for stable ordering
+      spans.sort((a, b) => a.name.localeCompare(b.name))
+      const [dbSpan, errSpan, webSpan] = spans
+
+      // All spans should share the same traceId
+      assert.deepStrictEqual(dbSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
+      assert.deepStrictEqual(errSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
+
+      // Root span (web.request) should not have parentSpanId
+      assert.strictEqual(webSpan.parentSpanId, undefined, 'root span should not have parentSpanId')
+
+      // Child spans should have parentSpanId equal to root span's spanId
+      assert.deepStrictEqual(dbSpan.parentSpanId, webSpan.spanId, 'child span should reference parent')
+      assert.deepStrictEqual(errSpan.parentSpanId, webSpan.spanId, 'error span should reference parent')
+
+      assertObjectContains(webSpan, {
+        name: 'GET /api/test',
+        kind: 2, // SERVER
+      })
+      // Status.code should either be unset or zero
+      assert.ok(!webSpan.status?.code)
+      assertObjectContains(dbSpan, {
+        name: 'db.query',
+        kind: 3, // CLIENT
+      })
+      assertObjectContains(errSpan, {
+        name: 'error.operation',
+        status: { code: 2, message: 'test error message' },
+      })
+
+      // Validate timing fields
+      for (const span of spans) {
+        assert.strictEqual(span.flags, 1, 'exported spans should have the sampled flag')
+        assert.match(span.traceState, /(?:^|,)ot=rv:[0-9a-f]{14};th:0(?:,|$)/)
+        assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
+        assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
+        assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
+      }
+
+      assertObjectContains(webSpan.attributes, [
+        { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
+        { key: 'operation.name', value: { stringValue: 'web.request' } },
+        { key: 'resource.name', value: { stringValue: 'GET /api/test' } },
+        { key: 'http.method', value: { stringValue: 'GET' } },
+        { key: 'http.url', value: { stringValue: '/api/test' } },
+      ])
+      assertObjectContains(dbSpan.attributes, [
+        { key: 'db.type', value: { stringValue: 'postgres' } },
+      ])
+
+      // Global tags (DD_TAGS) are carried by the resource only, unless a span overrides the value
+      for (const span of spans) {
+        assert.ok(!span.attributes.some(({ key }) => key === 'team'), `${span.name} should not repeat team`)
+      }
+      assert.ok(!webSpan.attributes.some(({ key }) => key === 'region'), 'web span should not repeat region')
+      assertObjectContains(dbSpan.attributes, [
+        { key: 'region', value: { stringValue: 'eu1' } },
+      ])
     })
-
-    const resourceSpan = payload.resourceSpans[0]
-    assert.ok(resourceSpan.scopeSpans[0].scope.version, 'scope should have a version')
-
-    const spans = resourceSpan.scopeSpans[0].spans
-    assert.strictEqual(spans.length, 3, 'should have 3 spans')
-
-    // Sort by name for stable ordering
-    spans.sort((a, b) => a.name.localeCompare(b.name))
-    const [dbSpan, errSpan, webSpan] = spans
-
-    // All spans should share the same traceId
-    assert.deepStrictEqual(dbSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
-    assert.deepStrictEqual(errSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
-
-    // Root span (web.request) should not have parentSpanId
-    assert.strictEqual(webSpan.parentSpanId, undefined, 'root span should not have parentSpanId')
-
-    // Child spans should have parentSpanId equal to root span's spanId
-    assert.deepStrictEqual(dbSpan.parentSpanId, webSpan.spanId, 'child span should reference parent')
-    assert.deepStrictEqual(errSpan.parentSpanId, webSpan.spanId, 'error span should reference parent')
-
-    assertObjectContains(webSpan, {
-      name: 'GET /api/test',
-      kind: 2, // SERVER
-    })
-    // Status.code should either be unset or zero
-    assert.ok(!webSpan.status?.code)
-    assertObjectContains(dbSpan, {
-      name: 'db.query',
-      kind: 3, // CLIENT
-    })
-    assertObjectContains(errSpan, {
-      name: 'error.operation',
-      status: { code: 2, message: 'test error message' },
-    })
-
-    // Validate timing fields
-    for (const span of spans) {
-      assert.strictEqual(span.flags, 1, 'exported spans should have the sampled flag')
-      assert.match(span.traceState, /(?:^|,)ot=rv:[0-9a-f]{14};th:0(?:,|$)/)
-      assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
-      assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
-      assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
-    }
-
-    assertObjectContains(webSpan.attributes, [
-      { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
-      { key: 'operation.name', value: { stringValue: 'web.request' } },
-      { key: 'resource.name', value: { stringValue: 'GET /api/test' } },
-      { key: 'http.method', value: { stringValue: 'GET' } },
-      { key: 'http.url', value: { stringValue: '/api/test' } },
-    ])
-    assertObjectContains(dbSpan.attributes, [
-      { key: 'db.type', value: { stringValue: 'postgres' } },
-    ])
-
-    // Global tags (DD_TAGS) are carried by the resource only, unless a span overrides the value
-    for (const span of spans) {
-      assert.ok(!span.attributes.some(({ key }) => key === 'team'), `${span.name} should not repeat team`)
-    }
-    assert.ok(!webSpan.attributes.some(({ key }) => key === 'region'), 'web span should not repeat region')
-    assertObjectContains(dbSpan.attributes, [
-      { key: 'region', value: { stringValue: 'eu1' } },
-    ])
-  })
+  }
 })
