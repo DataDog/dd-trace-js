@@ -993,11 +993,19 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    if (this.filterDiBreakpointHitByStack && !this.#isExpectedDiBreakpointHit(snapshot)) {
+      log.debug('Ignoring Dynamic Instrumentation snapshot because it does not match the failed test stack')
+      return
+    }
+
     for (const resolve of this.diBreakpointHitResolvers) {
       resolve()
     }
     this.diBreakpointHitResolvers.length = 0
 
+    while (this.diBreakpointHitSpans[0]?.context()._isFinished) {
+      this.diBreakpointHitSpans.shift()
+    }
     const testSpan = this.diBreakpointHitSpans.shift() || this.activeTestSpan
 
     if (!testSpan || testSpan.context()._isFinished) {
@@ -1010,11 +1018,6 @@ module.exports = class CiPlugin extends Plugin {
     const activeTestSpanContext = testSpan.context()
 
     if (activeTestSpanContext.getTag(DI_ERROR_DEBUG_INFO_CAPTURED) === 'true') {
-      return
-    }
-
-    if (this.filterDiBreakpointHitByStack && !this.#isExpectedDiBreakpointHit(snapshot)) {
-      log.debug('Ignoring Dynamic Instrumentation snapshot because it does not match the failed test stack')
       return
     }
 

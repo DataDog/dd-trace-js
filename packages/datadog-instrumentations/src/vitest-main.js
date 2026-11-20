@@ -1237,7 +1237,7 @@ function getFinishWrapper (exitOrClose) {
     const files = this.state.getFiles()
     const tests = getTypeTasks(files)
     const isEmptyShard = emptyShardContexts.has(this) ||
-      (this.config.shard && files.length === 0 && hasCachedSpecifications(this))
+      (this.config.shard && !areAllSuitesSkipped && files.length === 0 && hasCachedSpecifications(this))
     const hasUnexpectedEmptySession = hasNoTestFiles && !isEmptyShard &&
       !areAllSuitesSkipped && !this.config.passWithNoTests
     if (!error && hasUnexpectedEmptySession) {

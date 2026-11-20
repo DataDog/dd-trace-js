@@ -1,11 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
 const {
   getProvidedContext,
+  libraryConfigurationCh,
   parseProvidedContextValue,
   setProvidedContext,
 } = require('../src/vitest-util')
@@ -295,11 +297,17 @@ describe('vitest main instrumentation', () => {
     })
   }
 
-  for (const { name, cachedSpecs, expectedReason } of [
+  for (const { name, cachedSpecs, expectedReason, skipAssignedSuite } of [
     {
       name: 'empty sharded runs with cached specifications',
       cachedSpecs: new Map([['/repo/test.mjs', {}]]),
       expectedReason: 'zero_test_shard',
+    },
+    {
+      name: 'sharded runs with every assigned suite skipped by TIA',
+      cachedSpecs: new Map([[__filename, {}]]),
+      expectedReason: 'all_tests_skipped',
+      skipAssignedSuite: true,
     },
     {
       name: 'sharded runs with no candidate specifications',
@@ -319,12 +327,19 @@ describe('vitest main instrumentation', () => {
         './helpers/channel': {
           getChannelPromise (channel, payload) {
             if (channel === testSessionFinishCh) finishes.push(payload)
+            if (channel.name === 'ci:vitest:test-suite:skippable') {
+              return Promise.resolve({ skippableSuites: [path.relative(process.cwd(), __filename)] })
+            }
+            if (channel === libraryConfigurationCh) {
+              return Promise.resolve({ libraryConfig: { isItrEnabled: true, isSuitesSkippingEnabled: true } })
+            }
             return Promise.resolve()
           },
         },
         './vitest-util': {
           ...require('../src/vitest-util'),
           testSessionFinishCh,
+          testSessionConfigurationCh: { hasSubscribers: false },
         },
       })
       class Vitest {
@@ -342,13 +357,15 @@ describe('vitest main instrumentation', () => {
         close () { return undefined }
         exit () { return undefined }
         reportCoverage () { return undefined }
-        runFiles () { return undefined }
+        /** @param {string[]} specifications */
+        runFiles (specifications) { assert.deepStrictEqual(specifications, []) }
       }
       const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
-      hook({ Vitest, startVitest () { return undefined } })
+      hook({ Vitest, startVitest () { return undefined } }, '5.1.1')
       const vitest = new Vitest()
 
       await vitest.start()
+      if (skipAssignedSuite) await vitest.runFiles([__filename])
       await vitest.close()
 
       assert.strictEqual(finishes.length, 1)
