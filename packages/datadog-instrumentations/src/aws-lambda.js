@@ -47,6 +47,8 @@ function wrapHandler (handler, config, monitor) {
 
     // The shim awaits its startup listeners before calling the adapter. Preserve that boundary so
     // legacy RIC captures native context completion methods before the adapter replaces them.
+    // Resolve parent context before the invocation span starts. Diagnostic-channel publishing is synchronous,
+    // so the plugin supplies `preparation` when extraction must be awaited.
     if (prepareChannel.hasSubscribers) prepareChannel.publish(invocationContext)
     if (invocationContext.preparation) {
       return invocationContext.preparation.then(() => invocationChannel.tracePromise(
