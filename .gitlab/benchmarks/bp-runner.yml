@@ -28,6 +28,7 @@ experiments:
               echo "REPRO iteration $i/$REPRO_LOOP"
               rm -f results.ndjson
               ./runall.sh || { echo "REPRO: failed at iteration $i/$REPRO_LOOP"; exit 1; }
+              node repro-outlier-check.js results.ndjson || { echo "REPRO: outlier iteration at run $i/$REPRO_LOOP"; exit 1; }
             done
             echo "REPRO: no failure in $REPRO_LOOP iterations"
           else
