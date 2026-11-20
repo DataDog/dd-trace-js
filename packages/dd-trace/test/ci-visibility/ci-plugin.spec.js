@@ -39,6 +39,9 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
 } = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
@@ -889,6 +892,7 @@ describe('CiPlugin', () => {
     plugin.activeTestSpan = {
       context: () => ({
         _isFinished: false,
+        getTag: sinon.stub().returns(undefined),
         toTraceId: () => 'trace-id',
         toSpanId: () => 'span-id',
       }),
@@ -914,6 +918,104 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
+  it('exports mismatched DI breakpoint hits when stack filtering is disabled', () => {
+    const plugin = createPlugin('mocha')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/other.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('keeps the DI breakpoint wait and target pending until a matching snapshot arrives', async () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    plugin.filterDiBreakpointHitByStack = true
+    plugin.di = {}
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    const resolved = sinon.spy()
+    const wait = plugin.prepareDiBreakpointHitWait().then(resolved)
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/other.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.notCalled(exportDiLogs)
+    sinon.assert.notCalled(testSpan.setTag)
+    sinon.assert.notCalled(resolved)
+    assert.strictEqual(plugin.diBreakpointHitResolvers.length, 1)
+    assert.deepStrictEqual(plugin.diBreakpointHitSpans, [testSpan])
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    await wait
+    sinon.assert.calledOnce(resolved)
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('attaches DI breakpoint hits to the next live retry span', () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    const finishedSpan = createDiTestSpan(true)
+    plugin.queueDiBreakpointHitSpan(finishedSpan)
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    plugin.activeTestSpan = undefined
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.notCalled(finishedSpan.setTag)
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('links the latest matching DI snapshot when the same call site hits the probe twice', () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    plugin.filterDiBreakpointHitByStack = true
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    const snapshot = createDiSnapshot({
+      file: '/repo/failing.spec.js',
+      line: 23,
+      callerFile: '/repo/helper.js',
+      callerLine: 45,
+    })
+    const snapshotTag = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'successful-call' } })
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'failing-call' } })
+
+    sinon.assert.calledTwice(exportDiLogs)
+    assert.deepStrictEqual(testSpan.setTag.withArgs(snapshotTag).lastCall.args, [snapshotTag, 'failing-call'])
+  })
+
   function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
@@ -925,6 +1027,56 @@ describe('CiPlugin', () => {
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: exporter },
     })
     return plugin
+  }
+
+  function configureDiBreakpointHitTest (plugin) {
+    const exportDiLogs = sinon.spy()
+    const testSpan = createDiTestSpan()
+
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    plugin.activeTestSpan = testSpan
+    plugin.testErrorStackIndex = 0
+    plugin.testErrorStackFrames = [
+      { file: '/repo/failing.spec.js', line: 23 },
+      { file: '/repo/helper.js', line: 45 },
+    ]
+    plugin._setRepositoryRoot('/repo', [])
+
+    return { exportDiLogs, testSpan }
+  }
+
+  function createDiTestSpan (finished = false) {
+    const tags = new Map()
+    return {
+      context: () => ({
+        _isFinished: finished,
+        getTag: key => tags.get(key),
+        toTraceId: () => 'trace-id',
+        toSpanId: () => 'span-id',
+      }),
+      setTag: sinon.spy((key, value) => tags.set(key, value)),
+    }
+  }
+
+  function createDiSnapshot ({
+    file,
+    line,
+    callerFile,
+    callerLine,
+  }) {
+    return {
+      id: 'snapshot-id',
+      probe: {
+        location: {
+          file,
+          lines: [String(line)],
+        },
+      },
+      stack: [
+        { function: 'test function', fileName: file, lineNumber: line },
+        { function: 'caller', fileName: callerFile, lineNumber: callerLine },
+      ],
+    }
   }
 })
 
