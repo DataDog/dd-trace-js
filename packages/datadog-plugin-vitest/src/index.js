@@ -96,6 +96,8 @@ class VitestPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
+    this.filterDiBreakpointHitByStack = true
+
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
@@ -204,9 +206,8 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
-      // might be wrongly overwritten.
       if (mightHitProbe) {
+        this.queueDiBreakpointHitSpan(span)
         this.activeTestSpan = span
       }
 
