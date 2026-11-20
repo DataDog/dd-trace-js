@@ -49,6 +49,7 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'ai',
   'async-mutex',
   'aws-lambda', // AWS Lambda is activated by the serverless bootstrap rather than a module load
   'azure-cosmos',
@@ -225,6 +226,7 @@ describe('Plugin Structure Validation', () => {
       '@wdio/jasmine-framework',
       '@wdio/local-runner',
       '@wdio/utils',
+      'ai',
       'bullmq',
       'mercurius',
       'postgres',

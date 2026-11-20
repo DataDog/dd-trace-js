@@ -25,6 +25,7 @@
     "@langchain/core": "1.4.1",
     "@langchain/langgraph": "1.7.5",
     "@smithy/smithy-client": "4.15.2",
+    "ai": "7.0.172",
     "aws-sdk": "2.1693.0",
     "axios": "1.21.1",
     "esbuild": "^0.28.0",
