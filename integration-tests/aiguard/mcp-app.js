@@ -8,6 +8,8 @@ const { BlockList } = require('node:net')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
+const v2 = require('@modelcontextprotocol/client')
+const { StdioClientTransport: StdioClientTransportV2 } = require('@modelcontextprotocol/client/stdio')
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
 const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js')
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js')
@@ -16,6 +18,7 @@ const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js')
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
+const { McpServer: McpServerV2 } = require('@modelcontextprotocol/server')
 const express = require('express')
 const OpenAI = require('openai')
 const { z } = require('zod')
@@ -110,6 +113,35 @@ function createMcpServer (label) {
   return server
 }
 
+/**
+ * An MCP v2 server, for the in-memory pair of MCP v2.
+ *
+ * @param {string} label
+ */
+function createMcpServerV2 (label) {
+  const server = new McpServerV2({ name: `${label}-handshake-name`, version: '1.0.0' })
+  server.registerTool('write_file', {
+    description: 'Writes a line',
+    inputSchema: z.object({ text: z.string() }),
+  }, ({ text }) => writeLine(label, text))
+  server.registerTool('record_value', {
+    description: 'Records the type of a value',
+    inputSchema: z.object({ value: z.any(), text: z.string().optional() }),
+  }, ({ value }) => recordValue(label, value))
+  server.registerTool('inspect_value', {
+    description: 'Shows the type and the content of a value',
+    inputSchema: z.object({ value: z.any() }),
+  }, ({ value }) => inspectValue(value))
+  server.registerTool('digest_bytes', {
+    description: 'Shows the type, the length and the SHA-256 digest of binary data',
+    inputSchema: z.object({ value: z.any() }),
+  }, ({ value }) => digestBytes(value))
+  return server
+}
+
+// The MCP v2 clients talk to the same MCP v1 servers over stdio, streamable HTTP and SSE, because the
+// protocol is the same and the instrumentation is only on the client side. The in-memory pair of
+// MCP v2 has an MCP v2 server, so both ends are MCP v2.
 const SDKS = {
   v1: {
     Client,
@@ -118,6 +150,14 @@ const SDKS = {
     StdioClientTransport,
     StreamableHTTPClientTransport,
     createInMemoryServer: createMcpServer,
+  },
+  v2: {
+    Client: v2.Client,
+    InMemoryTransport: v2.InMemoryTransport,
+    SSEClientTransport: v2.SSEClientTransport,
+    StdioClientTransport: StdioClientTransportV2,
+    StreamableHTTPClientTransport: v2.StreamableHTTPClientTransport,
+    createInMemoryServer: createMcpServerV2,
   },
 }
 
@@ -222,8 +262,7 @@ function connect (kind, sdkName) {
  * @returns {keyof SDKS}
  */
 function sdkOf (req) {
-  if (req.query.sdk !== undefined && req.query.sdk !== 'v1') throw new Error(`Unknown SDK ${req.query.sdk}`)
-  return 'v1'
+  return req.query.sdk === 'v2' ? 'v2' : 'v1'
 }
 
 /**

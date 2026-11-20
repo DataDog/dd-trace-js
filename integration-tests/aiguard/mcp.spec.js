@@ -13,7 +13,7 @@ const { after, before, beforeEach, describe, it } = require('mocha')
 const { spawnProcAndExpectExit } = require('../helpers')
 const { LOCAL_ORIGIN, expectedServer, serverId, useMcpApp } = require('./mcp-helpers')
 
-const SDKS = ['v1']
+const SDKS = ['v1', 'v2']
 
 /**
  * The BlockList of the blocklist kind of mcp-app.js, as the check reads it.
@@ -32,9 +32,13 @@ function toolArguments (evaluation) {
 }
 
 describe('AIGuard MCP client tool calls', () => {
+  // The MCP v2 client talks to the MCP v1 servers of mcp-app.js. MCP v2 is also the server of the
+  // MCP v2 in-memory pair.
   const harness = useMcpApp([
     'express',
     '@modelcontextprotocol/sdk@1.32.2',
+    '@modelcontextprotocol/client@2.4.0',
+    '@modelcontextprotocol/server@2.4.0',
     'openai@6',
     'zod',
   ])
@@ -153,7 +157,7 @@ describe('AIGuard MCP client tool calls', () => {
 
     it('keeps the server of each client when two clients expose the same tool', async () => {
       await get('/mcp/call?transport=stdio&text=one')
-      await get('/mcp/call?transport=sse&text=two')
+      await get('/mcp/call?sdk=v2&transport=sse&text=two')
 
       const [first, second] = attributes()
       assert.strictEqual(assertDirectCall(first, 'one').transport, 'stdio')
@@ -512,7 +516,7 @@ describe('AIGuard MCP client tool calls', () => {
         let output = ''
         await spawnProcAndExpectExit(path.join(harness.cwd, 'aiguard/mcp-esm.mjs'), {
           cwd: harness.cwd,
-          env: harness.env(),
+          env: { ...harness.env(), MCP_SDK: sdk },
           execArgv: ['--import', 'dd-trace/initialize.mjs'],
         }, data => { output += data })
 

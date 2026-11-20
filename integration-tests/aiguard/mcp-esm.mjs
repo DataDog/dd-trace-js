@@ -1,9 +1,14 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// The ESM build of the SDK, with one allowed call and one call that AI Guard blocks.
-const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js')
+// The ESM build of the SDK, with one allowed call and one call that AI Guard blocks. MCP_SDK=v2
+// selects the ESM build of the MCP v2 client.
+const { Client, StdioClientTransport } = process.env.MCP_SDK === 'v2'
+  ? { ...await import('@modelcontextprotocol/client'), ...await import('@modelcontextprotocol/client/stdio') }
+  : {
+      ...await import('@modelcontextprotocol/sdk/client/index.js'),
+      ...await import('@modelcontextprotocol/sdk/client/stdio.js'),
+    }
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const transport = new StdioClientTransport({
