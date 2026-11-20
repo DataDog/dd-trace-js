@@ -6,6 +6,8 @@ const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
+const { createInstrumenter } = require('istanbul-lib-instrument')
+
 const { convertV8DirToReport } = require('./coverage/merge-lcov')
 const { REPO_ROOT } = require('./coverage/runtime')
 
@@ -262,5 +264,84 @@ describe('integration coverage merge', () => {
     const { summary } = await convert([scriptEntry(pathToFileURL(depFile).href, 10)])
 
     assert.equal(summary.files, 0, 'unrelated dependency coverage should be filtered out')
+  })
+
+  describe('Bun istanbul coverage', () => {
+    let istanbulDir
+
+    before(() => {
+      istanbulDir = path.join(workDir, 'istanbul')
+    })
+
+    /**
+     * Istanbul coverage for `filePath` as `bun-bootstrap.js` writes it, with the first statement hit.
+     *
+     * @param {string} filePath
+     * @returns {Promise<IstanbulFileCoverage>}
+     */
+    async function istanbulCoverage (filePath) {
+      const instrumenter = createInstrumenter({ esModules: false })
+      instrumenter.instrumentSync(await fs.readFile(REPO_FILE, 'utf8'), filePath)
+      const fileCoverage = instrumenter.lastFileCoverage()
+      fileCoverage.s['0'] = 1
+      return fileCoverage
+    }
+
+    /**
+     * @param {Record<string, string>} files istanbul directory contents, by file name
+     */
+    async function convertIstanbul (files) {
+      await fs.rm(v8Dir, { force: true, recursive: true })
+      await fs.rm(outputDir, { force: true, recursive: true })
+      await fs.rm(istanbulDir, { force: true, recursive: true })
+      await fs.mkdir(v8Dir, { recursive: true })
+      await fs.mkdir(istanbulDir, { recursive: true })
+      for (const [name, contents] of Object.entries(files)) {
+        await fs.writeFile(path.join(istanbulDir, name), contents)
+      }
+      const summary = await convertV8DirToReport(v8Dir, outputDir, { lcovOnly: false, istanbulDir })
+      let coverage = {}
+      if (summary.files > 0) {
+        coverage = JSON.parse(await fs.readFile(path.join(outputDir, 'coverage-final.json'), 'utf8'))
+      }
+      return { summary, coverage }
+    }
+
+    it('merges process coverage keyed at the repo path into the report', async () => {
+      const fileCoverage = await istanbulCoverage(REPO_FILE)
+      const { summary, coverage } = await convertIstanbul({
+        'bun-1.json': JSON.stringify({ [REPO_FILE]: fileCoverage }),
+        'bun-2.json': JSON.stringify({ [REPO_FILE]: fileCoverage }),
+      })
+
+      assert.deepStrictEqual(summary, { scripts: 0, profiles: 2, files: 1 })
+      assert.equal(coverage[REPO_FILE].s['0'], 2)
+    })
+
+    it('ignores malformed files and out-of-scope or mismatched entries', async () => {
+      const depFile = path.join(REPO_ROOT, 'node_modules', 'some-other-dep', 'index.js')
+      const { summary } = await convertIstanbul({
+        'malformed.json': '{',
+        'null.json': 'null',
+        'not-coverage.txt': JSON.stringify({ [REPO_FILE]: await istanbulCoverage(REPO_FILE) }),
+        'entries.json': JSON.stringify({
+          [depFile]: await istanbulCoverage(depFile),
+          [REPO_FILE]: await istanbulCoverage(depFile),
+          [path.join(REPO_ROOT, 'index.js')]: null,
+        }),
+      })
+
+      assert.deepStrictEqual(summary, { scripts: 0, profiles: 1, files: 0 })
+    })
+
+    it('reports no profiles when the directory does not exist', async () => {
+      await fs.rm(v8Dir, { force: true, recursive: true })
+      await fs.rm(outputDir, { force: true, recursive: true })
+      await fs.mkdir(v8Dir, { recursive: true })
+
+      const summary = await convertV8DirToReport(v8Dir, outputDir, { istanbulDir: path.join(workDir, 'missing') })
+
+      assert.deepStrictEqual(summary, { scripts: 0, profiles: 0, files: 0 })
+    })
   })
 })
