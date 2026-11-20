@@ -122,8 +122,11 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   finish (ctx) {
-    const { req, res, span } = ctx
+    const { req, res, span, responseError } = ctx
     if (!span) return
+    if (responseError) {
+      this.error({ span, error: responseError })
+    }
     if (res) {
       const status = res.status || res.statusCode
 
@@ -148,7 +151,7 @@ class HttpClientPlugin extends ClientPlugin {
     super.finish(ctx)
   }
 
-  error ({ span, error, args, customRequestTimeout }) {
+  error ({ span, error }) {
     if (!span) return
     if (error) {
       span.addTags({
@@ -156,13 +159,6 @@ class HttpClientPlugin extends ClientPlugin {
         [ERROR_MESSAGE]: error.message || error.code,
         [ERROR_STACK]: error.stack,
       })
-    } else {
-      // conditions for no error:
-      // 1. not using a custom agent instance with custom timeout specified
-      // 2. no invocation of `req.setTimeout`
-      if (!args.options.agent?.options?.timeout && !customRequestTimeout) return
-
-      span.setTag('error', 1)
     }
   }
 

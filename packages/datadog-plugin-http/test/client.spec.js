@@ -961,123 +961,134 @@ describe('Plugin', () => {
           })
         })
 
-        it('should record timeouts as errors', done => {
-          const app = express()
+        describe('socket idle timeouts', () => {
+          const idleTimeout = 50
+          let finishedResponses
 
-          app.get('/user', (req, res) => {})
-
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].error, 1)
-              assert.ok(!('http.status_code' in traces[0][0].meta))
+          beforeEach(() => {
+            finishedResponses = []
+            agent.reload('http', {
+              server: false,
+              client: {
+                hooks: {
+                  request (span, req, res) {
+                    finishedResponses.push(res?.readableEnded)
+                  },
+                },
+              },
             })
-            .then(done)
-            .catch(done)
+          })
 
-          appListener = server(app, port => {
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-              res.on('data', () => { })
-            })
+          afterEach(() => {
+            appListener?.closeAllConnections()
+          })
 
-            req.on('error', () => {})
+          async function listen (handler) {
+            appListener = server(handler, () => {})
+            await once(appListener, 'listening')
+            return `${protocol}://localhost:${appListener.address().port}/user`
+          }
 
-            req.setTimeout(1)
+          for (const source of ['default agent', 'custom agent', 'request option', 'setTimeout']) {
+            const test = source === 'default agent' && !satisfies(process.version, '>=19') ? it.skip : it
+
+            test(`keeps the span open after a timeout from the ${source}`, async () => {
+              const partialBody = source === 'setTimeout'
+              const url = await listen((req, res) => {
+                if (partialBody) {
+                  res.write('first chunk')
+                }
+              })
+              const requestReceived = once(appListener, 'request')
+              const timeoutAgent = source === 'custom agent' ? new http.Agent({ timeout: idleTimeout }) : undefined
+              const options = { agent: timeoutAgent, timeout: source === 'request option' ? idleTimeout : undefined }
+              const makeRequest = source === 'default agent' ? http.get : http.request
+              const req = makeRequest(url, options, res => {
+                res.resume()
+                if (partialBody) {
+                  req.setTimeout(idleTimeout)
+                }
+              })
+              const requestTimeout = once(req, 'timeout')
+              if (makeRequest === http.request) {
+                req.end()
+              }
+
+              try {
+                const [[, res]] = await Promise.all([requestReceived, requestTimeout])
+                const finishesAtTimeout = finishedResponses.length
+                let recordedSpan
+                const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
+                const requestClosed = once(req, 'close')
+                res.end('last chunk')
+                await Promise.all([requestClosed, traceReceived])
+
+                assert.strictEqual(finishesAtTimeout, 0)
+                assert.deepStrictEqual(finishedResponses, [true])
+                assert.strictEqual(recordedSpan.error, 0)
+                assert.strictEqual(recordedSpan.meta['http.status_code'], '200')
+              } finally {
+                timeoutAgent?.destroy()
+              }
+            }).timeout(10000)
+          }
+
+          it('records the error supplied when the timeout handler destroys the request', async () => {
+            const url = await listen(() => {})
+            const req = http.request(url)
+            const timeout = once(req, 'timeout')
+            req.setTimeout(idleTimeout)
             req.end()
+            await timeout
+
+            const finishesAtTimeout = finishedResponses.length
+            const error = new Error('Request cancelled after socket timeout')
+            let recordedSpan
+            const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
+            const requestError = once(req, 'error')
+            const requestClosed = new Promise(resolve => req.once('close', resolve))
+            req.destroy(error)
+            const [[emittedError]] = await Promise.all([requestError, requestClosed, traceReceived])
+
+            assert.strictEqual(emittedError, error)
+            assert.strictEqual(finishesAtTimeout, 0)
+            assert.deepStrictEqual(finishedResponses, [undefined])
+            assertObjectContains(recordedSpan, {
+              error: 1,
+              meta: { [ERROR_MESSAGE]: error.message, [ERROR_TYPE]: error.name },
+            })
+            assert.ok(!('http.status_code' in recordedSpan.meta))
+          })
+
+          it('records the response error when a timeout handler destroys a partial response', async () => {
+            const url = await listen((req, res) => {
+              res.write('first chunk')
+            })
+            const req = http.get(url, res => {
+              res.resume()
+              req.setTimeout(idleTimeout)
+            })
+            const [[res]] = await Promise.all([once(req, 'response'), once(req, 'timeout')])
+            assert.deepStrictEqual(finishedResponses, [])
+
+            let recordedSpan
+            const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
+            const requestClosed = once(req, 'close')
+            req.destroy()
+            await Promise.all([requestClosed, traceReceived])
+
+            assert.deepStrictEqual(finishedResponses, [false])
+            assert.strictEqual(res.errored.code, 'ECONNRESET')
+            assertObjectContains(recordedSpan, {
+              error: 1,
+              meta: {
+                [ERROR_MESSAGE]: res.errored.message,
+                [ERROR_TYPE]: res.errored.name,
+                'http.status_code': '200',
+              },
+            })
           })
         })
-
-        {
-          const node20Test = satisfies(process.version, '>=20') ? it : it.skip
-
-          node20Test('should not record default HTTP agent timeout as error with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000) // over 5s default
-              })
-              res.status(200).send()
-            })
-
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 0)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', () => {})
-
-              req.end()
-            })
-          }).timeout(10000)
-
-          node20Test('should record error if custom Agent timeout is used with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
-            })
-
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 1)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
-
-            const options = {
-              agent: new http.Agent({ keepAlive: true, timeout: 5000 }), // custom agent with same default timeout
-            }
-
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', () => {})
-
-              req.end()
-            })
-          }).timeout(10000)
-
-          node20Test('should record error if req.setTimeout is used with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
-            })
-
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].error, 1)
-              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                res.on('data', () => { })
-              })
-
-              req.on('error', () => {})
-              req.setTimeout(5000) // match default timeout
-
-              req.end()
-            })
-          }).timeout(10000)
-        }
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
