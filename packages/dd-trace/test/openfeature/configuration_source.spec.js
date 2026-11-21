@@ -179,8 +179,9 @@ describe('OpenFeature configuration source', () => {
     config.site = 'DDOG-GOV.COM'
     config.env = 'prod'
     const applyConfiguration = sinon.spy()
+    const initialization = { isWaiting: sinon.spy(), fail: sinon.spy() }
 
-    const source = configurationSource.create(config, applyConfiguration)
+    const source = configurationSource.create(config, applyConfiguration, initialization)
     const resolved = AgentlessConfigurationSource.firstCall.args[0]
 
     assert.strictEqual(
@@ -197,7 +198,8 @@ describe('OpenFeature configuration source', () => {
         pollIntervalMs: 30_000,
         requestTimeoutMs: 5000,
       }),
-      applyConfiguration
+      applyConfiguration,
+      initialization
     )
     assert.ok(source instanceof AgentlessConfigurationSource)
     sinon.assert.notCalled(log.warn)

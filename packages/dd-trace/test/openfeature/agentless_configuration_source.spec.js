@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const timersPromises = require('node:timers/promises')
 const zlib = require('node:zlib')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -37,6 +38,7 @@ describe('AgentlessConfigurationSource', () => {
   let clock
   let config
   let count
+  let delays
   let increment
   let log
   let random
@@ -64,6 +66,7 @@ describe('AgentlessConfigurationSource', () => {
       warn: sinon.spy(),
     }
     random = sinon.stub(Math, 'random').returns(0.5)
+    delays = []
     requests = []
     responses = []
     sources = []
@@ -116,6 +119,19 @@ describe('AgentlessConfigurationSource', () => {
       '../exporters/common/request': request,
       '../log': log,
       './flag-selection': flagSelection,
+      'node:timers/promises': {
+        /**
+         * Records whether each delay keeps the process alive, then waits on the fake clock.
+         *
+         * @param {number} delay
+         * @param {undefined} value
+         * @param {{ ref: boolean, signal: AbortSignal }} options
+         */
+        setTimeout (delay, value, options) {
+          delays.push({ delay, ref: options.ref })
+          return timersPromises.setTimeout(delay, value, options)
+        },
+      },
     })
   })
 
@@ -126,8 +142,11 @@ describe('AgentlessConfigurationSource', () => {
     nock.cleanAll()
   })
 
-  function source () {
-    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration)
+  /**
+   * @param {import('../../src/openfeature/agentless_configuration_source').ProviderInitialization} [initialization]
+   */
+  function source (initialization) {
+    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration, initialization)
     sources.push(configurationSource)
     return configurationSource
   }
@@ -964,6 +983,137 @@ describe('AgentlessConfigurationSource', () => {
       sinon.assert.calledOnce(applyConfiguration)
       assert.deepStrictEqual(ignoredLogs(), [])
       sinon.assert.notCalled(count)
+    })
+  })
+
+  // See https://github.com/DataDog/dd-trace-js/issues/11355.
+  describe('provider initialization', () => {
+    let initialization
+    let waiting
+
+    beforeEach(() => {
+      waiting = true
+      initialization = {
+        isWaiting: sinon.spy(() => waiting),
+        fail: sinon.spy(() => { waiting = false }),
+      }
+    })
+
+    /**
+     * @param {string} cause
+     */
+    function assertFailed (cause) {
+      sinon.assert.calledOnce(initialization.fail)
+      const [error] = initialization.fail.firstCall.args
+      assert.ok(error instanceof Error)
+      assert.strictEqual(error.message, `Feature Flagging agentless configuration poll failed (${cause})`)
+    }
+
+    it('holds the process during retries while initialization waits, then fails it with the cause', async () => {
+      const refused = () => ({ error: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) })
+      responses.push(refused(), refused(), refused())
+
+      source(initialization).start()
+      await flush()
+      await tick(5000)
+      await tick(10_000)
+
+      assert.strictEqual(requests.length, 3)
+      assertFailed('retries exhausted: connect ECONNREFUSED (ECONNREFUSED)')
+      assert.deepStrictEqual(delays, [
+        { delay: 5000, ref: true },
+        { delay: 10_000, ref: true },
+        // The poll has reported its failure, so waiting for the next one must not hold the process.
+        { delay: 30_000, ref: false },
+      ])
+    })
+
+    it('reports an exhausted retryable status without the request URL', async () => {
+      responses.push({ statusCode: 503 }, { statusCode: 503 }, { statusCode: 503 })
+
+      source(initialization).start()
+      await flush()
+      await tick(5000)
+      await tick(10_000)
+
+      assertFailed('retries exhausted: HTTP 503')
+    })
+
+    for (const { name, response, cause } of [
+      { name: 'an authentication failure', response: { statusCode: 403 }, cause: 'HTTP 403, authentication failed' },
+      { name: 'a status that is not retried', response: { statusCode: 404 }, cause: 'HTTP 404 is not retryable' },
+      { name: 'a malformed payload', response: { statusCode: 200, body: '{' }, cause: 'malformed UFC payload' },
+      {
+        name: 'a 304 before any configuration',
+        response: { statusCode: 304 },
+        cause: 'HTTP 304 received before any configuration was applied',
+      },
+    ]) {
+      it(`fails initialization at once on ${name}`, async () => {
+        responses.push(response)
+
+        source(initialization).start()
+        await flush()
+
+        assert.strictEqual(requests.length, 1)
+        assertFailed(cause)
+      })
+    }
+
+    it('fails initialization when the configuration cannot be applied', async () => {
+      applyConfiguration.throws(new Error('listener failed'))
+      responses.push({ statusCode: 200, body: responseBody() })
+
+      source(initialization).start()
+      await flush()
+
+      assertFailed('configuration could not be applied')
+    })
+
+    it('does not hold the process while no initialization waits', async () => {
+      waiting = false
+      responses.push({ statusCode: 503 }, { statusCode: 200, body: responseBody() })
+
+      source(initialization).start()
+      await flush()
+      await tick(5000)
+
+      assert.deepStrictEqual(delays, [{ delay: 5000, ref: false }, { delay: 30_000, ref: false }])
+      sinon.assert.notCalled(initialization.fail)
+    })
+
+    it('keeps retries and failed polls away from initialization once a configuration was applied', async () => {
+      responses.push(
+        { statusCode: 200, body: responseBody() },
+        { statusCode: 503 },
+        { statusCode: 503 },
+        { statusCode: 503 },
+        { statusCode: 404 }
+      )
+
+      source(initialization).start()
+      await flush()
+      await tick(30_000)
+      await tick(5000)
+      await tick(10_000)
+      await tick(30_000)
+
+      assert.strictEqual(requests.length, 5)
+      assert.deepStrictEqual(delays.map(({ ref }) => ref), [false, false, false, false, false])
+      sinon.assert.notCalled(initialization.fail)
+    })
+
+    it('reports a failed poll on every cycle until a configuration arrives', async () => {
+      waiting = false
+      responses.push({ statusCode: 404 }, { statusCode: 404 }, { statusCode: 200, body: responseBody() })
+
+      source(initialization).start()
+      await flush()
+      await tick(30_000)
+      await tick(30_000)
+
+      sinon.assert.calledTwice(initialization.fail)
+      sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
     })
   })
 })

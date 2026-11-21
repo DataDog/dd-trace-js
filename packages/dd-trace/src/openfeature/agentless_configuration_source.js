@@ -34,6 +34,14 @@ const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuratio
  */
 
 /**
+ * The provider initialization that waits for the first configuration from this source.
+ *
+ * @typedef {object} ProviderInitialization
+ * @property {() => boolean} isWaiting - Whether the provider is initializing and has no configuration yet.
+ * @property {(error: Error) => void} fail - Reports a poll that ended without any configuration applied.
+ */
+
+/**
  * @typedef {object} PollResponse
  * @property {Error | null | undefined} error
  * @property {string | undefined} body
@@ -64,15 +72,20 @@ class AgentlessConfigurationSource {
   /** @type {Set<string>} */
   #failureWarnings = new Set()
 
+  /** @type {ProviderInitialization | undefined} */
+  #initialization
+
   #malformedPayloadLogged = false
 
   /**
    * @param {AgentlessSourceConfig} config
    * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
+   * @param {ProviderInitialization} [initialization]
    */
-  constructor (config, applyConfiguration) {
+  constructor (config, applyConfiguration, initialization) {
     this.#config = config
     this.#applyConfiguration = applyConfiguration
+    this.#initialization = initialization
   }
 
   start () {
@@ -145,14 +158,20 @@ class AgentlessConfigurationSource {
 
       if (attempt === MAX_ATTEMPTS) {
         this.#warnFailure(response.statusCode, response.error, attempt)
-        this.#logPollFailure('retries exhausted')
+        const cause = response.statusCode === undefined
+          ? errorMessage(response.error)
+          : `HTTP ${response.statusCode}`
+        this.#logPollFailure('retries exhausted', `retries exhausted: ${cause}`)
         return
       }
 
       const delay = retryDelay(this.#config.pollIntervalMs, attempt, Math.random())
       log.debug('Feature Flags: agentless configuration poll attempt %d/%d is retryable; retrying in %dms',
         attempt, MAX_ATTEMPTS, delay)
-      if (!await wait(delay, abortController.signal)) return
+      // Nothing else may keep an idle process alive here. Without a ref'd delay, a process that awaits
+      // initialization would exit with code 0 before this poll can report its failure.
+      const holdProcess = this.#appliedCreatedAt === undefined && this.#initialization?.isWaiting() === true
+      if (!await wait(delay, abortController.signal, holdProcess)) return
     }
   }
 
@@ -218,12 +237,12 @@ class AgentlessConfigurationSource {
 
     if (statusCode === 401 || statusCode === 403) {
       this.#warnFailure(statusCode, undefined, 1)
-      this.#logPollFailure('authentication failed, not retried')
+      this.#logPollFailure('authentication failed, not retried', `HTTP ${statusCode}, authentication failed`)
       return
     }
 
     if (statusCode !== 200) {
-      this.#logPollFailure('HTTP status is not retryable')
+      this.#logPollFailure('HTTP status is not retryable', `HTTP ${statusCode} is not retryable`)
       return
     }
 
@@ -276,11 +295,13 @@ class AgentlessConfigurationSource {
 
   /**
    * @param {string} reason
+   * @param {string} [cause] - The reason with its details, for the initialization error.
    */
-  #logPollFailure (reason) {
+  #logPollFailure (reason, cause = reason) {
     this.#failedPolls++
     if (this.#appliedCreatedAt === undefined) {
       log.debug(POLL_FAILED_WITHOUT_CONFIGURATION, reason)
+      this.#initialization?.fail(new Error(`Feature Flagging agentless configuration poll failed (${cause})`))
     } else {
       log.debug('Feature Flags: agentless configuration poll failed (%s); keeping the configuration created at %s',
         reason, this.#appliedCreatedAt)
@@ -321,11 +342,12 @@ class AgentlessConfigurationSource {
 /**
  * @param {number} delay
  * @param {AbortSignal} signal
+ * @param {boolean} [ref] - Whether the delay keeps the process alive.
  * @returns {Promise<boolean>}
  */
-async function wait (delay, signal) {
+async function wait (delay, signal, ref = false) {
   try {
-    await sleep(delay, undefined, { ref: false, signal })
+    await sleep(delay, undefined, { ref, signal })
     return true
   } catch (error) {
     if (error?.name === 'AbortError') return false

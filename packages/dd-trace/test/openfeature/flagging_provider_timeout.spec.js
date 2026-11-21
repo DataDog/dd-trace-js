@@ -579,6 +579,111 @@ describe('FlaggingProvider Initialization Timeout', () => {
     })
   })
 
+  // See https://github.com/DataDog/dd-trace-js/issues/11355.
+  describe('when a configuration source poll ends without a configuration', () => {
+    const pollError = new Error('Feature Flagging agentless configuration poll failed (retries exhausted: HTTP 503)')
+    let create
+
+    beforeEach(() => {
+      create = sinon.stub().returns({ start: sinon.spy(), stop: sinon.spy() })
+      FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
+        'dc-polyfill': {
+          channel: channelStub,
+        },
+        '../log': log,
+        './configuration_source': { create },
+        './writers/flag-eval-evp-hook': sinon.stub().returns({ destroy: sinon.spy() }),
+        '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+      })
+    })
+
+    /**
+     * @returns {import('../../src/openfeature/agentless_configuration_source').ProviderInitialization}
+     */
+    function initialization () {
+      return create.firstCall.args[2]
+    }
+
+    it('reports whether initialization waits for the first configuration', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      assert.strictEqual(initialization().isWaiting(), false)
+
+      const promise = provider.initialize()
+      assert.strictEqual(initialization().isWaiting(), true)
+
+      provider.setConfiguration({ flags: {} })
+      await promise
+      assert.strictEqual(initialization().isWaiting(), false)
+    })
+
+    it('stops waiting once initialization times out', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const promise = provider.initialize()
+      promise.catch(() => {})
+
+      await clock.tickAsync(30_000)
+
+      await assert.rejects(promise, { message: 'Initialization timeout after 30000ms' })
+      assert.strictEqual(initialization().isWaiting(), false)
+    })
+
+    it('rejects a waiting initialization with the poll error without waiting for the timeout', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const promise = provider.initialize()
+
+      initialization().fail(pollError)
+
+      await assert.rejects(promise, pollError)
+      assert.strictEqual(initialization().isWaiting(), false)
+      assert.strictEqual(clock.countTimers(), 0)
+      sinon.assert.calledOnceWithExactly(
+        log.errorWithoutTelemetry,
+        'Feature Flags: provider failed to initialize: %s',
+        pollError.message
+      )
+    })
+
+    it('rejects a later initialization at once until a configuration arrives', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const errors = sinon.spy()
+      provider.events.addHandler(ProviderEvents.Error, errors)
+
+      initialization().fail(pollError)
+
+      // No initialization was waiting, so the failure is kept for the next one instead of emitted.
+      sinon.assert.notCalled(errors)
+      await assert.rejects(provider.initialize(), pollError)
+
+      provider.setConfiguration({ flags: {} })
+      await provider.initialize()
+    })
+
+    it('ignores a failed poll once a configuration is applied', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const errors = sinon.spy()
+      provider.events.addHandler(ProviderEvents.Error, errors)
+      const configuration = { flags: {} }
+      provider.setConfiguration(configuration)
+
+      initialization().fail(pollError)
+
+      await provider.initialize()
+      assert.strictEqual(provider.getConfiguration(), configuration)
+      sinon.assert.notCalled(errors)
+    })
+
+    it('fails the SDK initialization with the poll error', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const ready = OpenFeature.setProviderAndWait('poll-failure', provider)
+
+      initialization().fail(pollError)
+
+      await assert.rejects(ready, pollError)
+      assert.strictEqual(OpenFeature.getClient('poll-failure').providerStatus, ProviderStatus.ERROR)
+      await OpenFeature.clearProviders()
+    })
+  })
+
   describe('when the configuration source cannot start', () => {
     const SOURCE_ERROR_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
       'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +

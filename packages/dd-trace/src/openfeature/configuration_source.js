@@ -20,6 +20,7 @@ const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog 
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
+ * @typedef {import('./agentless_configuration_source').ProviderInitialization} ProviderInitialization
  */
 
 /**
@@ -29,8 +30,9 @@ const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog 
  *
  * @param {import('../config/config-base')} config
  * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
+ * @param {ProviderInitialization} [initialization]
  */
-function create (config, applyConfiguration) {
+function create (config, applyConfiguration, initialization) {
   const {
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: source,
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: baseUrl,
@@ -77,7 +79,7 @@ function create (config, applyConfiguration) {
     apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
     env: config.env,
     service: usageService(config.service),
-  }, applyConfiguration)
+  }, applyConfiguration, initialization)
 }
 
 /**

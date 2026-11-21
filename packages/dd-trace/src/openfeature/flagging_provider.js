@@ -39,6 +39,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {Error | undefined} */
   #configurationSourceError
 
+  /** @type {Error | undefined} */
+  #pollError
+
   /** @type {number} */
   #initializationTimeoutMs
 
@@ -88,7 +91,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     try {
-      this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+      this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this), {
+        isWaiting: () => this.#waitingForConfiguration,
+        fail: error => this.#failPoll(error),
+      })
     } catch (error) {
       this.#configurationSourceError = error
       log.error('Unable to configure Feature Flagging configuration source', error)
@@ -116,6 +122,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     } else if (this.#configurationSourceError) {
       // No configuration can arrive, so fail now instead of waiting for the timeout.
       this.setError(this.#configurationSourceError)
+    } else if (this.#pollError) {
+      // The last poll ended without a configuration, and the source does not hold the process until the next
+      // one, so fail now instead of leaving initialization pending on timers that cannot keep the process alive.
+      this.setError(this.#pollError)
     } else {
       log.debug('Feature Flags: waiting for provider initialization (timeout %dms)...', this.#initializationTimeoutMs)
     }
@@ -136,6 +146,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // An empty update leaves upstream initialization pending until configuration arrives or it times out.
     if (configuration == null) return
     this.#waitingForConfiguration = false
+    this.#pollError = undefined
 
     if (wasWaiting) {
       this.#logInitialConfiguration()
@@ -160,6 +171,19 @@ class FlaggingProvider extends DatadogNodeServerProvider {
         error instanceof Error ? error.message : String(error)
       )
     } catch { /* logging failure must not affect initialization */ }
+  }
+
+  /**
+   * Fails a waiting initialization when a configuration source poll ends without a configuration, and
+   * remembers the failure for a later initialization.
+   *
+   * @param {Error} error
+   */
+  #failPoll (error) {
+    if (this.getConfiguration() !== undefined) return
+
+    this.#pollError = error
+    if (this.#waitingForConfiguration) this.setError(error)
   }
 
   #logInitialConfiguration () {
