@@ -27,6 +27,11 @@ describe('normalizeRabbitMQName', () => {
     ['reply-orders-8F14E45F-CEEA-467A-9F3A-6B1F1E2C0A11', 'reply-orders-*'],
     ['reply_8f14e45fceea467a9f3a6b1f1e2c0a11', 'reply_*'],
     ['worker.8f14e45f-ceea-467a-9f3a-6b1f1e2c0a11', 'worker.*'],
+    ['foo_8f14e45f-ceea-467a-9f3a-6b1f1e2c0a11', 'foo_*'],
+    // bare UUID (whole name)
+    ['8f14e45f-ceea-467a-9f3a-6b1f1e2c0a11', '*'],
+    ['8F14E45F-CEEA-467A-9F3A-6B1F1E2C0A11', '*'],
+    ['8F14E45FCEEA467A9F3A6B1F1E2C0A11', '*'],
     // trailing long hex (16 or more hex chars)
     ['membership-9f8e7d6c5b4a39281706f5e4d3c2b1a0', 'membership-*'],
     ['session_0123456789abcdef', 'session_*'],
@@ -37,6 +42,8 @@ describe('normalizeRabbitMQName', () => {
     ['payments.events', 'payments.events'],
     ['session_0123456789abcde', 'session_0123456789abcde'], // 15 hex chars
     ['0123456789abcdef0123', '0123456789abcdef0123'], // no separator
+    ['8f14e45f-ceea-467a-9f3a-6b1f1e2c0a1', '8f14e45f-ceea-467a-9f3a-6b1f1e2c0a1'], // 35-char near-UUID
+    ['8f14e45fceea467a9f3a6b1f1e2c0a1', '8f14e45fceea467a9f3a6b1f1e2c0a1'], // 31 hex chars
     ['amq.direct', 'amq.direct'],
     ['wolverine.events.orders', 'wolverine.events.orders'],
     ['my_bus_queue', 'my_bus_queue'],
