@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
+const { inspect, isDeepStrictEqual } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -24,7 +25,8 @@ describe('Plugin', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
-        queue = `test-${id()}`
+        // The random part is not a trailing suffix, so DSM keeps this name as is.
+        queue = `test-${id()}-queue`
       })
 
       afterEach(() => {
@@ -224,6 +226,69 @@ describe('Plugin', () => {
           })
         })
 
+        describe('per-instance queue names', () => {
+          const collectStatsPoints = dsmStats => {
+            let statsPointsReceived = []
+            for (const timeStatsBucket of dsmStats) {
+              for (const statsBuckets of timeStatsBucket?.Stats ?? []) {
+                statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
+              }
+            }
+            return statsPointsReceived
+          }
+
+          const assertEdgeTags = (dsmStats, rawQueue, expectedEdgeTags) => {
+            const edgeTags = collectStatsPoints(dsmStats).map(point => point.EdgeTags)
+            for (const expected of expectedEdgeTags) {
+              assert.ok(edgeTags.some(tags => isDeepStrictEqual(tags, expected)),
+                `Expected ${inspect(edgeTags)} to contain ${inspect(expected)}`)
+            }
+            assert.ok(!edgeTags.flat().includes(`topic:${rawQueue}`), `Raw queue ${rawQueue} leaked into edge tags`)
+          }
+
+          it('Should normalize a trailing UUID in the topic tag when producing and consuming', done => {
+            const perInstanceQueue = 'callback-8f14e45f-ceea-467a-9f3a-6b1f1e2c0a11'
+
+            agent.expectPipelineStats(dsmStats => {
+              assertEdgeTags(dsmStats, perInstanceQueue, [
+                ['direction:out', 'has_routing_key:true', 'topic:callback-*', 'type:rabbitmq'],
+                ['direction:in', 'topic:callback-*', 'type:rabbitmq'],
+              ])
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            channel.assertQueue(perInstanceQueue, { exclusive: true }, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+              channel.consume(ok.queue, () => {}, { noAck: true }, (err) => {
+                if (err) done(err)
+              })
+            })
+          })
+
+          it('Should normalize a server-named queue in the topic tag when producing and consuming', done => {
+            let serverNamedQueue
+
+            agent.expectPipelineStats(dsmStats => {
+              assertEdgeTags(dsmStats, serverNamedQueue, [
+                ['direction:out', 'has_routing_key:true', 'topic:amq.gen-*', 'type:rabbitmq'],
+                ['direction:in', 'topic:amq.gen-*', 'type:rabbitmq'],
+              ])
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            channel.assertQueue('', { exclusive: true }, (err, ok) => {
+              if (err) return done(err)
+
+              serverNamedQueue = ok.queue
+              assert.match(serverNamedQueue, /^amq\.gen-/)
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+              channel.consume(ok.queue, () => {}, { noAck: true }, (err) => {
+                if (err) done(err)
+              })
+            })
+          })
+        })
+
         it('regression test: should handle basic.get when queue is empty', done => {
           channel.assertQueue(queue, {}, (err, ok) => {
             if (err) return done(err)
@@ -286,10 +351,10 @@ describe('Plugin', () => {
 
           it('Should maintain separate DSM context for sequential consume-produce flows', (done) => {
             const setCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'setCheckpoint')
-            const queueA = `queue-a-${id()}`
-            const queueB = `queue-b-${id()}`
-            const queueAOut = `queue-a-out-${id()}`
-            const queueBOut = `queue-b-out-${id()}`
+            const queueA = `queue-${id()}-a`
+            const queueB = `queue-${id()}-b`
+            const queueAOut = `queue-${id()}-a-out`
+            const queueBOut = `queue-${id()}-b-out`
 
             let doneCount = 0
             const checkAssertions = () => {
