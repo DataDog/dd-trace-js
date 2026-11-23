@@ -96,6 +96,7 @@ describe('mocha-parallel-files script', function () {
           CI: 'true',
           GITHUB_JOB: 'trace-core',
           GITHUB_REPOSITORY: 'DataDog/dd-trace-js',
+          GITHUB_RUN_ATTEMPT: '2',
           GITHUB_RUN_ID: '123',
           GITHUB_RUN_NUMBER: '456',
           GITHUB_SERVER_URL: 'https://github.com',
@@ -109,8 +110,37 @@ describe('mocha-parallel-files script', function () {
       assert.match(xml, /<property name="ci\.pipeline\.name" value="Core &amp; &quot;smoke&quot;"\/>/)
       assert.match(xml, /<property name="ci\.pipeline\.id" value="123"\/>/)
       assert.match(xml, /<property name="ci\.pipeline\.number" value="456"\/>/)
-      assert.match(xml, /<property name="ci\.pipeline\.url" value="https:\/\/github\.com\/DataDog\/dd-trace-js\/actions\/runs\/123"\/>/)
+      assert.match(
+        xml,
+        /<property name="ci\.pipeline\.url" value="https:\/\/github\.com\/DataDog\/dd-trace-js\/actions\/runs\/123\/attempts\/2"\/>/
+      )
       assert.match(xml, /<property name="ci\.job\.name" value="trace-core"\/>/)
+      assert.match(xml, /<property name="GITHUB_RUN_ATTEMPT" value="2"\/>/)
+    } finally {
+      fs.rmSync(junitFile, { force: true })
+      fs.rmSync(path.join(repoRoot, '.junit-tmp'), { force: true, recursive: true })
+    }
+  })
+
+  it('omits the run attempt from the merged xunit report when GITHUB_RUN_ATTEMPT is unset', async () => {
+    const fixture = path.join(fixturesDir, 'extra-ipc-message.js')
+    try {
+      const { code } = await runParallel(['--', fixture], {
+        env: {
+          CI: 'true',
+          GITHUB_JOB: 'trace-core',
+          GITHUB_REPOSITORY: 'DataDog/dd-trace-js',
+          GITHUB_RUN_ATTEMPT: undefined,
+          GITHUB_RUN_ID: '123',
+          GITHUB_SERVER_URL: 'https://github.com',
+          GITHUB_WORKFLOW: 'Core',
+        },
+      })
+
+      assert.strictEqual(code, 0)
+      const xml = fs.readFileSync(junitFile, 'utf8')
+      assert.match(xml, /<property name="ci\.pipeline\.url" value="https:\/\/github\.com\/DataDog\/dd-trace-js\/actions\/runs\/123"\/>/)
+      assert.doesNotMatch(xml, /GITHUB_RUN_ATTEMPT/)
     } finally {
       fs.rmSync(junitFile, { force: true })
       fs.rmSync(path.join(repoRoot, '.junit-tmp'), { force: true, recursive: true })
