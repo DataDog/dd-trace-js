@@ -36,10 +36,9 @@ describeSupported('Lambda trace headers', () => {
 
   async function load (config = {}) {
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' }, ...config })
-    // agent.load rebuilds the tracer for each configuration; the public facade must use that instance.
+    // agent.load rebuilds the tracer for each configuration; the internal facade must use that instance.
     delete require.cache[require.resolve('../../src/lambda/facade')]
-    delete require.cache[require.resolve('../../../../lambda')]
-    lambda = require('../../../../lambda')
+    lambda = require('../../src/lambda/facade')
   }
 
   for (const [style, carrierKey] of [

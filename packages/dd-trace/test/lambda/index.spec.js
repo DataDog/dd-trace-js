@@ -179,7 +179,7 @@ describe('lambda', () => {
         const context = { getRemainingTimeInMillis: () => 150 }
 
         // The explicit facade owns this invocation after the automatic hook adds its monitor.
-        const handler = require('../../../../lambda').wrap(app.handler)
+        const handler = require('../../src/lambda/facade').wrap(app.handler)
         await handler(event, context)
         assertExactlyOneLambdaSpan(traces)
 

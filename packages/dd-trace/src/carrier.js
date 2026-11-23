@@ -8,6 +8,7 @@ const FIELD_WRITE = 2
 const FIELD_HAS = 4
 const FIELD_DELETE = 8
 const FIELD_NAME_LENGTH = 16
+const FIELD_NAME = 32
 
 const b3FlagsHeader = 'x-b3-flags'
 const b3Header = 'b3'
@@ -36,6 +37,7 @@ const carrierOperations = {}
  * @property {unknown} [has]
  * @property {unknown} [delete]
  * @property {unknown} [nameLength]
+ * @property {unknown} [name]
  */
 
 /**
@@ -47,6 +49,7 @@ const carrierOperations = {}
  * @property {(carrier: Carrier) => void} delete
  * @property {(carrier: Carrier, target: Carrier) => void} copy
  * @property {number} nameLength
+ * @property {string} name
  */
 
 /**
@@ -63,6 +66,7 @@ function defineCapability (name, operations, capability) {
   if (operations & FIELD_HAS) carrierOperations[`has${suffix}`] = capability.has
   if (operations & FIELD_DELETE) carrierOperations[`delete${suffix}`] = capability.delete
   if (operations & FIELD_NAME_LENGTH) carrierOperations[`${name}NameLength`] = capability.nameLength
+  if (operations & FIELD_NAME) carrierOperations[`${name}Name`] = capability.name
   return capability
 }
 
@@ -109,6 +113,7 @@ function defineField (fieldName, headerName, read, operations) {
     },
 
     nameLength: headerName.length,
+    name: headerName,
   })
 }
 
@@ -277,7 +282,7 @@ const dsmBase64 = defineField(
   'dsmBase64',
   dsmBase64Header,
   readDsmBase64,
-  FIELD_READ | FIELD_WRITE | FIELD_HAS | FIELD_NAME_LENGTH
+  FIELD_READ | FIELD_WRITE | FIELD_HAS | FIELD_NAME_LENGTH | FIELD_NAME
 )
 const dsmBinary = defineField('dsmBinary', dsmBinaryHeader, readDsmBinary, FIELD_READ | FIELD_HAS)
 
@@ -363,6 +368,7 @@ function pickDsm (carrier) {
 /**
  * @typedef {object} CarrierOperations
  * @property {typeof datadogParentId.delete} deleteDatadogParentId
+ * @property {typeof dsmBase64.name} dsmBase64Name
  * @property {typeof dsmBase64.nameLength} dsmBase64NameLength
  * @property {typeof dsmBase64.has} hasDsmBase64
  * @property {typeof dsmBinary.has} hasDsmBinary
