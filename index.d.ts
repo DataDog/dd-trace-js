@@ -1845,6 +1845,53 @@ declare namespace tracer {
          */
         arguments: string;
       };
+      /**
+       * Set when the tool call runs an MCP tool: references an entry of the `mcpServers` evaluate option.
+       */
+      mcp?: {
+        /**
+         * The `id` of the MCP server entry of the tool.
+         */
+        server_id: string;
+      };
+    }
+
+    /**
+     * An MCP server referenced by the `mcp.server_id` of tool calls, sent in the `mcpServers` evaluate option.
+     */
+    export interface McpServer {
+      /**
+       * Server ID that the tool calls reference with `mcp.server_id`.
+       */
+      id: string;
+      /**
+       * Who runs the MCP client: `client` when the application runs it, `provider` when the model provider runs it.
+       */
+      managed_by: 'client' | 'provider';
+      /**
+       * Transport of the server.
+       */
+      transport: 'streamable_http' | 'sse' | 'stdio' | 'in_process' | 'unknown';
+      /**
+       * Configured name of the server.
+       */
+      name?: string;
+      /**
+       * Origin of the server URL: scheme, host and port only, never userinfo, path, query or fragment.
+       */
+      url?: string;
+      /**
+       * Program name of a stdio server command, never its full path.
+       */
+      command?: string;
+      /**
+       * Package or module that a stdio server runs, never arbitrary arguments.
+       */
+      args?: string[];
+      /**
+       * Original MCP tool name of each function name that the model uses.
+       */
+      tools: { [functionName: string]: string };
     }
 
     /**
@@ -2050,6 +2097,8 @@ declare namespace tracer {
        *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
        *             empty key, a key longer than 200 characters, a string value longer than 25000
        *             characters, or a value that is not a string, finite number or boolean are dropped.
+       *   - `mcpServers`: The MCP servers that the `mcp.server_id` of the tool calls reference. Sent with the
+       *                   messages and reported on the AI Guard span; omitted when empty.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
@@ -2059,6 +2108,7 @@ declare namespace tracer {
         opts?: {
           block?: boolean,
           tags?: { [key: string]: string | number | boolean },
+          mcpServers?: McpServer[],
         }
       ): Promise<Evaluation>;
     }

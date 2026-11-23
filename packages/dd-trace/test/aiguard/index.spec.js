@@ -155,6 +155,7 @@ describe('AIGuard SDK', () => {
     )
   }
 
+  /** @type {(meta: Record<string, unknown>, metaStruct?: object | null) => Promise<void>} */
   const assertAIGuardSpan = async (meta, metaStruct = null) => {
     await agent.assertFirstTraceSpan(span => {
       assert.strictEqual(span.name, 'ai_guard')
@@ -1617,6 +1618,125 @@ describe('AIGuard SDK', () => {
         assert.strictEqual(span.meta['app.flow'], 'auto')
         assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
       })
+    })
+  })
+
+  describe('MCP servers', () => {
+    const mcpServers = [{
+      id: 'mcp_b77bc22583ac5006',
+      managed_by: 'client',
+      url: 'https://mcp.example.com',
+      transport: 'streamable_http',
+      tools: { search: 'search' },
+    }]
+    const mcpToolCall = [{
+      role: 'assistant',
+      tool_calls: [{
+        id: 'dd_mcp_1',
+        function: { name: 'search', arguments: '{"q":"x"}' },
+        mcp: { server_id: 'mcp_b77bc22583ac5006' },
+      }],
+    }]
+    const allow = { body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } } }
+    const meta = { service: config.service, env: config.env }
+
+    it('sends mcp_servers after the messages and the meta', async () => {
+      mockRequest(allow)
+
+      await aiguard.evaluate(mcpToolCall, { mcpServers })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(
+        request.firstCall.args[0],
+        JSON.stringify({ data: { attributes: { messages: mcpToolCall, meta, mcp_servers: mcpServers } } })
+      )
+    })
+
+    for (const servers of [undefined, []]) {
+      it(`sends the payload of earlier versions with ${JSON.stringify(servers)} servers`, async () => {
+        mockRequest(allow)
+
+        await aiguard.evaluate(toolCall, { mcpServers: servers })
+
+        assertRequest(toolCall)
+        await assertAIGuardSpan({ 'ai_guard.target': 'tool' }, { messages: toolCall })
+      })
+    }
+
+    it('reports the sent mcp_servers and the mcp references in the meta-struct', async () => {
+      mockRequest(allow)
+
+      await aiguard.evaluate(mcpToolCall, { mcpServers })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.target': 'tool', 'ai_guard.tool_name': 'search', 'ai_guard.action': 'ALLOW' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    it('reports mcp_servers for a failed evaluation', async () => {
+      mockRequest({ status: 503, body: { errors: [{ title: 'Unavailable' }] } })
+
+      await rejects(() => aiguard.evaluate(mcpToolCall, { mcpServers }), { name: 'AIGuardClientError' })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.target': 'tool', 'error.type': 'AIGuardClientError' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    it('reports mcp_servers for a blocked evaluation', async () => {
+      mockRequest({ body: { data: { attributes: { action: 'DENY', reason: 'No', is_blocking_enabled: true } } } })
+
+      await rejects(() => aiguard.evaluate(mcpToolCall, { mcpServers }), { name: 'AIGuardAbortError' })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.action': 'DENY', 'ai_guard.blocked': 'true' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    for (const withServers of [true, false]) {
+      const description = withServers ? 'over the sent list' : 'without MCP'
+      it(`never lets extra_metastruct set mcp_servers ${description}`, async () => {
+        mockRequest({
+          body: {
+            data: {
+              attributes: {
+                action: 'ALLOW',
+                extra_metastruct: [{ key: 'mcp_servers', value: [{ id: 'forged' }] }, { key: 'custom', value: 1 }],
+              },
+            },
+          },
+        })
+        const messages = withServers ? mcpToolCall : toolCall
+
+        await aiguard.evaluate(messages, withServers ? { mcpServers } : undefined)
+
+        await assertAIGuardSpan(
+          { 'ai_guard.action': 'ALLOW' },
+          withServers ? { messages, mcp_servers: mcpServers, custom: 1 } : { messages, custom: 1 }
+        )
+      })
+    }
+
+    it('sends the payload of earlier versions when mcpServers is not an array', async () => {
+      mockRequest(allow)
+      const notAList = /** @type {never} */ (/** @type {unknown} */ ('mcp_b77bc22583ac5006'))
+
+      await aiguard.evaluate(toolCall, { mcpServers: notAList })
+
+      assertRequest(toolCall)
+    })
+
+    it('reports a copy of mcp_servers that later changes of the caller do not alter', async () => {
+      mockRequest(allow)
+      const servers = structuredClone(mcpServers)
+
+      await aiguard.evaluate(mcpToolCall, { mcpServers: servers })
+      servers[0].tools.search = 'changed'
+
+      await assertAIGuardSpan({ 'ai_guard.action': 'ALLOW' }, { messages: mcpToolCall, mcp_servers: mcpServers })
     })
   })
 
