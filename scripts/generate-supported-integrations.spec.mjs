@@ -28,6 +28,8 @@ const nodeAliases = {
   'node-28': 'npm:node@28.0.0',
 }
 
+const mariadbPackageVersions = ['2.5.6', '3.0.0', '3.1.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4']
+
 describe('generate supported integrations', () => {
   it('shares the default, oldest, latest, and explicit WebdriverIO selections', () => {
     assert.deepStrictEqual(getWebdriverioVersions(), ['9.0.0', 'latest'])
@@ -324,7 +326,7 @@ describe('generate supported integrations', () => {
         ))]
       )),
       getPackageVersions: dependency => Promise.resolve(dependency === 'mariadb'
-        ? ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4']
+        ? mariadbPackageVersions
         : ['6.1.0', '6.9.0', '7.0.0']),
     })
 
@@ -455,19 +457,17 @@ describe('generate supported integrations', () => {
       ],
       plugins: new Map([['mariadb', 'mariadb']]),
       instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { mariadb: declarations }),
-      getPackageVersions: () => Promise.resolve([
-        '2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4',
-      ]),
+      getPackageVersions: () => Promise.resolve(mariadbPackageVersions),
     })
 
     assert.deepStrictEqual(rows[0].versions, [{
       testedRuntimes: { node: ['26.2.0'] },
       supportedRange: '>=3.0.0',
-      tested: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4'],
+      tested: ['2.5.6', '3.0.0', '3.1.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4'],
     }, {
       testedRuntimes: { node: ['18.20.8'] },
       supportedRange: '>=3.0.0',
-      tested: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.4'],
+      tested: ['2.5.6', '3.0.0', '3.1.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.4'],
     }])
   })
 
@@ -477,9 +477,7 @@ describe('generate supported integrations', () => {
       nodeVersions: ['18.20.8'],
       plugins: new Map([['mariadb', 'mariadb']]),
       instrumentations: testInstrumentations(['18.20.8'], { mariadb: declarations }),
-      getPackageVersions: () => Promise.resolve([
-        '2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4',
-      ]),
+      getPackageVersions: () => Promise.resolve(mariadbPackageVersions),
     })
 
     assert.deepStrictEqual(rows, [])
