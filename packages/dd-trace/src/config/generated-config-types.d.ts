@@ -524,7 +524,7 @@ export interface GeneratedConfig {
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_METRIC_EXPORT_INTERVAL: number;
@@ -1219,7 +1219,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
   OTEL_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;

@@ -18,8 +18,8 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  * replaces the default Datadog Agent exporter at tracer initialization time.
  *
  * Key Components:
- * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP/JSON (port 4318)
- * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP JSON format
+ * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP/JSON or HTTP/protobuf (port 4318)
+ * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP JSON or protobuf format
  *
  * When enabled, traces are exported exclusively via OTLP. The original
  * Datadog Agent exporter is replaced.
@@ -59,16 +59,17 @@ function buildResourceAttributes (config) {
 }
 
 /**
- * Creates the OTLP HTTP/JSON trace exporter.
+ * Creates the OTLP HTTP trace exporter.
  *
  * @param {Config} config - Tracer configuration instance
- * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
+ * @returns {OtlpHttpTraceExporter} The OTLP HTTP exporter
  */
 function createOtlpTraceExporter (config) {
   const exporter = new OtlpHttpTraceExporter(
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+    config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
     buildResourceAttributes(config),
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
