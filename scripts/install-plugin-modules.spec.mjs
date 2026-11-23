@@ -132,8 +132,11 @@ describe('plugin fixture discovery', () => {
     })
   })
 
-  it('injects LangGraph peers into its scoped workspace', () => {
+  it('installs LangGraph peers only in its scoped workspaces', () => {
     withInstallerFixture({ PLUGINS: 'langgraph', PACKAGE_VERSION_RANGE: '1.1.2' }, fixtureRoot => {
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8')).workspaces
+      assert.deepEqual(packages.sort(), ['@langchain/langgraph', '@langchain/langgraph@1.1.2'])
+
       const manifest = JSON.parse(readFileSync(
         join(fixtureRoot, 'versions/@langchain/langgraph@1.1.2/package.json'), 'utf8'
       ))
