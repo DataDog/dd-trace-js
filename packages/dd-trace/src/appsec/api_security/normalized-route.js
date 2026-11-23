@@ -15,10 +15,11 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  *
  * Design: Express 5 / path-to-regexp 8 only. The route is parsed once by path-to-regexp's `parse()`
  * (token tree → segment templates, cached per route string). Per-request presence of optional
- * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. The
- * mount prefix and the served route are each matched where Express matched them (`req.baseUrl`,
- * `req.url`), each alternative in path-to-regexp's order (group included, then excluded), else
- * req.params is used. Express 4 ships path-to-regexp 0.x, which has no `parse()` → no tag.
+ * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. As in
+ * Express, the mount prefix matches the start of the URL, with the app Router's case sensitivity, and
+ * the served route the rest, with its own Router's options; each tries its alternatives in
+ * path-to-regexp's order (group included, then excluded), else req.params is used. Express 4 ships
+ * path-to-regexp 0.x, which has no `parse()` → no tag.
  */
 
 // path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
@@ -60,13 +61,13 @@ const routeOptions = new WeakMap()
  *   precomputed: string | null, branches: RouteBranch[] | null,
  *   variants?: Map<number, string> }} CompiledRoute
  *
- * @typedef {{ sensitive?: boolean, strict?: boolean }} RoutingOptions
+ * @typedef {{ sensitive?: boolean, strict?: boolean, end?: boolean }} RoutingOptions - `end: false` for a mount
  *
- * @typedef {{ route: string, url: string, options: RoutingOptions }} MatchedPart
- *   A part of the route and the request path its Router matched it against.
+ * @typedef {{ route: string, options: RoutingOptions }} MatchedPart
+ *   A part of the route and the options of the Router layer that matched it.
  *
- * @typedef {(tokens: PathToRegexpToken[], options: { sensitive: boolean, trailing: boolean })
- *   => ((url: string) => object | undefined) | undefined} MatcherFactory
+ * @typedef {(tokens: PathToRegexpToken[], options: { sensitive: boolean, trailing: boolean, end: boolean })
+ *   => ((url: string) => { path: string, params: object } | undefined) | undefined} MatcherFactory
  */
 
 /**
@@ -185,16 +186,17 @@ function compileRoute (route, parse) {
     branches: null,
   }
 
-  // No optional groups → fixed output, computed once (no matcher, so group count is irrelevant here).
+  // match()'s regexp is exponential in the route's TOTAL optional-group count (static and structural
+  // groups included, not just the resolvable ones), so cap that before building the matcher. A route
+  // without groups still gets its single branch: as a mount, it must match to consume its part.
+  if (groupIds.size <= MAX_OPTIONAL_GROUPS) {
+    compiled.branches = expandBranches(parsed.tokens, groupIds).map(branch => ({ ...branch, matchers: [] }))
+  }
+
+  // No optional groups → fixed output, computed once.
   if (optionalGroups.length === 0) {
     compiled.precomputed = renderRoute(compiled, EMPTY_SET)
     return compiled
-  }
-
-  // match()'s regexp is exponential in the route's TOTAL optional-group count (static and structural
-  // groups included, not just the resolvable ones), so cap that before building the matcher.
-  if (groupIds.size <= MAX_OPTIONAL_GROUPS) {
-    compiled.branches = expandBranches(parsed.tokens, groupIds).map(branch => ({ ...branch, matchers: [] }))
   }
   compiled.variants = new Map()
   return compiled
@@ -333,36 +335,39 @@ function resolvePresence (compiled, params) {
 
 /**
  * Which optional groups are present, from the first alternative matching the URL (the one Express
- * served), or undefined when none can be matched. A catch-all is present unless it captured only
- * slashes, or when another token of that alternative shares its name (its value can't be told apart).
+ * served), with the matched path, or undefined when none can be matched. A catch-all is present
+ * unless it captured only slashes, or when another token of that alternative shares its name (its
+ * value can't be told apart).
  * @param {CompiledRoute} compiled
  * @param {string} path - request path, query stripped
  * @param {MatcherFactory} makeMatcher
  * @param {RoutingOptions} options
- * @returns {Set<number> | undefined}
+ * @returns {{ present: Set<number>, path: string } | undefined}
  */
 function matchPresence (compiled, path, makeMatcher, options) {
   const sensitive = options.sensitive === true
   const strict = options.strict === true
-  const key = (sensitive ? 1 : 0) | (strict ? 2 : 0)
+  const end = options.end !== false
+  const key = (sensitive ? 1 : 0) | (strict ? 2 : 0) | (end ? 0 : 4)
   for (const branch of compiled.branches) {
     let matcher = branch.matchers[key]
     if (matcher === undefined) {
       // Like Express's router, a non-strict route matches without its trailing slashes.
       let { tokens } = branch
       const last = compiled.tokens.at(-1)
-      if (!strict && last.type === 'text' && last.value.endsWith('/')) {
+      if (!strict && last?.type === 'text' && last.value.endsWith('/')) {
         let end = last.value.length
         while (end > 0 && last.value[end - 1] === '/') end--
         tokens = [...tokens.slice(0, -1), { type: 'text', value: last.value.slice(0, end) }]
       }
-      matcher = makeMatcher(tokens, { sensitive, trailing: !strict })
+      matcher = makeMatcher(tokens, { sensitive, trailing: !strict, end })
       if (matcher === undefined) return
       branch.matchers[key] = matcher
     }
-    const params = matcher(path)
-    if (params === undefined) continue
+    const match = matcher(path)
+    if (match === undefined) continue
 
+    const { params } = match
     const present = new Set(branch.groups)
     for (const t of compiled.wildcards) {
       let shared = false
@@ -377,7 +382,7 @@ function matchPresence (compiled, path, makeMatcher, options) {
       }
       if (shared || !isEmptyValue(params[t.name], true)) present.add(t.group)
     }
-    return present
+    return { present, path: match.path }
   }
 }
 
@@ -408,28 +413,27 @@ function getCompiledRoute (route, parse) {
 }
 
 /**
- * Which optional groups of the joined route are present, from each part matched against its own
- * request path, or undefined when a part can't be matched. A part's group ids follow those of the
- * parts before it, as in the joined route.
+ * Which optional groups of the joined route are present, from its parts matched in sequence against
+ * the path as Express routed it: a mount consumes the start, the next part matches the rest. Undefined
+ * when a part doesn't match. A part's group ids follow those of the parts before it.
  * @param {MatchedPart[]} parts
+ * @param {string} path - request path, query stripped
  * @param {(pattern: string) => { tokens: PathToRegexpToken[] } | undefined} parse
  * @param {MatcherFactory} makeMatcher
  * @returns {Set<number> | undefined}
  */
-function matchParts (parts, parse, makeMatcher) {
+function matchParts (parts, path, parse, makeMatcher) {
   const present = new Set()
   let offset = 0
-  for (const { route, url, options } of parts) {
+  for (const { route, options } of parts) {
     const compiled = getCompiledRoute(route, parse)
-    if (compiled === null) return
-    if (compiled.precomputed !== null) continue // no optional groups (an empty prefix included)
-    if (compiled.branches === null) return
+    if (compiled === null || compiled.branches === null) return
 
-    const qIdx = url.indexOf('?')
-    const matched = matchPresence(compiled, qIdx === -1 ? url : url.slice(0, qIdx), makeMatcher, options)
+    const matched = matchPresence(compiled, path, makeMatcher, options)
     if (matched === undefined) return
-    for (const group of matched) present.add(group + offset)
+    for (const group of matched.present) present.add(group + offset)
     offset += compiled.optionalGroups.length
+    path = path.slice(matched.path.length) || '/'
   }
   return present
 }
@@ -438,12 +442,13 @@ function matchParts (parts, parse, makeMatcher) {
  * Normalize an Express route string. Express 5 only: `parse`/`makeMatcher` are path-to-regexp 8's
  * `parse()` and a `match()` factory; returns null when either is unavailable (Express 4).
  * @param {string} route - route string (the http.route value)
- * @param {object|null|undefined} params - req.params (fallback when the route parts don't match)
- * @param {MatchedPart[]|undefined} parts - the route's parts, in order, as its Routers matched them
+ * @param {object|null|undefined} params - req.params (fallback when the URL doesn't match)
+ * @param {string|undefined} urlPath - request URL (query stripped here)
  * @param {(pattern: string) => { tokens: PathToRegexpToken[] } | undefined} parse
  * @param {MatcherFactory} makeMatcher
+ * @param {MatchedPart[]} [parts] - the route's parts, in order, as its Routers matched them
  */
-function normalizeRouteExpress (route, params, parts, parse, makeMatcher) {
+function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher, parts) {
   if (typeof route !== 'string' || !route || typeof parse !== 'function' || typeof makeMatcher !== 'function') {
     return null
   }
@@ -452,10 +457,13 @@ function normalizeRouteExpress (route, params, parts, parse, makeMatcher) {
   if (entry === null) return null
   if (entry.precomputed !== null) return entry.precomputed
 
-  // The matched parts are authoritative (they keep mount params that mergeParams=false drops);
-  // fall back to req.params when the route can't be split or a part doesn't match.
+  // The matched URL is authoritative (it keeps mount params that mergeParams=false drops); fall back
+  // to req.params when the route can't be split or the URL doesn't match.
   let present
-  if (parts !== undefined) present = matchParts(parts, parse, makeMatcher)
+  if (urlPath && parts !== undefined) {
+    const qIdx = urlPath.indexOf('?')
+    present = matchParts(parts, qIdx === -1 ? urlPath : urlPath.slice(0, qIdx), parse, makeMatcher)
+  }
   present ??= resolvePresence(entry, params)
 
   if (entry.optionalGroups.length > MAX_OPTIONAL_GROUPS) return renderRoute(entry, present)
@@ -470,10 +478,13 @@ function normalizeRouteExpress (route, params, parts, parse, makeMatcher) {
 }
 
 /**
- * Split the route where Express matched it: the mount prefix against `req.baseUrl` with the app
- * Router's case sensitivity, the served route against the Router-relative `req.url` with its own
- * Router's options. Undefined when those options are unknown (route registered while AppSec was
- * off) or the route can't be split (a route array).
+ * Split the route where Express matched it: the mount prefix, with the app Router's case
+ * sensitivity, then the served route, with its own Router's options. Only route patterns and options
+ * are read: Express restores `req.url`/`req.baseUrl` once a request leaves a Router (e.g. to an app
+ * error handler). Undefined when the served Router's options are unknown (route registered while
+ * AppSec was off) or the route can't be split (a route array). A nested Router's own case
+ * sensitivity is not tracked per mount, so its mount matches with the app's: only alternatives
+ * differing by letter case can then resolve differently.
  * @param {object} req
  * @param {unknown} route - joined route (http.route)
  * @returns {MatchedPart[] | undefined}
@@ -492,9 +503,11 @@ function splitRoute (req, route) {
     return
   }
 
-  // Mounts are never strict.
-  const mount = { sensitive: req.app?.router?.caseSensitive === true }
-  return [{ route: prefix, url: req.baseUrl, options: mount }, { route: leaf, url: req.url, options }]
+  const served = { route: leaf, options }
+  if (prefix === '') return [served]
+  // Mounts are never strict and match the start of the path.
+  const mount = { sensitive: req.app?.router?.caseSensitive === true, end: false }
+  return [{ route: prefix, options: mount }, served]
 }
 
 /**
@@ -518,7 +531,8 @@ function normalizeRoute (req) {
       if (parse === undefined || makeMatcher === undefined) return null
       // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook.
       const route = spanContext.getTag(HTTP_ROUTE)
-      return normalizeRouteExpress(route, req.params, splitRoute(req, route), parse, makeMatcher)
+      return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher,
+        splitRoute(req, route))
     }
     default:
       return null

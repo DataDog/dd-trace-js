@@ -89,6 +89,14 @@ withVersions('express', 'express', '>=5', version => {
       const upperRouter = express.Router({ caseSensitive: true })
       upperRouter.get('/p{A}{a}', ok)
       app.use('/API', upperRouter)
+      const rootRouter = express.Router()
+      rootRouter.get('', ok)
+      app.use('/root{/:x}', rootRouter)
+      // Answered by an app-level error handler, after Express restored req.url and req.baseUrl.
+      const failingRouter = express.Router()
+      failingRouter.get('/boom{/:id}', () => { throw new Error('boom') })
+      app.use('/e', failingRouter)
+      app.use((err, req, res, next) => res.status(500).end())
 
       // Apps with routing settings, each with a direct route and a default Router mounted at /r.
       const settingApps = {
@@ -151,8 +159,8 @@ withVersions('express', 'express', '>=5', version => {
       ['sensitive', '/r/pa', '/r/pA'],
       ['strict', '/posts/draft/', '/posts/draft/'],
       ['strict', '/r/posts/draft', '/r/posts/draft/'],
-      // A mount prefix matches req.baseUrl with the app Router's options: the case-insensitive app
-      // takes the static {/preview} group, the case-sensitive one binds 'PREVIEW' as the tenant.
+      // A mount prefix matches with the app Router's options: the case-insensitive app takes the
+      // static {/preview} group, the case-sensitive one binds 'PREVIEW' as the tenant.
       ['default', '/api/PREVIEW/v1/users/42', '/api/preview/v1/users/{id}'],
       ['default', '/api/acme/v1/users/42', '/api/{tenant}/v1/users/{id}'],
       ['default', '/api/PREVIEW/v1', '/api/preview/v1'],
@@ -161,10 +169,13 @@ withVersions('express', 'express', '>=5', version => {
       ['default', '/w/foo/v1/users/V1/users/42', '/w/{scope}/v1/users/{id}'],
       // A decoded '%2F' is an ordinary param value, not an empty one.
       ['default', '/t/acme/parts/%2F', '/t/{tenant}/parts/{id}'],
-      // A mount's params are matched from req.baseUrl even when req.params (mergeParams=false) lacks them.
+      // A mount's params are matched even when req.params (mergeParams=false) lacks them.
       ['default', '/orgs/acme/users/42', '/orgs/{orgId}/users/{userId}'],
-      // The served route matches its Router-relative URL, so a static mount's case doesn't matter.
+      // The served route matches the rest of the URL with its own options, whatever the mount's case.
       ['default', '/api/pa', '/API/pa'],
+      // An empty served route ('') answers the mount root.
+      ['default', '/root/1', '/root/{x}'],
+      ['default', '/root', '/root'],
       // Unknown Router options: presence comes from req.params, not a guessed case-insensitive match.
       ['unrecorded', '/pa', '/p'],
       ['sensitive', '/api/PREVIEW/v1/users/42', '/api/{tenant}/v1/users/{id}'],
@@ -180,6 +191,14 @@ withVersions('express', 'express', '>=5', version => {
         })
       })
     }
+
+    it('sets normalized route /e/boom/{id} when an error handler outside the Router answers', async () => {
+      await requests.default.get('/e/boom/1', { validateStatus: null })
+
+      await agent.assertSomeTraces((traces) => {
+        assert.equal(traces[0][0].meta['_dd.appsec.normalized_route'], '/e/boom/{id}')
+      })
+    })
 
     it('does NOT set normalized route when API Security is disabled', async () => {
       appsec.disable()

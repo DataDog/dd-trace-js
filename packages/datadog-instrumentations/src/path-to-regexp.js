@@ -68,7 +68,7 @@ addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
         } catch {
           return
         }
-        return result ? result.params : undefined
+        return result || undefined
       }
     }
   }
@@ -98,9 +98,9 @@ function getParse () {
 }
 
 /**
- * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) => (url => params)`
- * that compiles a token sequence once and returns a matcher yielding the captured params (or undefined on no
- * match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
+ * Returns the host's path-to-regexp 8.x `match` adapter: a factory `(tokens, options) => (url => match)`
+ * that compiles a token sequence once and returns a matcher yielding the matched `{ path, params }` (or
+ * undefined on no match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
  * @returns {((tokens: object[], options?: object) => ((url: string) => object | undefined) | undefined) | undefined}
  */
 function getMatch () {

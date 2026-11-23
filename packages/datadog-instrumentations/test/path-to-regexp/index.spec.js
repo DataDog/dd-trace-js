@@ -60,6 +60,6 @@ describe('path-to-regexp instrumentation', () => {
     assert.deepStrictEqual(parse('/x'), { tokens: [{ type: 'text', value: '/x' }] })
     const match = getMatch()
     const matchPath = match('/a/:id')
-    assert.deepStrictEqual(matchPath('/a/1'), { id: '1' })
+    assert.deepStrictEqual(matchPath('/a/1'), { params: { id: '1' } })
   })
 })
