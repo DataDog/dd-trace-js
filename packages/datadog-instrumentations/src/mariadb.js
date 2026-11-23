@@ -171,11 +171,13 @@ function wrapPreparedExecute (execute) {
     let completed = false
     if (!promise) {
       arguments[1] = function () {
+        if (completed) return /** @type {Function} */ (resolve).apply(this, arguments)
         completed = true
         return finishCh.runStores(ctx, resolve, this, ...arguments)
       }
       /** @param {Error} error */
       arguments[2] = function (error) {
+        if (completed) return /** @type {Function} */ (reject).apply(this, arguments)
         completed = true
         ctx.error = error
         errorCh.publish(ctx)
@@ -188,6 +190,7 @@ function wrapPreparedExecute (execute) {
       result = startCh.runStores(ctx, runPreparedExecute, this, ctx, execute, arguments)
     } catch (error) {
       if (!completed) {
+        completed = true
         ctx.error = error
         errorCh.publish(ctx)
         finishCh.publish(ctx)
