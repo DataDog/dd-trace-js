@@ -4612,7 +4612,7 @@
         "implementation": "B",
         "type": "string",
         "default": "http/json",
-        "allowed": "http/json",
+        "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
