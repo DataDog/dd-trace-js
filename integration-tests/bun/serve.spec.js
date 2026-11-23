@@ -219,6 +219,27 @@ describe('Bun.serve', function () {
     ])
   })
 
+  it('traces direct server.fetch() calls, which pass no server argument', async () => {
+    const url = await start()
+    const received = serverSpan(span => {
+      assert.strictEqual(span.meta['http.url'], url + '/direct')
+      assert.strictEqual(span.meta['http.status_code'], '200')
+      assert.strictEqual(span.error, 0)
+    })
+    const response = new Promise(resolve => {
+      const onMessage = message => {
+        if (message.event !== 'direct') return
+        child.off('message', onMessage)
+        resolve(message)
+      }
+      child.on('message', onMessage)
+    })
+    child.send({ event: 'direct' })
+    const [{ status, body }] = await Promise.all([response, received])
+    assert.strictEqual(status, 200)
+    assert.strictEqual(body, 'direct')
+  })
+
   for (const [path, testCase, status, message] of [
     ['/unavailable', '', 503],
     ['/throw', '', 500, 'sync failure'],

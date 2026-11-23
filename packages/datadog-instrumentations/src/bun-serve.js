@@ -56,11 +56,15 @@ function wrapOptions (options, errors, upgraded, handlers) {
     if (!start.hasSubscribers) return fetch.apply(this, arguments)
 
     const url = new URL(request.url)
-    const address = server.requestIP(request)
+    // Direct `server.fetch(request)` calls omit the server argument but still bind the server as `this`.
+    const address = (server ?? this).requestIP(request)
+    const headers = Object.fromEntries(request.headers)
+    // Requests constructed for direct dispatch can lack the Host header that network requests always carry.
+    headers.host ??= url.host
     const req = {
       method: request.method,
       url: url.pathname + url.search,
-      headers: Object.fromEntries(request.headers),
+      headers,
       socket: { encrypted: url.protocol === 'https:', remoteAddress: address?.address },
     }
     const res = new ResponseAdapter()

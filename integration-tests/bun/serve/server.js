@@ -32,6 +32,12 @@ if (process.env.TEST_CASE === 'hono') {
   fetch = app.fetch
 } else {
   fetch = function (request, server) {
+    if (new URL(request.url).pathname === '/direct') {
+      // Bun omits the server argument for direct `server.fetch(request)` calls.
+      assert.strictEqual(server, undefined)
+      assert.ok(tracer.scope().active())
+      return new Response('direct')
+    }
     assert.strictEqual(this, server)
     if (process.env.TEST_CASE === 'disabled') {
       assert.strictEqual(tracer.scope().active(), null)
@@ -132,5 +138,11 @@ if (process.env.TEST_CASE === 'reload') {
   })
   server.reload({ fetch: () => new Response('reloaded') })
 }
+
+process.on('message', async ({ event }) => {
+  if (event !== 'direct') return
+  const response = await server.fetch(new Request(`http://localhost:${server.port}/direct`))
+  process.send({ event: 'direct', status: response.status, body: await response.text() })
+})
 
 process.send({ port: server.port })
