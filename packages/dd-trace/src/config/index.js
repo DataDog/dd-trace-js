@@ -843,6 +843,24 @@ class Config extends ConfigBase {
 
     const unsupportedRuntime = getUnsupportedRuntime()
     if (unsupportedRuntime !== undefined) {
+      if (unsupportedRuntime === 'Bun') {
+        this.#deactivate(
+          'runtimeMetrics.native',
+          'Native runtime metrics are disabled, because they do not work on Bun.'
+        )
+        this.#deactivate(
+          'DD_PROFILING_HEAP_ENABLED',
+          'Heap profiling is disabled, because it does not work on Bun.'
+        )
+        // An unset heap flag inherits the legacy profiler list, which includes space by default.
+        if (this.DD_PROFILING_HEAP_ENABLED === undefined && this.DD_PROFILING_PROFILERS.includes('space')) {
+          setAndTrack(this, 'DD_PROFILING_HEAP_ENABLED', false)
+        }
+        this.#deactivate(
+          'iast.DD_IAST_ENABLED',
+          'IAST is disabled, because it does not work on Bun.'
+        )
+      }
       this.#deactivate(
         'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
         `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
