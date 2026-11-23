@@ -1,0 +1,31 @@
+name: Get Datadog API key (exchange)
+description: Internal implementation; exchange OIDC token for API key. Use `./.github/actions/dd-wif` instead.
+
+inputs:
+  org_uuid:
+    description: "Datadog organization UUID"
+    required: true
+
+outputs:
+  api_key:
+    description: "Datadog API key"
+    value: ${{ steps.dd-wif.outputs.api_key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get Datadog API key
+      id: dd-wif
+      uses: DataDog/datadog-workload-identity-federation-github-action/intake@c9456387851248e0a5452f99085b16ad14fc3acb # v1.0.0
+      with:
+        org_uuid: ${{ inputs.org_uuid }}
+        site: datadoghq.com
+    - name: Verify API key was returned
+      shell: bash
+      env:
+        API_KEY: ${{ steps.dd-wif.outputs.api_key }}
+      run: |
+        if [ -z "$API_KEY" ]; then
+          echo "dd-wif succeeded but returned no API key"
+          exit 1
+        fi
