@@ -2,7 +2,6 @@
 
 const { performance } = require('node:perf_hooks')
 
-const satisfies = require('../../../vendor/dist/semifies')
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 const {
@@ -16,7 +15,13 @@ const {
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
-const { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
+const {
+  getRewrittenSql,
+  normalizeSql,
+  runSqlCommand,
+  wrapCallbackBundle,
+  wrapPromiseBundle,
+} = require('./mariadb-bundle')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -225,8 +230,10 @@ function finishPromiseQuery (ctx, result) {
  */
 function runPreparedExecute (ctx, execute, args) {
   const command = /** @type {{ sql: unknown }} */ (args[0])
-  const sql = command.sql
-  if (ctx.sql !== sql && typeof sql === 'string' && sql && typeof ctx.sql === 'string') command.sql = ctx.sql
+  const sql = getRewrittenSql(command.sql, ctx.sql)
+  if (sql !== undefined) {
+    command.sql = sql
+  }
   return execute.apply(this, args)
 }
 
@@ -257,12 +264,13 @@ function wrapLegacyStatement (statement) {
  * @param {boolean} raw
  */
 function runLegacyPrepare (ctx, originalSql, prepare, args, raw) {
-  if (ctx.sql !== originalSql && typeof originalSql === 'string' && originalSql && typeof ctx.sql === 'string') {
+  const sql = getRewrittenSql(originalSql, ctx.sql)
+  if (sql !== undefined) {
     if (raw) {
-      args[1] = ctx.sql
+      args[1] = sql
     } else {
       const command = /** @type {{ sql: unknown }} */ (args[0])
-      command.sql = ctx.sql
+      command.sql = sql
     }
   }
   const index = raw ? 3 : 1
@@ -303,8 +311,13 @@ function wrapLegacyExecute (Driver, callbackApi) {
         const target = raw ? arguments : /** @type {{ callback?: Function }} */ (cmdParam)
         const index = raw ? typeof arguments[2] === 'function' ? 2 : 3 : 'callback'
         const callback = target[index]
+        let completed = false
         /** @param {Error | null} error */
         target[index] = function (error) {
+          if (completed) {
+            return callback?.apply(this, arguments)
+          }
+          completed = true
           if (error) {
             ctx.error = error
             errorCh.publish(ctx)
@@ -609,11 +622,9 @@ addHook({ name, file: 'lib/connection.js', versions: ['>=3'], patchDefault: true
 addHook({
   name,
   file: 'lib/connection-promise.js',
-  versions: ['>=3 <3.4.1'],
+  versions: ['>=3 <3.3.0'],
   patchDefault: true,
-}, (Driver, version) => {
-  return satisfies(version, '<3.3.0') ? wrapLegacyExecute(Driver, false) : Driver
-})
+}, Driver => wrapLegacyExecute(Driver, false))
 addHook({ name, file: 'lib/connection-callback.js', versions: ['>=3 <3.4.1'], patchDefault: true }, Driver => {
   return wrapLegacyExecute(Driver, true)
 })

@@ -107,17 +107,23 @@ function normalizeSql (command) {
 }
 
 /**
- * @param {unknown} original
- * @param {unknown} injected
  * @param {unknown} originalSql
+ * @param {unknown} rewrittenSql
+ */
+function getRewrittenSql (originalSql, rewrittenSql) {
+  return rewrittenSql !== originalSql &&
+    typeof originalSql === 'string' && originalSql !== '' && typeof rewrittenSql === 'string'
+    ? rewrittenSql
+    : undefined
+}
+
+/**
+ * @param {unknown} original
+ * @param {string} injected
  * @param {boolean} [mirrorOptions]
  * @returns {unknown}
  */
-function withInjectedSql (original, injected, originalSql, mirrorOptions) {
-  if (typeof originalSql !== 'string' || !originalSql || typeof injected !== 'string') {
-    return original
-  }
-
+function withInjectedSql (original, injected, mirrorOptions) {
   if (typeof original === 'string') return injected
 
   const options = /** @type {{ values?: unknown, metaAsArray?: boolean }} */ (original)
@@ -149,8 +155,11 @@ function withInjectedSql (original, injected, originalSql, mirrorOptions) {
  * @param {boolean} [mirrorOptions]
  */
 function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions) {
-  if (preparedSql === undefined && ctx.sql !== originalSql) {
-    args[0] = withInjectedSql(args[0], ctx.sql, originalSql, mirrorOptions)
+  if (preparedSql === undefined) {
+    const sql = getRewrittenSql(originalSql, ctx.sql)
+    if (sql !== undefined) {
+      args[0] = withInjectedSql(args[0], sql, mirrorOptions)
+    }
   }
   return command.apply(this, args)
 }
@@ -1634,4 +1643,4 @@ function wrapCallbackBundle (mariadb) {
   ])
 }
 
-module.exports = { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }
+module.exports = { getRewrittenSql, normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }

@@ -961,13 +961,7 @@ describe('Plugin', () => {
                   async () => {
                     const options = { host: 'localhost', user: 'root', database: 'db', pipelining, prepareCacheLength }
                     const client = await mariadb.createConnection(options)
-                    const module = proxyquire(`../../../versions/mariadb@${version}`, {})
-                    const callbackDriver = module.get('mariadb/callback')
-                    const callbackClient = callbackDriver.createConnection(options)
-                    const connect = promisify(callbackClient.connect).bind(callbackClient)
-                    const end = promisify(callbackClient.end).bind(callbackClient)
-                    await connect()
-                    try {
+                    await withCallbackConnection(async callbackClient => {
                       for (const callback of [false, true]) {
                         for (const object of [false, true]) {
                           const marker = `dbm_execute_${callback}_${object}_${Date.now()}`
@@ -994,9 +988,7 @@ describe('Plugin', () => {
                           ])), { Prepare: prepareCacheLength ? 1 : 2, Execute: 2 })
                         }
                       }
-                    } finally {
-                      await Promise.all([client.end(), end()])
-                    }
+                    }, options).finally(() => client.end())
                   })
               }
             }
@@ -1055,6 +1047,33 @@ describe('Plugin', () => {
                 await assertSingleQueryTrace(sql, () => assert.rejects(execute(sql), { errno: 1064 }), expectedSpan)
               })
             })
+
+            if (semver.intersects(version, '<3.4.1')) {
+              it('should keep pooled execute successful when its callback throws', async () => {
+                const callbackDriver = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+                const pool = callbackDriver.createPool({ host: 'localhost', user: 'root', database: 'db' })
+                const sql = 'SELECT 42 AS dbm_callback_throw'
+                const failure = new Error('application callback failed')
+                let result
+                try {
+                  const [, error] = await assertSingleQueryTrace(sql, () => new Promise(resolve => {
+                    pool.execute(sql, (error, rows) => {
+                      if (error) {
+                        resolve(error)
+                        return
+                      }
+                      result = rows
+                      throw failure
+                    })
+                  }), { error: 0 })
+                  assert.strictEqual(error, failure)
+                  assert.strictEqual(Number(result[0].dbm_callback_throw), 42)
+                } finally {
+                  const end = promisify(pool.end)
+                  await end.call(pool)
+                }
+              })
+            }
 
             if (semver.intersects(version, '>=3.1.0 <3.4.1')) {
               it('should not change callback pool options when preparation fails', async () => {
