@@ -27,6 +27,7 @@ const {
   nextAppRouteResponse,
   expressProcessParams,
   routerParam,
+  routerRouteCreate,
   responseBody,
   responseWriteHead,
   responseSetHeader,
@@ -238,6 +239,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(nextQueryParsed.hasSubscribers, false)
       assert.strictEqual(expressProcessParams.hasSubscribers, false)
       assert.strictEqual(routerParam.hasSubscribers, false)
+      assert.strictEqual(routerRouteCreate.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
       assert.strictEqual(informationalResponse.hasSubscribers, false)
@@ -254,6 +256,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(nextQueryParsed.hasSubscribers, true)
       assert.strictEqual(expressProcessParams.hasSubscribers, true)
       assert.strictEqual(routerParam.hasSubscribers, true)
+      assert.strictEqual(routerRouteCreate.hasSubscribers, true)
       assert.strictEqual(responseWriteHead.hasSubscribers, true)
       assert.strictEqual(responseSetHeader.hasSubscribers, true)
       assert.strictEqual(informationalResponse.hasSubscribers, true)
@@ -338,6 +341,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(nextQueryParsed.hasSubscribers, false)
       assert.strictEqual(expressProcessParams.hasSubscribers, false)
       assert.strictEqual(routerParam.hasSubscribers, false)
+      assert.strictEqual(routerRouteCreate.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
       assert.strictEqual(informationalResponse.hasSubscribers, false)

@@ -1,7 +1,11 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { runUpload } from './run-upload.mjs'
+import { Semaphore } from './semaphore.mjs'
 
 const INPUT_DIR = 'junit-results'
+const MAX_CONCURRENT_UPLOADS = 4
+const RUN_ATTEMPT_PROPERTY = /<property name="GITHUB_RUN_ATTEMPT" value="(\d+)"/
 
 // Every sibling workflow's upload is merged into one call, so datadog-ci's own GITHUB_*-derived
 // Pipeline/Job tags would attribute every test to the All Green workflow instead of the one that
@@ -18,34 +22,88 @@ const XPATH_TAGS = [
   "ci.job.name=/testcase/..//property[@name='ci.job.name']/@value",
 ]
 
-// datadog-ci derives its own ci.pipeline.name/id/number/url and ci.job.name tags directly from
-// these GITHUB_* variables (the All Green job's own), applying the same values to every file in
-// the batched upload — which would overwrite the per-test XPATH_TAGS values above. Blanking just
-// these four leaves every other GITHUB_*-derived tag (repository URL, PR association, commit SHA)
-// untouched, since those don't collide with anything XPATH_TAGS sets.
+// datadog-ci derives ci.pipeline.*/ci.job.* tags from these GITHUB_* variables, which are All Green's
+// own here and would overwrite the per-test XPATH_TAGS values above. JOB_CHECK_RUN_ID and DD_GITHUB_JOB_NAME
+// are All Green's job id and name, so they would point the uploaded tests at a job that did not run them.
 const NO_PIPELINE_ATTRIBUTION_ENV = {
   GITHUB_WORKFLOW: '',
   GITHUB_JOB: '',
   GITHUB_RUN_ID: '',
   GITHUB_RUN_NUMBER: '',
+  JOB_CHECK_RUN_ID: '',
+  DD_GITHUB_JOB_NAME: '',
+}
+
+const uploadSemaphore = new Semaphore(MAX_CONCURRENT_UPLOADS)
+
+/**
+ * @param {string} file
+ */
+function isJunitReport (file) {
+  const name = basename(file)
+  return name.endsWith('.xml') && (name.includes('junit') || name.includes('test') || name.includes('TEST-'))
 }
 
 /**
- * Upload every sibling workflow's downloaded junit reports to Datadog in a single call.
- * `--auto-discovery` already walks `junit-results/<run-id>/<artifact-name>/*.xml` recursively and
- * uploads every matching file itself (with its own internal concurrency), so there's no need to
- * merge the reports into one document first — each testcase's `node_version` and `ci.*` properties
- * (see `XPATH_TAGS`) keep matrix cells and originating workflows distinguishable regardless of which
- * file they came from.
+ * Group the downloaded reports under `junit-results/<run-id>/` by the run attempt stamped into
+ * each report, so each group can be uploaded with its own run's GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT.
+ * Datadog derives the pipeline correlation id from those two values; without it, the tests can't
+ * be linked to the pipeline that ran them.
+ *
+ * @param {string} inputDir
+ * @returns {Array<{ runId: string, runAttempt: string | undefined, files: string[] }>}
+ */
+export function groupJunitReports (inputDir) {
+  const groups = new Map()
+  for (const runId of readdirSync(inputDir)) {
+    const runDir = join(inputDir, runId)
+    for (const file of readdirSync(runDir, { recursive: true })) {
+      if (!isJunitReport(file)) continue
+      const path = join(runDir, file)
+      const runAttempt = readFileSync(path, 'utf8').match(RUN_ATTEMPT_PROPERTY)?.[1]
+      const key = `${runId}/${runAttempt}`
+      let group = groups.get(key)
+      if (!group) {
+        group = { runId, runAttempt, files: [] }
+        groups.set(key, group)
+      }
+      group.files.push(path)
+    }
+  }
+  return [...groups.values()]
+}
+
+/**
+ * Reports without a stamped run attempt (e.g. from before it was stamped) keep the old
+ * unattributed upload.
+ *
+ * @param {{ runId: string, runAttempt: string | undefined }} group
+ * @returns {Record<string, string>}
+ */
+export function junitUploadEnv ({ runId, runAttempt }) {
+  if (!runAttempt) return NO_PIPELINE_ATTRIBUTION_ENV
+  return { ...NO_PIPELINE_ATTRIBUTION_ENV, GITHUB_RUN_ID: runId, GITHUB_RUN_ATTEMPT: runAttempt }
+}
+
+/**
+ * Upload every sibling workflow's downloaded junit reports to Datadog, one call per run attempt.
  *
  * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
 export async function uploadAllJunit () {
   if (!existsSync(INPUT_DIR)) return []
 
-  const result = await runUpload('datadog-ci', [
-    'junit', 'upload', '--service', 'dd-trace-js-tests', '--auto-discovery', INPUT_DIR,
-    ...XPATH_TAGS.flatMap(tag => ['--xpath-tag', tag]),
-  ], NO_PIPELINE_ATTRIBUTION_ENV)
-  return [result]
+  return await Promise.all(groupJunitReports(INPUT_DIR).map(async (group, index) => {
+    await uploadSemaphore.acquire()
+    try {
+      return await runUpload('datadog-ci', [
+        'junit', 'upload', '--service', 'dd-trace-js-tests',
+        ...(index === 0 ? [] : ['--skip-git-metadata-upload']),
+        ...XPATH_TAGS.flatMap(tag => ['--xpath-tag', tag]),
+        ...group.files,
+      ], junitUploadEnv(group))
+    } finally {
+      uploadSemaphore.release()
+    }
+  }))
 }
