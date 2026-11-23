@@ -125,9 +125,9 @@ function setHttpClientCheckpoint (tracer, span, parentContext, headers) {
 }
 
 /** @type {typeof import('./http').isAwsSdkRequest} */
-function isAwsSdkRequest (parentSpan, invocationId) {
+function isAwsSdkRequest (parentSpan, headers) {
   http ??= require('./http')
-  return http.isAwsSdkRequest(parentSpan, invocationId)
+  return http.isAwsSdkRequest(parentSpan, headers)
 }
 
 /** @type {typeof import('./http').setHttpServerCheckpoint} */

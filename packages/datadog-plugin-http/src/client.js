@@ -99,7 +99,7 @@ class HttpClientPlugin extends ClientPlugin {
         this.config.dsmEnabled &&
         this.config.DD_DATA_STREAMS_HTTP_ENABLED &&
         allowed &&
-        !isAwsSdkRequest(store?.span, options.headers['amz-sdk-invocation-id'])
+        !isAwsSdkRequest(store?.span, options.headers)
       ) {
         dataStreamsContext = setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, options.headers)
       }

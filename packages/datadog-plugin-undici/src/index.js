@@ -125,7 +125,7 @@ class UndiciPlugin extends HttpClientPlugin {
         this.config.dsmEnabled &&
         this.config.DD_DATA_STREAMS_HTTP_ENABLED &&
         allowed &&
-        !isAwsSdkRequest(store?.span, normalizeHeaders(request.headers)['amz-sdk-invocation-id'])
+        !isAwsSdkRequest(store?.span, normalizeHeaders(request.headers))
       ) {
         removeHeader(request, dsmBase64Name)
         setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, headers)
