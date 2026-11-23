@@ -20,7 +20,7 @@ app.http('httptest2', {
   authLevel: 'anonymous',
   route: 'httptest2/{id}',
   handler: async (request, context) => {
-    const response = await fetch('http://127.0.0.1:7071/api/httptest')
+    const response = await fetch(new URL('../httptest', request.url))
     await response.text()
     return {
       status: 200,

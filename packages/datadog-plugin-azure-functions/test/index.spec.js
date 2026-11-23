@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -8,6 +10,7 @@ const sinon = require('sinon')
 require('../../dd-trace/test/setup/core')
 
 const { defaults } = require('../../dd-trace/src/config/defaults')
+const log = require('../../dd-trace/src/log')
 const web = require('../../dd-trace/src/plugins/util/web')
 const AzureFunctionsPlugin = require('../src')
 
@@ -155,6 +158,111 @@ describe('azure-functions HTTP invocation lifecycle', () => {
     plugin.bindStart(ctx)
     return ctx
   }
+
+  describe('HTTP route prefixes', () => {
+    let readFile
+
+    beforeEach(() => {
+      sinon.stub(process, 'env').value({ ...process.env, AzureWebJobsScriptRoot: '/azure-app' })
+      delete process.env.AzureFunctionsJobHost__extensions__http__routePrefix
+      readFile = sinon.stub(fs, 'readFileSync').callThrough()
+      readFile.withArgs(path.join('/azure-app', 'host.json'), 'utf8').returns('{"version":"2.0"}')
+    })
+
+    for (const [prefix, expected] of [
+      [undefined, '/api/items/{id}'],
+      ['v2/functions', '/v2/functions/items/{id}'],
+      ['', '/items/{id}'],
+      [null, '/api/items/{id}'],
+      [[], '/items/{id}'],
+    ]) {
+      it(`includes the configured prefix ${JSON.stringify(prefix)} before sampling`, () => {
+        readFile.withArgs(path.join('/azure-app', 'host.json'), 'utf8').returns(JSON.stringify({
+          extensions: { http: { routePrefix: prefix } },
+        }))
+        const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+        const tags = span.context().getTags()
+        assert.strictEqual(tags['http.route'], expected)
+        assert.strictEqual(tags['resource.name'], `GET ${expected}`)
+      })
+    }
+
+    for (const prefix of ['custom', '']) {
+      it(`gives the environment prefix ${JSON.stringify(prefix)} precedence over host.json`, () => {
+        process.env.AzureFunctionsJobHost__extensions__http__routePrefix = prefix
+        const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+        assert.strictEqual(span.context().getTag('http.route'), `${prefix ? `/${prefix}` : ''}/items/{id}`)
+        sinon.assert.notCalled(readFile)
+      })
+    }
+
+    for (const route of ['/items/{id}', 'items/{id:int?}', 'items/{*rest}']) {
+      it(`preserves the function template ${route} when adding the prefix`, () => {
+        const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, route)
+        const expected = `/api${route.startsWith('/') ? route : `/${route}`}`
+        assert.strictEqual(span.context().getTag('http.route'), expected)
+        assert.strictEqual(span.context().getTag('resource.name'), `GET ${expected}`)
+      })
+    }
+
+    it('uses the worker working directory when the app-root environment variable is absent', () => {
+      delete process.env.AzureWebJobsScriptRoot
+      sinon.stub(process, 'cwd').returns('/azure-app')
+      const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      assert.strictEqual(span.context().getTag('http.route'), '/api/test-function')
+    })
+
+    it('caches the prefix for subsequent invocations', () => {
+      bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+      readFile.withArgs(path.join('/azure-app', 'host.json'), 'utf8')
+        .returns('{"extensions":{"http":{"routePrefix":"new"}}}')
+      const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+      assert.strictEqual(span.context().getTag('http.route'), '/api/items/{id}')
+      sinon.assert.calledOnce(readFile)
+    })
+
+    for (const value of [Object.assign(new Error('unreadable'), { code: 'EACCES' }), '{invalid JSON']) {
+      it(`preserves the function-relative route when configuration fails with ${String(value)}`, () => {
+        const debug = sinon.spy(log, 'debug')
+        const readHost = readFile.withArgs(path.join('/azure-app', 'host.json'), 'utf8')
+        if (value instanceof Error) {
+          readHost.throws(value)
+        } else {
+          readHost.returns(value)
+        }
+        const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+        assert.strictEqual(span.context().getTag('http.route'), '/items/{id}')
+        bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true }, 'items/{id}')
+        sinon.assert.calledOnce(readFile)
+        sinon.assert.calledOnceWithExactly(
+          debug,
+          'Cannot determine Azure Functions route prefix: %s',
+          value instanceof Error ? 'EACCES' : 'SyntaxError'
+        )
+      })
+    }
+
+    it('accepts a UTF-8 byte order mark', () => {
+      readFile.withArgs(path.join('/azure-app', 'host.json'), 'utf8').returns('\uFEFF{"version":"2.0"}')
+      const { span } = bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      assert.strictEqual(span.context().getTag('http.route'), '/api/test-function')
+    })
+
+    it('does not read host configuration with Datadog semantics', () => {
+      bindHttpStart('', { DD_TRACE_OTEL_SEMANTICS_ENABLED: false })
+      sinon.assert.notCalled(readFile)
+    })
+
+    it('does not read host configuration for non-HTTP invocations', () => {
+      plugin.configure({ enabled: false, DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      plugin.bindStart({
+        currentStore: {},
+        functionName: 'test-function',
+        methodName: 'cosmosDB',
+      })
+      sinon.assert.notCalled(readFile)
+    })
+  })
 
   for (const [route, expectedRoute] of [
     [undefined, '/test-function'],
