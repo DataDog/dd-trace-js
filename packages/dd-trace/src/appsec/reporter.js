@@ -7,6 +7,7 @@ const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
+const SpanProcessor = require('../span_processor')
 const { ASM } = require('../standalone/product')
 const { isEmpty, truncateString, typedArrayLength } = require('../util')
 const { getActiveRequest } = require('./store')
@@ -389,7 +390,8 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
     req = getActiveRequest()
   }
 
-  if (!rootSpan) {
+  const isHttpRequest = !rootSpan
+  if (isHttpRequest) {
     rootSpan = web.root(req)
   }
 
@@ -419,6 +421,10 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
   }
 
   rootSpan.addTags(newTags)
+
+  if (isHttpRequest) {
+    SpanProcessor.requestPartialFlushOnFinish(rootSpan)
+  }
 
   // Add _dd.appsec.json tag to inferred proxy span
   if (config.inferredProxyServicesEnabled) {

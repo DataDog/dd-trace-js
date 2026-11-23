@@ -18,6 +18,7 @@ const traceSampledCh = channel('dd-trace:trace:sampled')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+let partialFlushOnFinishKey
 let otelSampling
 
 /** @param {import('./opentracing/span_context')} context */
@@ -90,6 +91,12 @@ class SpanProcessor {
     return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT
   }
 
+  /** @param {import('./opentracing/span')} span */
+  static requestPartialFlushOnFinish (span) {
+    partialFlushOnFinishKey ??= Symbol('partialFlushOnFinish')
+    span.context()[partialFlushOnFinishKey] = true
+  }
+
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -103,7 +110,11 @@ class SpanProcessor {
       this._erase(trace, active)
       return
     }
-    if (started.length === finished.length || finished.length >= flushMinSpans) {
+    if (
+      started.length === finished.length ||
+      finished.length >= flushMinSpans ||
+      (partialFlushOnFinishKey !== undefined && spanContext[partialFlushOnFinishKey] === true)
+    ) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
