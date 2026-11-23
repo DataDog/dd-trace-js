@@ -13,6 +13,10 @@ function getVitestWorkerPort () {
 }
 
 class Writer {
+  #pendingFlushes = 0
+  #flushCallbacks = []
+  #flushError
+
   constructor (interprocessCode) {
     this._encoder = new JSONEncoder()
     // Code used to identify the type of payload being sent to the main process
@@ -21,18 +25,36 @@ class Writer {
   }
 
   /**
+   * Waits for earlier sends so finalization cannot close the worker with traces in flight.
+   *
    * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
     const count = this._encoder.count()
+    if (onDone) this.#flushCallbacks.push(onDone)
 
     if (count > 0) {
       const payload = this._encoder.makePayload()
 
-      this._sendPayload(payload, onDone)
+      this.#pendingFlushes++
+      this._sendPayload(payload, error => {
+        this.#flushError ||= error
+        this.#pendingFlushes--
+        this.#finishFlush()
+      })
     } else {
-      onDone?.()
+      this.#finishFlush()
     }
+  }
+
+  #finishFlush () {
+    if (this.#pendingFlushes || !this.#flushCallbacks.length) return
+
+    const callbacks = this.#flushCallbacks
+    const error = this.#flushError
+    this.#flushCallbacks = []
+    this.#flushError = undefined
+    for (const callback of callbacks) callback(error)
   }
 
   append (payload) {

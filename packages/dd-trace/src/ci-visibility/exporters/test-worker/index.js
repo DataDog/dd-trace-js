@@ -91,12 +91,15 @@ function getInterprocessTelemetryCode () {
  * Currently used by Jest, Cucumber and Mocha workers.
  */
 class TestWorkerCiVisibilityExporter {
+  #flushTracesImmediately
+
   constructor () {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()
     const interprocessLogsCode = getInterprocessLogsCode()
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
+    this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
     this._writer = new Writer(interprocessTraceCode)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
@@ -110,6 +113,8 @@ class TestWorkerCiVisibilityExporter {
 
   export (payload) {
     this._writer.append(payload)
+    // A Vitest file can produce more JSON than V8 can fit in one string, especially with retries.
+    if (this.#flushTracesImmediately) this._writer.flush()
   }
 
   exportCoverage (formattedCoverage) {
