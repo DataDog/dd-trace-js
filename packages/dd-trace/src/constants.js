@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  OTEL_B3_STYLE: 'OTel b3',
   SAMPLING_PRIORITY_KEY: '_sampling_priority_v1',
   ANALYTICS_KEY: '_dd1.sr.eausr',
   ORIGIN_KEY: '_dd.origin',

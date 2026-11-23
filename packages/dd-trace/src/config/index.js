@@ -25,14 +25,13 @@ const {
   getIsGCPFunction,
   getIsAzureFunction,
 } = require('../serverless')
-const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH, OTEL_B3_STYLE } = require('../constants')
 const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
-  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -200,6 +199,8 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
+  #hasConfiguredDatadogPropagationStyle = false
+
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -284,6 +285,9 @@ class Config extends ConfigBase {
    */
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
+      if (name === 'DD_TRACE_PROPAGATION_STYLE' && source !== 'remote_config') {
+        this.#hasConfiguredDatadogPropagationStyle = true
+      }
       const entry = configurationsTable[name]
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
@@ -355,6 +359,8 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
+    // Remove calculated fallbacks before applying and resolving the replacement settings.
+    undo(this, 'calculated')
     // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
@@ -379,8 +385,6 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
-    undo(this, 'calculated')
-
     if (this.isCiVisibility) {
       setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
       setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
@@ -484,24 +488,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
     } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
-    }
-
-    // TODO: Remove the experimental env vars as a major or deprecate the option?
-    if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3')) {
-        this.tracePropagationStyle.inject.push('b3')
-      }
-      if (!this.tracePropagationStyle.extract.includes('b3')) {
-        this.tracePropagationStyle.extract.push('b3')
-      }
-      if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
-        this.tracePropagationStyle.inject.push('b3 single header')
-      }
-      if (!this.tracePropagationStyle.extract.includes('b3 single header')) {
-        this.tracePropagationStyle.extract.push('b3 single header')
-      }
-      setAndTrack(this, 'tracePropagationStyle.inject', this.tracePropagationStyle.inject)
-      setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
     if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
@@ -730,18 +716,39 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
-    // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
-    // propagation on its own. A set DD_TRACE_PROPAGATION_STYLE takes precedence, even when its value is invalid
-    // and its own default applies. Runs before the fallbacks so the inject and extract styles inherit it.
+    // A startup DD_TRACE_PROPAGATION_STYLE takes precedence even if its value was invalid.
     if (trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
-      getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') === undefined) {
-      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', this.OTEL_PROPAGATORS)
+        !this.#hasConfiguredDatadogPropagationStyle &&
+        !trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE')) {
+      const styles = DD_MAJOR < 6
+        ? this.OTEL_PROPAGATORS.map(style => style === 'b3' ? OTEL_B3_STYLE : style)
+        : this.OTEL_PROPAGATORS
+      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', styles)
     }
 
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
+      }
+    }
+
+    if (this.experimental?.b3) {
+      for (const direction of /** @type {const} */ (['inject', 'extract'])) {
+        const path = `tracePropagationStyle.${direction}`
+        const styles = this.tracePropagationStyle[direction]
+        const otelB3 = styles.includes(OTEL_B3_STYLE)
+        // Shared styles take precedence over the legacy flag. The flag can add multi-header B3 to OTel B3.
+        if (!otelB3 && trackedConfigOrigins.get(path) === 'calculated') continue
+
+        const hasMulti = styles.includes('b3') || styles.includes('b3multi')
+        const hasSingle = otelB3 || styles.includes('b3 single header')
+        if (hasMulti && hasSingle) continue
+
+        const expanded = [...styles]
+        if (!hasMulti) expanded.push(otelB3 ? 'b3multi' : 'b3')
+        if (!hasSingle) expanded.push('b3 single header')
+        setAndTrack(this, path, expanded)
       }
     }
 
