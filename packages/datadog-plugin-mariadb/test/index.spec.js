@@ -14,7 +14,7 @@ const semver = require('semver')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
+const { ANY_STRING, assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const { withFakeNow, withoutImmediateClockRead } = require('./helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -696,8 +696,8 @@ describe('Plugin', () => {
           return rows[0].argument.toString()
         }
 
-        async function connect (config) {
-          await agent.load('mariadb', config)
+        async function connect (config, tracerConfig) {
+          await agent.load('mariadb', config, tracerConfig)
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
           connection = await mariadb.createConnection({
@@ -715,6 +715,63 @@ describe('Plugin', () => {
           await connection.end()
           await agent.close()
         })
+
+        if (semver.intersects(version, '>=3')) {
+          it('should escape process metadata in prepared SQL comments', async () => {
+            await connect({ dbmPropagationMode: 'service' }, { service: 'svc*/name', version: 'v*/tag' })
+            const sql = 'SELECT ? AS dbm_process_metadata'
+            const [, rows] = await assertSingleQueryTrace(sql, () => connection.execute(sql, [23]))
+            assert.strictEqual(Number(rows[0].dbm_process_metadata), 23)
+            assert.match(await receivedQuery('dbm_process_metadata', true),
+              /ddps='svc\*%2Fname',ddpv='v\*%2Ftag'\*\/ SELECT \? AS dbm_process_metadata$/)
+          })
+
+          describe('with a tracer logger', () => {
+            useEnv({ DD_TRACE_DEBUG: 'true' })
+
+            it('should not propagate into queries started from a suppressed execute', async () => {
+              const message = 'execute from the tracer logger'
+              const sql = 'SELECT 42 AS dbm_suppressed_execute'
+              const nestedSql = 'SELECT 43 AS dbm_suppressed_nested'
+              let execution
+              let nested
+              await connect({ dbmPropagationMode: 'service' }, {
+                logger: {
+                  debug () {},
+                  error (error) {
+                    if (error.message === message) {
+                      execution = client.execute(sql)
+                    }
+                  },
+                },
+              })
+
+              const client = await mariadb.createConnection({
+                host: 'localhost',
+                user: 'root',
+                database: 'db',
+                prepareCacheLength: 0,
+                logger: {
+                  query (statement) {
+                    if (statement.startsWith('EXECUTE:') && statement.includes(sql)) {
+                      nested = connection.query(nestedSql)
+                    }
+                  },
+                },
+              })
+              try {
+                require('../../dd-trace/src/log').error(message)
+                assert.ok(execution)
+                await execution
+                assert.ok(nested)
+                await nested
+                assert.strictEqual(await receivedQuery('dbm_suppressed_nested'), nestedSql)
+              } finally {
+                await client.end()
+              }
+            })
+          })
+        }
 
         describe('with service mode using plugin configurations', () => {
           beforeEach(() => connect({ dbmPropagationMode: 'service', service: 'serviced' }))
@@ -787,6 +844,42 @@ describe('Plugin', () => {
           })
 
           if (semver.intersects(version, '>=3')) {
+            for (const callback of [false, true]) {
+              it(`should activate the query span in the ${callback ? 'callback' : 'promise'} execute logger`,
+                async () => {
+                  const sql = 'SELECT ? AS dbm_execute_logger'
+                  const components = []
+                  const options = {
+                    host: 'localhost',
+                    user: 'root',
+                    database: 'db',
+                    pipelining: false,
+                    logger: {
+                      query (message) {
+                        if (message.startsWith('EXECUTE:') && message.includes('dbm_execute_logger')) {
+                          const span = global._ddtrace.scope().active()
+                          components.push(span?.context().getTags().component)
+                        }
+                      },
+                    },
+                  }
+                  if (callback) {
+                    await withCallbackConnection(client => {
+                      const execute = promisify(client.execute).bind(client)
+                      return assertSingleQueryTrace(sql, () => execute(sql, [23]))
+                    }, options)
+                  } else {
+                    const client = await mariadb.createConnection(options)
+                    try {
+                      await assertSingleQueryTrace(sql, () => client.execute(sql, [23]))
+                    } finally {
+                      await client.end()
+                    }
+                  }
+                  assert.deepStrictEqual(components, ['mariadb'])
+                })
+            }
+
             if (semver.intersects(version, '>=3 <3.3.0')) {
               for (const callback of [false, true]) {
                 const api = callback ? 'callback' : 'promise'
@@ -960,35 +1053,46 @@ describe('Plugin', () => {
                 it(`should inject execute before preparation (pipeline=${pipelining}, cache=${prepareCacheLength})`,
                   async () => {
                     const options = { host: 'localhost', user: 'root', database: 'db', pipelining, prepareCacheLength }
-                    const client = await mariadb.createConnection(options)
-                    await withCallbackConnection(async callbackClient => {
-                      for (const callback of [false, true]) {
-                        for (const object of [false, true]) {
-                          const marker = `dbm_execute_${callback}_${object}_${Date.now()}`
-                          const sql = `SELECT ? AS ${marker}`
-                          const command = object ? { sql } : sql
-                          const execute = callback
-                            ? promisify(callbackClient.execute).bind(callbackClient)
-                            : client.execute.bind(client)
-
-                          for (const value of [41, 42]) {
+                    const freshConnection = !pipelining && prepareCacheLength === 0
+                    const valuesPerConnection = freshConnection ? [[41], [42]] : [[41, 42]]
+                    for (const callback of [false, true]) {
+                      for (const object of [false, true]) {
+                        const marker = `dbm_execute_${callback}_${object}_${Date.now()}`
+                        const sql = `SELECT ? AS ${marker}`
+                        const command = object ? { sql } : sql
+                        const check = async (execute, values) => {
+                          for (const value of values) {
                             const [, rows] = await assertSingleQueryTrace(sql, () => execute(command, [value]))
                             assert.strictEqual(Number(rows[0][marker]), value)
                             assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
                           }
-                          if (object) assert.strictEqual(command.sql, sql)
-                          const commands = await connection.query(
-                            'SELECT command_type, COUNT(*) AS count FROM mysql.general_log ' +
-                            "WHERE command_type IN ('Prepare', 'Execute') AND argument LIKE ? " +
-                            "AND argument NOT LIKE '%general_log%' GROUP BY command_type",
-                            [`%${marker}%`]
-                          )
-                          assert.deepStrictEqual(Object.fromEntries(commands.map(row => [
-                            row.command_type, Number(row.count),
-                          ])), { Prepare: prepareCacheLength ? 1 : 2, Execute: 2 })
                         }
+                        for (const values of valuesPerConnection) {
+                          if (callback) {
+                            await withCallbackConnection(
+                              client => check(promisify(client.execute).bind(client), values), options
+                            )
+                          } else {
+                            const client = await mariadb.createConnection(options)
+                            try {
+                              await check(client.execute.bind(client), values)
+                            } finally {
+                              await client.end()
+                            }
+                          }
+                        }
+                        if (object) assert.strictEqual(command.sql, sql)
+                        const commands = await connection.query(
+                          'SELECT command_type, COUNT(*) AS count FROM mysql.general_log ' +
+                          "WHERE command_type IN ('Prepare', 'Execute') AND argument LIKE ? " +
+                          "AND argument NOT LIKE '%general_log%' GROUP BY command_type",
+                          [`%${marker}%`]
+                        )
+                        assert.deepStrictEqual(Object.fromEntries(commands.map(row => [
+                          row.command_type, Number(row.count),
+                        ])), { Prepare: prepareCacheLength ? 1 : 2, Execute: 2 })
                       }
-                    }, options).finally(() => client.end())
+                    }
                   })
               }
             }

@@ -2,6 +2,7 @@
 
 const { performance } = require('node:perf_hooks')
 
+const { storage } = require('../../datadog-core')
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 const {
@@ -38,7 +39,8 @@ const poolAcquireChannels = {
   acquireFinishCh,
 }
 const wrappedPools = new WeakSet()
-const executeCommands = new WeakSet()
+const executeContexts = new WeakMap()
+const legacyStorage = storage('legacy')
 
 /**
  * @typedef {object} PoolAcquireTiming
@@ -91,10 +93,29 @@ function wrapCommandStart (start, ctx) {
 function wrapCommand (Command, execute) {
   return class extends Command {
     constructor (...args) {
-      const traced = execute && (executeCommands.has(args[3]) || executeCommands.delete(args[4]))
+      let prepared
+      if (execute) {
+        prepared = executeContexts.get(args[3])
+        if (!prepared) {
+          prepared = executeContexts.get(args[4])
+          if (prepared) {
+            executeContexts.delete(args[4])
+          }
+        }
+      }
       super(...args)
 
-      if (!this.start || traced) return
+      if (!this.start) return
+      if (prepared) {
+        const store = prepared.currentStore
+        if (store) {
+          const start = this.start
+          this.start = function () {
+            return legacyStorage.run(store, Reflect.apply, start, this, arguments)
+          }
+        }
+        return
+      }
 
       const ctx = { sql: this.sql, conf: this.opts }
 
@@ -172,7 +193,7 @@ function wrapPreparedExecute (execute) {
     if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
     commandAddCh.publish(ctx)
-    executeCommands.add(cmdParam)
+    executeContexts.set(cmdParam, ctx)
     let completed = false
     if (!promise) {
       arguments[1] = function () {
@@ -239,15 +260,19 @@ function runPreparedExecute (ctx, execute, args) {
 
 /** @typedef {{ execute: Function, close: () => unknown }} LegacyStatement */
 
-/** @param {LegacyStatement} statement */
-function wrapLegacyStatement (statement) {
+/**
+ * @param {LegacyStatement} statement
+ * @param {{ sql: unknown }} ctx
+ */
+function wrapLegacyStatement (statement, ctx) {
   return {
+    nativeStatement: statement,
     execute () {
-      executeCommands.add(statement)
+      executeContexts.set(statement, ctx)
       try {
         return statement.execute.apply(statement, arguments)
       } finally {
-        executeCommands.delete(statement)
+        executeContexts.delete(statement)
       }
     },
     close () {
@@ -275,7 +300,7 @@ function runLegacyPrepare (ctx, originalSql, prepare, args, raw) {
   }
   const index = raw ? 3 : 1
   const resolve = /** @type {(statement: LegacyStatement) => void} */ (args[index])
-  args[index] = statement => resolve(wrapLegacyStatement(statement))
+  args[index] = statement => resolve(wrapLegacyStatement(statement, ctx))
   return prepare.apply(this, args)
 }
 
@@ -303,8 +328,14 @@ function wrapLegacyExecute (Driver, callbackApi) {
           ctx.sql = sql
           return startCh.runStores(ctx, runLegacyPrepare, connection, ctx, sql, connection.prepare, arguments, raw)
         },
+        executePromise () {
+          if (!raw) {
+            executeContexts.set(arguments[0], ctx)
+            arguments[1] = arguments[1].nativeStatement
+          }
+          return connection.executePromise.apply(connection, arguments)
+        },
       }
-      if (raw) adapter.executePromise = connection.executePromise.bind(connection)
       arguments[0] = adapter
 
       if (callbackApi) {

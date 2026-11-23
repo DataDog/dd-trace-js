@@ -114,6 +114,17 @@ describe('DatabasePlugin DBM caching', () => {
     assert.match(plugin.createDbmComment(span, 'svc'), /dde='newenv'/)
   })
 
+  it('encodes malformed Unicode in process metadata without breaking configuration', () => {
+    const span = makeSpan()
+    tracer._service = 'service-\uD800'
+    tracer._version = 'release-\uDC00'
+    plugin.configure({ dbmPropagationMode: 'disabled', enabled: true })
+    assert.strictEqual(plugin.createDbmComment(span, 'svc'), null)
+
+    plugin.configure({ dbmPropagationMode: 'service', enabled: true })
+    assert.match(plugin.createDbmComment(span, 'svc'), /ddps='service-%EF%BF%BD',ddpv='release-%EF%BF%BD'$/)
+  })
+
   it('appends ddprs= when peer-service is in scope', () => {
     const span = makeSpan({ 'db.name': 'mydb', 'out.host': 'host1' })
     plugin.getPeerService = () => ({
