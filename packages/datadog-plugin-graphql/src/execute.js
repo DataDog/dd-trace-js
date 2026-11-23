@@ -55,6 +55,8 @@ const originalResolvers = new WeakMap()
 // `patchedResolvers` keeps wrapping idempotent, so re-walking a shared type is
 // safe and this set only terminates cycles.
 const walkedTypes = new WeakMap()
+// Schemas with an object type field that GraphQL resolves with the default or contextual field resolver.
+const schemasWithDefaultResolvers = new WeakSet()
 
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
@@ -1074,7 +1076,10 @@ function wrapFields (type, schema) {
   }
 
   if (type._fields) {
+    // Interface fields never run: GraphQL resolves the field of the concrete object type.
+    const isObjectType = schema !== undefined && tag === 'GraphQLObjectType'
     for (const field of Object.values(type._fields)) {
+      if (isObjectType && !field.resolve) schemasWithDefaultResolvers.add(schema)
       wrapFieldResolve(field)
       wrapFieldType(field, schema)
     }
@@ -1667,6 +1672,7 @@ module.exports.addField = addField
 module.exports.createResolverInfo = createResolverInfo
 module.exports.findCollapsedField = findCollapsedField
 module.exports.wrapFields = wrapFields
+module.exports.hasDefaultResolvers = schema => schemasWithDefaultResolvers.has(schema)
 module.exports.readJitDefaultInScope = readJitDefaultInScope
 module.exports.recordJitResolverError = recordJitResolverError
 module.exports.resolveCompiledJitField = resolveCompiledJitField

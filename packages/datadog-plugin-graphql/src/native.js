@@ -19,6 +19,7 @@ const {
   addField,
   createResolverInfo,
   findCollapsedField,
+  hasDefaultResolvers,
   wrapFields,
 } = GraphQLExecutePlugin
 
@@ -65,16 +66,18 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
   static extraPrefixes = []
 
   bindStart (ctx) {
-    resolvePlugin?.enableIfNeeded()
     const { schema, document } = ctx
     // The `operationName` getter resolves the operation and throws on a malformed document.
     const operationName = Array.isArray(document?.definitions) ? ctx.operationName : undefined
     ctx.arguments = [{ schema, document, variableValues: ctx.rawVariableValues, operationName }]
     const store = super.bindStart(ctx)
 
+    // The schema walk in super.bindStart() finds the fields left to the default resolver.
+    resolvePlugin?.enableIfNeeded(schema)
     const rootCtx = ctx.ddRootCtx
     if (rootCtx) {
       rootCtx.native = true
+      rootCtx.resolveChannel = resolvePlugin?._enabled === true
       rootCtx.document = document
       rootCtx.operation = getOperation(document, operationName)
       if (this.config.hooks.execute) rootCtx.hookArgs = ctx.ddArgs
@@ -110,7 +113,10 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
       for (const error of errors) {
         const originalError = error.originalError ?? error
         if (Array.isArray(error.path) && !resolveErrors.has(originalError)) {
-          recordResolveErrorForPath(originalError, error.path, undefined, ctx.ddRootCtx)
+          // Without the resolve channel, the schema wrapper traced every field with its field node, so the error's
+          // nodes pick the field as the locatedError() hook does on other versions.
+          const fieldNodes = ctx.ddRootCtx.resolveChannel ? undefined : error.nodes
+          recordResolveErrorForPath(originalError, error.path, fieldNodes, ctx.ddRootCtx)
         }
       }
     }
@@ -124,11 +130,12 @@ class GraphQLNativeExecutePlugin extends GraphQLExecutePlugin {
 }
 
 /**
- * GraphQL 17 publishes every field resolution on its resolve channel. This plugin traces the fields that use the
- * default resolver, which the schema wrapper cannot reach. The context carries the field name, parent type, return
- * type, arguments and dotted path, but not the resolve info, so the field node comes from the operation and the
- * parent field from the path. Binding a store to the channel would run for every field, so the plugin enters the
- * field's store only around the fields it traces, for a resolver function on the root value or source object.
+ * GraphQL 17 publishes every field resolution on its resolve channel once subscribed, which roughly doubles the cost
+ * of a traced operation. This plugin traces the fields that use the default resolver, which the schema wrapper cannot
+ * reach, so it subscribes only once a schema with such a field executes. The context carries the field name, parent
+ * type, return type, arguments and dotted path, but not the resolve info, so the field node comes from the operation
+ * and the parent field from the path. Binding a store to the channel would run for every field, so the plugin enters
+ * the field's store only around the fields it traces, for a resolver function on the root value or source object.
  */
 class GraphQLNativeResolvePlugin extends TracingPlugin {
   static id = 'graphql'
@@ -137,19 +144,24 @@ class GraphQLNativeResolvePlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
+    this.defaultResolversSeen ??= false
     resolvePlugin = this
   }
 
-  // GraphQL publishes this channel for every field once subscribed, which costs most when the plugin has nothing to
-  // trace. With `depth: 0` only IAST and AppSec read the channel, so subscribe once one of them listens.
+  // With `depth: 0` only IAST and AppSec read the channel, so subscribe once one of them listens.
   configure (config) {
     this.fullConfig = config
-    super.configure(needsResolveChannel(config) ? config : false)
+    super.configure(this.defaultResolversSeen && needsResolveChannel(config) ? config : false)
   }
 
-  enableIfNeeded () {
+  /**
+   * @param {object} [schema]
+   */
+  enableIfNeeded (schema) {
+    if (this._enabled) return
+    this.defaultResolversSeen ||= hasDefaultResolvers(schema)
     const config = this.fullConfig
-    if (!this._enabled && config?.enabled && needsResolveChannel(config)) super.configure(config)
+    if (this.defaultResolversSeen && config?.enabled && needsResolveChannel(config)) super.configure(config)
   }
 
   start (ctx) {
