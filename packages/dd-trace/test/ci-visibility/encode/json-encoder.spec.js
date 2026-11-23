@@ -57,4 +57,18 @@ describe('CI Visibility JSON encoder', () => {
     assert.deepStrictEqual(encoder.makePayload(), ['[', '{"value":"test"}', ']'])
     assert.strictEqual(reads, 1)
   })
+
+  it('starts a new batch only when the next item would exceed the UTF-8 byte limit', () => {
+    const encoder = new JSONEncoder(8)
+    const batches = []
+    const flushBatch = parts => batches.push(parts.join(''))
+
+    encoder.encode('é', flushBatch)
+    encoder.encode(0, flushBatch)
+    assert.deepStrictEqual(batches, [])
+
+    encoder.encode(1, flushBatch)
+    flushBatch(encoder.makePayload())
+    assert.deepStrictEqual(batches, ['["é",0]', '[1]'])
+  })
 })

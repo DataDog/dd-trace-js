@@ -13,8 +13,18 @@ function getVitestWorkerPort () {
 }
 
 class Writer {
-  constructor (interprocessCode) {
-    this._encoder = new JSONEncoder()
+  #onTraceBatch
+  #traceFlush
+
+  /**
+   * @param {number | null} interprocessCode
+   * @param {number} [traceBatchBytes]
+   */
+  constructor (interprocessCode, traceBatchBytes) {
+    this._encoder = new JSONEncoder(traceBatchBytes)
+    if (traceBatchBytes !== undefined) {
+      this.#onTraceBatch = this.#sendTraceBatch.bind(this)
+    }
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
     this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -24,6 +34,10 @@ class Writer {
    * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
+    if (this.#onTraceBatch !== undefined) {
+      this.#flushTraceBatches(onDone)
+      return
+    }
     const count = this._encoder.count()
 
     if (count > 0) {
@@ -36,7 +50,45 @@ class Writer {
   }
 
   append (payload) {
-    this._encoder.encode(payload)
+    if (this.#onTraceBatch === undefined) {
+      this._encoder.encode(payload)
+      return
+    }
+    try {
+      this._encoder.encode(payload, this.#onTraceBatch)
+    } catch (error) {
+      log.error('Error encoding test worker trace: %s', error)
+    }
+  }
+
+  /**
+   * @param {(error?: Error) => void} [onDone]
+   */
+  #flushTraceBatches (onDone) {
+    if (this._encoder.count() > 0) {
+      this.#sendTraceBatch(this._encoder.makePayload())
+    }
+    const traceFlush = this.#traceFlush
+    this.#traceFlush = undefined
+    if (traceFlush?.pending > 0) {
+      traceFlush.onDone = onDone
+    } else {
+      onDone?.(traceFlush?.error)
+    }
+  }
+
+  /**
+   * @param {string[]} parts
+   */
+  #sendTraceBatch (parts) {
+    const traceFlush = this.#traceFlush ??= { pending: 0, error: undefined, onDone: undefined }
+    traceFlush.pending++
+    this._sendPayload(parts, (error) => {
+      traceFlush.error ||= error
+      if (--traceFlush.pending === 0) {
+        traceFlush.onDone?.(traceFlush.error)
+      }
+    })
   }
 
   _sendPayload (data, onDone = () => {}) {
@@ -45,53 +97,39 @@ class Writer {
     // See cucumber code:
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
 
-    // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
-    // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
-    const isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
-    let payload = isVitestWorkerOld
-      ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
-      : [this._interprocessCode, data]
-    if (this._isWebdriverioWorker) {
-      payload = createWebdriverioWorkerMessage(payload)
-    }
+    try {
+      const serialized = Array.isArray(data) ? data.join('') : data
+      // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
+      // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
+      const isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
+      let payload = isVitestWorkerOld
+        ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data: serialized }
+        : [this._interprocessCode, serialized]
+      if (this._isWebdriverioWorker) {
+        payload = createWebdriverioWorkerMessage(payload)
+      }
 
-    const vitestWorkerPort = getVitestWorkerPort()
-    if (vitestWorkerPort) {
-      try {
+      const vitestWorkerPort = getVitestWorkerPort()
+      if (vitestWorkerPort) {
         vitestWorkerPort.postMessage(payload)
-      } catch (error) {
-        log.error('Error posting message to vitest worker port', error)
-      } finally {
-        onDone()
-      }
-      return
-    }
-
-    // child_process workers (jest default, cucumber)
-    if (process.send) {
-      process.send(payload, (error) => {
-        if (error) log.error('Error sending message to parent process', error)
-        onDone(error)
-      })
-      return
-    }
-
-    // worker_threads (jest --workerThreads, vitest)
-    const { isMainThread, parentPort } = require('node:worker_threads')
-    if (!isMainThread && parentPort) {
-      try {
-        parentPort.postMessage(payload)
-      } catch (error) {
-        log.error('Error posting message to parent port', error)
-        onDone(error)
+      } else if (process.send) {
+        process.send(payload, (error) => {
+          if (error) log.error('Error sending message to test worker parent: %s', error)
+          onDone(error)
+        })
         return
+      } else {
+        const { parentPort } = require('node:worker_threads')
+        parentPort?.postMessage(payload)
       }
-      // postMessage has no acknowledgement callback. Completion means the
-      // message was accepted by the local port, not processed by the parent.
-      onDone()
+    } catch (error) {
+      log.error('Error sending message to test worker parent: %s', error)
+      onDone(error)
       return
     }
 
+    // postMessage has no acknowledgement callback. Completion means the
+    // message was accepted by the local port, not processed by the parent.
     onDone()
   }
 }

@@ -160,12 +160,11 @@ const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
-const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
-const kDdPlaywrightFailureVideos = Symbol('ddPlaywrightFailureVideos')
 const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 const instrumentedPlaywrightReporters = new WeakSet()
+const workerFailureMedia = new WeakMap()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
 const PLAYWRIGHT_FAILURE_VIDEO_PATH_RE = /(?:^|[\\/])video(?:-\d+)?\.webm$/
 const automaticFailureScreenshotPaths = new Set()
@@ -1260,6 +1259,14 @@ function dispatcherRunWrapperNew (run) {
   }
 }
 
+/**
+ * @param {string} testId
+ * @param {number} retry
+ */
+function getMediaAttemptId (testId, retry) {
+  return testId + ':' + retry
+}
+
 function onDispatcherCreateWorker (dispatcher, worker) {
   if (!worker) {
     return worker
@@ -1290,6 +1297,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
   }
 
   worker.on('testBegin', ({ testId }) => {
+    workerFailureMedia.delete(worker)
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1343,28 +1351,25 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
     )
     const testResult = test.results.at(-1)
-    if (isFailureScreenshotUploadEnabled &&
+    if ((isFailureScreenshotUploadEnabled || isFailureVideoUploadEnabled) &&
+        testStatus === 'fail' &&
+        testResult &&
         !shouldCreateTestSpan &&
         !test._ddShouldSkipEfdRetry &&
         !disabledTestIds.has(testId)) {
       let screenshots
-      if (testStatus === 'fail') {
+      if (isFailureScreenshotUploadEnabled) {
         screenshots = automaticFailureScreenshotsByTestId.get(testId)
         if (!screenshots) {
           screenshots = []
           automaticFailureScreenshotsByTestId.set(testId, screenshots)
         }
       }
-      worker[kDdPlaywrightFailureScreenshots] ??= []
-      worker[kDdPlaywrightFailureScreenshots].push(screenshots)
-    }
-    if (isFailureVideoUploadEnabled &&
-        !shouldCreateTestSpan &&
-        !test._ddShouldSkipEfdRetry &&
-        !disabledTestIds.has(testId)) {
-      const videos = testStatus === 'fail' ? failureVideosByTestId.get(testId) : undefined
-      worker[kDdPlaywrightFailureVideos] ??= []
-      worker[kDdPlaywrightFailureVideos].push(videos)
+      workerFailureMedia.set(worker, {
+        attemptId: getMediaAttemptId(testId, testResult.retry),
+        screenshots,
+        videos: isFailureVideoUploadEnabled ? failureVideosByTestId.get(testId) : undefined,
+      })
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled && !test._ddIsAutomaticRetryExcluded &&
@@ -2435,6 +2440,16 @@ function finishProcessHostStartRunner (processHost) {
     return
   }
 
+  /** @param {string} attemptId */
+  const takeFailureMedia = (attemptId) => {
+    const media = workerFailureMedia.get(processHost)
+    if (!media || media.attemptId !== attemptId) {
+      return
+    }
+    workerFailureMedia.delete(processHost)
+    return media
+  }
+
   // We add a new listener to `processHost.process`, which represents the worker
   processHost.process.on('message', (message) => {
     if (message?.type === EFD_RETRY_COUNT_REQUEST) {
@@ -2449,8 +2464,7 @@ function finishProcessHostStartRunner (processHost) {
     if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
       workerReportCh.publish({
         serializedTraces: message[1],
-        screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
-        videos: processHost[kDdPlaywrightFailureVideos]?.shift(),
+        takeFailureMedia,
       })
     } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
       workerReportTelemetryCh.publish(message[1])
@@ -2776,6 +2790,7 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
+      mediaAttemptId: STATUS_TO_TEST_STATUS[status] === 'fail' ? getMediaAttemptId(testId, retry) : undefined,
       isExpectedFailure: status === 'failed' && testInfo.expectedStatus === 'failed',
       hasNonRetriableError: testInfo._hasNonRetriableError,
       retryTestId,

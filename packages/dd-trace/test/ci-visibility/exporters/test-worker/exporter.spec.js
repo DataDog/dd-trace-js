@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const { Worker } = require('node:worker_threads')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -60,6 +62,68 @@ describe('CI Visibility Test Worker Exporter', () => {
       jestWorkerExporter.export(traceSecond)
       jestWorkerExporter.flush()
       sinon.assert.calledWith(send, [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('sends trace batches in order and waits for all of them even with an empty tail', () => {
+      const trace = [{ type: 'test', meta: { value: 'é'.repeat(3 * 1024 * 1024) } }]
+      const oversizedTrace = [{ type: 'test', meta: { value: 'é'.repeat(4 * 1024 * 1024) } }]
+      const exporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      exporter.export(trace)
+      sinon.assert.notCalled(send)
+      exporter.export(trace)
+      exporter.export(oversizedTrace)
+      sinon.assert.callCount(send, 3)
+
+      exporter.flush(onDone)
+      sinon.assert.callCount(send, 3)
+      const [first, second, third] = send.args
+      assert.deepStrictEqual(first[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      assert.deepStrictEqual(second[0], first[0])
+      assert.deepStrictEqual(third[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([oversizedTrace])])
+
+      const error = new Error('IPC channel closed')
+      third[1](error)
+      first[1]()
+      sinon.assert.notCalled(onDone)
+      second[1]()
+      sinon.assert.calledOnceWithExactly(onDone, error)
+
+      const nextDone = sinon.spy()
+      exporter.flush(nextDone)
+      sinon.assert.calledOnceWithExactly(nextDone, undefined)
+    })
+
+    it('keeps neighboring traces when one trace cannot be serialized', () => {
+      const exporter = new TestWorkerCiVisibilityExporter()
+      const first = [{ name: 'first' }]
+      const invalid = []
+      const last = [{ name: 'last' }]
+      invalid.push(invalid)
+
+      exporter.export(first)
+      exporter.export(invalid)
+      exporter.export(last)
+      exporter.flush()
+
+      sinon.assert.calledOnceWithExactly(
+        send,
+        [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([first, last])],
+        sinon.match.func
+      )
+    })
+
+    it('completes a flush when the transport throws synchronously', () => {
+      const error = new Error('cannot write IPC message')
+      process.send = sinon.stub().throws(error)
+      const exporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      exporter.export([{ name: 'test' }])
+      exporter.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, error)
     })
 
     it('can export coverages', () => {
@@ -136,6 +200,25 @@ describe('CI Visibility Test Worker Exporter', () => {
       jestWorkerExporter.export(trace)
       jestWorkerExporter.flush()
       sinon.assert.notCalled(send)
+    })
+
+    it('sends traces to the parent port in a worker thread', async () => {
+      const worker = new Worker(`
+        const { workerData } = require('node:worker_threads')
+        const Exporter = require(workerData)
+        const exporter = new Exporter()
+        exporter.export([{ name: 'test' }])
+        exporter.flush()
+      `, {
+        eval: true,
+        workerData: require.resolve('../../../../src/ci-visibility/exporters/test-worker'),
+      })
+      const messages = []
+      worker.on('message', message => messages.push(message))
+
+      const [exitCode] = await once(worker, 'exit')
+      assert.strictEqual(exitCode, 0)
+      assert.deepStrictEqual(messages, [[JEST_WORKER_TRACE_PAYLOAD_CODE, '[[{"name":"test"}]]']])
     })
   })
 
@@ -375,6 +458,22 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.export(trace)
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      sinon.assert.notCalled(send)
+    })
+
+    it('reports a synchronous Vitest port error to the flush callback', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      const error = new Error('cannot post message')
+      const postMessage = sinon.stub().throws(error)
+      globalThis.__vitest_worker__ = { ctx: { port: { postMessage } } }
+      const exporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      exporter.export([{ name: 'test' }])
+      exporter.flush(onDone)
+
+      sinon.assert.calledOnce(postMessage)
+      sinon.assert.calledOnceWithExactly(onDone, error)
       sinon.assert.notCalled(send)
     })
 

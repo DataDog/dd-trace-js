@@ -13,6 +13,7 @@ channel('dd-trace:instrumentation:load').publish({ name: 'playwright' })
 const suitePath = path.join(process.cwd(), 'pending-upload-test.js')
 const screenshotPath = path.join(process.cwd(), 'test-failed-1.png')
 const isPendingVideo = process.env.PLAYWRIGHT_PENDING_VIDEO === 'true'
+const mediaAttemptId = 'pending-upload-test:0'
 
 if (isPendingVideo) {
   const exporter = tracer._tracer._exporter
@@ -70,6 +71,7 @@ channel('ci:playwright:worker:report').publish({
       type: 'test',
       error: 1,
       meta: {
+        '_dd.playwright.media_attempt_id': mediaAttemptId,
         'test.name': 'pending upload',
         'test.status': 'fail',
         test_suite_absolute_path: suitePath,
@@ -80,20 +82,22 @@ channel('ci:playwright:worker:report').publish({
       duration: 1e6,
     },
   ]]),
-  screenshots: isPendingVideo
-    ? undefined
-    : [{
-        name: 'screenshot',
-        contentType: 'image/png',
-        path: screenshotPath,
-      }],
-  videos: isPendingVideo
-    ? [{
-        name: 'video',
-        contentType: 'video/webm',
-        path: path.join(process.cwd(), 'video.webm'),
-      }]
-    : undefined,
+  takeFailureMedia (attemptId) {
+    if (attemptId !== mediaAttemptId) {
+      return
+    }
+    return isPendingVideo
+      ? {
+          videos: [{
+            name: 'video',
+            contentType: 'video/webm',
+            path: path.join(process.cwd(), 'video.webm'),
+          }],
+        }
+      : {
+          screenshots: [{ name: 'screenshot', contentType: 'image/png', path: screenshotPath }],
+        }
+  },
 })
 
 setImmediate(() => {

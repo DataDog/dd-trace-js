@@ -12,13 +12,27 @@ class JSONEncoder {
     this.payloads = []
   }
 
-  encode (payload) {
+  /**
+   * @param {unknown} payload
+   * @param {(parts: string[]) => void} [flushBatch]
+   */
+  encode (payload, flushBatch) {
     if (this.#maxBytes !== undefined) {
       const serializedPayload = JSON.stringify(payload) ?? 'null'
       const payloadBytes = Buffer.byteLength(serializedPayload)
-      const separatorBytes = this.payloads.length === 0 ? 0 : 1
-      if (payloadBytes + separatorBytes > this.#maxBytes - this.#bytes) return false
-      this.#bytes += payloadBytes + separatorBytes
+      if (payloadBytes + (this.payloads.length === 0 ? 0 : 1) > this.#maxBytes - this.#bytes) {
+        if (flushBatch === undefined) {
+          return false
+        }
+        if (this.payloads.length !== 0) {
+          flushBatch(this.makePayload())
+        }
+        if (payloadBytes + 2 > this.#maxBytes) {
+          flushBatch(['[', serializedPayload, ']'])
+          return true
+        }
+      }
+      this.#bytes += payloadBytes + (this.payloads.length === 0 ? 0 : 1)
       this.payloads.push(serializedPayload)
       return true
     }

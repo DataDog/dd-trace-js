@@ -1839,7 +1839,7 @@ for (const version of ['4.0.5', 'latest']) {
     useSandbox([`vitest@${version}`], true)
 
     for (const pool of ['forks', 'threads']) {
-      it(`retries a passing test without unhandled IPC errors in ${pool}`, async function () {
+      it(`reports all attempts across worker trace batches in ${pool}`, async function () {
         this.timeout(60_000)
         const receiver = await new FakeCiVisIntake().start()
         let childProcess
@@ -1853,13 +1853,16 @@ for (const version of ['4.0.5', 'latest']) {
               faulty_session_threshold: 100,
             },
           })
-          receiver.setKnownTests({ vitest: {} })
-          childProcess = exec('./node_modules/.bin/vitest run', {
+          const knownSuite = 'ci-visibility/vitest-tests/efd-suite-admission-second.mjs'
+          receiver.setKnownTests({ vitest: { [knownSuite]: ['second EFD suite admission test'] } })
+          childProcess = exec('./node_modules/.bin/vitest run --maxWorkers=1', {
             cwd: sandboxCwd(),
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-first.mjs',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-{first,second}.mjs',
+              VITEST_LARGE_WORKER_TRACES: 'true',
+              NO_ISOLATE: 'true',
               POOL_CONFIG: pool,
             },
           })
@@ -1874,9 +1877,13 @@ for (const version of ['4.0.5', 'latest']) {
               payloads => {
                 const tests = payloads.flatMap(({ payload }) => payload.events)
                   .filter(event => event.type === 'test').map(event => event.content)
-                assert.strictEqual(tests.length, 3, output)
+                assert.strictEqual(tests.length, 4, output)
                 assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'), output)
-                const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                assert.strictEqual(tests.filter(test => test.meta[TEST_SUITE] === knownSuite).length, 1, output)
+                const attempts = tests.filter(test => test.meta[TEST_SUITE] !== knownSuite)
+                assert.strictEqual(new Set(attempts.map(test => test.trace_id.toString())).size, 3, output)
+                assert.ok(attempts.every(test => test.meta['worker_payload.639']?.length === 4800), output)
+                const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                 assert.strictEqual(retries.length, 2, output)
                 assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd), output)
               }

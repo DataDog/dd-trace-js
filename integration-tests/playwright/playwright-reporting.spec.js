@@ -1849,6 +1849,55 @@ versions.forEach((version) => {
           assert.strictEqual(testOutput.split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1, 1, testOutput)
         })
 
+      it('uploads failure media when a child-only batch precedes its test span', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisAgentlessConfig(receiver.port),
+          {
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+            PLAYWRIGHT_SPLIT_TEST_TRACES: 'true',
+            PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.filter(({ payload }) => payload?.events).flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test' &&
+              event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+            assert.ok(failedTest, getTestOutput())
+            const { meta, trace_id: traceId } = failedTest.content
+            assert.strictEqual(meta[TEST_STATUS], 'fail', getTestOutput())
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true', getTestOutput())
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOADED], 'true', getTestOutput())
+            assert.strictEqual(meta['_dd.playwright.media_attempt_id'], undefined)
+            assert.strictEqual(meta['worker_payload.639']?.length, 4800)
+
+            const children = events.filter(event => event.content.name?.startsWith('worker-batch-child-'))
+            assert.deepStrictEqual(children.map(event => event.content.name).sort(), [
+              'worker-batch-child-first',
+              'worker-batch-child-second',
+            ])
+            for (const { content } of children) {
+              assert.strictEqual(content.trace_id.toString(), traceId.toString())
+              assert.strictEqual(content.meta['worker_payload.639']?.length, 4800)
+            }
+            const uploads = payloads.filter(({ media }) => media).map(({ media }) => media)
+            assert.deepStrictEqual(uploads.map(({ contentType }) => contentType).sort(), ['image/png', 'video/webm'])
+            for (const upload of uploads) {
+              assert.strictEqual(upload.traceId, traceId.toString())
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
       deferredFailureScreenshotTest(
         'uploads a failure screenshot deferred by test code',

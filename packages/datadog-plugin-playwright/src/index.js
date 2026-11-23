@@ -72,6 +72,7 @@ const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
 const RETRY_TEST_ID = '_dd.playwright.retry_test_id'
 const DEFER_FINAL_STATUS = '_dd.playwright.defer_final_status'
+const MEDIA_ATTEMPT_ID = '_dd.playwright.media_attempt_id'
 const noop = () => {}
 
 /**
@@ -333,7 +334,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots, videos }) => {
+    this.addSub('ci:playwright:worker:report', ({ serializedTraces, takeFailureMedia }) => {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
       let formattedTestSpan
@@ -392,6 +393,13 @@ class PlaywrightPlugin extends CiPlugin {
         delete formattedTestSpan.meta[RETRY_TEST_ID]
         delete formattedTestSpan.meta[DEFER_FINAL_STATUS]
       }
+      const mediaAttemptId = formattedTestSpan?.meta[MEDIA_ATTEMPT_ID]
+      let media
+      if (mediaAttemptId !== undefined) {
+        delete formattedTestSpan.meta[MEDIA_ATTEMPT_ID]
+        media = takeFailureMedia(mediaAttemptId)
+      }
+      const { screenshots, videos } = media ?? {}
       let readyToExport = false
       let isFinalExecution
       const exportTraces = () => {
@@ -546,6 +554,7 @@ class PlaywrightPlugin extends CiPlugin {
       finalStatus,
       retryTestId,
       deferFinalStatus,
+      mediaAttemptId,
       earlyFlakeAbortReason,
       onDone,
     }) => {
@@ -559,6 +568,9 @@ class PlaywrightPlugin extends CiPlugin {
         retryTestId !== undefined && deferFinalStatus
 
       span.setTag(TEST_STATUS, testStatus)
+      if (mediaAttemptId !== undefined) {
+        span.setTag(MEDIA_ATTEMPT_ID, mediaAttemptId)
+      }
 
       if (error) {
         span.setTag('error', error)
