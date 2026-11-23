@@ -157,7 +157,7 @@
     "google-auth-library": "11.3.3",
     "google-gax": "6.10.0",
     "graphql": "17.1.0",
-    "graphql-jit": "0.9.4",
+    "graphql-jit": "0.10.1",
     "graphql-tag": "2.12.7",
     "graphql-tools": "10.0.9",
     "graphql-yoga": "6.1.0",
