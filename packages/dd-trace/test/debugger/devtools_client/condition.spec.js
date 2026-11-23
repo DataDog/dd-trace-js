@@ -200,6 +200,19 @@ describe('Expression language', function () {
       })
     })
 
+    for (const [label, bad] of [['array', ['new']], ['number', 42], ['object', { toString: () => 'x' }]]) {
+      it(`should reject a non-string ref (${label})`, function () {
+        assert.throws(() => compile({ ref: bad }), { name: 'SyntaxError', message: /^Illegal identifier/ })
+      })
+
+      it(`should reject a non-string instanceof operand (${label})`, function () {
+        assert.throws(() => compile({ instanceof: [{ ref: 'x' }, bad] }), {
+          name: 'SyntaxError',
+          message: /^Illegal identifier/,
+        })
+      })
+    }
+
     it('should honor the configured redacted and excluded identifiers', function () {
       const { compileSegments } = loadCondition({
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],

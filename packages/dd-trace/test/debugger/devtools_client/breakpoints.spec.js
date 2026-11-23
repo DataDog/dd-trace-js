@@ -784,6 +784,35 @@ describe('breakpoints', function () {
 
         assert.strictEqual(probe.compiledCaptureExpressions, undefined)
       })
+
+      it('should discard a remotely supplied compiledCaptureExpressions without captureExpressions', async function () {
+        await addProbe({ compiledCaptureExpressions: suppliedCompiledCaptureExpressions() })
+
+        const probe = getInstalledProbe()
+
+        assert.strictEqual(probe.compiledCaptureExpressions, undefined)
+        assert.strictEqual(probe.nsBetweenSampling, 200_000n)
+      })
+
+      it('should discard a supplied compiledCaptureExpressions with empty captureExpressions', async function () {
+        await addProbe({ captureExpressions: [], compiledCaptureExpressions: suppliedCompiledCaptureExpressions() })
+
+        assert.strictEqual(getInstalledProbe().compiledCaptureExpressions, undefined)
+      })
+
+      it('should replace a remotely supplied compiledCaptureExpressions with the compiled captureExpressions',
+        async function () {
+          await addProbe({
+            captureExpressions: [{ name: 'myVar', expr: { dsl: 'myVar', json: { ref: 'myVar' } } }],
+            compiledCaptureExpressions: suppliedCompiledCaptureExpressions(),
+          })
+
+          const { compiledCaptureExpressions } = getInstalledProbe()
+
+          assert.strictEqual(compiledCaptureExpressions.length, 1)
+          assert.strictEqual(compiledCaptureExpressions[0].name, 'myVar')
+          assert.strictEqual(compiledCaptureExpressions[0].expression, 'myVar')
+        })
     })
 
     describe('templates', function () {
@@ -1246,6 +1275,17 @@ describe('breakpoints', function () {
       })
       sinon.assert.calledThrice(sessionMock.post)
     })
+
+    it('should discard a remotely supplied compiledCaptureExpressions', async function () {
+      await addProbe()
+
+      await breakpoints.modifyBreakpoint(genProbeConfig({
+        version: 2,
+        compiledCaptureExpressions: suppliedCompiledCaptureExpressions(),
+      }))
+
+      assert.strictEqual(getInstalledProbe().compiledCaptureExpressions, undefined)
+    })
   })
 
   describe('refreshBreakpoints', function () {
@@ -1496,6 +1536,14 @@ describe('breakpoints', function () {
     return probe
   }
 })
+
+function suppliedCompiledCaptureExpressions () {
+  return [{
+    name: 'x',
+    expression: 'globalThis.__pwned = true',
+    limits: { maxReferenceDepth: 0, maxCollectionSize: 1, maxFieldCount: 1, maxLength: 16 },
+  }]
+}
 
 /**
  * Generate a probe config

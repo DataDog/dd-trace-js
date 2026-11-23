@@ -387,7 +387,7 @@ function assertString (variable) {
 }
 
 function assertIdentifier (value) {
-  if (!identifierRegex.test(value) || reservedWords.has(value)) {
+  if (typeof value !== 'string' || !identifierRegex.test(value) || reservedWords.has(value)) {
     throw new SyntaxError(`Illegal identifier: ${value}`)
   }
   return value
