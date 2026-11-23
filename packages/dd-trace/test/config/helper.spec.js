@@ -324,7 +324,7 @@ describe('config-helper env resolution', () => {
     })
 
     it('returns the env name from the highest-priority valid source', () => {
-      process.env.OTEL_PROPAGATORS = 'b3'
+      process.env.OTEL_LOG_LEVEL = 'debug'
       const log = require('../../src/log')
       sinon.spy(log, 'warn')
 
@@ -332,7 +332,7 @@ describe('config-helper env resolution', () => {
       StableConfigStub.callsFake(function () {
         this.localEntries = {}
         this.fleetEntries = {
-          DD_TRACE_PROPAGATION_STYLE: 'invalid',
+          DD_TRACE_LOG_LEVEL: 'invalid',
         }
         this.warnings = []
       })
@@ -344,7 +344,7 @@ describe('config-helper env resolution', () => {
         './stable': StableConfigStub,
       })
 
-      assert.strictEqual(mod.getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE'), 'OTEL_PROPAGATORS')
+      assert.strictEqual(mod.getValidatedConfiguredEnvName('DD_TRACE_LOG_LEVEL'), 'OTEL_LOG_LEVEL')
       sinon.assert.notCalled(log.warn)
     })
 

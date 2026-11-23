@@ -333,8 +333,8 @@ class TextMapPropagator {
       this.#b3InjectIsSingleHeader = true
       this.#extractB3Context = extractB3SingleContext
     } else {
-      const envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
+      const envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') ??
+        getValidatedConfiguredEnvName('OTEL_PROPAGATORS')
       this.#extractB3Context = envName === 'OTEL_PROPAGATORS'
         ? extractB3SingleContext
         : extractB3MultiContext
@@ -355,13 +355,13 @@ class TextMapPropagator {
 
     let envName
     if (origin === 'calculated' && !experimentalEnabled && sharedOrigin !== 'remote_config') {
-      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') ??
+        getValidatedConfiguredEnvName('OTEL_PROPAGATORS')
     } else if (origin === 'env_var' ||
       origin === 'local_stable_config' ||
       origin === 'fleet_stable_config') {
       envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE_INJECT')
     }
-    // eslint-disable-next-line eslint-rules/eslint-env-aliases
     this.#b3InjectIsSingleHeader = envName === 'OTEL_PROPAGATORS'
     this.#b3InjectOrigin = origin
     this.#b3ExperimentalEnabled = experimentalEnabled
