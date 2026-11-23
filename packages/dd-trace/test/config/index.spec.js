@@ -7341,6 +7341,37 @@ rules:
         versionsStub.restore()
       })
 
+      if (runtime === 'Deno') {
+        for (const value of [undefined, 'true', 'false']) {
+          it(`should preserve metrics, heap and IAST configuration with enabled=${value}`, () => {
+            if (value !== undefined) {
+              process.env.DD_RUNTIME_METRICS_NATIVE = value
+              process.env.DD_PROFILING_HEAP_ENABLED = value
+              process.env.DD_IAST_ENABLED = value
+            }
+
+            const config = getConfig()
+            const origin = value === undefined ? 'default' : 'env_var'
+
+            for (const [name, configPath] of [
+              ['DD_RUNTIME_METRICS_NATIVE', 'runtimeMetrics.native'],
+              ['DD_PROFILING_HEAP_ENABLED', 'DD_PROFILING_HEAP_ENABLED'],
+              ['DD_IAST_ENABLED', 'iast.DD_IAST_ENABLED'],
+            ]) {
+              assert.strictEqual(config.getOrigin(configPath), origin)
+              assertObjectContains(getLatestConfigUpdate(name), {
+                value: value === undefined ? defaults[configPath] ?? null : value === 'true',
+                origin,
+              })
+            }
+            assert.strictEqual(config.runtimeMetrics.native, value === undefined || value === 'true')
+            assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, value === undefined ? undefined : value === 'true')
+            assert.strictEqual(config.iast.DD_IAST_ENABLED, value === 'true')
+            sinon.assert.notCalled(logWriter.warn)
+          })
+        }
+      }
+
       it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
         process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
@@ -7443,6 +7474,151 @@ rules:
       })
     })
   }
+
+  context('Bun', () => {
+    const diagnostic = 'DATADOG TRACER DIAGNOSTIC - IAST is disabled, because it does not work on Bun.'
+    let versionsStub
+
+    beforeEach(() => {
+      versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    })
+
+    afterEach(() => {
+      versionsStub.restore()
+    })
+
+    for (const value of [undefined, 'true', 'false', '', 'invalid']) {
+      it(`should disable native runtime metrics with DD_RUNTIME_METRICS_NATIVE=${value}`, () => {
+        if (value !== undefined) process.env.DD_RUNTIME_METRICS_NATIVE = value
+
+        const config = getConfig()
+
+        assert.strictEqual(config.runtimeMetrics.native, false)
+        assertObjectContains(getLatestConfigUpdate('DD_RUNTIME_METRICS_NATIVE'), {
+          value: false,
+          origin: value === 'false' ? 'env_var' : 'calculated',
+        })
+      })
+    }
+
+    it('should disable native runtime metrics enabled programmatically and explain why', () => {
+      const config = getConfig({ runtimeMetrics: { native: true } })
+
+      assert.strictEqual(config.runtimeMetrics.native, false)
+      assert.strictEqual(config.getOrigin('runtimeMetrics.native'), 'calculated')
+      sinon.assert.calledOnceWithExactly(logWriter.warn,
+        'DATADOG TRACER DIAGNOSTIC - Native runtime metrics are disabled, because they do not work on Bun.')
+    })
+
+    for (const heapEnv of [
+      {},
+      { DD_PROFILING_HEAP_ENABLED: 'true' },
+      { DD_PROFILING_HEAP_ENABLED: 'false' },
+      { DD_PROFILING_HEAP_ENABLED: '' },
+      { DD_PROFILING_HEAP_ENABLED: 'invalid' },
+      { DD_PROFILING_PROFILERS: 'space,wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'false', DD_PROFILING_PROFILERS: 'space,wall' },
+    ]) {
+      it(`should report heap profiling disabled with ${JSON.stringify(heapEnv)}`, () => {
+        Object.assign(process.env, heapEnv)
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, false)
+        assertObjectContains(getLatestConfigUpdate('DD_PROFILING_HEAP_ENABLED'), {
+          value: false,
+          origin: heapEnv.DD_PROFILING_HEAP_ENABLED === 'false' ? 'env_var' : 'calculated',
+        })
+        if (heapEnv.DD_PROFILING_HEAP_ENABLED === 'true') {
+          sinon.assert.calledOnceWithExactly(logWriter.warn,
+            'DATADOG TRACER DIAGNOSTIC - Heap profiling is disabled, because it does not work on Bun.')
+        }
+      })
+    }
+
+    it('should retain the default heap origin when no space profiler is selected', () => {
+      process.env.DD_PROFILING_PROFILERS = 'wall'
+      const config = getConfig()
+
+      for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remoteConfig)
+
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, undefined)
+        assert.strictEqual(config.getOrigin('DD_PROFILING_HEAP_ENABLED'), 'default')
+        assertObjectContains(getLatestConfigUpdate('DD_PROFILING_HEAP_ENABLED'), {
+          value: null,
+          origin: 'default',
+        })
+      }
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should retain the effective metrics and heap configuration across updates and explain only once', () => {
+      process.env.DD_RUNTIME_METRICS_NATIVE = 'true'
+      process.env.DD_PROFILING_HEAP_ENABLED = 'true'
+      const config = getConfig()
+
+      for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remoteConfig)
+
+        assert.strictEqual(config.runtimeMetrics.native, false)
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, false)
+        for (const name of ['DD_RUNTIME_METRICS_NATIVE', 'DD_PROFILING_HEAP_ENABLED']) {
+          assertObjectContains(getLatestConfigUpdate(name), { value: false, origin: 'calculated' })
+        }
+      }
+      sinon.assert.calledTwice(logWriter.warn)
+    })
+
+    it('should disable IAST enabled by an environment variable and report the effective configuration', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.getOrigin('iast.DD_IAST_ENABLED'), 'calculated')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_IAST_ENABLED', value: false, origin: 'calculated' },
+      ])
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST enabled programmatically', () => {
+      const config = getConfig({ iast: { enabled: true } })
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should keep IAST disabled and explain only once across configuration updates', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST without a diagnostic when startup logs are disabled', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should not warn when IAST is disabled', () => {
+      process.env.DD_IAST_ENABLED = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+  })
 
   context('Feature Flagging configuration source', () => {
     it('enables Datadog exposure logging by default', () => {
