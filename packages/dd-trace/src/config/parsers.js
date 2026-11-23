@@ -276,6 +276,31 @@ const transformers = {
     }
     return value
   },
+  /**
+   * Validates like `validatePropagationStyles`, with the OpenTelemetry semantics: an empty list resolves to
+   * unset, and `none` disables propagation even when combined with other propagators, as the OpenTelemetry
+   * JavaScript SDK does. `DD_TRACE_PROPAGATION_STYLE` keeps its own handling of both.
+   *
+   * @param {string[]} value
+   * @param {string} optionName
+   * @param {string} source
+   * @param {boolean} [reportInvalid]
+   * @returns {string[] | undefined}
+   */
+  validateOtelPropagators (value, optionName, source, reportInvalid = true) {
+    if (value.length === 0) return
+    value = transformers.toLowerCase(value)
+    if (value.includes('none')) {
+      if (reportInvalid && value.some(propagator => propagator !== 'none')) {
+        warnInvalidValue(
+          value.join(','), optionName, source, "'none' cannot be combined with other propagators",
+          undefined, 'disabled propagation'
+        )
+      }
+      return ['none']
+    }
+    return transformers.validatePropagationStyles(value, optionName, source, reportInvalid)
+  },
 }
 
 const telemetryTransformers = {
