@@ -12,6 +12,7 @@ const msgpack = require('@msgpack/msgpack')
 const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { decodeOtlpTraceRequest } = require('../../../../integration-tests/helpers/otlp')
 const { storage } = require('../../../datadog-core')
 const { httpAgent } = require('../../src/exporters/common/agents')
 const { usesOtlpTraceExporter } = require('../../src/exporter')
@@ -387,8 +388,11 @@ function decodeOtlpTraces (payload) {
  * @param {express.Response} res
  */
 function handleTraceRequest (req, res) {
-  const otlp = req.is('application/json')
-  const trace = otlp ? decodeOtlpTraces(JSON.parse(req.body)) : req.body
+  const protobuf = req.is('application/x-protobuf')
+  const otlp = protobuf || req.is('application/json')
+  const trace = otlp
+    ? decodeOtlpTraces(protobuf ? decodeOtlpTraceRequest(req.body) : JSON.parse(req.body))
+    : req.body
   res.status(200).send(otlp ? {} : { rate_by_service: { 'service:,env:': 1 } })
   for (const { handler, spanResourceMatch } of traceHandlers) {
     const spans = trace.flatMap(span => span)
@@ -765,7 +769,7 @@ module.exports = {
     // PUT, and a writer built on libdatadog sends POST.
     agent.put('/v0.4/traces', handleTraceRequest)
     agent.post('/v0.4/traces', handleTraceRequest)
-    agent.post('/v1/traces', handleTraceRequest)
+    agent.post('/v1/traces', bodyParser.raw({ limit: Infinity, type: 'application/x-protobuf' }), handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 

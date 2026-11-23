@@ -14,6 +14,7 @@ const {
 // same marker. The value is the wrapper itself, so a second wrap of the same handler returns the
 // instrumented function rather than the raw one.
 const WRAPPED = Symbol.for('dd-trace.lambda.wrapped')
+const prepareChannel = dc.channel('datadog:aws-lambda:invocation:prepare')
 const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
 
 /**
@@ -46,6 +47,14 @@ function wrapHandler (handler, config, monitor) {
 
     // The shim awaits its startup listeners before calling the adapter. Preserve that boundary so
     // legacy RIC captures native context completion methods before the adapter replaces them.
+    // Resolve parent context before the invocation span starts. Diagnostic-channel publishing is synchronous,
+    // so the plugin supplies `preparation` when extraction must be awaited.
+    if (prepareChannel.hasSubscribers) prepareChannel.publish(invocationContext)
+    if (invocationContext.preparation) {
+      return invocationContext.preparation.then(() => invocationChannel.tracePromise(
+        () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)), invocationContext
+      ))
+    }
     return invocationChannel.tracePromise(
       () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)),
       invocationContext

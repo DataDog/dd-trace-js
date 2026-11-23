@@ -82,6 +82,7 @@ export interface GeneratedConfig {
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
+  DD_DATA_STREAMS_HTTP_ENABLED: boolean;
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
@@ -523,7 +524,7 @@ export interface GeneratedConfig {
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_METRIC_EXPORT_INTERVAL: number;
@@ -722,6 +723,7 @@ export interface GeneratedEnvVarConfig {
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
   DD_DATA_STREAMS_ENABLED: boolean;
+  DD_DATA_STREAMS_HTTP_ENABLED: boolean;
   DD_DBM_INJECT_SQL_BASEHASH: boolean;
   DD_DBM_PROPAGATION_MODE: "disabled" | "service" | "full" | "dynamic_service";
   DD_DECODE_AUTHORIZER_CONTEXT: boolean;
@@ -1217,7 +1219,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
   OTEL_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;

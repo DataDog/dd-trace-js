@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR,
   testMatch: '*-test.js',
   workers: 1,
   // Explicit "missing" accepts new baselines in Playwright 1.64; the default preserves the non-retriable failure.
