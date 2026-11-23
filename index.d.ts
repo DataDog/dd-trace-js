@@ -948,7 +948,8 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails. It fails at once when the agentless
-         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY. A pending initialization
+         * keeps the process alive until it succeeds or fails.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
