@@ -319,6 +319,7 @@ async function getRunsForCommit (api, sha, page = 1) {
  * @param {{ actions: Record<string, Function> }} api
  * @param {WorkflowRun} run
  * @param {number} [page]
+ * @param {number} [retry] attempt number for the current page
  * @returns {Promise<WorkflowJob[]>}
  */
 async function getJobs (api, run, page = 1, retry = 1) {
