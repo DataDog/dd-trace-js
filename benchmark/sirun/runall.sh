@@ -112,7 +112,7 @@ echo "using Node.js ${VERSION}"
 CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
-VARIANT_MAX_SECONDS=${VARIANT_MAX_SECONDS:-75} # TEMPORARY (#11256): overridable for the repro loop, revert before merge
+VARIANT_MAX_SECONDS=75
 VARIANT_HARD_TIMEOUT_SECONDS=600
 
 # With BENCHMARKS_FROM=candidate the baseline runs this PR's benchmark code on

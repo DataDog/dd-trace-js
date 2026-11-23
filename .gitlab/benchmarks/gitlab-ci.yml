@@ -107,7 +107,6 @@ benchmark:
   variables:
     SPLITS: 7
     REPRO_LOOP: "150"  # TEMPORARY: repro loop
-    VARIANT_MAX_SECONDS: "300"  # TEMPORARY: tweaked-metal is ~2x slower; the loop stops on an outlier iteration instead
 
 benchmark-serverless:
   stage: benchmarks
