@@ -1,5 +1,10 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
+
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { getIsAzureContainerApp } = require('../../dd-trace/src/serverless')
@@ -23,6 +28,9 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static kind = 'server'
   static type = 'serverless'
   static prefix = 'tracing:datadog:azure:functions:invoke'
+
+  /** @type {string | undefined} */
+  #routePrefix
 
   bindStart (ctx) {
     const meta = getMetaForTrigger(ctx)
@@ -58,7 +66,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
           ctx
         )
         const route = ctx.invocationContext.options.trigger.route?.trim() || ctx.functionName
-        web.setRoute(req, route.startsWith('/') ? route : `/${route}`)
+        const prefix = this.#routePrefix ??= getRoutePrefix()
+        web.setRoute(req, prefix + (route.startsWith('/') ? route : `/${route}`))
       } else {
         webContext.config = this.config
         webContext.tracer = this.tracer
@@ -118,6 +127,21 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+function getRoutePrefix () {
+  let prefix = getEnvironmentVariable('AzureFunctionsJobHost__extensions__http__routePrefix')
+  if (prefix === undefined) {
+    try {
+      const root = getEnvironmentVariable('AzureWebJobsScriptRoot') || process.cwd()
+      const contents = fs.readFileSync(path.join(root, 'host.json'), 'utf8')
+      prefix = JSON.parse(contents.replace(/^\uFEFF/, '')).extensions?.http?.routePrefix ?? 'api'
+    } catch (error) {
+      log.debug('Cannot determine Azure Functions route prefix: %s', error.code || error.name)
+      return ''
+    }
+  }
+  return typeof prefix === 'string' && prefix ? `/${prefix}` : ''
 }
 
 /**
