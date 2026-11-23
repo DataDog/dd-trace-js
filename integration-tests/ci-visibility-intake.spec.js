@@ -3,8 +3,10 @@
 const assert = require('node:assert/strict')
 const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
+const net = require('node:net')
 const { PassThrough } = require('node:stream')
 
+const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
@@ -329,6 +331,118 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     const rejection = assert.rejects(promise, /child exited with no matching payloads/)
 
     await Promise.all([clock.tickAsync(50), rejection])
+  })
+})
+
+describe('FakeCiVisIntake.gatherPayloadsUntilChildExit connection drain', () => {
+  let clock, intake
+
+  beforeEach(async () => {
+    intake = await new FakeCiVisIntake().start()
+    // Sockets and Express rely on real immediates; only the drain and response timers are faked.
+    clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+
+  afterEach(() => {
+    clock.restore()
+    return intake.stop()
+  })
+
+  async function connect () {
+    const accepted = once(intake.server, 'connection')
+    const socket = net.connect(intake.port, '127.0.0.1')
+    socket.on('error', () => {})
+    const [serverSocket] = await accepted
+    return { socket, serverSocket }
+  }
+
+  /**
+   * @param {number} count
+   */
+  async function waitForTimers (count) {
+    while (clock.countTimers() < count) {
+      await new Promise(resolve => setImmediate(resolve))
+    }
+  }
+
+  it('resolves once the exited child closed its connections, before the grace period', async () => {
+    const { socket, serverSocket } = await connect()
+    const onPayload = sinon.spy(payloads => assert.strictEqual(payloads.length, 1))
+    const child = fakeChildProcess()
+    const drained = intake.gatherPayloadsUntilChildExit(
+      child,
+      ({ url }) => url === '/api/v2/citestcycle',
+      onPayload,
+      { gracePeriod: 10_000, hardTimeout: 20_000 }
+    )
+
+    intake.emit('message', { url: '/api/v2/citestcycle', payload: {} })
+    child.simulateExit(0)
+    await clock.tickAsync(9999)
+    assert.strictEqual(onPayload.callCount, 0, 'an open connection may still carry payloads')
+
+    socket.destroy()
+    await once(serverSocket, 'close')
+    await drained
+    assert.strictEqual(onPayload.callCount, 1)
+  })
+
+  it('stops waiting at the grace period for a connection that outlives the child', async () => {
+    const { socket } = await connect()
+    const child = fakeChildProcess()
+    const onPayload = sinon.spy(payloads => assert.strictEqual(payloads.length, 1))
+    const promise = intake.gatherPayloadsUntilChildExit(
+      child,
+      ({ url }) => url === '/api/v2/citestcycle',
+      onPayload,
+      { gracePeriod: 1000, hardTimeout: 5000 }
+    )
+
+    intake.emit('message', { url: '/api/v2/citestcycle', payload: {} })
+    child.simulateExit(0)
+    await clock.tickAsync(999)
+    assert.strictEqual(onPayload.callCount, 0)
+
+    await Promise.all([clock.tickAsync(1), promise])
+    assert.strictEqual(onPayload.callCount, 1)
+    socket.destroy()
+  })
+
+  it('waits for a delayed payload whose client disconnected before the response', async () => {
+    intake.setWaitingTime(500)
+    const accepted = once(intake.server, 'connection')
+    const request = http.request({
+      port: intake.port,
+      host: '127.0.0.1',
+      method: 'POST',
+      path: '/api/v2/citestcycle',
+      agent: false,
+      headers: { 'content-type': 'application/msgpack' },
+    })
+    request.on('error', () => {})
+    request.end(Buffer.from(msgpack.encode({ events: [{ type: 'test' }] })))
+    const [serverSocket] = await accepted
+    await waitForTimers(1)
+
+    const child = fakeChildProcess()
+    const onPayload = sinon.spy(payloads => {
+      assert.deepStrictEqual(payloads.map(({ payload }) => payload.events), [[{ type: 'test' }]])
+    })
+    const promise = intake.gatherPayloadsUntilChildExit(
+      child,
+      ({ url }) => url === '/api/v2/citestcycle',
+      onPayload,
+      { gracePeriod: 10_000, hardTimeout: 20_000 }
+    )
+
+    request.destroy()
+    await once(serverSocket, 'close')
+    child.simulateExit(0)
+    await clock.tickAsync(499)
+    assert.strictEqual(onPayload.callCount, 0, 'the delayed payload has not been emitted yet')
+
+    await Promise.all([clock.tickAsync(1), promise])
+    assert.strictEqual(onPayload.callCount, 1)
   })
 })
 

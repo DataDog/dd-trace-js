@@ -1577,18 +1577,21 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
-        const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
-        assert.strictEqual(testSpans.length, 2)
-        const spanTypes = testSpans.map(span => span.type)
-        assertObjectContains(spanTypes, ['test'])
-        assert.ok(
-          !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
-          `Got: ${inspect(spanTypes)}`
-        )
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
-        done()
-      }).catch(done)
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/v0.4/traces',
+        tracesRequests => {
+          const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
+          assert.strictEqual(testSpans.length, 2)
+          const spanTypes = testSpans.map(span => span.type)
+          assertObjectContains(spanTypes, ['test'])
+          assert.ok(
+            !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
+            `Got: ${inspect(spanTypes)}`
+          )
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+        }
+      ).then(() => done(), done)
     })
 
     it('reports tests when using agentless', (done) => {
@@ -1602,21 +1605,23 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        eventsRequests => {
+          const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
 
-        // it propagates test session name to the test and test suite events in parallel mode
-        metadataDicts.forEach(metadata => {
-          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
-        })
+          // it propagates test session name to the test and test suite events in parallel mode
+          metadataDicts.forEach(metadata => {
+            assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+          })
 
-        const events = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-        const eventTypes = events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-
-        done()
-      }).catch(done)
+          const events = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+          const eventTypes = events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        }
+      ).then(() => done(), done)
     })
 
     it('reports tests when using evp proxy', (done) => {
@@ -1629,15 +1634,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
-        .then(eventsRequests => {
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle',
+        eventsRequests => {
           const eventTypes = eventsRequests.map(({ payload }) => payload)
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
           assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-          done()
-        }).catch(done)
+        }
+      ).then(() => done(), done)
     })
 
     // older versions handle retries differently
@@ -1827,19 +1834,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       Promise.all([
         once(childProcess, 'message'),
-        receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000),
-      ]).then(([, eventsRequests]) => {
-        const tests = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-          .filter(event => event.type === 'test')
-          .map(event => event.content)
+        // 'close' waits for stdio, so the TypeError check below sees all output.
+        once(childProcess, 'close'),
+        receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url === '/api/v2/citestcycle',
+          eventsRequests => {
+            const tests = eventsRequests.map(({ payload }) => payload)
+              .flatMap(({ events }) => events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
 
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(
-          tests[0].meta[TEST_NAME],
-          'jest-worker-message passes after sending a non-array worker message'
-        )
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(
+              tests[0].meta[TEST_NAME],
+              'jest-worker-message passes after sending a non-array worker message'
+            )
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+          }
+        ),
+      ]).then(() => {
         assert.doesNotMatch(testOutput, /TypeError/)
         done()
       }).catch(done)
@@ -1855,20 +1869,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const events = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-        const eventTypes = events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        eventsRequests => {
+          const events = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+          const eventTypes = events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
-        tests.forEach(testEvent => {
-          assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
-        })
-
-        done()
-      }).catch(done)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
+          tests.forEach(testEvent => {
+            assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+          })
+        }
+      ).then(() => done(), done)
     })
 
     onlyLatestIt('reports tests when using evp proxy', (done) => {
@@ -1882,15 +1898,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
-        .then(eventsRequests => {
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle',
+        eventsRequests => {
           const eventTypes = eventsRequests.map(({ payload }) => payload)
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
           assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-          done()
-        }).catch(done)
+        }
+      ).then(() => done(), done)
     })
   })
 
