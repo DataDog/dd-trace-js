@@ -681,12 +681,14 @@ describe('Plugin', () => {
          * The driver has no public hook on the encoded packet, so the server log is the source of truth.
          *
          * @param {string} marker
+         * @param {boolean} [prepare]
          * @returns {Promise<string>}
          */
-        async function receivedQuery (marker) {
+        async function receivedQuery (marker, prepare) {
           const rows = await connection.query(
             'SELECT argument FROM mysql.general_log ' +
-            "WHERE command_type IN ('Query', 'Execute') AND argument LIKE ? AND argument NOT LIKE '%general_log%' " +
+            `WHERE command_type IN (${prepare ? "'Prepare'" : "'Query', 'Execute'"}) ` +
+            "AND argument LIKE ? AND argument NOT LIKE '%general_log%' " +
             'ORDER BY event_time DESC LIMIT 1',
             [`%${marker}%`]
           )
@@ -794,6 +796,126 @@ describe('Plugin', () => {
           }
 
           if (semver.intersects(version, '>=3')) {
+            if (semver.intersects(version, '>=3 <3.3.0')) {
+              for (const callback of [false, true]) {
+                const api = callback ? 'callback' : 'promise'
+                it(`should preserve native embedded value reads for ${api} execute`, async () => {
+                  let reads = 0
+                  const marker = `dbm_enumerable_execute_${callback}`
+                  const sql = `SELECT ? AS ${marker}`
+                  const command = { sql, get values () { return [40 + ++reads] } }
+                  const check = async execute => {
+                    const [, rows] = await assertSingleQueryTrace(sql, () => execute(command, [99]))
+                    assert.strictEqual(Number(rows[0][marker]), 42)
+                    assert.match(await receivedQuery(marker, true), /^\/\*dddb='db',dddbs='serviced',/)
+                  }
+                  if (callback) {
+                    await withCallbackConnection(client => check(promisify(client.execute).bind(client)))
+                  } else {
+                    await check(connection.execute.bind(connection))
+                  }
+                })
+              }
+
+              it('should not propagate into an explicit prepare called during execute normalization', async () => {
+                const explicitSql = 'SELECT 42 AS dbm_nested_explicit_prepare'
+                /** @type {{ pending?: Promise<{ execute: Function, close: () => void }> }} */
+                const nested = {}
+                const rows = await connection.execute({
+                  sql: 'SELECT ? AS dbm_outer_execute',
+                  get values () {
+                    nested.pending ??= connection.prepare(explicitSql)
+                    return [43]
+                  },
+                })
+                const statement = await nested.pending
+                assert.ok(statement)
+                try {
+                  assert.strictEqual(Number(rows[0].dbm_outer_execute), 43)
+                  assert.strictEqual(Number((await statement.execute())[0].dbm_nested_explicit_prepare), 42)
+                  assert.strictEqual(await receivedQuery('dbm_nested_explicit_prepare', true), explicitSql)
+                } finally {
+                  statement.close()
+                }
+              })
+            }
+
+            if (semver.intersects(version, '>=3.3.0')) {
+              it('should preserve native reads of execute options', async () => {
+                const client = await mariadb.createConnection({
+                  host: 'localhost', user: 'root', database: 'db', pipelining: false, prepareCacheLength: 0,
+                })
+                try {
+                  let reads = 0
+                  const sql = 'SELECT :value AS dbm_named_execute'
+                  const command = { sql, get namedPlaceholders () { return ++reads <= 2 } }
+                  const [, rows] = await assertSingleQueryTrace(sql, () => client.execute(command, { value: 42 }))
+                  assert.strictEqual(Number(rows[0].dbm_named_execute), 42)
+                  assert.strictEqual(reads, 2)
+                  const logged = await receivedQuery('dbm_named_execute', true)
+                  assert.match(logged, /^\/\*dddb='db',dddbs='serviced',/)
+                  assert.match(logged, / SELECT \? AS dbm_named_execute$/)
+                } finally {
+                  await client.end()
+                }
+              })
+
+              it('should validate execute SQL before reading query options', async () => {
+                const command = { sql: '', get rowsAsArray () { throw new Error('option read before validation') } }
+                await withCallbackConnection(async client => {
+                  let returned = false
+                  const { error, returned: calledAfterReturn } = await new Promise(resolve => {
+                    assert.strictEqual(client.execute(command, error => {
+                      resolve({ error, returned })
+                    }), undefined)
+                    returned = true
+                  })
+                  assert.strictEqual(error?.code, 'ER_UNDEFINED_SQL')
+                  assert.strictEqual(calledAfterReturn, semver.intersects(version, '<3.4.1'))
+                })
+              })
+            }
+
+            if (semver.intersects(version, '>=3.4.1')) {
+              it('should finish execute when reading a query option throws', async () => {
+                const sql = 'SELECT 1 AS dbm_throwing_option'
+                const failure = new Error('option getter failed')
+                const command = { sql, get namedPlaceholders () { throw failure } }
+                const events = []
+                let captureInvalid = false
+                const subscriptions = ['start', 'error', 'finish'].map(event => {
+                  const channel = dc.channel(`apm:mariadb:query:${event}`)
+                  const onEvent = context => {
+                    if (captureInvalid || context.sql?.includes(sql)) events.push(event)
+                  }
+                  channel.subscribe(onEvent)
+                  return () => channel.unsubscribe(onEvent)
+                })
+                try {
+                  await assertSingleQueryTrace(
+                    sql,
+                    () => assert.rejects(connection.execute(command), error => error === failure),
+                    { error: 1, meta: { [ERROR_MESSAGE]: failure.message } }
+                  )
+                  assert.deepStrictEqual(events, ['start', 'error', 'finish'])
+                  events.length = 0
+                  await withCallbackConnection(async client => {
+                    const callback = sinon.spy()
+                    assert.throws(() => client.execute(command, callback), error => error === failure)
+                    sinon.assert.notCalled(callback)
+                    assert.deepStrictEqual(events, ['start', 'error', 'finish'])
+                    events.length = 0
+                    captureInvalid = true
+                    assert.throws(() => client.execute('', () => { throw failure }), error => error === failure)
+                    captureInvalid = false
+                  })
+                  assert.deepStrictEqual(events, ['start', 'error', 'finish'])
+                } finally {
+                  for (const unsubscribe of subscriptions) unsubscribe()
+                }
+              })
+            }
+
             for (const pipelining of [false, true]) {
               for (const prepareCacheLength of [0, 8]) {
                 it(`should inject execute before preparation (pipeline=${pipelining}, cache=${prepareCacheLength})`,
@@ -848,7 +970,7 @@ describe('Plugin', () => {
 
             it('should preserve execute validation and callback option mutations', async () => {
               const invalid = [undefined, null, 0, false, '', NaN]
-              const commands = invalid.filter(sql => sql !== null).concat(invalid.map(sql => ({ sql })))
+              const commands = [...invalid.filter(sql => sql !== null), ...invalid.map(sql => ({ sql }))]
               assert.throws(() => connection.execute(null), TypeError)
               for (const sql of commands) {
                 await assert.rejects(connection.execute(sql), { errno: 45049 })
@@ -874,7 +996,7 @@ describe('Plugin', () => {
                     })
                     assert.strictEqual(result, undefined)
                     if (sql && typeof sql === 'object') {
-                      assert.strictEqual(sql.metaAsArray, semver.intersects(version, '>=3.4.0') ? true : undefined)
+                      assert.strictEqual(sql.metaAsArray, semver.intersects(version, '>=3.3.0') ? true : undefined)
                     }
                   })
                   await assert.rejects(completion, { errno: 45049 })
@@ -901,6 +1023,25 @@ describe('Plugin', () => {
               })
             })
 
+            if (semver.intersects(version, '>=3.1.0 <3.4.1')) {
+              it('should not change callback pool options when preparation fails', async () => {
+                const callbackDriver = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+                const pool = callbackDriver.createPool({ host: 'localhost', user: 'root', database: 'db' })
+                const execute = promisify(pool.execute).bind(pool)
+                const end = promisify(pool.end).bind(pool)
+                try {
+                  const sql = 'INVALID dbm_failed_callback_pool'
+                  const command = { sql, metaAsArray: false }
+                  await assertSingleQueryTrace(sql, () => assert.rejects(execute(command), { errno: 1064 }), {
+                    error: 1,
+                  })
+                  assert.strictEqual(command.metaAsArray, false)
+                } finally {
+                  await end()
+                }
+              })
+            }
+
             it('should inject pooled execute before preparation', async () => {
               const module = proxyquire(`../../../versions/mariadb@${version}`, {})
               const callbackDriver = module.get('mariadb/callback')
@@ -922,7 +1063,7 @@ describe('Plugin', () => {
                     if (object) {
                       assert.strictEqual(command.sql, sql)
                       if (callback) {
-                        assert.strictEqual(command.metaAsArray, semver.intersects(version, '>=3.4.0 <3.4.1')
+                        assert.strictEqual(command.metaAsArray, semver.intersects(version, '>=3.1.0 <3.4.1')
                           ? true
                           : undefined)
                       }

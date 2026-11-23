@@ -120,20 +120,21 @@ function withInjectedSql (original, injected, originalSql, mirrorOptions) {
 
   if (typeof original === 'string') return injected
 
-  const command = { ...original, sql: injected }
-  if (!Object.hasOwn(command, 'values') && 'values' in original) {
+  const options = /** @type {{ values?: unknown, metaAsArray?: boolean }} */ (original)
+  const command = { ...options, sql: injected }
+  if (!Object.hasOwn(command, 'values') && 'values' in options) {
     Object.defineProperty(command, 'values', {
-      get () { return original.values },
+      get () { return options.values },
     })
   }
   if (mirrorOptions) {
-    const enumerable = Object.getOwnPropertyDescriptor(original, 'metaAsArray')?.enumerable ?? true
+    const enumerable = Object.getOwnPropertyDescriptor(options, 'metaAsArray')?.enumerable ?? true
     Object.defineProperty(command, 'metaAsArray', {
       configurable: true,
       enumerable,
-      get () { return original.metaAsArray },
+      get () { return options.metaAsArray },
       /** @param {boolean} value */
-      set (value) { original.metaAsArray = value },
+      set (value) { options.metaAsArray = value },
     })
   }
   return command
@@ -1633,4 +1634,4 @@ function wrapCallbackBundle (mariadb) {
   ])
 }
 
-module.exports = { normalizeSql, runSqlCommand, withInjectedSql, wrapCallbackBundle, wrapPromiseBundle }
+module.exports = { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }
