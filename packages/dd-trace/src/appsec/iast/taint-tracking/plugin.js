@@ -139,12 +139,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addDatabaseSubscriptions () {
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result, 'sequelize', getIastContext(storage('legacy').getStore()))
+      ({ result }) => this.#taintDatabaseResult(result, 'sequelize', getIastContext(storage('legacy').getStore()))
     )
 
     this.addSub(
       { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
-      ({ result, currentStore }) => this._taintDatabaseResult(result, 'pg', getIastContext(currentStore))
+      ({ result, currentStore }) => this.#taintDatabaseResult(result, 'pg', getIastContext(currentStore))
     )
   }
 
@@ -263,7 +263,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, dbOrigin, iastContext, name, visited) {
+  #taintDatabaseResult (result, dbOrigin, iastContext, name, visited) {
     if (!iastContext || this._rowsToTaint === 0) return result
 
     if (typeof result === 'string') {
@@ -280,14 +280,14 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
         const nextName = name ? `${name}.${i}` : String(i)
-        result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName, visited)
+        result[i] = this.#taintDatabaseResult(result[i], dbOrigin, iastContext, nextName, visited)
       }
     } else if (dbOrigin === 'sequelize' && result.dataValues) {
-      result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name, visited)
+      result.dataValues = this.#taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name, visited)
     } else {
       for (const key of Object.keys(result)) {
         const nextName = name ? `${name}.${key}` : key
-        result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName, visited)
+        result[key] = this.#taintDatabaseResult(result[key], dbOrigin, iastContext, nextName, visited)
       }
     }
 
