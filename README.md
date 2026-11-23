@@ -82,8 +82,9 @@ bun --preload dd-trace/init app.js
 Alternatively, call `require('dd-trace').init()` before loading instrumented modules.
 
 - Verified working: `Bun.serve` and Elysia server spans, Express, fetch clients, `pg`, winston,
-  CommonJS-loaded pino/OpenAI/ai/LangChain/graphql, and manual LLMObs.
+  CommonJS-loaded pino/OpenAI, and manual LLMObs.
   Wall/timeline profiling uploads work, but without JavaScript stack samples.
+- Orchestrion-based integrations are not yet supported on Bun.
 - ESM-imported packages are generally not instrumented, including CommonJS packages loaded via `import`. Not supported:
   `node:http` clients from ESM and pino/OpenAI/ai/postgres via `import`. Hono route names require CommonJS.
 - Static `Response` routes keep Bun's fast path and do not produce server spans.
