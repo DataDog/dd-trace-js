@@ -22,8 +22,9 @@ for (const { versions, hook } of instrumentations['path-to-regexp']) {
 const parse = getParse()
 const makeMatcher = getMatch()
 
-function normalize (route, params, urlPath, options) {
-  return normalizeRouteExpress(route, params, urlPath, parse, makeMatcher, options)
+function normalize (route, params, url, options = {}) {
+  const parts = url === undefined ? undefined : [{ route, url, options }]
+  return normalizeRouteExpress(route, params, parts, parse, makeMatcher)
 }
 
 // Register one test per case, named after its inputs so a failure names the exact route.
@@ -44,7 +45,7 @@ describe('normalizeRouteExpress', () => {
     check('(/^\\/a$/)', '/a', null) // RegExp route
 
     it('returns null when no parse function is provided (Express 4 / path-to-regexp 0.x)', () => {
-      assert.equal(normalizeRouteExpress('/users/:id', {}, '/users/1', undefined), null)
+      assert.equal(normalizeRouteExpress('/users/:id', {}, undefined, undefined), null)
     })
   })
 
@@ -115,6 +116,25 @@ describe('normalizeRouteExpress', () => {
     }
   })
 
+  describe('mount prefix and served route matched separately', () => {
+    // Each part is [route, URL its Router matched, that Router's options].
+    function checkParts (mount, served, expected, params = {}) {
+      it(`${mount[0]} on ${mount[1]} + ${served[0]} on ${served[1]} → ${expected}`, () => {
+        const parts = [mount, served].map(([route, url, options = {}]) => ({ route, url, options }))
+        assert.equal(normalizeRouteExpress(mount[0] + served[0], params, parts, parse, makeMatcher), expected)
+      })
+    }
+
+    // The served route's group ids follow the prefix's; mount params survive mergeParams=false.
+    checkParts(['/orgs{/:orgId}', '/orgs/acme'], ['/users{/:tab}', '/users'], '/orgs/{orgId}/users')
+    checkParts(['/orgs{/:orgId}', '/orgs'], ['/users{/:tab}', '/users/me'], '/orgs/users/{tab}')
+    // Each part uses its own Router's options.
+    checkParts(['/API', '/api'], ['/p{A}{a}', '/pa', { sensitive: true }], '/API/pa')
+    checkParts(['/api{/preview}{/:t}', '/api/PREVIEW', { sensitive: true }], ['/x', '/x'], '/api/{t}/x')
+    // A part that doesn't match falls back to req.params for the whole route.
+    checkParts(['/orgs{/:orgId}', '/other'], ['/users{/:tab}', '/users/me'], '/orgs/users/{tab}', { tab: 'me' })
+  })
+
   describe('fallback to req.params without a URL match', () => {
     check('/api{/:version}/users', undefined, '/api/{version}/users', { version: 'v2' })
     check('/api{/:version}/users', '/other', '/api/users', { version: '' })
@@ -141,7 +161,8 @@ describe('normalizeRouteExpress', () => {
     })
 
     it('resolves from req.params when a matcher cannot be built', () => {
-      assert.equal(normalizeRouteExpress('/m{/:id}/:x', { x: '1' }, '/m/1', parse, () => undefined), '/m/{x}')
+      const parts = [{ route: '/m{/:id}/:x', url: '/m/1', options: {} }]
+      assert.equal(normalizeRouteExpress('/m{/:id}/:x', { x: '1' }, parts, parse, () => undefined), '/m/{x}')
     })
   })
 

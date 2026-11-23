@@ -83,6 +83,12 @@ withVersions('express', 'express', '>=5', version => {
       const partsRouter = express.Router({ mergeParams: true })
       partsRouter.get('/parts{/:id}', ok)
       app.use('/t/:tenant', partsRouter)
+      const orgRouter = express.Router()
+      orgRouter.get('/users/:userId', ok)
+      app.use('/orgs{/:orgId}', orgRouter)
+      const upperRouter = express.Router({ caseSensitive: true })
+      upperRouter.get('/p{A}{a}', ok)
+      app.use('/API', upperRouter)
 
       // Apps with routing settings, each with a direct route and a default Router mounted at /r.
       const settingApps = {
@@ -145,16 +151,20 @@ withVersions('express', 'express', '>=5', version => {
       ['sensitive', '/r/pa', '/r/pA'],
       ['strict', '/posts/draft/', '/posts/draft/'],
       ['strict', '/r/posts/draft', '/r/posts/draft/'],
-      // A dynamic mount prefix matches with the parent's options: presence comes from req.params.
-      // The case-insensitive parent takes the static {/preview} group, the case-sensitive one binds
-      // 'PREVIEW' as the tenant.
-      ['default', '/api/PREVIEW/v1/users/42', '/api/v1/users/{id}'],
+      // A mount prefix matches req.baseUrl with the app Router's options: the case-insensitive app
+      // takes the static {/preview} group, the case-sensitive one binds 'PREVIEW' as the tenant.
+      ['default', '/api/PREVIEW/v1/users/42', '/api/preview/v1/users/{id}'],
       ['default', '/api/acme/v1/users/42', '/api/{tenant}/v1/users/{id}'],
-      ['default', '/api/PREVIEW/v1', '/api/v1'],
+      ['default', '/api/PREVIEW/v1', '/api/preview/v1'],
+      // A route array can't be split where it matched: presence comes from req.params.
       ['default', '/outer/api/PREVIEW/v1/users/42', '/outer/api/v1/users/{id}'],
       ['default', '/w/foo/v1/users/V1/users/42', '/w/{scope}/v1/users/{id}'],
       // A decoded '%2F' is an ordinary param value, not an empty one.
       ['default', '/t/acme/parts/%2F', '/t/{tenant}/parts/{id}'],
+      // A mount's params are matched from req.baseUrl even when req.params (mergeParams=false) lacks them.
+      ['default', '/orgs/acme/users/42', '/orgs/{orgId}/users/{userId}'],
+      // The served route matches its Router-relative URL, so a static mount's case doesn't matter.
+      ['default', '/api/pa', '/API/pa'],
       // Unknown Router options: presence comes from req.params, not a guessed case-insensitive match.
       ['unrecorded', '/pa', '/p'],
       ['sensitive', '/api/PREVIEW/v1/users/42', '/api/{tenant}/v1/users/{id}'],
