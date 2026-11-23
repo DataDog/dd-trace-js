@@ -88,6 +88,19 @@ module.exports = [
     },
     channelName: 'resolveLanguageModel',
   },
+  // Recent AI SDK v7 builds share model resolution through a hashed ESM chunk.
+  {
+    module: {
+      name: 'ai',
+      versionRange: '>=7.0.0 <8.0.0',
+      filePath: /^dist\/default-stop-condition-[\w-]+\.js$/,
+    },
+    functionQuery: {
+      functionName: 'resolveLanguageModel',
+      kind: 'Sync',
+    },
+    channelName: 'resolveLanguageModel',
+  },
   // AI SDK v7 filters runtime context from tracing channel events unless each key is included.
   {
     module: {

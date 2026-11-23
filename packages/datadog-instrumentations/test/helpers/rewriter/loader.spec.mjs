@@ -61,6 +61,50 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout, 'true\ntrue\n')
   })
 
+  it('intercepts AI SDK model calls resolved in a shared chunk', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-ai-chunk-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({
+      version: '7.0.179', type: 'module', main: 'dist/index.js',
+    }))
+    writeFileSync(join(packageDirectory, 'dist', 'default-stop-condition-wtuJTiTo.js'), `
+      export function resolveLanguageModel (model) { return model }
+    `)
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), `
+      export { resolveLanguageModel } from './default-stop-condition-wtuJTiTo.js'
+    `)
+    writeFileSync(join(root, 'main.mjs'), `
+      import assert from 'node:assert/strict'
+      import { createRequire } from 'node:module'
+      import { resolveLanguageModel } from 'ai'
+
+      const require = createRequire(import.meta.url)
+      const { channel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const calls = []
+      channel('dd-trace:vercel-ai:model:intercept').subscribe(ctx => { calls.push(ctx.method) })
+      const model = { doGenerate: async () => 'generated', doStream: async () => 'streamed' }
+      const resolved = resolveLanguageModel(model)
+      assert.equal(await resolved.doGenerate({ prompt: [] }), 'generated')
+      assert.equal(await resolved.doStream({ prompt: [] }), 'streamed')
+      assert.deepEqual(calls, ['doGenerate', 'doStream'])
+    `)
+    const result = spawnSync(process.execPath, [
+      '--import', join(repositoryRoot, 'initialize.mjs'), join(root, 'main.mjs'),
+    ], {
+      cwd: root,
+      env: {
+        ...process.env,
+        DD_TRACE_ENABLED: 'true',
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+        DD_TRACE_STARTUP_LOGS: 'false',
+      },
+      encoding: 'utf8',
+    })
+    assert.strictEqual(result.status, 0, result.stderr)
+  })
+
   it('does not rewrite application modules', async () => {
     const result = await load('file:///app.mjs', { format: 'module' }, () => ({ format: 'module', source }))
 

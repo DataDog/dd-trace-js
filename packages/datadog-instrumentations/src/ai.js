@@ -148,6 +148,9 @@ function wrapTracer (tracer) {
 let orchestrionSubscribed = false
 
 for (const hook of getHooks('ai').values()) {
+  // Shared chunks need source rewriting only; the entry point installs the subscribers.
+  if (hook.file instanceof RegExp) continue
+
   if (hook.file === 'dist/index.js') {
     // if not removed, the below hook will never match correctly
     // however, it is still needed in the orchestrion definition

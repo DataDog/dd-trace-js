@@ -3,13 +3,20 @@
 const { stringifyIfNeeded } = require('./utils')
 
 /**
- * Converts a LanguageModelV2FilePart with an image mediaType to an AI Guard style image_url content part.
+ * Converts a language model file part with an image mediaType to an AI Guard style image_url content part.
  *
- * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
+ * @param {object} part
+ * @param {URL|string|Uint8Array|{type: 'url', url: URL}|{type: 'data', data: string|Uint8Array}} part.data
+ * @param {string} part.mediaType
  * @returns {{type: 'image_url', image_url: {url: string}}|undefined}
  */
 function convertFilePartToImageUrl (part) {
-  const { data, mediaType } = part
+  const { mediaType } = part
+  let { data } = part
+
+  // LanguageModelV4 tags file data; earlier provider contracts pass it directly.
+  if (data?.type === 'url') data = data.url
+  else if (data?.type === 'data') data = data.data
 
   if (data instanceof URL) {
     return { type: 'image_url', image_url: { url: data.toString() } }
@@ -28,7 +35,7 @@ function convertFilePartToImageUrl (part) {
 }
 
 /**
- * Converts a LanguageModelV2Prompt to the AI Guard style message format.
+ * Converts a language model prompt to the AI Guard style message format.
  *
  * @param {Array<{role: string, content: string|Array<{type: string}>}>} prompt
  * @returns {Array<{role: string, content?: string|Array<{type: string}>, tool_calls?: Array, tool_call_id?: string}>}
@@ -94,7 +101,9 @@ function convertVercelPromptToMessages (prompt) {
         }
 
         if (toolCalls.length > 0) {
-          messages.push({ role: 'assistant', tool_calls: toolCalls })
+          const message = { role: 'assistant', tool_calls: toolCalls }
+          if (text !== undefined) message.content = text
+          messages.push(message)
         } else if (text !== undefined) {
           messages.push({ role: 'assistant', content: text })
         }
@@ -167,7 +176,6 @@ function buildTextOutputMessages (inputMessages, text) {
  */
 function buildOutputMessages (inputMessages, content) {
   const toolCalls = content.filter(c => c.type === 'tool-call')
-  if (toolCalls.length) return buildToolCallOutputMessages(inputMessages, toolCalls)
   let text = ''
   let isFirstTextPart = true
   for (const part of content) {
@@ -175,6 +183,11 @@ function buildOutputMessages (inputMessages, content) {
     if (!isFirstTextPart) text += '\n'
     text += part.text
     isFirstTextPart = false
+  }
+  if (toolCalls.length) {
+    const messages = buildToolCallOutputMessages(inputMessages, toolCalls)
+    if (text) messages.at(-1).content = text
+    return messages
   }
   if (text) return buildTextOutputMessages(inputMessages, text)
   return []
@@ -200,8 +213,7 @@ function getStreamedContent (chunks) {
     }
   }
 
-  if (toolCalls.length) return toolCalls
-  return text ? [{ type: 'text', text }] : []
+  return text ? [{ type: 'text', text }, ...toolCalls] : toolCalls
 }
 
 module.exports = {
