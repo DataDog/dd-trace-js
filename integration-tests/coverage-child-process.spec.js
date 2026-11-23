@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const libCoverage = require('istanbul-lib-coverage')
 
@@ -38,6 +38,17 @@ describe('integration coverage child process hook', () => {
     await fsp.mkdir(path.join(coverageRoot, 'packages', 'dd-trace', 'src'), { recursive: true })
     await fsp.mkdir(path.join(coverageRoot, 'integration-tests', 'coverage'), { recursive: true })
     await fsp.mkdir(path.join(appRoot, 'coverage-fixtures'), { recursive: true })
+    await fsp.writeFile(path.join(appRoot, 'coverage-fixtures', 'promisify.js'), `
+if (process.env.MODE !== 'empty') {
+  process.stdout.write(JSON.stringify({
+    marker: process.env.MARKER,
+    coverage: process.env.NODE_V8_COVERAGE,
+    bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
+  }))
+  process.stderr.write('stderr')
+}
+process.exitCode = process.env.MODE === 'error' ? 7 : 0
+`)
 
     await fsp.copyFile(
       path.join(process.cwd(), 'package.json'),
@@ -104,6 +115,42 @@ fs.writeFileSync(path.join(__dirname, 'worker-debug.json'), JSON.stringify({
 
     await fsp.rm(appRoot, { force: true, recursive: true })
   })
+
+  for (const method of ['execFile', 'exec']) {
+    for (const mode of ['success', 'empty', 'error']) {
+      it(`preserves promisified ${method} output and coverage with ${mode} results`, async () => {
+        const file = path.join(appRoot, 'coverage-fixtures', 'promisify.js')
+        const options = { cwd: appRoot, env: { MODE: mode, MARKER: 'custom-env' } }
+        const execFileAsync = promisify(childProcess.execFile)
+        const execAsync = promisify(childProcess.exec)
+        const promise = method === 'execFile'
+          ? execFileAsync(process.execPath, [file], options)
+          : execAsync(`"${process.execPath}" "${file}"`, options)
+
+        assert.ok(promise.child instanceof childProcess.ChildProcess)
+        let result
+        if (mode === 'error') {
+          await assert.rejects(promise, error => {
+            assert.strictEqual(error.code, 7)
+            result = error
+            return true
+          })
+        } else {
+          result = await promise
+        }
+        if (mode === 'empty') {
+          assert.deepStrictEqual(result, { stdout: '', stderr: '' })
+        } else {
+          assert.deepStrictEqual(JSON.parse(result.stdout), {
+            marker: 'custom-env',
+            coverage: getV8CoverageDir(),
+            bootstrap: true,
+          })
+          assert.strictEqual(result.stderr, 'stderr')
+        }
+      })
+    }
+  }
 
   it('propagates the V8 coverage directory and bootstrap through fork to a grandchild', async () => {
     childProcess.execFileSync(process.execPath, [path.join(appRoot, 'coverage-fixtures', 'parent.js')], {

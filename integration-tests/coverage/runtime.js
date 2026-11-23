@@ -28,6 +28,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..')
 // otherwise drop the inherited NODE_V8_COVERAGE) still has the directory injected.
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
+// Bun ignores NODE_OPTIONS and NODE_V8_COVERAGE, so Bun descendants preload their own bootstrap from BUN_OPTIONS.
+const BUN_BOOTSTRAP_PATH = path.join(__dirname, 'bun-bootstrap.js')
 
 const packageNameCache = new Map()
 const rootCache = new Map()
@@ -107,6 +109,15 @@ function copyV8ProfilesSync (fromDir, toDir) {
     }
   } catch {}
   return copied
+}
+
+/**
+ * Directory Bun processes write their istanbul coverage JSON into, next to the V8 profiles.
+ *
+ * @param {string} [collectorRoot]
+ */
+function getIstanbulCoverageDir (collectorRoot = getCollectorRoot()) {
+  return path.join(collectorRoot, 'istanbul')
 }
 
 function getMergedReportDir () {
@@ -263,6 +274,7 @@ function applyCoverageEnv (env, options = {}) {
 
 module.exports = {
   BOOTSTRAP_REQUIRE_ARG,
+  BUN_BOOTSTRAP_PATH,
   CHILD_BOOTSTRAP_PATH,
   COLLECTOR_ENV,
   COPY_BACK_ENV,
@@ -275,6 +287,7 @@ module.exports = {
   canonicalizePath,
   copyV8ProfilesSync,
   getCollectorRoot,
+  getIstanbulCoverageDir,
   getMergedReportDir,
   getV8CoverageDir,
   isCoverageActive,
