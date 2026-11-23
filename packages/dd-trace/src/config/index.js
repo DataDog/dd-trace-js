@@ -717,7 +717,7 @@ class Config extends ConfigBase {
     // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
     // propagation on its own. A set DD_TRACE_PROPAGATION_STYLE takes precedence, even when its value is invalid
     // and its own default applies. Runs before the fallbacks so the inject and extract styles inherit it.
-    if (!trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE') && trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
+    if (trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
       getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') === undefined) {
       setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', this.OTEL_PROPAGATORS)
     }
