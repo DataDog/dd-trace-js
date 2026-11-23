@@ -92,7 +92,7 @@ export function junitUploadEnv ({ runId, runAttempt }) {
 export async function uploadAllJunit () {
   if (!existsSync(INPUT_DIR)) return []
 
-  return Promise.all(groupJunitReports(INPUT_DIR).map(async group => {
+  return await Promise.all(groupJunitReports(INPUT_DIR).map(async group => {
     await uploadSemaphore.acquire()
     try {
       return await runUpload('datadog-ci', [
