@@ -1,0 +1,30 @@
+name: Get Datadog API key
+description: Exchange GitHub OIDC token for a Datadog API key via Datadog workload identity federation.
+
+inputs:
+  org_uuid:
+    description: "Datadog organization UUID"
+    required: true
+
+outputs:
+  api_key:
+    description: "Datadog API key"
+    value: ${{ steps.attempt.outputs.api_key || steps.retry.outputs.api_key }}
+
+runs:
+  using: composite
+  steps:
+    # Retry once on failure to work around transient exchange errors.
+    - id: attempt
+      uses: ./.github/actions/dd-wif/exchange
+      continue-on-error: true
+      with:
+        org_uuid: ${{ inputs.org_uuid }}
+    - if: steps.attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 60
+    - if: steps.attempt.outcome == 'failure'
+      id: retry
+      uses: ./.github/actions/dd-wif/exchange
+      with:
+        org_uuid: ${{ inputs.org_uuid }}
