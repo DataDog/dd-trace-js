@@ -162,6 +162,17 @@ jobs:
         with:
           node-floor: active-lts
 
+  azure-functions-unit:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: azure-functions
+      SPEC: index
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
+
   azure-functions:
     strategy:
       fail-fast: false
@@ -216,6 +227,10 @@ jobs:
           ACCEPT_EULA: "Y"
           BLOB_SERVER: azurite
           METADATA_SERVER: azurite
+        # Temporary: the image runs `tdnf distro-sync` at boot, which replaces the PostgreSQL files under the
+        # running server (plpgsql.so: undefined symbol heap_datum_update_type) and breaks database deletes.
+        # Blocking its package repository keeps the image's own consistent PostgreSQL until a real fix lands.
+        options: --add-host=packages.microsoft.com:127.0.0.1
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
@@ -325,6 +340,10 @@ jobs:
           ACCEPT_EULA: "Y"
           BLOB_SERVER: azurite
           METADATA_SERVER: azurite
+        # Temporary: the image runs `tdnf distro-sync` at boot, which replaces the PostgreSQL files under the
+        # running server (plpgsql.so: undefined symbol heap_datum_update_type) and breaks database deletes.
+        # Blocking its package repository keeps the image's own consistent PostgreSQL until a real fix lands.
+        options: --add-host=packages.microsoft.com:127.0.0.1
     env:
       PLUGINS: azure-cosmos
       SERVICES: azurite,azurecosmosemulator

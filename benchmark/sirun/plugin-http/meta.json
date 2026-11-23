@@ -14,6 +14,17 @@
         "CLIENT_USE_TRACER": "1"
       }
     },
+    "client-with-tracer-dsm": {
+      "iterations": 12,
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+      "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
+      "env": {
+        "CLIENT_USE_TRACER": "1",
+        "DD_DATA_STREAMS_ENABLED": "true"
+      }
+    },
     "server-with-tracer": {
       "iterations": 11,
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
@@ -23,6 +34,18 @@
       "env": {
         "SERVER_USE_TRACER": "1",
         "REQS": "20000"
+      }
+    },
+    "server-with-tracer-dsm": {
+      "iterations": 11,
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+      "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
+      "env": {
+        "SERVER_USE_TRACER": "1",
+        "REQS": "20000",
+        "DD_DATA_STREAMS_ENABLED": "true"
       }
     },
     "server-querystring-obfuscation": {

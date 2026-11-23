@@ -2,7 +2,7 @@
 
 const web = require('../../plugins/util/web')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
-const { getBlockingAction } = require('../blocking')
+const { block, getBlockingAction, isBlocked } = require('../blocking')
 const log = require('../../log')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
@@ -23,6 +23,18 @@ const ALLOWED_ROOTSPAN_NAMES = new Set([
   'express.request',
   'fastify.request',
 ])
+
+/** @type {WeakMap<import('http').IncomingMessage, ((error: Error) => void) | undefined>} */
+const requestsToBlockOnDetection = new WeakMap()
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {(error: Error) => void} [ignoreError] Keeps the abort error of a blocked request out of the framework's
+ *   request errors.
+ */
+function markToBlockOnDetection (req, ignoreError) {
+  requestsToBlockOnDetection.set(req, ignoreError)
+}
 
 class DatadogRaspAbortError extends Error {
   constructor (req, res, blockingAction, raspRule, ruleTriggered) {
@@ -67,10 +79,27 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   if (abortController && !abortOnUncaughtException) {
     const blockingAction = getBlockingAction(result?.actions)
-    const rootSpanName = rootSpan?.context?.()?._name
+    const shouldBlockOnDetection = requestsToBlockOnDetection.has(req)
 
-    if (blockingAction && ALLOWED_ROOTSPAN_NAMES.has(rootSpanName)) {
+    if (blockingAction && (shouldBlockOnDetection || ALLOWED_ROOTSPAN_NAMES.has(rootSpan?.context?.()?._name))) {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
+
+      if (shouldBlockOnDetection) {
+        // The blocking response is sent before the abort: once the operation fails, the framework can destroy the
+        // response before writing anything, as Next.js does when a stream fails before its first chunk.
+        let blocked = false
+        if (res) {
+          blocked = isBlocked(res) || block(req, res, rootSpan, null, blockingAction)
+        }
+        if (blocked) {
+          const ignoreError = requestsToBlockOnDetection.get(req)
+          ignoreError?.(abortError)
+        }
+        if (ruleTriggered) {
+          updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+        }
+      }
+
       abortController.abort(abortError)
 
       return
@@ -84,6 +113,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
 module.exports = {
   handleResult,
+  markToBlockOnDetection,
   RULE_TYPES,
   DatadogRaspAbortError,
 }

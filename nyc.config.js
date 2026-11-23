@@ -30,6 +30,7 @@ module.exports = {
     'initialize.mjs',
     'loader-hook.mjs',
     'register.js',
+    'register.mjs',
     'version.js',
   ],
   exclude: [

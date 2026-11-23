@@ -37,6 +37,13 @@ const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
+let outputDirId = 0
+
+// Concurrent runs share the sandbox. Playwright removes its output dir on startup and worker artifacts on exit.
+function getUniqueOutputDir () {
+  return `./test-results-active-test-span-${++outputDirId}`
+}
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
@@ -95,6 +102,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -119,6 +127,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -150,6 +159,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -240,6 +250,7 @@ versions.forEach((version) => {
               DD_TRACE_LOG_LEVEL: 'error',
               PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-rum',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
               ...(telemetryEnabled && {
                 ...getCiVisEvpProxyConfig(receiver.port),
                 DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
@@ -330,6 +341,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -362,6 +374,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-did-not-run',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
               ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
             },
           }
