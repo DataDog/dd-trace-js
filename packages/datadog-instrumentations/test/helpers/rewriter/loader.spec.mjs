@@ -131,6 +131,28 @@ describe('rewriter loader', () => {
     assertRewritten(result.source)
   })
 
+  it('leaves CommonJS to the Module._compile shim in the sync loader hook', () => {
+    const url = createAiModuleUrl()
+    const contexts = [
+      { format: 'commonjs' },
+      // require() of CommonJS can arrive without a format.
+      { conditions: ['require', 'node'] },
+    ]
+
+    for (const context of contexts) {
+      const result = loadSync(url, context, () => ({ source }))
+
+      assert.strictEqual(result.source, source)
+    }
+  })
+
+  it('rewrites ES modules loaded through require() in the sync loader hook', () => {
+    const url = createAiModuleUrl()
+    const result = loadSync(url, { conditions: ['require', 'node'] }, () => ({ format: 'module', source }))
+
+    assertRewritten(result.source)
+  })
+
   it('rewrites binary sync loader results', () => {
     const sourceText = readFileSync(jasmineSourcePath, 'utf8')
     const buffer = Buffer.from(sourceText)
@@ -153,7 +175,7 @@ describe('rewriter loader', () => {
     }
   })
 
-  it('does not rewrite CommonJS require loads in the sync loader hook', () => {
+  it('rewrites CommonJS require loads once with register.js and the rewriter preload', () => {
     const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-'))
     const packageDirectory = join(root, 'node_modules', 'ai')
 
@@ -195,7 +217,7 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout.trim(), '1')
   })
 
-  it('does not rewrite CommonJS entrypoint loads in the sync loader hook', () => {
+  it('rewrites CommonJS entrypoint loads once with register.js and the rewriter preload', () => {
     const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-entrypoint-'))
     const packageDirectory = join(root, 'node_modules', 'ai')
 

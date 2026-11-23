@@ -2,13 +2,17 @@
   'error', { ignores: ['module.register', 'module.registerHooks'] }
 ] */
 
-import Module from 'node:module'
+import Module, { createRequire } from 'node:module'
 
 const mode = process.argv[2]
 const { register } = Module
 const registerHooks = /** @type {{ registerHooks?: (options: object) => object }} */ (Module).registerHooks
 let asyncRegistrations = 0
 let syncRegistrations = 0
+// The tracer's own rewriter hook, which the loader replaces, is not a loader registration; module-hooks.spec.js
+// covers it.
+const require = createRequire(import.meta.url)
+const moduleHooks = require('../../../../datadog-instrumentations/src/helpers/rewriter/module-hooks.js')
 if (mode === 'without-async-loader') {
   Reflect.deleteProperty(Module, 'register')
 } else if (register) {
@@ -21,7 +25,7 @@ if (mode === 'without-sync-hooks') {
   Reflect.deleteProperty(Module, 'registerHooks')
 } else if (registerHooks) {
   Reflect.set(Module, 'registerHooks', function (options) {
-    syncRegistrations++
+    if (options.load !== moduleHooks.loadSync) syncRegistrations++
     return registerHooks(options)
   })
 }

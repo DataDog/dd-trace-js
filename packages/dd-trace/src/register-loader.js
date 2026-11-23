@@ -22,6 +22,7 @@ function registerLoader (registerAsync, parentURL, tryRegisterSync) {
 
   if (syncResult) {
     registered = true
+    handOverRewrite(true)
     return
   }
 
@@ -35,9 +36,19 @@ function registerLoader (registerAsync, parentURL, tryRegisterSync) {
   // Node.js removes module.register in nodejs/node#67090.
   if (registerAsync) {
     const { getLoaderRegisterOptions } = require('./esm-module-load')
+    handOverRewrite(false)
     registerAsync('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
     registered = true
   }
+}
+
+/**
+ * The loader's hooks rewrite ES modules from now on, in place of the tracer's own synchronous rewriter hook.
+ *
+ * @param {boolean} sync Whether the loader runs as synchronous hooks.
+ */
+function handOverRewrite (sync) {
+  require('../../datadog-instrumentations/src/helpers/rewriter/module-hooks').handOverToLoader(sync)
 }
 
 module.exports = registerLoader
