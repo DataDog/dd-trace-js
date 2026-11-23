@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 const { on } = require('node:events')
+const { writeFile } = require('node:fs/promises')
+const { join } = require('node:path')
 
 const { spawn } = require('child_process')
 const {
@@ -73,69 +75,83 @@ describe('esm', () => {
       }).timeout(50000)
     })
 
-    describe('with OTel semantics', () => {
-      let agent
-      let proc
+    for (const [label, configuredPrefix, envPrefix, prefix] of [
+      ['default', undefined, undefined, 'api'],
+      ['custom', 'v2/functions', undefined, 'v2/functions'],
+      ['empty', '', undefined, ''],
+      ['environment', 'ignored', 'override', 'override'],
+      ['empty environment', 'ignored', '', ''],
+    ]) {
+      const routeRoot = prefix ? `/${prefix}` : ''
+      describe(`with OTel semantics and ${label} route prefix`, () => {
+        let agent
+        let proc
 
-      before(async function () {
-        this.timeout(60000)
-        agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
-          DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
-          DD_TRACE_SAMPLING_RULES: JSON.stringify([
-            { resource: 'GET /httptest2/{id}', sample_rate: 0.5 },
-          ]),
-          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        before(async function () {
+          this.timeout(60000)
+          await writeFile(join(sandboxCwd(), 'host.json'), JSON.stringify({
+            version: '2.0',
+            extensions: { http: { routePrefix: configuredPrefix } },
+          }))
+          agent = await new FakeAgent().start()
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+            DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+            DD_TRACE_SAMPLING_RULES: JSON.stringify([
+              { resource: `GET ${routeRoot}/httptest2/{id}`, sample_rate: 0.5 },
+            ]),
+            AzureFunctionsJobHost__extensions__http__routePrefix: envPrefix,
+            OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
+            PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+          })
         })
+
+        after(async () => {
+          await stopProc(proc, { signal: 'SIGINT' })
+          await agent.stop()
+        })
+
+        it('uses the route for sampling before outbound propagation', async () => {
+          const [span, response] = await Promise.all([
+            waitForOtlpSpan(agent, `GET ${routeRoot}/httptest2/{id}`, 50_000),
+            fetch(`http://127.0.0.1:7071${routeRoot}/httptest2/42?page=2&token=fake-token`, {
+              headers: {
+                'x-datadog-parent-id': '2',
+                'x-datadog-trace-id': '1',
+              },
+            }),
+          ])
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(response.headers.get('x-sampling-priority'), '2')
+          await response.text()
+
+          const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+          assertObjectContains(attributes, {
+            '_dd.p.ksr': { stringValue: '0.5' },
+            'http.route': { stringValue: `${routeRoot}/httptest2/{id}` },
+            'url.scheme': { stringValue: 'http' },
+            'url.path': { stringValue: `${routeRoot}/httptest2/42` },
+            'url.query': { stringValue: 'page=2&<redacted>' },
+            _sampling_priority_v1: { intValue: 2 },
+          })
+        }).timeout(60_000)
+
+        it('omits queries containing Azure function keys', async () => {
+          const [span, response] = await Promise.all([
+            waitForOtlpSpan(agent, `GET ${routeRoot}/httptest`, 50_000),
+            fetch(`http://127.0.0.1:7071${routeRoot}/httptest?page=2&code=fake-function-key`),
+          ])
+          assert.strictEqual(response.status, 200)
+          await response.text()
+
+          const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+          assertObjectContains(attributes, {
+            'http.route': { stringValue: `${routeRoot}/httptest` },
+            'url.path': { stringValue: `${routeRoot}/httptest` },
+          })
+          assert.strictEqual(attributes['url.query'], undefined)
+        }).timeout(60_000)
       })
-
-      after(async () => {
-        await stopProc(proc, { signal: 'SIGINT' })
-        await agent.stop()
-      })
-
-      it('uses the route for sampling before outbound propagation', async () => {
-        const [span, response] = await Promise.all([
-          waitForOtlpSpan(agent, 'GET /httptest2/{id}', 50_000),
-          fetch('http://127.0.0.1:7071/api/httptest2/42?page=2&token=fake-token', {
-            headers: {
-              'x-datadog-parent-id': '2',
-              'x-datadog-trace-id': '1',
-            },
-          }),
-        ])
-        assert.strictEqual(response.status, 200)
-        assert.strictEqual(response.headers.get('x-sampling-priority'), '2')
-        await response.text()
-
-        const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
-        assertObjectContains(attributes, {
-          '_dd.p.ksr': { stringValue: '0.5' },
-          'http.route': { stringValue: '/httptest2/{id}' },
-          'url.scheme': { stringValue: 'http' },
-          'url.path': { stringValue: '/api/httptest2/42' },
-          'url.query': { stringValue: 'page=2&<redacted>' },
-          _sampling_priority_v1: { intValue: 2 },
-        })
-      }).timeout(60_000)
-
-      it('omits queries containing Azure function keys', async () => {
-        const [span, response] = await Promise.all([
-          waitForOtlpSpan(agent, 'GET /httptest', 50_000),
-          fetch('http://127.0.0.1:7071/api/httptest?page=2&code=fake-function-key'),
-        ])
-        assert.strictEqual(response.status, 200)
-        await response.text()
-
-        const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
-        assertObjectContains(attributes, {
-          'http.route': { stringValue: '/httptest' },
-          'url.path': { stringValue: '/api/httptest' },
-        })
-        assert.strictEqual(attributes['url.query'], undefined)
-      }).timeout(60_000)
-    })
+    }
   })
 })
 
