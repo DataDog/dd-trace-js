@@ -250,10 +250,14 @@ function patch (http, methodName) {
                 ctx.res = arg
                 finish()
                 break
+              case 'abort':
+                if (!ctx.res && !req.socket) {
+                  finish()
+                }
+                break
               case 'error':
                 ctx.error = arg
                 errorChannel.publish(ctx)
-              case 'abort': // deprecated and replaced by `close` in node 17
               case 'close':
                 finish()
             }

@@ -1033,61 +1033,98 @@ describe('Plugin', () => {
             }).timeout(10000)
           }
 
-          it('records the error supplied when the timeout handler destroys the request', async () => {
-            const url = await listen(() => {})
-            const req = http.request(url)
-            const timeout = once(req, 'timeout')
-            req.setTimeout(idleTimeout)
-            req.end()
-            await timeout
-
-            const finishesAtTimeout = finishedResponses.length
-            const error = new Error('Request cancelled after socket timeout')
-            let recordedSpan
-            const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
-            const requestError = once(req, 'error')
-            const requestClosed = new Promise(resolve => req.once('close', resolve))
-            req.destroy(error)
-            const [[emittedError]] = await Promise.all([requestError, requestClosed, traceReceived])
-
-            assert.strictEqual(emittedError, error)
-            assert.strictEqual(finishesAtTimeout, 0)
-            assert.deepStrictEqual(finishedResponses, [undefined])
-            assertObjectContains(recordedSpan, {
-              error: 1,
-              meta: { [ERROR_MESSAGE]: error.message, [ERROR_TYPE]: error.name },
-            })
-            assert.ok(!('http.status_code' in recordedSpan.meta))
-          })
-
-          it('records the response error when a timeout handler destroys a partial response', async () => {
-            const url = await listen((req, res) => {
-              res.write('first chunk')
-            })
-            const req = http.get(url, res => {
-              res.resume()
+          for (const method of ['destroy', 'abort']) {
+            it(`records the request error when a timeout handler calls ${method}() before headers`, async () => {
+              const url = await listen(() => {})
+              const req = http.request(url)
+              const timeout = once(req, 'timeout')
               req.setTimeout(idleTimeout)
-            })
-            const [[res]] = await Promise.all([once(req, 'response'), once(req, 'timeout')])
-            assert.deepStrictEqual(finishedResponses, [])
+              req.end()
+              await timeout
 
-            let recordedSpan
-            const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
-            const requestClosed = once(req, 'close')
-            req.destroy()
-            await Promise.all([requestClosed, traceReceived])
+              const finishesAtTimeout = finishedResponses.length
+              const error = method === 'destroy' ? new Error('Request cancelled after socket timeout') : undefined
+              let recordedSpan
+              const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
+              const requestError = once(req, 'error')
+              const requestClosed = new Promise(resolve => req.once('close', resolve))
+              if (error) {
+                req.destroy(error)
+              } else {
+                req.abort()
+              }
+              const [[emittedError]] = await Promise.all([requestError, requestClosed, traceReceived])
 
-            assert.deepStrictEqual(finishedResponses, [false])
-            assert.strictEqual(res.errored.code, 'ECONNRESET')
-            assertObjectContains(recordedSpan, {
-              error: 1,
-              meta: {
-                [ERROR_MESSAGE]: res.errored.message,
-                [ERROR_TYPE]: res.errored.name,
-                'http.status_code': '200',
-              },
+              if (error) {
+                assert.strictEqual(emittedError, error)
+              } else {
+                assert.strictEqual(emittedError.code, 'ECONNRESET')
+              }
+              assert.strictEqual(finishesAtTimeout, 0)
+              assert.deepStrictEqual(finishedResponses, [undefined])
+              assertObjectContains(recordedSpan, {
+                error: 1,
+                meta: { [ERROR_MESSAGE]: emittedError.message, [ERROR_TYPE]: emittedError.name },
+              })
+              assert.ok(!('http.status_code' in recordedSpan.meta))
             })
+          }
+
+          it('finishes a queued request on abort without waiting for a socket', async () => {
+            const url = await listen(() => {})
+            const socketPool = new http.Agent({ maxSockets: 1 })
+            const requestReceived = once(appListener, 'request')
+            http.get(url, { agent: socketPool }, res => res.resume())
+
+            try {
+              const [, activeResponse] = await requestReceived
+              const req = http.get(url, { agent: socketPool })
+              let finishesAtAbort
+              req.once('abort', () => {
+                finishesAtAbort = finishedResponses.length
+                activeResponse.end()
+              })
+              const requestClosed = once(req, 'close')
+              req.abort()
+              await requestClosed
+
+              assert.strictEqual(finishesAtAbort, 1)
+            } finally {
+              socketPool.destroy()
+            }
           })
+
+          for (const method of ['destroy', 'abort']) {
+            it(`records the response error when a timeout handler calls ${method}() after headers`, async () => {
+              const url = await listen((req, res) => {
+                res.write('first chunk')
+              })
+              const req = http.get(url, res => {
+                res.resume()
+                req.setTimeout(idleTimeout)
+              })
+              const [[res]] = await Promise.all([once(req, 'response'), once(req, 'timeout')])
+              assert.deepStrictEqual(finishedResponses, [])
+
+              let recordedSpan
+              const traceReceived = agent.assertFirstTraceSpan(span => { recordedSpan = span })
+              const responseError = once(res, 'error')
+              const requestClosed = once(req, 'close')
+              req[method]()
+              const [[error]] = await Promise.all([responseError, requestClosed, traceReceived])
+
+              assert.strictEqual(error.code, 'ECONNRESET')
+              assert.deepStrictEqual(finishedResponses, [false])
+              assertObjectContains(recordedSpan, {
+                error: 1,
+                meta: {
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_TYPE]: error.name,
+                  'http.status_code': '200',
+                },
+              })
+            })
+          }
         })
 
         it('should only record a request once', done => {
