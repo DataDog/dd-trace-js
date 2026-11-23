@@ -321,22 +321,22 @@ async function getRunsForCommit (api, sha, page = 1) {
  * @param {number} [page]
  * @returns {Promise<WorkflowJob[]>}
  */
-async function getJobs (api, run, page = 1) {
-  let jobs
+async function getJobs (api, run, page = 1, retry = 1) {
+  const response = await api.actions.listJobsForWorkflowRunAttempt({
+    owner: OWNER,
+    repo: REPO,
+    run_id: run.id,
+    attempt_number: run.run_attempt ?? 1,
+    page,
+    per_page: PAGE_SIZE,
+  })
+  const jobs = response.data?.jobs
+
   // The API sometimes answers 200 with an empty body for a jobs page: retry it.
-  for (let attempt = 1; ; attempt++) {
-    const response = await api.actions.listJobsForWorkflowRunAttempt({
-      owner: OWNER,
-      repo: REPO,
-      run_id: run.id,
-      attempt_number: run.run_attempt ?? 1,
-      page,
-      per_page: PAGE_SIZE,
-    })
-    jobs = response.data?.jobs
-    if (Array.isArray(jobs)) break
-    if (attempt === 3) throw new TypeError(`Unexpected jobs response for run ${run.id}, page ${page}: ${response.status}`)
-    await new Promise(resolve => setTimeout(resolve, 5000 * attempt))
+  if (!Array.isArray(jobs)) {
+    if (retry === 3) throw new TypeError(`Unexpected jobs response for run ${run.id}, page ${page}: ${response.status}`)
+    await new Promise(resolve => setTimeout(resolve, 5000 * retry))
+    return getJobs(api, run, page, retry + 1)
   }
 
   if (jobs.length < PAGE_SIZE) return jobs

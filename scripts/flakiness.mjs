@@ -115,29 +115,28 @@ async function checkWorkflowRuns (id, page = 1) {
   return Promise.all(promises)
 }
 
-async function checkWorkflowJobs (id, attempt, page = 1) {
+async function checkWorkflowJobs (id, attempt, page = 1, retry = 1) {
   if (attempt < 1) return
 
   /** @type {JobsAttemptResponse | undefined} */
-  let response
+  const response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
+    attempt_number: attempt,
+    owner: 'DataDog',
+    repo: 'dd-trace-js',
+    run_id: id,
+    page,
+    per_page: LIMIT,
+  }))
+
   /** @type {unknown} */
-  let jobs
-  // The API sometimes answers 200 with an empty body for a jobs page: retry it.
-  for (let retry = 1; ; retry++) {
-    response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
-      attempt_number: attempt,
-      owner: 'DataDog',
-      repo: 'dd-trace-js',
-      run_id: id,
-      page,
-      per_page: LIMIT,
-    }))
-    jobs = response?.data?.jobs
-    if (Array.isArray(jobs) || retry === 3) break
-    await new Promise(resolve => setTimeout(resolve, 5000 * retry))
-  }
+  const jobs = response?.data?.jobs
 
   if (!Array.isArray(jobs)) {
+    // The API sometimes answers 200 with an empty body for a jobs page: retry it.
+    if (retry < 3) {
+      await new Promise(resolve => setTimeout(resolve, 5000 * retry))
+      return checkWorkflowJobs(id, attempt, page, retry + 1)
+    }
     throw new TypeError(`Unexpected jobs response shape (${inspect(redactHeaders(response), { depth: Infinity })})`)
   }
 
