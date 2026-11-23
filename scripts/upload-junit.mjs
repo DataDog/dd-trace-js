@@ -23,14 +23,15 @@ const XPATH_TAGS = [
 ]
 
 // datadog-ci derives ci.pipeline.*/ci.job.* tags from these GITHUB_* variables, which are All Green's
-// own here and would overwrite the per-test XPATH_TAGS values above. JOB_CHECK_RUN_ID is All Green's
-// job id, so it would point the uploaded tests at a job that did not run them.
+// own here and would overwrite the per-test XPATH_TAGS values above. JOB_CHECK_RUN_ID and DD_GITHUB_JOB_NAME
+// are All Green's job id and name, so they would point the uploaded tests at a job that did not run them.
 const NO_PIPELINE_ATTRIBUTION_ENV = {
   GITHUB_WORKFLOW: '',
   GITHUB_JOB: '',
   GITHUB_RUN_ID: '',
   GITHUB_RUN_NUMBER: '',
   JOB_CHECK_RUN_ID: '',
+  DD_GITHUB_JOB_NAME: '',
 }
 
 const uploadSemaphore = new Semaphore(MAX_CONCURRENT_UPLOADS)
@@ -92,11 +93,12 @@ export function junitUploadEnv ({ runId, runAttempt }) {
 export async function uploadAllJunit () {
   if (!existsSync(INPUT_DIR)) return []
 
-  return await Promise.all(groupJunitReports(INPUT_DIR).map(async group => {
+  return await Promise.all(groupJunitReports(INPUT_DIR).map(async (group, index) => {
     await uploadSemaphore.acquire()
     try {
       return await runUpload('datadog-ci', [
         'junit', 'upload', '--service', 'dd-trace-js-tests',
+        ...(index === 0 ? [] : ['--skip-git-metadata-upload']),
         ...XPATH_TAGS.flatMap(tag => ['--xpath-tag', tag]),
         ...group.files,
       ], junitUploadEnv(group))

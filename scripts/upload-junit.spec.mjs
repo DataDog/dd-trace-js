@@ -86,6 +86,7 @@ describe('upload-junit', () => {
         GITHUB_RUN_ID: '111',
         GITHUB_RUN_NUMBER: '',
         JOB_CHECK_RUN_ID: '',
+        DD_GITHUB_JOB_NAME: '',
         GITHUB_RUN_ATTEMPT: '2',
       })
     })
@@ -97,6 +98,7 @@ describe('upload-junit', () => {
         GITHUB_RUN_ID: '',
         GITHUB_RUN_NUMBER: '',
         JOB_CHECK_RUN_ID: '',
+        DD_GITHUB_JOB_NAME: '',
       })
     })
   })
