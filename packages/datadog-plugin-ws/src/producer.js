@@ -6,7 +6,6 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
-const { getSegment } = require('../../dd-trace/src/util')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
@@ -23,8 +22,6 @@ class WSProducerPlugin extends TracingPlugin {
     const { byteLength, socket, binary } = ctx
     if (!socket?.spanContext) return
 
-    const spanTags = socket.spanTags
-    const path = getSegment(spanTags['resource.name'], ' ', 1)
     const opCode = binary ? 'binary' : 'text'
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
@@ -32,7 +29,7 @@ class WSProducerPlugin extends TracingPlugin {
       meta: {
         'span.type': 'websocket',
         'span.kind': 'producer',
-        'resource.name': `websocket ${path}`,
+        'resource.name': socket.spanTags.messageResource,
         'websocket.message.type': opCode,
 
       },

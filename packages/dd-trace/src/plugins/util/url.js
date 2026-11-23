@@ -40,9 +40,14 @@ function getProtocol (req) {
 }
 
 /**
+ * @typedef {object} NormalizedUrlConfig
+ * @property {boolean | RegExp} queryStringObfuscation
+ */
+
+/**
  * Obfuscate query string
  *
- * @param {object} config
+ * @param {NormalizedUrlConfig} config
  * @param {string} url
  */
 function obfuscateQs (config, url) {
@@ -115,16 +120,14 @@ function getQsObfuscator (config) {
  * Callers gate this behind `DD_TRACE_OTEL_SEMANTICS_ENABLED`, so the default
  * (flag off) hot path stays a plain tag assignment.
  *
- * @param {{ queryStringObfuscation?: boolean | string }} config
+ * @param {NormalizedUrlConfig} config
  * @param {string} base `scheme://host[:port]`
  * @param {string} [pathname] raw request path, may include `?query`
  * @param {string} strippedUrl `base` + query-stripped path (used when there is no query)
  */
 function buildClientHttpUrl (config, base, pathname, strippedUrl) {
   if (pathname?.includes('?')) {
-    // `config.queryStringObfuscation` is the raw config value here (client plugins
-    // don't normalize it the way the server does), so compile it first.
-    return obfuscateQs({ queryStringObfuscation: getQsObfuscator(config) }, `${base}${pathname}`)
+    return obfuscateQs(config, `${base}${pathname}`)
   }
   return strippedUrl
 }

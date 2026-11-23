@@ -2,13 +2,14 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
+const { createRequire } = require('node:module')
 
 const { describe, it } = require('mocha')
 
-const lambda = require('../../../../lambda')
+const lambda = require('../../src/lambda/facade')
 
 describe('Lambda facade', () => {
-  it('keeps the cross-major public surface narrow', () => {
+  it('keeps the internal shim contract narrow', () => {
     assert.deepStrictEqual(Object.keys(lambda).sort(), [
       'getTraceHeaders',
       'reportInitFailure',
@@ -18,6 +19,16 @@ describe('Lambda facade', () => {
     ])
   })
 
+  it('does not expose a root Lambda entry point or declaration file', () => {
+    assert.throws(() => require.resolve('../../../../lambda'), { code: 'MODULE_NOT_FOUND' })
+    assert.throws(() => require.resolve('../../../../lambda.d.ts'), { code: 'MODULE_NOT_FOUND' })
+  })
+
+  it('is accessible from the selected tracer installation without a root entry point', () => {
+    const tracerRequire = createRequire(require.resolve('../../../..'))
+    assert.strictEqual(tracerRequire('./packages/dd-trace/src/lambda/facade'), require('../../src/lambda/facade'))
+  })
+
   it('activates the invocation plugin when the facade is imported before the Lambda environment is available', () => {
     const script = `
       const assert = require('node:assert/strict')
@@ -25,7 +36,7 @@ describe('Lambda facade', () => {
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
       delete process.env.DD_TRACE_DISABLED_PLUGINS
       delete process.env.DD_TRACE_AWS_LAMBDA_ENABLED
-      const { wrap, getTraceHeaders } = require(${JSON.stringify(require.resolve('../../../../lambda'))})
+      const { wrap, getTraceHeaders } = require(${JSON.stringify(require.resolve('../../src/lambda/facade'))})
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'early-facade-test'
       const tracer = require(${JSON.stringify(require.resolve('../../../..'))}).init({
         startupLogs: false,

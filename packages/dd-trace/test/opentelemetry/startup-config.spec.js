@@ -55,7 +55,8 @@ describe('effective OTel startup configuration', () => {
     },
     {
       name: 'OTel opt-out over DD opt-in',
-      env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'true' },
+      // OTEL_SDK_DISABLED=true selects the no-op tracer unless DD_TRACE_ENABLED is set.
+      env: { DD_TRACE_ENABLED: 'true', DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'true' },
       configured: true,
     },
     {

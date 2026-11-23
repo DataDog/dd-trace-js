@@ -1,6 +1,9 @@
 'use strict'
 
-const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+/** @typedef {typeof import('../../../../vendor/node_modules/@datadog/sketches-js')} Sketches */
+const { LogCollapsingLowestDenseDDSketch } = /** @type {Sketches} */ (
+  require('../../../../vendor/dist/@datadog/sketches-js')
+)
 const { TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY } = require('../constants')
 
 /**

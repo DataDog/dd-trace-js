@@ -85,41 +85,37 @@ function stripIpv6Brackets (host) {
  */
 
 /**
- * Decompose a server request URL into the OpenTelemetry `url.*` / `server.*`
- * parts. Structural fields (scheme, address, path) are read from the raw URL;
- * the port is explicit or inferred from the scheme. The query comes from the
- * already-obfuscated URL so configured query-string obfuscation is preserved.
+ * Decompose an already-obfuscated server request URL into OpenTelemetry `url.*` / `server.*` parts.
  *
- * @param {string} rawUrl full request URL (`scheme://host[:port]/path?query`)
- * @param {string} obfuscatedUrl same URL with its query string obfuscated
+ * @param {string} url full request URL (`scheme://host[:port]/path?query`)
  * @returns {ServerUrlParts}
  */
-function decomposeServerUrl (rawUrl, obfuscatedUrl) {
+function decomposeServerUrl (url) {
   let scheme
   let address
   let port
   let path
 
   try {
-    const parsed = new URL(rawUrl)
+    const parsed = new URL(url)
     scheme = parsed.protocol.length > 1 ? parsed.protocol.slice(0, -1) : undefined
     // `extractURL` builds `http://undefined/...` when the Host header is absent; skip that.
     const hostname = parsed.hostname
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
-      port = parsed.port ? Number.parseInt(parsed.port, 10) : defaultPortForUrl(rawUrl)
+      port = parsed.port ? Number.parseInt(parsed.port, 10) : defaultPortForUrl(url)
       if (port === 0) port = undefined
     }
     path = parsed.pathname || '/'
   } catch {
     // Malformed or relative URL: fall back to a best-effort path only.
-    path = extractPathFromUrl(rawUrl)
+    path = extractPathFromUrl(url)
   }
 
   let query
-  const queryIndex = obfuscatedUrl.indexOf('?')
+  const queryIndex = url.indexOf('?')
   if (queryIndex !== -1) {
-    const rawQuery = obfuscatedUrl.slice(queryIndex + 1)
+    const rawQuery = url.slice(queryIndex + 1)
     if (rawQuery) query = rawQuery
   }
 
@@ -256,7 +252,7 @@ function applyHttpOtelSemantics (formattedSpan) {
   if (kind === 'server') {
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
-      const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
+      const { scheme, address, port, path, query } = decomposeServerUrl(url)
       if (path !== undefined) newMeta[URL_PATH] = path
       if (scheme !== undefined) newMeta[URL_SCHEME] = toHttpScheme(scheme)
       if (query !== undefined) newMeta[URL_QUERY] = query
@@ -294,7 +290,6 @@ module.exports = {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
-  decomposeServerUrl, // exercised directly by the helper spec
   isInstrumentationOwnedResource,
   otelHttpResourceName,
   setInstrumentationHttpResource,
