@@ -977,6 +977,7 @@ describe('OpenTelemetry Traces', () => {
 
   describe('Exporter', () => {
     for (const env of [
+      {},
       { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf' },
@@ -995,7 +996,6 @@ describe('OpenTelemetry Traces', () => {
     }
 
     for (const env of [
-      {},
       { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json' },
       { OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' },
@@ -1135,7 +1135,7 @@ describe('OpenTelemetry Traces', () => {
       }).finish()
 
       sinon.assert.calledOnce(sendPayload)
-      const payload = JSON.parse(sendPayload.firstCall.args[0])
+      const payload = decodeProtobufPayload(sendPayload.firstCall.args[0])
       const [span] = payload.resourceSpans[0].scopeSpans[0].spans
       assert.strictEqual(span.name, 'GET /wire')
       assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.request.method').value,
@@ -1176,9 +1176,9 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Configurations', () => {
-    it('uses default http/json protocol', () => {
+    it('uses default http/protobuf protocol', () => {
       const config = getConfigFresh()
-      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
     })
 
     it('uses port 4318 for default OTLP HTTP endpoint', () => {

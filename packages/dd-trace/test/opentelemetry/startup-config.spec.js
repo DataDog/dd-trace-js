@@ -332,7 +332,8 @@ describe('effective OTel startup configuration', () => {
     if (DD_MAJOR < 6) this.skip()
     const matching = run({ OTEL_PROPAGATORS: 'tracecontext,baggage' }).configuration
     assert.equal(matching.OTEL_PROPAGATORS, 'tracecontext,baggage')
-    assert.equal(run({ OTEL_PROPAGATORS: 'none,baggage' }).configuration.OTEL_PROPAGATORS, 'baggage')
+    assert.equal(run({ DD_TRACE_PROPAGATION_STYLE: 'none,baggage' }).configuration.OTEL_PROPAGATORS, 'baggage')
+    assert.equal(run({ OTEL_PROPAGATORS: 'none,baggage' }).configuration.OTEL_PROPAGATORS, 'none')
     assert.equal(run({}, { tracePropagationStyle: ['b3 single header', 'b3multi'] })
       .configuration.OTEL_PROPAGATORS, 'b3,b3multi')
     assert.equal(run({}, { tracePropagationStyle: [] }).configuration.OTEL_PROPAGATORS, 'none')

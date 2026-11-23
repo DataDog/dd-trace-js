@@ -51,6 +51,15 @@ describe('db sources with pg', () => {
         }, 'SQL_INJECTION', { occurrences: 1 }, null, null,
         'Should have SQL_INJECTION using the first row of the result')
 
+        testThatRequestHasVulnerability(async (req, res) => {
+          const result = await client.query("SELECT '\\x0102'::bytea AS data, query FROM examples")
+
+          await client.query(result.rows[0].query)
+
+          res.end()
+        }, 'SQL_INJECTION', { occurrences: 1 }, null, null,
+        'Should have SQL_INJECTION using the first row of a result with a binary column')
+
         testThatRequestHasNoVulnerability(async (req, res) => {
           const result = await client.query('SELECT * FROM examples')
 

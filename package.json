@@ -240,7 +240,7 @@
     "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-regexp": "^3.3.3",
     "eslint-plugin-sonarjs": "^4.2.2",
-    "eslint-plugin-unicorn": "^79.0.0",
+    "eslint-plugin-unicorn": "^80.0.0",
     "express": "^5.3.0",
     "glob": "^10.4.5",
     "globals": "^17.14.0",
