@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
+const net = require('node:net')
 const { join } = require('node:path')
 
 const { BUN } = require('../helpers/bun')
@@ -219,25 +220,50 @@ describe('Bun.serve', function () {
     ])
   })
 
-  it('traces direct server.fetch() calls, which pass no server argument', async () => {
+  for (const [path, status, message] of [
+    ['/direct', 200],
+    ['/direct/throw', 500, 'direct sync failure'],
+    ['/direct/reject', 500, 'direct async failure'],
+  ]) {
+    it(`traces direct server.fetch() calls, which pass no server argument (${path})`, async () => {
+      const url = await start()
+      const received = serverSpan(span => {
+        assert.strictEqual(span.meta['http.url'], url + path)
+        assert.strictEqual(span.meta['http.status_code'], String(status))
+        assert.strictEqual(span.error, message ? 1 : 0)
+        assert.strictEqual(span.meta['error.message'], message)
+      })
+      const response = new Promise(resolve => {
+        const onMessage = message => {
+          if (message.event !== 'direct') return
+          child.off('message', onMessage)
+          resolve(message)
+        }
+        child.on('message', onMessage)
+      })
+      child.send({ event: 'direct', path })
+      const [result] = await Promise.all([response, received])
+      // Bun rethrows direct dispatch failures to the caller; tracing must preserve them.
+      assert.deepStrictEqual(result, message
+        ? { event: 'direct', error: message }
+        : { event: 'direct', status: 200, body: 'direct' })
+    })
+  }
+
+  it('passes requests with unparseable URLs to the application untraced', async () => {
     const url = await start()
-    const received = serverSpan(span => {
-      assert.strictEqual(span.meta['http.url'], url + '/direct')
-      assert.strictEqual(span.meta['http.status_code'], '200')
-      assert.strictEqual(span.error, 0)
+    const response = await new Promise((resolve, reject) => {
+      const socket = net.connect(new URL(url).port, '127.0.0.1', () => {
+        socket.end('GET / HTTP/1.1\r\nHost: [\r\nConnection: close\r\n\r\n')
+      })
+      let data = ''
+      socket.setEncoding('utf8')
+      socket.on('data', chunk => { data += chunk })
+      socket.on('end', () => resolve(data))
+      socket.on('error', reject)
     })
-    const response = new Promise(resolve => {
-      const onMessage = message => {
-        if (message.event !== 'direct') return
-        child.off('message', onMessage)
-        resolve(message)
-      }
-      child.on('message', onMessage)
-    })
-    child.send({ event: 'direct' })
-    const [{ status, body }] = await Promise.all([response, received])
-    assert.strictEqual(status, 200)
-    assert.strictEqual(body, 'direct')
+    assert.match(response, /^HTTP\/1\.1 200 /)
+    assert.match(response, /\r\n\r\nunparsed$/)
   })
 
   for (const [path, testCase, status, message] of [

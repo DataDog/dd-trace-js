@@ -55,8 +55,11 @@ function wrapOptions (options, errors, upgraded, handlers) {
   const wrapHandler = (fetch, route) => function (request, server) {
     if (!start.hasSubscribers) return fetch.apply(this, arguments)
 
-    const url = new URL(request.url)
+    // Malformed Host headers can produce request URLs that applications still receive but cannot be parsed.
+    const url = URL.parse(request.url)
+    if (url === null) return fetch.apply(this, arguments)
     // Direct `server.fetch(request)` calls omit the server argument but still bind the server as `this`.
+    const direct = server === undefined
     const address = (server ?? this).requestIP(request)
     const headers = Object.fromEntries(request.headers)
     // Requests constructed for direct dispatch can lack the Host header that network requests always carry.
@@ -115,7 +118,10 @@ function wrapOptions (options, errors, upgraded, handlers) {
 
     const fail = error => {
       errorChannel.publish({ req, error })
-      if (!finished) {
+      if (direct) {
+        // Bun rethrows direct dispatch failures to the caller without invoking its error callback.
+        complete()
+      } else if (!finished) {
         errors.set(request, {
           error,
           // Bun invokes its error callback outside the fetch handler's async context.

@@ -32,10 +32,15 @@ if (process.env.TEST_CASE === 'hono') {
   fetch = app.fetch
 } else {
   fetch = function (request, server) {
-    if (new URL(request.url).pathname === '/direct') {
+    const url = URL.parse(request.url)
+    // Malformed Host headers produce request URLs that cannot be parsed, and such requests are not traced.
+    if (url === null) return new Response('unparsed')
+    if (url.pathname.startsWith('/direct')) {
       // Bun omits the server argument for direct `server.fetch(request)` calls.
       assert.strictEqual(server, undefined)
       assert.ok(tracer.scope().active())
+      if (url.pathname === '/direct/throw') throw new Error('direct sync failure')
+      if (url.pathname === '/direct/reject') return Promise.reject(new Error('direct async failure'))
       return new Response('direct')
     }
     assert.strictEqual(this, server)
@@ -45,7 +50,7 @@ if (process.env.TEST_CASE === 'hono') {
       return new Response('disabled')
     }
     assert.ok(tracer.scope().active())
-    const path = new URL(request.url).pathname
+    const path = url.pathname
     if (path === '/ws') {
       if (server.upgrade(request)) return
       return new Response('upgrade rejected', { status: 400 })
@@ -139,10 +144,14 @@ if (process.env.TEST_CASE === 'reload') {
   server.reload({ fetch: () => new Response('reloaded') })
 }
 
-process.on('message', async ({ event }) => {
+process.on('message', async ({ event, path }) => {
   if (event !== 'direct') return
-  const response = await server.fetch(new Request(`http://localhost:${server.port}/direct`))
-  process.send({ event: 'direct', status: response.status, body: await response.text() })
+  try {
+    const response = await server.fetch(new Request(`http://localhost:${server.port}${path}`))
+    process.send({ event: 'direct', status: response.status, body: await response.text() })
+  } catch (error) {
+    process.send({ event: 'direct', error: error.message })
+  }
 })
 
 process.send({ port: server.port })
