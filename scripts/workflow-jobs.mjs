@@ -9,7 +9,6 @@
 
 /**
  * @typedef {{
- *   id?: number,
  *   name: string,
  *   html_url: string | null,
  *   conclusion?: string | null,
@@ -23,18 +22,22 @@
 
 /**
  * @typedef {{
+ *   databaseId?: number,
+ *   name: string,
+ *   detailsUrl: string | null,
+ *   conclusion?: string | null,
+ *   startedAt?: string | null,
+ *   completedAt?: string | null,
+ * }} CheckRun
+ */
+
+/**
+ * @typedef {{
  *   node?: {
  *     runAttempt: number,
  *     checkSuite: {
  *       checkRuns: {
- *         nodes: Array<{
- *           databaseId?: number,
- *           name: string,
- *           detailsUrl: string,
- *           conclusion?: string | null,
- *           startedAt?: string | null,
- *           completedAt?: string | null,
- *         }>,
+ *         nodes: CheckRun[],
  *         pageInfo: { hasNextPage: boolean, endCursor?: string | null },
  *       },
  *     },
@@ -52,8 +55,8 @@ const CHECK_RUNS_QUERY = `
             pageInfo { hasNextPage endCursor }
             nodes {
               databaseId @include(if: $failedOnly)
-              name
-              detailsUrl
+              name @skip(if: $failedOnly)
+              detailsUrl @skip(if: $failedOnly)
               conclusion @skip(if: $failedOnly)
               startedAt @skip(if: $failedOnly)
               completedAt @skip(if: $failedOnly)
@@ -68,11 +71,11 @@ const CHECK_RUNS_QUERY = `
 /**
  * @param {Pick<import('octokit').Octokit, 'graphql'>} api
  * @param {WorkflowRun} run
- * @param {boolean} [failedOnly]
- * @returns {Promise<WorkflowJob[]>}
+ * @param {boolean} failedOnly
+ * @yields {{ runAttempt: number, nodes: CheckRun[] }} A page of check runs and the latest workflow attempt.
  */
-export async function getCheckRuns (api, run, failedOnly = false) {
-  const jobs = []
+async function * getCheckRunPages (api, run, failedOnly) {
+  const attempt = run.run_attempt ?? 1
   let after
 
   for (;;) {
@@ -92,30 +95,62 @@ export async function getCheckRuns (api, run, failedOnly = false) {
     if (!node || !Array.isArray(checks?.nodes)) {
       throw new TypeError(`Unexpected check runs response for workflow run ${run.id}.`)
     }
-    if (node.runAttempt !== (run.run_attempt ?? 1)) {
-      throw new Error(`Workflow run ${run.id} was rerun while collecting jobs.`)
+    if (!Number.isSafeInteger(node.runAttempt) || node.runAttempt < attempt) {
+      throw new Error(`Unexpected attempt for workflow run ${run.id}.`)
     }
 
-    for (const check of checks.nodes) {
-      if (failedOnly && !Number.isSafeInteger(check.databaseId)) {
-        throw new TypeError(`Missing failed job ID for workflow run ${run.id}.`)
-      }
-      jobs.push({
-        id: check.databaseId,
-        name: check.name,
-        html_url: check.detailsUrl,
-        conclusion: failedOnly ? 'failure' : check.conclusion?.toLowerCase(),
-        started_at: check.startedAt,
-        completed_at: check.completedAt,
-      })
-    }
+    yield { runAttempt: node.runAttempt, nodes: checks.nodes }
 
-    if (!checks.pageInfo.hasNextPage) return jobs
+    if (!checks.pageInfo.hasNextPage) return
     if (!checks.pageInfo.endCursor || checks.pageInfo.endCursor === after) {
       throw new Error(`Missing next check runs page for workflow run ${run.id}.`)
     }
     after = checks.pageInfo.endCursor
   }
+}
+
+/**
+ * @param {Pick<import('octokit').Octokit, 'graphql' | 'rest'>} api
+ * @param {WorkflowRun} run
+ * @returns {Promise<WorkflowJob[]>}
+ */
+export async function getCheckRuns (api, run) {
+  const attempt = run.run_attempt ?? 1
+  const jobs = []
+
+  for await (const { runAttempt, nodes } of getCheckRunPages(api, run, false)) {
+    if (runAttempt > attempt) return getRestJobs(api, run)
+
+    for (const check of nodes) {
+      jobs.push({
+        name: check.name,
+        html_url: check.detailsUrl,
+        conclusion: check.conclusion?.toLowerCase(),
+        started_at: check.startedAt,
+        completed_at: check.completedAt,
+      })
+    }
+  }
+  return jobs
+}
+
+/**
+ * @param {Pick<import('octokit').Octokit, 'graphql'>} api
+ * @param {WorkflowRun} run
+ * @returns {Promise<number[]>}
+ */
+export async function getFailedJobIds (api, run) {
+  const ids = []
+
+  for await (const { nodes } of getCheckRunPages(api, run, true)) {
+    for (const { databaseId } of nodes) {
+      if (!Number.isSafeInteger(databaseId)) {
+        throw new TypeError(`Missing failed job ID for workflow run ${run.id}.`)
+      }
+      ids.push(/** @type {number} */ (databaseId))
+    }
+  }
+  return ids
 }
 
 /**

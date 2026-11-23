@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'mocha'
 import sinon from 'sinon'
 
-import { getCheckRuns, getRestJobs } from './workflow-jobs.mjs'
+import { getCheckRuns, getFailedJobIds, getRestJobs } from './workflow-jobs.mjs'
 
 const run = { id: 42, node_id: 'workflow-42', run_attempt: 1 }
 
@@ -37,7 +37,6 @@ describe('workflow jobs', () => {
       const jobs = await getCheckRuns({ graphql }, run)
 
       assert.deepStrictEqual(jobs[0], {
-        id: undefined,
         name: 'unit',
         html_url: check.detailsUrl,
         conclusion: 'success',
@@ -60,28 +59,23 @@ describe('workflow jobs', () => {
 
     it('filters failures across all attempts and retains each failure occurrence', async () => {
       const graphql = sinon.stub()
-      const check = { databaseId: 1, name: 'unit', detailsUrl: 'https://example.com/jobs/1' }
-      graphql.onFirstCall().resolves(checksResponse([check], {
+      graphql.onFirstCall().resolves(checksResponse([{ databaseId: 1 }], {
         hasNextPage: true, endCursor: 'next', runAttempt: 3,
       }))
-      graphql.onSecondCall().resolves(checksResponse([
-        { ...check, databaseId: 2, detailsUrl: 'https://example.com/jobs/2' },
-      ], { runAttempt: 3 }))
+      graphql.onSecondCall().resolves(checksResponse([{ databaseId: 2 }], { runAttempt: 3 }))
 
-      const jobs = await getCheckRuns({ graphql }, { ...run, run_attempt: 3 }, true)
+      const ids = await getFailedJobIds({ graphql }, { ...run, run_attempt: 3 })
 
-      assert.deepStrictEqual(jobs.map(job => job.html_url), [check.detailsUrl, 'https://example.com/jobs/2'])
-      assert.deepStrictEqual(jobs.map(job => job.conclusion), ['failure', 'failure'])
-      assert.deepStrictEqual(jobs.map(job => job.id), [1, 2])
+      assert.deepStrictEqual(ids, [1, 2])
       assert.deepStrictEqual(graphql.firstCall.args[1].filter, { checkType: 'ALL', conclusions: ['FAILURE'] })
       assert.strictEqual(graphql.firstCall.args[1].failedOnly, true)
       assert.match(graphql.firstCall.args[0], /startedAt @skip\(if: \$failedOnly\)/)
     })
 
     it('rejects failed checks without an ID for attempt verification', async () => {
-      const graphql = sinon.stub().resolves(checksResponse([{ name: 'unit', detailsUrl: 'https://example.com/jobs/1' }]))
+      const graphql = sinon.stub().resolves(checksResponse([{}]))
 
-      await assert.rejects(getCheckRuns({ graphql }, run, true), {
+      await assert.rejects(getFailedJobIds({ graphql }, run), {
         name: 'TypeError', message: 'Missing failed job ID for workflow run 42.',
       })
     })
@@ -106,11 +100,27 @@ describe('workflow jobs', () => {
       })
     }
 
-    it('rejects a workflow that was rerun since it was selected', async () => {
-      const graphql = sinon.stub().resolves(checksResponse([], { runAttempt: 2 }))
+    it('uses only the selected attempt when a rerun starts during summary pagination', async () => {
+      const graphql = sinon.stub()
+      graphql.onFirstCall().resolves(checksResponse([{ name: 'discarded' }], {
+        hasNextPage: true, endCursor: 'next',
+      }))
+      graphql.onSecondCall().resolves(checksResponse([], { runAttempt: 2 }))
+      const jobs = [{ name: 'selected attempt', html_url: 'https://example.com/jobs/1' }]
+      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { jobs } })
+      const rest = { actions: { listJobsForWorkflowRunAttempt } }
 
-      await assert.rejects(getCheckRuns({ graphql }, run), {
-        message: 'Workflow run 42 was rerun while collecting jobs.',
+      assert.deepStrictEqual(await getCheckRuns({ graphql, rest }, run), jobs)
+      assert.strictEqual(graphql.callCount, 2)
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
+      assert.strictEqual(listJobsForWorkflowRunAttempt.firstCall.args[0].attempt_number, 1)
+    })
+
+    it('rejects a GraphQL snapshot older than the selected attempt', async () => {
+      const graphql = sinon.stub().resolves(checksResponse([], { runAttempt: 1 }))
+
+      await assert.rejects(getCheckRuns({ graphql }, { ...run, run_attempt: 2 }), {
+        message: 'Unexpected attempt for workflow run 42.',
       })
     })
 
