@@ -110,7 +110,7 @@ function noop () {}
  * @param {string} url
  */
 function removeVitestBrowserUrlMetadata (url) {
-  const locationMatch = url.match(VITEST_BROWSER_STACK_LOCATION_RE)
+  const locationMatch = VITEST_BROWSER_STACK_LOCATION_RE.exec(url)
   const location = locationMatch?.[0] || ''
   const urlWithoutLocation = location ? url.slice(0, -location.length) : url
   const queryStart = urlWithoutLocation.indexOf('?')

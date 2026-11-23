@@ -69,7 +69,7 @@ function capture (command, args) {
  * @param {string} baseRef
  */
 function getProposalState (repository, pullRequestNumber, baseRef) {
-  const [, owner, name] = repository.match(repositoryPattern)
+  const [, owner, name] = repositoryPattern.exec(repository)
   const result = JSON.parse(capture('gh', [
     'api',
     'graphql',
@@ -143,7 +143,7 @@ async function confirmProposalFastForward (
 ) {
   if (!repositoryPattern.test(repository)) throw new Error(`Invalid repository: ${repository}`)
 
-  const headMatch = mergeGroupHeadRef.match(mergeGroupHeadPattern)
+  const headMatch = mergeGroupHeadPattern.exec(mergeGroupHeadRef)
   if (!headMatch) throw new Error(`Invalid merge group ref: ${mergeGroupHeadRef}`)
 
   const [, baseRefName, pullRequest] = headMatch

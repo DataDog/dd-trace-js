@@ -516,7 +516,7 @@ You can copypaste and modify an existing plugin job configuration in this file t
 We use [ESLint](https://eslint.org) to make sure that new code
 conforms to our coding standards.
 
-To run the linter, use:
+Linting requires Node.js 22.13 or later. To run the linter, use:
 
 ```sh
 npm run lint

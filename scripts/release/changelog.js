@@ -322,10 +322,10 @@ function classifyDependencyBump (scopes, subject, files) {
     return 'other'
   }
 
-  const directory = subject.match(/\bin (\/\S+)/)
+  const directory = /\bin (\/\S+)/.exec(subject)
   if (directory && directory[1] !== '/vendor') return 'other'
 
-  const group = subject.match(/\bthe (\S+) group\b/)
+  const group = /\bthe (\S+) group\b/.exec(subject)
   if (group && !PRODUCTION_DEPENDENCY_GROUPS.has(group[1])) return 'other'
 
   return 'production'
@@ -335,7 +335,7 @@ function classifyDependencyBump (scopes, subject, files) {
  * @param {string} subject
  */
 function parsePullRequest (subject) {
-  const match = subject.match(PULL_REQUEST_PATTERN)
+  const match = PULL_REQUEST_PATTERN.exec(subject)
   if (!match) {
     return { subject, pr: '' }
   }
@@ -353,7 +353,7 @@ function parsePullRequest (subject) {
  * @param {string} subject
  */
 function parseConventionalSubject (subject) {
-  const match = subject.match(CONVENTIONAL_PATTERN)
+  const match = CONVENTIONAL_PATTERN.exec(subject)
   if (!match) return
 
   const isRevert = match[1] === 'revert'
