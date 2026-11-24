@@ -1,6 +1,7 @@
 'use strict'
 
 const RouterPlugin = require('../../datadog-plugin-router/src')
+const { normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class RestifyPlugin extends RouterPlugin {
@@ -11,10 +12,7 @@ class RestifyPlugin extends RouterPlugin {
 
     this.addSub('apm:restify:request:handle', ({ req }) => {
       this.setFramework(req, 'restify', this.config)
-    })
-
-    this.addSub('apm:restify:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      web.setSamplingRoute(req, restifyRoute)
     })
   }
 
@@ -24,6 +22,14 @@ class RestifyPlugin extends RouterPlugin {
       middleware: false, // not supported
     })
   }
+}
+
+/**
+ * @param {{ method: string, route?: { path?: string | RegExp } }} req
+ */
+function restifyRoute (req) {
+  const path = req.route?.path
+  if (typeof path === 'string') return normalizeRouteSegment(path)
 }
 
 module.exports = RestifyPlugin

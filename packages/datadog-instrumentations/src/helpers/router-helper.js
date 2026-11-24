@@ -154,6 +154,21 @@ function getLayerMeta (layer) {
   return layerMeta.get(layer)
 }
 
+/**
+ * @param {LayerMeta} meta
+ * @param {{ path?: string }} layer
+ * @param {string | RegExp | undefined} pattern
+ * @param {boolean} [useNativePattern]
+ */
+function resolveLayerRoute (meta, layer, pattern, useNativePattern = pattern !== undefined) {
+  if (!meta.needMultiMatch) return meta.captureRoute
+  if (typeof pattern === 'string') return pattern
+
+  for (const matcher of meta.matchers) {
+    if (useNativePattern ? matcher.regex === pattern : matcher.regex?.test(layer.path)) return matcher.path
+  }
+}
+
 function normalizeMethodName (method) {
   return method === '_all' || method === 'all' ? '*' : method
 }
@@ -256,6 +271,7 @@ module.exports = {
   joinPath,
   setLayerMeta,
   getLayerMeta,
+  resolveLayerRoute,
   markAppMounted,
   isAppMounted,
   normalizeRoutePath,

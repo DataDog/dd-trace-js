@@ -27,8 +27,110 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishHapiRoute,
+  publishKoaRouterDispatch,
+  publishRouterParams,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').ExpressionStatement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishHapiRoute (state, node, parent, ancestry) {
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  parent.body.splice(parent.body.indexOf(node) + 1, 0, ...parse(`
+    if (${channel}.end.hasSubscribers) {
+      ${channel}.end.publish({ self: this })
+    }
+  `).body)
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').ReturnStatement | import('estree').ExpressionStatement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishRouterParams (state, node, parent, ancestry) {
+  const call = /** @type {import('estree').CallExpression} */ (
+    node.type === 'ReturnStatement' ? node.argument : node.expression
+  )
+  const continuation = call.arguments.at(-1)
+  if (continuation?.type !== 'FunctionExpression') return
+
+  const methodMatches = query(parent, 'VariableDeclarator[init.callee.object.name="route"]' +
+    '[init.callee.property.name=/^_handles(Method|_method)$/]')
+  if (methodMatches.length !== 1) return
+  const methodMatch = /** @type {import('estree').VariableDeclarator} */ (methodMatches[0])
+
+  const nativeKeys = call.callee.type === 'Identifier' && call.arguments.length === 7 ? call.arguments[2] : undefined
+  const nativeMatch = nativeKeys?.type === 'MemberExpression' && nativeKeys.object.type === 'Identifier' &&
+    nativeKeys.property.type === 'Identifier' && nativeKeys.property.name === 'keys'
+    ? nativeKeys.object.name
+    : undefined
+
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const [matchBinding, matchAssignment, ...start] = parse(`
+    let __apm$methodMatched
+    __apm$methodMatched = undefined
+    let __apm$routeParams
+    if (route && __apm$methodMatched && ${channel}.start.hasSubscribers &&
+        ${nativeMatch ?? 'layer'}.keys?.length) {
+      __apm$routeParams = {
+        req,
+        layer,
+        pattern: ${nativeMatch ? `${nativeMatch}.pattern` : 'undefined'},
+        active: true,
+      }
+      ${channel}.start.publish(__apm$routeParams)
+    }
+  `).body
+  const assignment = /** @type {import('estree').AssignmentExpression} */ (
+    (/** @type {import('estree').ExpressionStatement} */ (matchAssignment)).expression
+  )
+  assignment.right = methodMatch.init
+  methodMatch.init = assignment
+  parent.body.splice(parent.body.indexOf(node), 0, ...start)
+  parent.body.unshift(matchBinding)
+
+  continuation.body.body.unshift(...parse(`
+    if (__apm$routeParams) {
+      __apm$routeParams.active = false
+      __apm$routeParams = undefined
+    }
+  `).body)
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').ReturnStatement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishKoaRouterDispatch (state, node, parent, ancestry) {
+  const dispatch = /** @type {import('estree').CallExpression} */ (node.argument)
+  const compose = /** @type {import('estree').CallExpression} */ (dispatch.callee)
+  const context = /** @type {import('estree').Identifier} */ (dispatch.arguments[0])
+  const chain = /** @type {import('estree').Identifier} */ (compose.arguments[0])
+
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const statements = parse(`
+    const __apm$koaDispatch = undefined
+    if (${channelVariable}.start.hasSubscribers) {
+      ${channelVariable}.start.publish({ context: ${context.name}, chain: ${chain.name} })
+    }
+  `).body
+  const binding = /** @type {import('estree').VariableDeclaration} */ (statements[0])
+  binding.declarations[0].init = compose
+  dispatch.callee = /** @type {import('estree').Identifier} */ (binding.declarations[0].id)
+  parent.body.splice(parent.body.indexOf(node), 0, ...statements)
 }
 
 /**

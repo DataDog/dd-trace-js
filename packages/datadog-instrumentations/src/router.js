@@ -11,6 +11,7 @@ const {
   joinPath,
   setLayerMeta,
   getLayerMeta,
+  resolveLayerRoute,
   isAppMounted,
   setRouterMountPath,
   extractMountPaths,
@@ -55,28 +56,6 @@ function annotateLayer (layer, matchers) {
 }
 
 /**
- * Single-pattern layers carry a constant route. Multi-pattern layers use the
- * host's request-local pattern when available, or match its legacy `layer.path`.
- *
- * @param {{ captureRoute?: string, needMultiMatch: boolean,
- *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
- * @param {{ path?: string }} layer
- * @param {import('node:http').IncomingMessage} [req]
- * @param {symbol} [matchedRoute]
- * @returns {string | undefined}
- */
-function resolveLayerRoute (meta, layer, req, matchedRoute) {
-  if (!meta.needMultiMatch) return meta.captureRoute
-
-  const pattern = matchedRoute && req[matchedRoute]
-  if (typeof pattern === 'string') return pattern
-
-  for (const matcher of meta.matchers) {
-    if (matchedRoute ? matcher.regex === pattern : matcher.regex?.test(layer.path)) return matcher.path
-  }
-}
-
-/**
  * Preserve the host Layer's error boundary while resolving a route outside its
  * dispatch method. This path runs only for multi-pattern layers.
  *
@@ -90,7 +69,7 @@ function resolveLayerRoute (meta, layer, req, matchedRoute) {
  */
 function resolveLayerRouteOrForwardError (meta, layer, next, req, matchedRoute) {
   try {
-    return resolveLayerRoute(meta, layer, req, matchedRoute)
+    return resolveLayerRoute(meta, layer, matchedRoute && req[matchedRoute], matchedRoute !== undefined)
   } catch (error) {
     next(error)
     return ROUTE_RESOLUTION_FAILED

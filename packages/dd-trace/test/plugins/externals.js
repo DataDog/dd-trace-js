@@ -146,6 +146,10 @@ module.exports = {
   ],
   express: [
     {
+      name: 'express',
+      versions: ['4.5.0'],
+    },
+    {
       name: 'axios',
       versions: ['>=1.0.0'],
     },

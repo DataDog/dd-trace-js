@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { once } = require('node:events')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -34,6 +35,86 @@ describe('Plugin', () => {
       afterEach(() => {
         appListener.close()
       })
+
+      for (const order of [['restify', 'http'], ['http', 'restify']]) {
+        describe(`resource sampling with ${order[0]} loaded first`, () => {
+          before(() => agent.load(order, [{ client: false }, { client: false }], {
+            rateLimit: -1,
+            sampleRate: 0,
+            samplingRules: [
+              { resource: 'GET /items/:id', sampleRate: 1 },
+              { resource: 'POST', sampleRate: 1 },
+            ],
+          }))
+
+          after(() => agent.close())
+
+          /**
+           * @param {'pre' | 'routed' | 'use' | 'handler' | 'root'} stage
+           */
+          async function propagate (stage) {
+            const app = restify.createServer()
+            let priority
+
+            function inject () {
+              const carrier = {}
+              tracer.trace('outbound', span => tracer.inject(span, 'http_headers', carrier))
+              priority = carrier['x-datadog-sampling-priority']
+            }
+
+            if (stage === 'pre' || stage === 'use') {
+              app[stage]((req, res, next) => {
+                inject()
+                return next()
+              })
+            }
+            if (stage === 'routed') app.once('routed', inject)
+            const method = stage === 'root' ? 'post' : 'get'
+            app[method]({ path: stage === 'root' ? '/' : '/items/:id' }, (req, res, next) => {
+              if (stage === 'handler' || stage === 'root') inject()
+              res.send({ priority })
+              return next()
+            })
+
+            appListener = app.listen(0, '127.0.0.1')
+            await once(appListener, 'listening')
+            const url = `http://127.0.0.1:${appListener.address().port}`
+            const response = await httpRequest.request(url + (stage === 'root' ? '/' : '/items/42'), {
+              method: method.toUpperCase(),
+            })
+            return response.data
+          }
+
+          const stages = ['use', 'handler']
+          if (semver.satisfies(pkgVersion, '>=7')) stages.push('routed')
+
+          for (const stage of stages) {
+            it(`samples the matched resource from ${stage}`, async () => {
+              const [body] = await Promise.all([
+                propagate(stage),
+                agent.assertFirstTraceSpan({ resource: 'GET /items/:id', metrics: { _sampling_priority_v1: 2 } }),
+              ])
+              assert.deepStrictEqual(body, { priority: '2' })
+            })
+          }
+
+          it('falls back before lookup and preserves that decision after lookup', async () => {
+            const [body] = await Promise.all([
+              propagate('pre'),
+              agent.assertUserRejectedTrace('GET /items/:id'),
+            ])
+            assert.deepStrictEqual(body, { priority: '-1' })
+          })
+
+          it('uses a method-only resource when the root route is selected', async () => {
+            const [body] = await Promise.all([
+              propagate('root'),
+              agent.assertFirstTraceSpan({ resource: 'POST', metrics: { _sampling_priority_v1: 2 } }),
+            ])
+            assert.deepStrictEqual(body, { priority: '2' })
+          })
+        })
+      }
 
       describe('without configuration', () => {
         before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
