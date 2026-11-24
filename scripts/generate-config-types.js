@@ -49,6 +49,7 @@ const TRANSFORM_TYPE_OVERRIDES = {
   setGRPCRange: 'number[]',
   splitJSONPathRules: 'string[]',
   toURL: 'URL',
+  validateOtelPropagators: 'string[] | undefined',
 }
 
 function createTreeNode () {

@@ -499,6 +499,9 @@ export interface GeneratedConfig {
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
+  mcp: {
+    DD_MCP_CAPTURE_INTENT: boolean;
+  };
   middlewareTracingEnabled: boolean;
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
@@ -530,6 +533,7 @@ export interface GeneratedConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
+  OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
@@ -827,6 +831,7 @@ export interface GeneratedEnvVarConfig {
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
+  DD_MCP_CAPTURE_INTENT: boolean;
   DD_MERGE_XRAY_TRACES: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MIN_COLD_START_DURATION: number;
@@ -1226,7 +1231,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
-  OTEL_PROPAGATORS: string[];
+  OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_SERVICE_NAME: string | undefined;

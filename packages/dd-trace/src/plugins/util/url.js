@@ -143,7 +143,7 @@ function buildClientHttpUrl (config, base, pathname, strippedUrl) {
  */
 function extractPathFromUrl (url) {
   if (!url) return '/'
-  const match = url.match(PATH_REGEX)
+  const match = PATH_REGEX.exec(url)
 
   return match?.groups?.path || '/'
 }

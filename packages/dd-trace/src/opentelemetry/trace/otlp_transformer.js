@@ -1,6 +1,7 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { isInt64 } = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
@@ -250,7 +251,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
-        if (Number.isInteger(value)) {
+        if (isInt64(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {
           attributes.push({ key, value: { doubleValue: value } })

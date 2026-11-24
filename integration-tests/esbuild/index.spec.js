@@ -117,6 +117,13 @@ esbuildVersions.forEach((version) => {
       })
     }
 
+    it('activates the bundled AI SDK before its first streaming call', function () {
+      const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/ai/package.json'))
+      if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
+      execSync('node ./build-and-test-ai.js', { timeout })
+    })
+
     describe('ESM', () => {
       afterEach(() => {
         rmSync('./out.mjs', { force: true })

@@ -860,6 +860,7 @@ export default [
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
+      'unicorn/prefer-options-parameter': 'off',
       'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
       'unicorn/prefer-reflect-apply': 'off', // lots | questionable benefit
       'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
@@ -867,6 +868,7 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
+      'unicorn/require-spread-parentheses': 'off',
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
       // These remaining rules need focused rewrites before activation.

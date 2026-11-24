@@ -76,7 +76,7 @@ describe('rewriter targets', () => {
   it('finds AI SDK model resolution chunks without matching other assets', () => {
     const filePath = 'dist/default-stop-condition-wtuJTiTo.js'
     assert.deepStrictEqual(getRewriteTarget(`file:///app/node_modules/ai/${filePath}`), {
-      moduleName: 'ai', filePath,
+      moduleName: 'ai', filePath, activate: true,
     })
     for (const filePath of [
       'dist/default-stop-condition-.js',

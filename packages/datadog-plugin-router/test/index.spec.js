@@ -5,6 +5,7 @@ const { once } = require('node:events')
 const http = require('node:http')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const { storage } = require('../../datadog-core')
@@ -13,16 +14,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
-
-/** @param {string} version */
-function hasRequestLocalRoutes (version) {
-  try {
-    return typeof require(`../../../versions/router@${version}`).get('router/lib/symbols').matchedRoute === 'symbol'
-  } catch (error) {
-    if (error.code !== 'MODULE_NOT_FOUND' || !error.message.includes("'router/lib/symbols'")) throw error
-    return false
-  }
-}
 
 describe('Plugin', () => {
   let Router
@@ -42,7 +33,7 @@ describe('Plugin', () => {
   }
 
   describe('router', () => {
-    withVersions('router', 'router', version => {
+    withVersions('router', 'router', (version, _, resolvedVersion) => {
       afterEach(() => {
         appListener && appListener.close()
       })
@@ -102,6 +93,8 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
+        const itWithRequestLocalRoutes = semver.gte(resolvedVersion, '2.3.0') ? it : it.skip
+
         before(() => {
           return agent.load(['http', 'router'])
         })
@@ -191,9 +184,7 @@ describe('Plugin', () => {
           })
         }
 
-        it('should keep matched routes local while parameter callbacks overlap', async function () {
-          if (!hasRequestLocalRoutes(version)) this.skip()
-
+        itWithRequestLocalRoutes('should keep matched routes local while parameter callbacks overlap', async () => {
           const router = Router()
           const gates = new Map()
           let allEntered
@@ -234,8 +225,7 @@ describe('Plugin', () => {
           assert.deepStrictEqual(results.map(response => response.data), [1, 2])
         })
 
-        it('should use the native case-sensitive pattern for error handlers', async function () {
-          if (!hasRequestLocalRoutes(version)) this.skip()
+        itWithRequestLocalRoutes('should use the native case-sensitive pattern for error handlers', async () => {
           const router = Router({ caseSensitive: true })
           const failure = new Error('failure')
           router.use((req, res, next) => next(failure))

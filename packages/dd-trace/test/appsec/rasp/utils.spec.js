@@ -165,6 +165,15 @@ describe('RASP - utils.js', () => {
       testAbortErrorInFramework('fastify.request')
     })
 
+    it('should record the request of a blocking abort', () => {
+      assert.strictEqual(utils.hasBlockingAbort(req), false)
+
+      testAbortErrorInFramework('express.request')
+
+      assert.strictEqual(utils.hasBlockingAbort(req), true)
+      assert.strictEqual(utils.hasBlockingAbort({}), false)
+    })
+
     it('should not create DatadogRaspAbortError when blockingAction is present in an unsupported framework', () => {
       const rootSpan = {
         context: sinon.stub().returns({ _name: 'http.request' }),
@@ -184,6 +193,7 @@ describe('RASP - utils.js', () => {
       utils.handleResult(result, req, res, abortController, config, raspRule)
 
       sinon.assert.notCalled(abortController.abort)
+      assert.strictEqual(utils.hasBlockingAbort(req), false)
     })
 
     it('should call updateRaspRuleMatchMetricTags when no blockingAction is present', () => {

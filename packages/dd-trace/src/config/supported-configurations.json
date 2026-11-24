@@ -131,6 +131,14 @@
         "default": "false"
       }
     ],
+    "DD_MCP_CAPTURE_INTENT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "mcp"
+      }
+    ],
     "DD_MIN_COLD_START_DURATION": [
       {
         "implementation": "B",
@@ -4102,10 +4110,7 @@
         "implementation": "D",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
-        "transform": "validatePropagationStyles",
-        "aliases": [
-          "OTEL_PROPAGATORS"
-        ]
+        "transform": "validatePropagationStyles"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
@@ -4771,6 +4776,14 @@
         "type": "int",
         "allowed": "[1-9]\\d*",
         "default": "7500"
+      }
+    ],
+    "OTEL_PROPAGATORS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": "",
+        "transform": "validateOtelPropagators"
       }
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [
