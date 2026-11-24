@@ -1304,10 +1304,7 @@ export default [
   },
   ...carrierFieldsConfig,
   {
-    // The Next.js fixture apps import dd-trace the way a customer does
-    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
-    // stub written into node_modules (see test/index.spec.js), so it never appears
-    // in a manifest the extraneous-dependency rules can read.
+    // The Next.js sandbox provides the checkout tracer at test time.
     name: 'dd-trace/datadog-plugin-next/fixtures',
     plugins: {
       import: eslintPluginImport,
@@ -1315,6 +1312,7 @@ export default [
     files: [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
+      'packages/datadog-plugin-next/test/datadog.js',
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',
