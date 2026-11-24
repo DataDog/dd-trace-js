@@ -158,11 +158,15 @@ function isObject (value) {
 }
 
 /**
- * UI-only tools cannot be called by the model, so they get no telemetry parameter.
- *
- * @param {{ _meta?: { ui?: { visibility?: unknown } } }} tool
+ * @typedef {{ properties?: object, _meta?: { ui?: { visibility?: unknown } } }} ManagedTool
+ * @typedef {(name: string, listedSchema?: object) => ManagedTool | undefined} GetToolForIntent
  */
-function isModelCallable (tool) {
+
+/**
+ * @param {ManagedTool | undefined} tool
+ */
+function canCaptureIntent (tool) {
+  if (!tool || (tool.properties && Object.hasOwn(tool.properties, TELEMETRY_KEY))) return false
   const visibility = tool._meta?.ui?.visibility
   return !Array.isArray(visibility) || visibility.includes('model')
 }
@@ -172,12 +176,13 @@ function isModelCallable (tool) {
  * caller's intent. The SDK's own tool objects are not changed, because it validates calls against them.
  *
  * @param {{ tools?: unknown }} result
+ * @param {GetToolForIntent} getTool
  */
-function injectTelemetrySchema (result) {
+function injectTelemetrySchema (result, getTool) {
   if (!isObject(result) || !Array.isArray(result.tools)) return result
 
   const tools = result.tools.map(tool => {
-    if (!isObject(tool) || !isModelCallable(tool)) return tool
+    if (!isObject(tool) || !canCaptureIntent(getTool(tool.name, tool.inputSchema))) return tool
 
     const inputSchema = isObject(tool.inputSchema) ? tool.inputSchema : {}
     const properties = isObject(inputSchema.properties) ? inputSchema.properties : {}
@@ -213,11 +218,13 @@ function isInjectedTelemetry (telemetry) {
  * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
+ * @param {GetToolForIntent} getTool
  * @returns {{ request: object, intent?: string } | undefined}
  */
-function stripTelemetry (request) {
+function stripTelemetry (request, getTool) {
   const args = request?.params?.arguments
-  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
+  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY]) ||
+      !canCaptureIntent(getTool(request.params.name))) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
   const { intent } = telemetry

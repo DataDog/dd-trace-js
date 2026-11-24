@@ -14,6 +14,10 @@ const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
+const CLOSED_TOOL_SCHEMA_KEYS = new Set([
+  '$id', '$schema', 'additionalProperties', 'default', 'deprecated', 'description', 'examples',
+  'properties', 'readOnly', 'required', 'title', 'type', 'writeOnly',
+])
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
 // _onrequest (span start, in the correct HTTP async context), the SDK request
@@ -22,6 +26,54 @@ const pendingContexts = new WeakMap()
 const wrappedAbortControllerMaps = new WeakSet()
 const wrappedRequestHandlerMaps = new WeakSet()
 const wrappedRequestHandlers = new WeakSet()
+const managedToolHandlers = new WeakMap()
+
+function trackManagedToolHandlers (mcpServer) {
+  const server = mcpServer.server
+  if (!mcpServer._toolHandlersInitialized || managedToolHandlers.has(server)) return
+
+  const list = server._requestHandlers?.get('tools/list')
+  const call = server._requestHandlers?.get('tools/call')
+  managedToolHandlers.set(server, { list, call, getTool: getManagedTool.bind(null, mcpServer) })
+}
+
+function getManagedTool (mcpServer, name, listedSchema) {
+  const tools = mcpServer._registeredTools
+  if (!tools || !Object.hasOwn(tools, name)) return
+  const tool = tools[name]
+  if (!tool.enabled) return
+  const { inputSchema, _meta } = tool
+  if (!inputSchema) return { _meta }
+
+  if (typeof mcpServer.toolInputSchemaJson === 'function' && inputSchema._zod?.def?.type !== 'object') {
+    const schema = listedSchema ?? mcpServer.toolInputSchemaJson(name)
+    if (schema?.type !== 'object' || schema.additionalProperties !== false) return
+    for (const key of Object.keys(schema)) {
+      if (!CLOSED_TOOL_SCHEMA_KEYS.has(key)) return
+    }
+    return { properties: schema.properties, _meta }
+  }
+
+  const properties = inputSchema.shape
+  if (!properties || acceptsUnknownZodProperties(inputSchema)) return
+  return { properties, _meta }
+}
+
+function acceptsUnknownZodProperties (schema) {
+  const zodV4 = schema._zod?.def
+  if (zodV4) return zodV4.catchall !== undefined && zodV4.catchall._zod?.def.type !== 'never'
+
+  const zodV3 = schema._def
+  return zodV3?.catchall?._def?.typeName !== 'ZodNever' || zodV3.unknownKeys === 'passthrough'
+}
+
+function managedToolResolver (server) {
+  const handlers = managedToolHandlers.get(server)
+  if (handlers?.list && handlers.call && server._requestHandlers?.get('tools/list') === handlers.list &&
+      server._requestHandlers?.get('tools/call') === handlers.call) {
+    return handlers.getTool
+  }
+}
 
 function addTraceContextToRequest (request, traceContext) {
   return {
@@ -171,7 +223,7 @@ function wrapProtocol (Protocol) {
       }
 
       wrapAbortControllers(this)
-      const ctx = { request, extra, server: this }
+      const ctx = { request, extra, server: this, managedToolResolver }
       serverRequestCh.start.runStores(ctx, () => {
         let pending = pendingContexts.get(this)
         if (!pending) {
@@ -216,6 +268,14 @@ function wrapProtocol (Protocol) {
 }
 
 function wrapMcpServer (McpServer) {
+  shimmer.wrap(McpServer.prototype, 'setToolRequestHandlers', function (original) {
+    return function setToolRequestHandlersWithTrace () {
+      const result = original.apply(this, arguments)
+      trackManagedToolHandlers(this)
+      return result
+    }
+  })
+
   // Both public registration methods (tool/registerTool) delegate here — one hook covers both.
   // Publishes to serverToolRegisteredCh so tracing.js can build a WeakMap of tool → name
   // for O(1) lookup in McpServerToolCallPlugin (executeToolHandler receives the tool object,
@@ -281,4 +341,4 @@ addHook({
   return exports
 })
 
-module.exports = { addTraceContextToRequest, callRequestHandler }
+module.exports = { addTraceContextToRequest, callRequestHandler, managedToolResolver, trackManagedToolHandlers }

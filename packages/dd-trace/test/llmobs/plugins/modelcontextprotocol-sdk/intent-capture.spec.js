@@ -12,6 +12,7 @@ const { assertLlmObsSpanEvent, MOCK_STRING, useLlmObs } = require('../../util')
 const TAGS = { ml_app: 'test', integration: 'modelcontextprotocol-sdk' }
 const INTENT = 'Check the weather to plan a trip'
 const TOOL_RESULT = { content: [{ type: 'text', text: 'sunny' }] }
+const APP_ARGUMENTS = { telemetry: { intent: 'daily' } }
 
 /**
  * @param {string} tool
@@ -60,10 +61,14 @@ describe('integrations', () => {
       let client
       let server
       let receivedArguments
+      let weatherTool
+      let telemetrySchema
 
       before(async () => {
-        const serverModule = require(`../../../../../../versions/@modelcontextprotocol/server@${version}`).get()
+        const serverVersion = require(`../../../../../../versions/@modelcontextprotocol/server@${version}`)
+        const serverModule = serverVersion.get()
         const clientModule = require('../../../../../../versions/@modelcontextprotocol/client@2').get()
+        const zod = serverVersion.get('zod/v4')
 
         server = new serverModule.McpServer({ name: 'test-server', version: '1.0.0' })
         // A strict schema rejects arguments it does not declare, so the tool only succeeds without `telemetry`.
@@ -73,7 +78,11 @@ describe('integrations', () => {
           required: ['city'],
           additionalProperties: false,
         })
-        server.registerTool('weather', { description: 'Weather for a city', inputSchema }, async args => {
+        weatherTool = server.registerTool('weather', { description: 'Weather for a city', inputSchema }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        server.registerTool('zod-weather', { inputSchema: zod.object({ city: zod.string() }) }, async args => {
           receivedArguments = args
           return TOOL_RESULT
         })
@@ -89,11 +98,48 @@ describe('integrations', () => {
           receivedArguments = args
           return TOOL_RESULT
         })
+        telemetrySchema = serverModule.fromJsonSchema({
+          type: 'object',
+          properties: {
+            telemetry: { type: 'object', properties: { intent: { type: 'string' } }, required: ['intent'] },
+          },
+          required: ['telemetry'],
+        })
+        server.registerTool('report-object', {
+          description: 'Has its own structured telemetry argument',
+          inputSchema: telemetrySchema,
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        server.registerTool('composed', {
+          inputSchema: serverModule.fromJsonSchema({
+            type: 'object',
+            anyOf: [
+              { properties: { telemetry: { type: 'object' } }, required: ['telemetry'] },
+              { properties: { city: { type: 'string' } }, required: ['city'] },
+            ],
+          }),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        server.registerTool('pattern', {
+          inputSchema: serverModule.fromJsonSchema({
+            type: 'object',
+            patternProperties: { '^telemetry$': { type: 'object' } },
+            additionalProperties: false,
+          }),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
         server.registerTool('ui-only', {
           description: 'Only the app calls this tool',
           inputSchema: {},
           _meta: { ui: { visibility: ['app'] } },
         }, async () => TOOL_RESULT)
+        server.registerTool('no-schema', {}, async () => TOOL_RESULT)
 
         const [clientTransport, serverTransport] = serverModule.InMemoryTransport.createLinkedPair()
         await server.connect(serverTransport)
@@ -106,13 +152,27 @@ describe('integrations', () => {
         await server?.close()
       })
 
+      it('keeps a declared telemetry object without first listing tools', async () => {
+        const result = await client.callTool({ name: 'report-object', arguments: APP_ARGUMENTS })
+
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'report-object')
+        assert.deepStrictEqual(JSON.parse(llmobsSpan.meta.input.value).params.arguments, APP_ARGUMENTS)
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
       it('adds a required telemetry argument to model-callable tools in tools/list', async () => {
         const first = await client.listTools()
         const second = await client.listTools()
 
         for (const result of [first, second]) {
           assertTelemetryArgument(result.tools.find(tool => tool.name === 'weather'))
+          assertTelemetryArgument(result.tools.find(tool => tool.name === 'zod-weather'))
+          assertTelemetryArgument(result.tools.find(tool => tool.name === 'no-schema'))
           assert.equal(result.tools.find(tool => tool.name === 'ui-only').inputSchema.properties?.telemetry, undefined)
+          assert.equal(result.tools.find(tool => tool.name === 'composed').inputSchema.properties?.telemetry, undefined)
+          assert.equal(result.tools.find(tool => tool.name === 'pattern').inputSchema.properties?.telemetry, undefined)
           assert.deepStrictEqual(result.tools.find(tool => tool.name === 'report').inputSchema.properties.telemetry, {
             type: 'string',
           })
@@ -173,6 +233,24 @@ describe('integrations', () => {
         })
       })
 
+      it('records intent for a tool without an input schema', async () => {
+        const result = await client.callTool({ name: 'no-schema', arguments: { telemetry: { intent: INTENT } } })
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'no-schema')
+        assert.equal(llmobsSpan.meta.intent, INTENT)
+      })
+
+      it('records intent for a Zod object that strips unknown arguments', async () => {
+        const result = await client.callTool({
+          name: 'zod-weather',
+          arguments: { city: 'Oslo', telemetry: { intent: INTENT } },
+        })
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, { city: 'Oslo' })
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'zod-weather')
+        assert.equal(llmobsSpan.meta.intent, INTENT)
+      })
+
       it('removes an empty telemetry argument', async () => {
         const result = await client.callTool({ name: 'weather', arguments: { city: 'Oslo', telemetry: {} } })
 
@@ -197,11 +275,59 @@ describe('integrations', () => {
         const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'report')
         assert.equal(llmobsSpan.meta.intent, undefined)
       })
+
+      it('uses the updated schema without another tools/list request', async () => {
+        weatherTool.update({ paramsSchema: telemetrySchema })
+        const result = await client.callTool({ name: 'weather', arguments: APP_ARGUMENTS })
+
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'weather')
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
+      it('keeps arguments accepted through a composed schema', async () => {
+        const result = await client.callTool({ name: 'composed', arguments: APP_ARGUMENTS })
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'composed')
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
+      it('keeps telemetry matched by patternProperties', async () => {
+        const result = await client.callTool({ name: 'pattern', arguments: APP_ARGUMENTS })
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'pattern')
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
+      it('preserves the native errors and inputs for unknown and disabled tools', async () => {
+        weatherTool.disable()
+        for (const [name, message] of [['weather', /Tool weather disabled/], ['missing', /Tool missing not found/]]) {
+          await assert.rejects(client.callTool({ name, arguments: APP_ARGUMENTS }), { code: -32602, message })
+          const { llmobsSpan } = findServerToolSpan(await getEvents(2), name)
+          assert.deepStrictEqual(JSON.parse(llmobsSpan.meta.input.value).params.arguments, APP_ARGUMENTS)
+          assert.equal(llmobsSpan.meta.intent, undefined)
+        }
+      })
+
+      it('does not extend a replacement tools/list handler', async () => {
+        const tool = { name: 'replacement', inputSchema: { type: 'object' } }
+        server.server.setRequestHandler('tools/list', () => ({ tools: [tool] }))
+
+        const result = await client.listTools()
+
+        assert.deepStrictEqual(result.tools, [tool])
+        await getEvents(2)
+      })
     })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', version => {
       let client
       let server
+      let receivedArguments
+      let callToolRequestSchema
 
       before(async () => {
         const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
@@ -210,9 +336,39 @@ describe('integrations', () => {
         const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
         const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
         const { InMemoryTransport } = versionModule.get('@modelcontextprotocol/sdk/inMemory.js')
+        callToolRequestSchema = versionModule.get('@modelcontextprotocol/sdk/types.js').CallToolRequestSchema
+        const zod = versionModule.get('zod')
+        const zodV3 = versionModule.get('zod/v3')
+        const zodV4 = versionModule.get('zod/v4')
 
         server = new McpServer({ name: 'test-server', version: '1.0.0' })
-        server.registerTool('weather', { description: 'Weather', inputSchema: {} }, async () => TOOL_RESULT)
+        server.registerTool('weather', { inputSchema: zodV3.object({}) }, async () => TOOL_RESULT)
+        server.registerTool('report-object', {
+          description: 'Has its own structured telemetry argument',
+          inputSchema: zod.object({ telemetry: zod.object({ intent: zod.string() }) }),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        server.registerTool('composed', {
+          inputSchema: zod.union([
+            zod.object({ telemetry: zod.object({ intent: zod.string() }) }),
+            zod.object({ city: zod.string() }),
+          ]),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        for (const [name, inputSchema] of [
+          ['catchall', zodV3.object({}).catchall(zodV3.unknown())],
+          ['passthrough-v3', zodV3.object({}).passthrough()],
+          ['passthrough-v4', zodV4.object({}).passthrough()],
+        ]) {
+          server.registerTool(name, { inputSchema }, async args => {
+            receivedArguments = args
+            return TOOL_RESULT
+          })
+        }
 
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
         await server.connect(serverTransport)
@@ -225,10 +381,23 @@ describe('integrations', () => {
         await server?.close()
       })
 
+      it('keeps a declared telemetry object without first listing tools', async () => {
+        const result = await client.callTool({ name: 'report-object', arguments: APP_ARGUMENTS })
+
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'report-object')
+        assert.deepStrictEqual(JSON.parse(llmobsSpan.meta.input.value).params.arguments, APP_ARGUMENTS)
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
       it('adds a required telemetry argument to tools/list', async () => {
         const result = await client.listTools()
 
         assertTelemetryArgument(result.tools[0])
+        for (const name of ['composed', 'catchall', 'passthrough-v3', 'passthrough-v4']) {
+          assert.equal(result.tools.find(tool => tool.name === name).inputSchema.properties?.telemetry, undefined)
+        }
 
         const { llmobsSpans } = await getEvents(2)
         assert.deepStrictEqual(llmobsSpans.map(span => span.name).sort(), ['MCP Client List Tools', 'mcp.tools/list'])
@@ -253,6 +422,37 @@ describe('integrations', () => {
           outputValue: MOCK_STRING,
           tags: serverToolTags('weather'),
         })
+      })
+
+      it('keeps arguments accepted through a composed schema', async () => {
+        const result = await client.callTool({ name: 'composed', arguments: APP_ARGUMENTS })
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'composed')
+        assert.equal(llmobsSpan.meta.intent, undefined)
+      })
+
+      it('keeps telemetry accepted by catchall and passthrough schemas', async () => {
+        for (const name of ['catchall', 'passthrough-v3', 'passthrough-v4']) {
+          const result = await client.callTool({ name, arguments: APP_ARGUMENTS })
+          assert.deepStrictEqual(result, TOOL_RESULT)
+          assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+          const { llmobsSpan } = findServerToolSpan(await getEvents(2), name)
+          assert.equal(llmobsSpan.meta.intent, undefined)
+        }
+      })
+
+      it('does not strip arguments when a custom handler replaces managed dispatch', async () => {
+        server.server.setRequestHandler(callToolRequestSchema, request => {
+          receivedArguments = request.params.arguments
+          return TOOL_RESULT
+        })
+        const result = await client.callTool({ name: 'weather', arguments: APP_ARGUMENTS })
+
+        assert.deepStrictEqual(result, TOOL_RESULT)
+        assert.deepStrictEqual(receivedArguments, APP_ARGUMENTS)
+        const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'weather')
+        assert.equal(llmobsSpan.meta.intent, undefined)
       })
     })
   })
