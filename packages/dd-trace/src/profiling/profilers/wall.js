@@ -20,8 +20,12 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   TRACE_ID_LABEL,
+  OTEL_LOCAL_ROOT_SPAN_ID,
+  OTEL_TRACE_ENDPOINT,
+  OTEL_ASYNC_ID,
   getNonJSThreadsLabels,
   getNonJSThreadsOtelLabels,
+  getOtelCustomLabels,
   getOtelThreadLabels,
   getThreadLabels,
 } = require('./shared')
@@ -423,26 +427,64 @@ class NativeWallProfiler {
   }
 
   /**
-   * The labels of an OTLP sample: the thread's, as semantic-convention attributes, and the span's trace and span IDs,
-   * which become the sample's link in the profiles builder. Its time is a sample timestamp, not a label.
+   * Returns a sample context's custom labels, which it only has with ACF (see #profilingContextOf).
    *
-   * @param {{ node: { name: string }, context?: { context?: unknown } }} sample
+   * @param {{ context?: unknown }} context
+   * @returns {Record<string, string | number> | undefined}
+   */
+  #customLabelsOf (context) {
+    const cctx = context.context
+    return this.#asyncContextFrameEnabled && Array.isArray(cctx) ? cctx[1] : undefined
+  }
+
+  /**
+   * The labels of an OTLP sample: the same as _generateLabels, with semantic-convention attributes where there are
+   * some, and otherwise execution context labels. The span's trace and span IDs become the sample's link, in the
+   * profiles builder, and its time is a sample timestamp, not a label.
+   *
+   * @param {{ node: { name: string }, context?: { context?: unknown, asyncId?: number } }} sample
    */
   #generateOtelLabels ({ node, context }) {
     if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
       return getNonJSThreadsOtelLabels()
     }
-    const ref = context == null ? undefined : this.#profilingContextOf(context)
+    if (context == null) {
+      return getOtelThreadLabels()
+    }
+
+    const ref = this.#profilingContextOf(context)
+    const customLabels = this.#customLabelsOf(context)
+
+    // As in _generateLabels, internal labels take precedence over custom labels of the same key
+    const labels = customLabels === undefined
+      ? { ...getOtelThreadLabels() }
+      : { ...getOtelCustomLabels(customLabels), ...getOtelThreadLabels() }
+
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels[OTEL_ASYNC_ID] = asyncId
+    }
+
     if (typeof ref !== 'object') {
-      return getOtelThreadLabels()
+      return labels
     }
-    const { spanId, traceIdLow } = ref
-    if (spanId === undefined || traceIdLow === undefined) {
-      return getOtelThreadLabels()
+
+    const { spanId, rootSpanId, traceIdLow, webTags, endpoint } = ref
+
+    // The span ID and trace ID become the sample's link. The trace ID is made once for each span in the samples.
+    if (spanId !== undefined && traceIdLow !== undefined) {
+      labels[SPAN_ID_LABEL] = toBigInt(spanId)
+      labels[TRACE_ID_LABEL] = ref.traceId ??= toTraceIdBigInt(traceIdLow, ref.traceIdHigh)
     }
-    // The trace ID is made once for each span in the samples
-    const labels = { ...getOtelThreadLabels(), [SPAN_ID_LABEL]: toBigInt(spanId) }
-    labels[TRACE_ID_LABEL] = ref.traceId ??= toTraceIdBigInt(traceIdLow, ref.traceIdHigh)
+    if (rootSpanId !== undefined) {
+      labels[OTEL_LOCAL_ROOT_SPAN_ID] = toBigInt(rootSpanId)
+    }
+    if (webTags !== undefined) {
+      labels[OTEL_TRACE_ENDPOINT] = endpointNameFromTags(webTags)
+    } else if (endpoint) {
+      labels[OTEL_TRACE_ENDPOINT] = endpoint
+    }
+
     return labels
   }
 
@@ -459,23 +501,8 @@ class NativeWallProfiler {
       return getThreadLabels()
     }
 
-    // Native profiler doesn't set context.context for some samples, such as idle samples or when
-    // the context was otherwise unavailable when the sample was taken. Note that with ACF, we don't
-    // use the "ref" indirection.
-    let ref
-    let customLabels
-    const cctx = context.context
-    if (this.#asyncContextFrameEnabled) {
-      // When custom labels are active with ACF, context.context is a 2-element array:
-      // [profilingContext, customLabels]. Otherwise it's a plain object.
-      if (Array.isArray(cctx)) {
-        [ref, customLabels] = cctx
-      } else {
-        ref = cctx
-      }
-    } else {
-      ref = cctx?.ref
-    }
+    const ref = this.#profilingContextOf(context)
+    const customLabels = this.#customLabelsOf(context)
 
     // Custom labels are spread first so that internal labels always take
     // precedence and overwrite them.

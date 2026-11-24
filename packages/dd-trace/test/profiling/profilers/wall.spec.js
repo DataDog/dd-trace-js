@@ -253,22 +253,28 @@ describe('profilers/native/wall', () => {
       'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
     }
     assert.deepStrictEqual(generateLabels({ node: {}, context: undefined }), threadLabels)
-    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), {
+      ...threadLabels,
+      'process.context.label.datadog.async_id': 7,
+    })
     assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread.name': 'Non-JS threads',
     })
-    // A span's IDs, for the sample's link. The trace ID is its lower 64 bits' identifier and the hex of its upper 64
-    // bits, as span contexts have them.
+    // A span's IDs, for the sample's link, and its local root span ID and endpoint. The trace ID is its lower 64
+    // bits' identifier and the hex of its upper 64 bits, as span contexts have them.
     const ref = {
       spanId: 42n,
       rootSpanId: 41n,
       traceIdLow: id('00000000000000ff', 16),
       traceIdHigh: '0123456789abcdef',
+      endpoint: 'GET /',
     }
     assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref } } }), {
       ...threadLabels,
       'span id': 42n,
       'trace id': 0x0123456789abcdef00000000000000ffn,
+      'process.context.label.datadog.local_root_span_id': 41n,
+      'process.context.label.datadog.trace_endpoint': 'GET /',
     })
     // Made once for the span's samples
     assert.strictEqual(ref.traceId, 0x0123456789abcdef00000000000000ffn)
@@ -292,11 +298,37 @@ describe('profilers/native/wall', () => {
     const refWithoutTrace = { spanId: 42n, rootSpanId: 41n }
     assert.deepStrictEqual(
       generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref: refWithoutTrace } } }),
-      threadLabels
+      { ...threadLabels, 'process.context.label.datadog.local_root_span_id': 41n }
     )
 
     profiler.capture(false)
     assert.strictEqual(profiler.isStarted(), false)
+  })
+
+  it('should capture OTLP profiles with custom labels as execution context labels', () => {
+    const profiler = makeWall(NativeWallProfiler, {
+      timelineEnabled: true,
+      asyncContextFrameEnabled: true,
+      otlp: true,
+    })
+    profiler.start()
+
+    profiler.capture(true)
+
+    const { generateLabels } = pprof.time.stopAndCapture.firstCall.args[1]
+    const customLabels = { customer: 'acme', 'datadog.os_thread_id': 'custom' }
+    const context = { timestamp: 1234n, context: [{ rootSpanId: 41n }, customLabels] }
+    const labels = generateLabels({ node: {}, context })
+    assert.deepStrictEqual(labels, {
+      'process.context.label.customer': 'acme',
+      // Internal labels take precedence over custom labels of the same key
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.local_root_span_id': 41n,
+    })
+
+    profiler.capture(false)
   })
 
   it('should capture pprof profiles with pprof labels', () => {
