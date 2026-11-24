@@ -82,6 +82,22 @@ function findWrappedDatadogRaspAbortError (error, req) {
   }
 }
 
+/**
+ * Finds the abort error of the request in the error of a failed operation
+ *
+ * @param {unknown} error
+ * @param {import('http').IncomingMessage} [failedRequest]
+ * @returns {DatadogRaspAbortError | undefined}
+ */
+function resolveAbortError (error, failedRequest) {
+  const directError = findDatadogRaspAbortError(error)
+  if (directError) return directError
+
+  if (!hasBlockingAbort(failedRequest)) return
+
+  return findWrappedDatadogRaspAbortError(error, failedRequest)
+}
+
 function handleUncaughtExceptionMonitor (error) {
   if (!blockOnDatadogRaspAbortError({ error, isTopLevel: true })) return
 
@@ -124,8 +140,7 @@ function handleUncaughtExceptionMonitor (error) {
 }
 
 function blockOnDatadogRaspAbortError ({ error, req: failedRequest, isTopLevel }) {
-  const abortError = findDatadogRaspAbortError(error) ??
-    (hasBlockingAbort(failedRequest) ? findWrappedDatadogRaspAbortError(error, failedRequest) : undefined)
+  const abortError = resolveAbortError(error, failedRequest)
   if (!abortError) return false
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
