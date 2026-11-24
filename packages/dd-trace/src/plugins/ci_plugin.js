@@ -503,13 +503,11 @@ module.exports = class CiPlugin extends Plugin {
       return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
 
-    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, payload => {
-      const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = typeof payload === 'string'
-        ? { traces: payload }
-        : payload
-      const formattedTraces = JSON.parse(traces)
-
-      for (const trace of formattedTraces) {
+    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, ({
+      traces,
+      [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId,
+    }) => {
+      for (const trace of traces) {
         if (testSuiteExecutionId) {
           this._workerTraceExecutionIds.set(trace, testSuiteExecutionId)
         }

@@ -5703,11 +5703,11 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(new Set(suiteStarts.map(({ testSuiteExecutionId }) => testSuiteExecutionId)).size, 2)
       assert.deepStrictEqual(workerTracePayloads, [
         {
-          traces: firstTrace,
+          traces: JSON.parse(firstTrace),
           [TEST_SUITE_EXECUTION_ID]: suiteStarts[0].testSuiteExecutionId,
         },
         {
-          traces: secondTrace,
+          traces: JSON.parse(secondTrace),
           [TEST_SUITE_EXECUTION_ID]: suiteStarts[1].testSuiteExecutionId,
         },
       ])

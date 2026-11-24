@@ -39,7 +39,7 @@ const {
   getTestEndLine,
   isModifiedTest,
   DYNAMIC_NAME_RE,
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -4647,8 +4647,7 @@ function onMessageWrapper (onMessage) {
 
     const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
-      workerReportTraceCh.publish(data)
+      publishWorkerTraces(workerReportTraceCh, data, { newTestsWithDynamicNames })
       return
     }
     if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload

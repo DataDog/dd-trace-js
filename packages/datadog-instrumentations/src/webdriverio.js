@@ -13,14 +13,13 @@ const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-tra
 const log = require('../../dd-trace/src/log')
 const shimmer = require('../../datadog-shimmer')
 const {
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   getIsFaultyEarlyFlakeDetection,
   getTestSuitePath,
   logTestOptimizationSummary,
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
-  TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { publishWithCompletion } = require('./helpers/channel')
 const { channel, tracingChannel } = require('./helpers/instrument')
@@ -1658,15 +1657,11 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      collectTestOptimizationSummariesFromTraces(payload, {
+      publishWorkerTraces(workerReportTraceCh, payload, {
         attemptToFixExecutions: state.attemptToFixExecutions,
         newTestsWithDynamicNames: state.newTestsWithDynamicNames,
         testManagementExecutions: state.testManagementExecutions,
-      })
-      workerReportTraceCh.publish({
-        traces: payload,
-        [TEST_SUITE_EXECUTION_ID]: workerRecord.testSuiteExecutionId,
-      })
+      }, workerRecord.testSuiteExecutionId)
     } else if (messageCode === MOCHA_WORKER_LOGS_PAYLOAD_CODE) {
       workerReportLogsCh.publish(payload)
     } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {

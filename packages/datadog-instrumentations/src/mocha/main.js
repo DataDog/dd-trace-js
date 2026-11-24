@@ -33,7 +33,7 @@ const {
   getIsFaultyEarlyFlakeDetection,
   getRelativeCoverageFiles,
   getTestCoverageLinesPercentage,
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   logTestOptimizationSummary,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
   getTestOptimizationRequestResults,
@@ -1666,12 +1666,11 @@ function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      collectTestOptimizationSummariesFromTraces(payload, {
+      publishWorkerTraces(workerReportTraceCh, payload, {
         newTestsWithDynamicNames,
         testAnnotations: workerTestAnnotations,
         attemptToFixExecutions,
       })
-      workerReportTraceCh.publish(payload)
     } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
       workerReportTelemetryCh.publish(payload)
     }

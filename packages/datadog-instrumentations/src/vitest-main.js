@@ -16,7 +16,7 @@ const {
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE,
   VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE,
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   getIsFaultyEarlyFlakeDetection,
   logTestOptimizationSummary,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
@@ -2058,11 +2058,10 @@ function handleEfdAdmissionMessage (workerProcess, interprocessCode, data) {
 
 function handleWorkerReport (interprocessCode, data) {
   if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-    collectTestOptimizationSummariesFromTraces(data, {
+    publishWorkerTraces(workerReportTraceCh, data, {
       newTestsWithDynamicNames,
       attemptToFixExecutions,
     })
-    workerReportTraceCh.publish(data)
     return true
   }
 

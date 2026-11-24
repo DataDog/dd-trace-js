@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
@@ -13,6 +14,7 @@ const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 const { SPAN_TYPE } = require('../../../../../ext/tags')
 require('../../setup/core')
 const getConfig = require('../../../src/config')
+const log = require('../../../src/log')
 const Span = require('../../../src/opentracing/span')
 
 const {
@@ -39,8 +41,7 @@ const {
   isModifiedTest,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
@@ -55,6 +56,7 @@ const {
   TEST_SESSION_EMPTY_REASON,
   TEST_SKIP_REASON,
   TEST_STATUS,
+  TEST_SUITE_EXECUTION_ID,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
@@ -76,6 +78,8 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+const workerTraceReportCh = channel('test:worker-report:trace')
 
 describe('finishAllTraceSpans', () => {
   it('does not finish completed spans twice', () => {
@@ -658,7 +662,7 @@ describe('attempt to fix summary', () => {
       ],
     ])
 
-    collectAttemptToFixExecutionsFromTraces(payload, executions)
+    publishWorkerTraces(workerTraceReportCh, payload, { attemptToFixExecutions: executions })
 
     const summary = formatAttemptToFixSummary(executions)
     assert.match(summary, /worker-suite\.js › worker test/)
@@ -668,10 +672,10 @@ describe('attempt to fix summary', () => {
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 
-  it('collects test optimization summaries from worker traces with one parse', () => {
+  it('collects Test Optimization summaries before publishing decoded worker traces', () => {
     const executions = new Map()
     const newTestsWithDynamicNames = new Set()
-    const payload = JSON.stringify([
+    const traces = [
       [
         {
           meta: {
@@ -690,15 +694,46 @@ describe('attempt to fix summary', () => {
           },
         },
       ],
-    ])
+    ]
+    const onReport = sinon.spy(() => [executions.size, newTestsWithDynamicNames.size])
+    workerTraceReportCh.subscribe(onReport)
+    try {
+      publishWorkerTraces(workerTraceReportCh, JSON.stringify(traces), {
+        attemptToFixExecutions: executions,
+        newTestsWithDynamicNames,
+      }, 'suite-execution')
+    } finally {
+      workerTraceReportCh.unsubscribe(onReport)
+    }
 
-    collectTestOptimizationSummariesFromTraces(payload, {
-      attemptToFixExecutions: executions,
-      newTestsWithDynamicNames,
-    })
-
+    sinon.assert.calledOnceWithExactly(onReport, {
+      traces,
+      [TEST_SUITE_EXECUTION_ID]: 'suite-execution',
+    }, workerTraceReportCh.name)
+    assert.deepStrictEqual(onReport.firstCall.returnValue, [1, 1])
     assert.deepStrictEqual([...newTestsWithDynamicNames], ['dynamic-suite.js › dynamic 123'])
     assert.match(formatAttemptToFixSummary(executions), /worker-suite\.js › worker test/)
+  })
+
+  it('drops malformed worker trace batches without dropping the next batch', () => {
+    const onReport = sinon.spy()
+    const logError = sinon.stub(log, 'error')
+    workerTraceReportCh.subscribe(onReport)
+    try {
+      publishWorkerTraces(workerTraceReportCh, '[', {})
+      publishWorkerTraces(workerTraceReportCh, 'null', {})
+      sinon.assert.notCalled(onReport)
+      sinon.assert.calledTwice(logError)
+
+      publishWorkerTraces(workerTraceReportCh, '[]', {})
+      sinon.assert.calledOnceWithExactly(onReport, {
+        traces: [],
+        [TEST_SUITE_EXECUTION_ID]: undefined,
+      }, workerTraceReportCh.name)
+    } finally {
+      workerTraceReportCh.unsubscribe(onReport)
+      logError.restore()
+    }
   })
 
   it('logs and clears the attempt to fix summary', () => {
@@ -936,7 +971,7 @@ describe('test management summary', () => {
       ],
     ])
 
-    collectTestOptimizationSummariesFromTraces(payload, { testManagementExecutions: executions })
+    publishWorkerTraces(workerTraceReportCh, payload, { testManagementExecutions: executions })
 
     assert.match(formatTestManagementSummary(executions), /Disabled: 1 test skipped\./)
     assert.match(

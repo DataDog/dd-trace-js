@@ -623,12 +623,10 @@ module.exports = {
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   DYNAMIC_NAME_RE,
-  collectDynamicNamesFromTraces,
-  collectTestOptimizationSummariesFromTraces,
+  publishWorkerTraces,
   logDynamicNamesWarning,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
-  collectAttemptToFixExecutionsFromTraces,
   formatTestManagementSummary,
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
@@ -2437,9 +2435,9 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
 }
 
 /**
- * Scans serialized worker trace payloads and populates Test Optimization summary data.
- * Silently ignores parse errors.
+ * Collects Test Optimization summaries before handing decoded traces to the exporter.
  *
+ * @param {{ publish: (report: { traces: object[][], [TEST_SUITE_EXECUTION_ID]?: string }) => void }} reportChannel
  * @param {string} data - JSON-serialized traces from a worker
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
@@ -2447,8 +2445,9 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
  *   attemptToFixExecutions?: AttemptToFixExecutions,
  *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
+ * @param {string} [testSuiteExecutionId]
  */
-function collectTestOptimizationSummariesFromTraces (data, summaries) {
+function publishWorkerTraces (reportChannel, data, summaries, testSuiteExecutionId) {
   const {
     newTestsWithDynamicNames,
     attemptToFixExecutions,
@@ -2456,8 +2455,13 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
     testAnnotations,
   } = summaries
 
+  let traces
   try {
-    const traces = JSON.parse(data)
+    traces = JSON.parse(data)
+    if (!Array.isArray(traces)) {
+      log.error('Could not read worker trace batch: expected an array')
+      return
+    }
     for (const trace of traces) {
       for (const span of trace) {
         if (testAnnotations && span.type === 'test' &&
@@ -2477,30 +2481,11 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
         collectTestManagementExecutionFromTraceSpan(span, executions)
       }
     }
-  } catch {
-    // ignore parse errors
+  } catch (error) {
+    log.error('Could not read worker trace batch: %s', error.message)
+    return
   }
-}
-
-/**
- * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
- * and populates the provided Set. Silently ignores parse errors.
- *
- * @param {string} data - JSON-serialized traces from a worker
- * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
- */
-function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
-  collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
-}
-
-/**
- * Scans serialized worker trace payloads for attempt-to-fix test spans.
- *
- * @param {string} data - JSON-serialized traces from a worker
- * @param {AttemptToFixExecutions} attemptToFixExecutions
- */
-function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
-  collectTestOptimizationSummariesFromTraces(data, { attemptToFixExecutions })
+  reportChannel.publish({ traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId })
 }
 
 function getAttemptToFixManagementNotes (result) {
