@@ -20,6 +20,7 @@ const {
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const TraceObjectEncoder = require('../../encode/trace-object-encoder')
+const { WEBDRIVERIO_WORKER_ENV } = require('./webdriverio')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
@@ -101,7 +102,8 @@ class TestWorkerCiVisibilityExporter {
     this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
     const useObjectEncoder = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE ||
       interprocessTraceCode === JEST_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
+      interprocessTraceCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE ||
+      (interprocessTraceCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE && !getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV))
     const traceEncoder = useObjectEncoder
       ? new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
       : undefined
