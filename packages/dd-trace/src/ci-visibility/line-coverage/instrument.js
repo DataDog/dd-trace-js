@@ -2,469 +2,1270 @@
 
 // Inserts per-test line probes into JavaScript source text.
 //
-// A line counts as executed when a statement starting on it began to run, which is Istanbul's
-// line model. Every such statement gets a probe that stores 1 into a module-scope variable named
-// after the line. A context-slot store needs no inline cache, so it stays cheap in the
-// interpreter and the baseline compiler, where most test code runs.
+// A line counts in a window when code on it began to run in that window. Code is the start of an
+// ESTree statement or expression node (a position), counted by the rules of the accuracy checker's
+// definition: when control reaches it, so an untaken branch, a short-circuited operand or the rest
+// of a line after a throw does not count; a function declaration when its scope is entered; a
+// method header when the class definition reaches it; code after an `await` or `yield` in the
+// window in which it resumes.
 //
-// The first probe each function runs also checks the module's touched flag. The first check
-// after a test boundary queues the module's reader with the collector, so a boundary only reads
-// the modules that ran since the previous one. Async functions and generators check it on every
-// probe, because they can resume after a boundary.
+// A probe stores 1 into a module-scope variable that stands for one line of one source file (a
+// slot). The walk follows evaluation order and leaves out a probe when a probe for the same slot
+// has run on every path since the current activation started or last resumed. Probes that run at
+// the same instant share one place, which is the cheapest one available: before a statement,
+// inside a block, around an expression, in the key of a property access, or right after an
+// expression that may throw, through an identity call. Positions with no such place, like a method
+// header, take a computed key or a synthetic declaration.
 //
-// Initialiser code (the module's top level, and the static blocks and static field initialisers of
-// classes defined there) stores into a separate set of variables, which the reader reports as
-// negative line numbers.
+// The first probe of an activation, and the first one after each resumption, also checks the
+// module's touched flag. The first check after a test boundary queues the module's reader with the
+// collector, so a boundary only reads the modules that ran since the previous one.
 //
-// Inserted text never contains a newline, so line numbers stay intact. A probe goes right after
-// the previous statement when only whitespace separates the two, so most statements keep their
-// columns too.
+// Inserted text never contains a newline, so line numbers stay intact.
 
-const STATEMENTS = new Set([
-  'ExpressionStatement', 'BreakStatement', 'ContinueStatement', 'DebuggerStatement', 'ReturnStatement',
-  'ThrowStatement', 'TryStatement', 'IfStatement', 'ForStatement', 'ForInStatement', 'ForOfStatement',
-  'WhileStatement', 'DoWhileStatement', 'SwitchStatement', 'WithStatement', 'LabeledStatement',
-])
+const UNMAPPED = -2
+const TOUCHED = -1
+
+const LIST = 0
+const SLOT = 1
+const LABEL = 2
+
+// Slots are bits of module-scope integers, 30 per variable so the values stay small integers.
+const SLOTS_PER_WORD = 30
+
+const RANK_CLOSER = 0
+const RANK_PREFIX = 1
+const RANK_OPENER = 2
+const RANK_REPLACE = 3
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])
 
-// Anonymous function and class definitions take their name from the binding they initialize, so
-// their initializer cannot be wrapped in a sequence expression.
-const NAMED_BY_BINDING = new Set(['FunctionExpression', 'ArrowFunctionExpression', 'ClassExpression'])
-
-// Child keys per node type, in source order. Unknown types fall back to their own keys.
-const CHILD_KEYS = {
-  ArrayExpression: ['elements'],
-  ArrayPattern: ['elements'],
-  AssignmentExpression: ['left', 'right'],
-  AssignmentPattern: ['left', 'right'],
-  AwaitExpression: ['argument'],
-  BinaryExpression: ['left', 'right'],
-  CallExpression: ['callee', 'arguments'],
-  ChainExpression: ['expression'],
-  ClassBody: ['body'],
-  ClassDeclaration: ['decorators', 'id', 'superClass', 'body'],
-  ClassExpression: ['decorators', 'id', 'superClass', 'body'],
-  ConditionalExpression: ['test', 'consequent', 'alternate'],
-  Decorator: ['expression'],
-  ImportExpression: ['source', 'options'],
-  LogicalExpression: ['left', 'right'],
-  MemberExpression: ['object', 'property'],
-  MethodDefinition: ['decorators', 'key', 'value'],
-  NewExpression: ['callee', 'arguments'],
-  ObjectExpression: ['properties'],
-  ObjectPattern: ['properties'],
-  Property: ['key', 'value'],
-  RestElement: ['argument'],
-  SequenceExpression: ['expressions'],
-  SpreadElement: ['argument'],
-  TaggedTemplateExpression: ['tag', 'quasi'],
-  TemplateLiteral: ['expressions'],
-  UnaryExpression: ['argument'],
-  UpdateExpression: ['argument'],
-  VariableDeclarator: ['id', 'init'],
-  YieldExpression: ['argument'],
-  Identifier: [],
-  Literal: [],
-  ThisExpression: [],
-  Super: [],
-  MetaProperty: [],
-  PrivateIdentifier: [],
-  TemplateElement: [],
-}
-
-const SKIPPED_KEYS = new Set(['type', 'start', 'end', 'range', 'loc'])
-
 /**
  * @typedef {object} InstrumentOptions
- * @property {(code: string, isModule: boolean) => object} parse returns an ESTree Program with UTF-16
- *   `start` and `end` offsets
- * @property {boolean} [isModule]
- * @property {number} fileIndex the collector's index for this file
- * @property {(line: number, column: number) => number} [originalLine] maps a generated position to
- *   its original line, or 0 when it has no mapping
+ * @property {(code: string) => object} parse returns an ESTree Program with UTF-16 `start` and `end`
+ * @property {number} moduleId the collector's id for the slot table of this module
+ * @property {(line: number, column: number) => ({ source: number, line: number } | undefined)} [mapPosition]
+ *   maps a generated position (1-based line, 0-based column) to a source and its 1-based line, or
+ *   undefined when the position is not credited
+ *
+ * @typedef {{ source: number, line: number, init: boolean }} Slot
  */
 
 /**
  * @param {string} code
  * @param {InstrumentOptions} options
- * @returns {{ code: string, lines: number[], initLines: number[] } | undefined} undefined when there is
- *   nothing to probe
+ * @returns {{ code: string, slots: Slot[], unprobed: number } | undefined} undefined when nothing is
+ *   probed. Slot `i` is bit `i % 30` of word `Math.floor(i / 30)` in what the reader writes.
  */
-function instrument (code, { parse, isModule = false, fileIndex, originalLine }) {
-  const program = parse(code, isModule)
-  const lineStarts = getLineStarts(code)
-  const prefix = choosePrefix(code)
-  const touch = `${prefix}t||${prefix}r()`
+function instrument (code, options) {
+  const program = options.parse(code)
+  for (const statement of program.body) {
+    if (statement.type.startsWith('Import') || statement.type.startsWith('Export')) return
+  }
+  return new Instrumenter(code, program, options).run()
+}
 
-  /** @type {Array<[number, number, number, string]>} offset, order, sequence, text */
-  const inserts = []
-  const lineSet = new Set()
-  const initLineSet = new Set()
-  let sequence = 0
-  let syntheticNames = 0
+class Instrumenter {
+  /**
+   * @param {string} code
+   * @param {object} program
+   * @param {InstrumentOptions} options
+   */
+  constructor (code, program, { moduleId, mapPosition }) {
+    this.code = code
+    this.program = program
+    this.moduleId = moduleId
+    this.mapPosition = mapPosition
+    this.prefix = choosePrefix(code)
+    this.lineStarts = getLineStarts(code)
+    // Source maps count lines by `\n` alone.
+    this.mapLineStarts = mapPosition ? getNewlineStarts(code) : undefined
 
-  // State of the function whose own body is being visited.
-  let fn = { init: false, touchEveryProbe: false, touched: false }
+    /** @type {Map<number, number>} */
+    this.slotByKey = new Map()
+    /** @type {Array<Slot & { probed: boolean }>} */
+    this.slots = []
+    /** @type {object[]} */
+    this.points = []
+    /** @type {object[]} */
+    this.edits = []
+    /** @type {Array<{ node: object, where: number }>} */
+    this.expressionStatements = []
+    this.syntheticNames = 0
+    this.sequence = 0
+    this.unprobed = 0
 
-  function lineAt (offset) {
-    let lo = 0
-    let hi = lineStarts.length - 1
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1
-      if (lineStarts[mid] <= offset) lo = mid
-      else hi = mid - 1
+    // Whether positions being visited are initialiser code.
+    this.init = true
+    // Slot -> segment in which a probe for it has run on every path; `undo` restores it.
+    /** @type {Map<number, number>} */
+    this.done = new Map()
+    /** @type {number[]} */
+    this.undo = []
+    this.segments = 0
+    this.segment = 0
+    // The open credit point: probes attached to it run at an instant that is control-equivalent to
+    // the current one. `latent` realizes the instant right after the last expression that may throw.
+    this.point = null
+    this.latent = null
+    /** @type {Array<{ slot: number, costly: object | null }>} */
+    this.pending = []
+    // Inside the spine of an optional chain: the first conditional snapshot, or null.
+    this.chain = null
+    this.inChain = false
+    this.inWith = 0
+  }
+
+  run () {
+    const { program, code } = this
+    const body = program.body
+    const directives = countDirectives(body, code)
+    let headerOffset = code.startsWith('#!') ? (this.lineStarts[1] ?? code.length) : 0
+    if (directives > 0) headerOffset = body[directives - 1].end
+    this.headerOffset = headerOffset
+
+    this.activation(() => {
+      this.init = true
+      const opener = { kind: 'prefix', at: headerOffset }
+      this.scopeEntry(body, directives, opener)
+      this.statements(body, directives, headerOffset)
+    })
+
+    if (this.points.length === 0) return
+    this.emit()
+    this.guardStatementStarts()
+    const words = []
+    for (let slot = 0; slot < this.slots.length; slot++) {
+      const word = Math.floor(slot / SLOTS_PER_WORD)
+      if (this.slots[slot].probed && words.at(-1) !== word) words.push(word)
     }
-    return lo + 1
+    this.edits.push({
+      at: headerOffset,
+      end: headerOffset,
+      rank: -1,
+      text: this.header(words),
+      spanStart: 0,
+      spanEnd: 0,
+      sub: 0,
+      sequence: -1,
+    })
+    return {
+      code: applyEdits(code, this.edits),
+      slots: this.slots.map(({ source, line, init }) => ({ source, line, init })),
+      unprobed: this.unprobed,
+    }
   }
 
-  function recordedLine (offset) {
-    const line = lineAt(offset)
-    if (!originalLine) return line
-    return originalLine(line, offset - lineStarts[line - 1])
-  }
+  // --- Positions and credit points ---
 
-  function probeText (line) {
-    let store
-    if (fn.init) {
-      initLineSet.add(line)
-      store = `${prefix}i${line}=1`
+  slotAt (offset) {
+    const init = this.init
+    let source = 0
+    let line
+    if (this.mapLineStarts === undefined) {
+      line = lineAt(this.lineStarts, offset)
     } else {
-      lineSet.add(line)
-      store = `${prefix}${line}=1`
+      const generatedLine = lineAt(this.mapLineStarts, offset)
+      const mapped = this.mapPosition(generatedLine, offset - this.mapLineStarts[generatedLine - 1])
+      if (mapped === undefined) return UNMAPPED
+      source = mapped.source
+      line = mapped.line
     }
-    if (fn.touchEveryProbe || !fn.touched) {
-      fn.touched = true
-      return `${touch},${store}`
+    const key = (source * 4_194_304 + line) * 2 + (init ? 1 : 0)
+    let slot = this.slotByKey.get(key)
+    if (slot === undefined) {
+      slot = this.slots.length
+      this.slots.push({ source, line, init, probed: false })
+      this.slotByKey.set(key, slot)
     }
-    return store
-  }
-
-  function insert (offset, order, text) {
-    inserts.push([offset, order, sequence++, text])
-  }
-
-  // Offset of the first character after whitespace and comments.
-  function skipTrivia (offset) {
-    while (offset < code.length) {
-      const c = code.charCodeAt(offset)
-      if (c === 32 || c === 9 || c === 10 || c === 13 || c === 0x20_28 || c === 0x20_29 || c === 0xA0 ||
-        c === 0xFE_FF || c === 11 || c === 12) {
-        offset++
-      } else if (c === 47 && code.charCodeAt(offset + 1) === 47) {
-        while (offset < code.length && !isLineBreak(code.charCodeAt(offset))) offset++
-      } else if (c === 47 && code.charCodeAt(offset + 1) === 42) {
-        const end = code.indexOf('*/', offset + 2)
-        offset = end === -1 ? code.length : end + 2
-      } else {
-        break
-      }
-    }
-    return offset
-  }
-
-  // A probe for a list statement goes right after the previous token when only whitespace sits
-  // between them, which keeps the statement's own columns, and right before the statement otherwise.
-  function listInsertOffset (stmtStart, minOffset) {
-    for (let i = minOffset; i < stmtStart; i++) {
-      const c = code.charCodeAt(i)
-      if (c !== 32 && c !== 9 && c !== 10 && c !== 13) return stmtStart
-    }
-    return minOffset
-  }
-
-  function insertListProbe (stmtStart, minOffset, line) {
-    insert(listInsertOffset(stmtStart, minOffset), 1, ';' + probeText(line) + ';')
+    return slot
   }
 
   /**
-   * @param {object[]} list
-   * @param {number} minOffset first offset a probe may go at: just after the list's opening token
-   * @param {number} dominatingLine a line recorded by a probe that runs whenever the list runs
+   * Records the position of `node`, which begins now.
+   *
+   * @param {object} node
+   * @param {object | null} [cheap] realizes the current instant
+   * @param {object | null} [costly] realizes it, at a price: used only when nothing else does
    */
-  function visitStatementList (list, minOffset, dominatingLine) {
-    let prevLine = dominatingLine
-    let floor = minOffset
-    for (const stmt of list) {
-      prevLine = visitListStatement(stmt, floor, prevLine)
-      floor = stmt.end
+  position (node, cheap, costly) {
+    const slot = this.slotAt(node.start)
+    if (slot === UNMAPPED || this.isDone(slot)) return
+    if (this.point === null) {
+      const opener = cheap ?? this.latent
+      if (opener === null || opener === undefined) {
+        this.pending.push({ slot, costly: costly ?? null })
+        return
+      }
+      this.open(opener)
+    }
+    this.attach(slot)
+  }
+
+  isDone (slot) {
+    return this.done.get(slot) === this.segment
+  }
+
+  markDone (slot) {
+    this.undo.push(slot, this.done.get(slot) ?? -1)
+    this.done.set(slot, this.segment)
+  }
+
+  attach (slot) {
+    if (this.isDone(slot)) return
+    this.point.slots.push(slot)
+    this.slots[slot].probed = true
+    this.markDone(slot)
+  }
+
+  open (opener) {
+    const point = { opener, slots: [], touch: false }
+    this.points.push(point)
+    this.point = point
+    this.latent = null
+    if (!this.isDone(TOUCHED)) {
+      point.touch = true
+      this.markDone(TOUCHED)
+    }
+    const pending = this.pending
+    if (pending.length > 0) {
+      this.pending = []
+      for (const { slot } of pending) this.attach(slot)
     }
   }
 
-  // Returns the line of a probe that dominates the code after this statement, or -1.
-  function visitListStatement (stmt, minOffset, prevLine) {
-    const type = stmt.type
-    if (type === 'VariableDeclaration') {
-      return visitVariableDeclaration(stmt, minOffset, prevLine, stmt.start)
+  // Positions waiting for a place get one now, before control can leave the current instant.
+  flush () {
+    const pending = this.pending
+    if (pending.length === 0) return
+    for (const { costly } of pending) {
+      if (costly !== null) {
+        this.open(costly)
+        return
+      }
     }
-    if (type === 'ExportNamedDeclaration' && stmt.declaration?.type === 'VariableDeclaration') {
-      return visitVariableDeclaration(stmt.declaration, minOffset, prevLine, stmt.start)
-    }
-    if (type === 'ExportDefaultDeclaration' && !isDeclaration(stmt.declaration)) {
-      const line = recordedLine(stmt.start)
-      if (line !== 0) insertListProbe(stmt.start, minOffset, line)
-      visitNode(stmt.declaration)
-      return -1
-    }
-    if (!STATEMENTS.has(type)) {
-      visitNonCounted(stmt)
-      return type === 'EmptyStatement' || type === 'FunctionDeclaration' ? prevLine : -1
-    }
-    const line = recordedLine(stmt.start)
-    if (line !== 0 && (line !== prevLine || fn.touchEveryProbe)) insertListProbe(stmt.start, minOffset, line)
-    const dominating = line === 0 || fn.touchEveryProbe ? -1 : line
-    visitStatementChildren(stmt, dominating)
-    return dominating
+    this.unprobed += pending.length
+    this.pending = []
   }
 
-  // A statement in a position that takes a single statement, like an if branch or a loop body.
-  function visitBodyStatement (stmt, dominatingLine) {
-    const type = stmt.type
-    if (type === 'BlockStatement') {
-      visitStatementList(stmt.body, stmt.start + 1, dominatingLine)
+  // Something that may throw just ran: later code is not control-equivalent to earlier code.
+  unsafe () {
+    this.flush()
+    this.point = null
+    this.latent = null
+  }
+
+  snapshot () {
+    return { undo: this.undo.length, segment: this.segment }
+  }
+
+  restore (snapshot) {
+    if (this.segment !== snapshot.segment) {
+      // A resumption happened since: nothing is known to have run in the current window.
+      this.segment = ++this.segments
       return
     }
-    let line = 0
-    if (type === 'VariableDeclaration') {
-      line = stmt.declarations[0]?.init ? recordedLine(stmt.declarations[0].init.start) : 0
-    } else if (STATEMENTS.has(type)) {
-      line = recordedLine(stmt.start)
-    }
-    if (line !== 0 && (line !== dominatingLine || fn.touchEveryProbe)) {
-      insert(stmt.start, 1, '{' + probeText(line) + ';')
-      insert(stmt.end, 0, '}')
-    }
-    if (type === 'VariableDeclaration') {
-      for (const declarator of stmt.declarations) visitNode(declarator)
-    } else if (STATEMENTS.has(type)) {
-      visitStatementChildren(stmt, line === 0 || fn.touchEveryProbe ? -1 : line)
-    } else {
-      visitNonCounted(stmt)
+    this.rollback(snapshot.undo)
+  }
+
+  rollback (length) {
+    const { undo, done } = this
+    while (undo.length > length) {
+      const previous = undo.pop()
+      const slot = undo.pop()
+      if (previous === -1) done.delete(slot)
+      else done.set(slot, previous)
     }
   }
 
-  function visitVariableDeclaration (declaration, minOffset, prevLine, statementStart) {
-    let dominating = prevLine
-    let first = true
-    for (const declarator of declaration.declarations) {
-      const init = declarator.init
-      visitNode(declarator.id)
-      if (!init) continue
-      const line = recordedLine(init.start)
-      if (line !== 0) {
-        if (first) {
-          // The first initializer runs before anything else in the statement, so its probe can go
-          // before the statement, which also keeps name inference for `const f = () => {}`.
-          if (line !== dominating || fn.touchEveryProbe) insertListProbe(statementStart, minOffset, line)
-        } else if (NAMED_BY_BINDING.has(init.type)) {
-          // A synthetic declarator before this one records the line without wrapping the initializer.
-          insert(declarator.start, 1, `${prefix}d${syntheticNames++}=(${probeText(line)}),`)
-        } else {
-          insert(init.start, 1, '(' + probeText(line) + ',')
-          insert(init.end, 0, ')')
-        }
-        dominating = fn.touchEveryProbe ? -1 : line
+  // Entry to code that runs only on some paths.
+  branch () {
+    this.unsafe()
+    return this.snapshot()
+  }
+
+  merge (snapshot) {
+    this.unsafe()
+    this.restore(snapshot)
+  }
+
+  // Code after this point may run in a later window.
+  suspend () {
+    this.unsafe()
+    this.segment = ++this.segments
+  }
+
+  activation (walk) {
+    const saved = {
+      init: this.init,
+      segment: this.segment,
+      point: this.point,
+      latent: this.latent,
+      pending: this.pending,
+      undo: this.undo.length,
+      chain: this.chain,
+      inChain: this.inChain,
+    }
+    this.segment = ++this.segments
+    this.point = null
+    this.latent = null
+    this.pending = []
+    this.chain = null
+    this.inChain = false
+    walk()
+    this.flush()
+    this.rollback(saved.undo)
+    this.init = saved.init
+    this.segment = saved.segment
+    this.point = saved.point
+    this.latent = saved.latent
+    this.pending = saved.pending
+    this.chain = saved.chain
+    this.inChain = saved.inChain
+  }
+
+  // --- Statements ---
+
+  // Function declarations, and directives, count when their scope is entered.
+  scopeEntry (list, directives, opener) {
+    for (let i = 0; i < list.length; i++) {
+      const statement = list[i]
+      if (i < directives) {
+        this.position(statement, opener)
+        this.position(statement.expression, opener)
+      } else if (statement.type === 'FunctionDeclaration') {
+        this.position(statement, opener)
+        this.functionBody(statement)
       }
-      first = false
-      visitNode(init)
     }
-    return -1
   }
 
-  function visitStatementChildren (stmt, dominatingLine) {
-    switch (stmt.type) {
+  statements (list, from, floor) {
+    for (let i = from; i < list.length; i++) {
+      const statement = list[i]
+      if (statement.type !== 'FunctionDeclaration') {
+        this.statement(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) }, LIST)
+      }
+      floor = statement.end
+    }
+  }
+
+  // A statement in a place that takes a single statement, like an if branch or a loop body.
+  slotStatement (statement) {
+    if (statement.type === 'BlockStatement') {
+      this.block(statement)
+    } else {
+      this.statement(statement, { kind: 'slot', node: statement }, SLOT)
+    }
+  }
+
+  block (node) {
+    const opener = { kind: 'prefix', at: node.start + 1 }
+    this.position(node, opener)
+    this.scopeEntry(node.body, 0, opener)
+    this.statements(node.body, 0, node.start + 1)
+  }
+
+  abrupt () {
+    this.unsafe()
+  }
+
+  statement (node, opener, where) {
+    switch (node.type) {
       case 'ExpressionStatement':
-        visitNode(stmt.expression)
+        this.expressionStatements.push({ node, where })
+        this.position(node, opener)
+        this.expression(node.expression, false, opener)
+        return
+      case 'VariableDeclaration':
+        this.variableDeclaration(node, opener)
+        return
+      case 'FunctionDeclaration':
+        // Only in a statement slot (sloppy-mode `if (a) function f () {}`).
+        this.position(node, opener)
+        this.functionBody(node)
+        return
+      case 'ClassDeclaration':
+        this.position(node, opener)
+        this.classBody(node)
+        return
+      case 'BlockStatement':
+        this.block(node)
+        return
+      case 'EmptyStatement':
+      case 'DebuggerStatement':
+        this.position(node, opener)
         return
       case 'ReturnStatement':
       case 'ThrowStatement':
-        visitNode(stmt.argument)
+        this.position(node, opener)
+        if (node.argument) this.expression(node.argument, true, opener)
+        this.abrupt()
         return
-      case 'IfStatement':
-        visitNode(stmt.test)
-        visitBodyStatement(stmt.consequent, dominatingLine)
-        if (stmt.alternate) visitBodyStatement(stmt.alternate, -1)
+      case 'BreakStatement':
+      case 'ContinueStatement':
+        this.position(node, opener)
+        this.abrupt()
         return
-      case 'ForStatement':
-        if (stmt.init?.type === 'VariableDeclaration') {
-          for (const declarator of stmt.init.declarations) visitNode(declarator)
-        } else {
-          visitNode(stmt.init)
+      case 'IfStatement': {
+        this.position(node, opener)
+        this.expression(node.test, true, opener)
+        let snapshot = this.branch()
+        this.slotStatement(node.consequent)
+        this.merge(snapshot)
+        if (node.alternate) {
+          snapshot = this.branch()
+          this.slotStatement(node.alternate)
+          this.merge(snapshot)
         }
-        visitNode(stmt.test)
-        visitNode(stmt.update)
-        visitBodyStatement(stmt.body, dominatingLine)
         return
+      }
+      case 'WhileStatement': {
+        this.position(node, opener)
+        if (containsSuspension(node)) this.suspend()
+        this.expression(node.test, true, null)
+        const snapshot = this.branch()
+        this.slotStatement(node.body)
+        this.merge(snapshot)
+        return
+      }
+      case 'DoWhileStatement': {
+        this.position(node, opener)
+        if (containsSuspension(node)) this.suspend()
+        const snapshot = this.snapshot()
+        this.slotStatement(node.body)
+        this.unsafe()
+        this.expression(node.test, true, null)
+        this.merge(snapshot)
+        return
+      }
+      case 'ForStatement': {
+        this.position(node, opener)
+        if (node.init) {
+          if (node.init.type === 'VariableDeclaration') {
+            this.variableDeclaration(node.init, opener)
+          } else {
+            this.expression(node.init, true, opener)
+          }
+        }
+        if (containsSuspension(node.test) || containsSuspension(node.update) || containsSuspension(node.body)) {
+          this.suspend()
+        }
+        if (node.test) this.expression(node.test, true, null)
+        const snapshot = this.branch()
+        this.slotStatement(node.body)
+        if (node.update) {
+          this.unsafe()
+          this.expression(node.update, true, null)
+        }
+        this.merge(snapshot)
+        return
+      }
       case 'ForInStatement':
-      case 'ForOfStatement':
-        visitNode(stmt.left)
-        visitNode(stmt.right)
-        visitBodyStatement(stmt.body, dominatingLine)
+      case 'ForOfStatement': {
+        this.position(node, opener)
+        this.expression(node.right, true, opener)
+        this.unsafe()
+        if (node.await || containsSuspension(node.left) || containsSuspension(node.body)) this.suspend()
+        const snapshot = this.branch()
+        const left = node.left
+        if (left.type === 'VariableDeclaration') {
+          // Bound on each iteration, where no probe can go: it counts with the body when only a name
+          // is bound, and through other positions on its line otherwise.
+          this.position(left, null)
+          for (const declarator of left.declarations) {
+            this.pattern(declarator.id, false)
+            if (declarator.init) this.expression(declarator.init, true, null)
+          }
+        } else {
+          this.pattern(left, true)
+        }
+        this.slotStatement(node.body)
+        this.merge(snapshot)
         return
-      case 'WhileStatement':
-        visitNode(stmt.test)
-        visitBodyStatement(stmt.body, dominatingLine)
+      }
+      case 'LabeledStatement': {
+        this.position(node, opener)
+        const snapshot = this.snapshot()
+        this.statement(node.body, opener, LABEL)
+        this.merge(snapshot)
         return
-      case 'DoWhileStatement':
-        visitBodyStatement(stmt.body, dominatingLine)
-        visitNode(stmt.test)
-        return
-      case 'WithStatement':
-        visitNode(stmt.object)
-        visitBodyStatement(stmt.body, dominatingLine)
-        return
-      case 'LabeledStatement':
-        visitBodyStatement(stmt.body, dominatingLine)
-        return
+      }
       case 'SwitchStatement':
-        visitNode(stmt.discriminant)
-        for (const switchCase of stmt.cases) {
-          visitNode(switchCase.test)
-          // `case <test>:` or `default:`
-          const colon = skipTrivia(switchCase.test ? switchCase.test.end : switchCase.start + 7)
-          visitStatementList(switchCase.consequent, colon + 1, -1)
+        this.switchStatement(node, opener)
+        return
+      case 'TryStatement': {
+        this.position(node, opener)
+        const snapshot = this.snapshot()
+        this.block(node.block)
+        if (node.handler) {
+          this.unsafe()
+          this.restore(snapshot)
+          if (node.handler.param) this.pattern(node.handler.param, false)
+          this.block(node.handler.body)
+        }
+        this.unsafe()
+        this.restore(snapshot)
+        if (node.finalizer) {
+          this.block(node.finalizer)
+          this.unsafe()
         }
         return
-      case 'TryStatement':
-        visitStatementList(stmt.block.body, stmt.block.start + 1, dominatingLine)
-        if (stmt.handler) {
-          visitNode(stmt.handler.param)
-          visitStatementList(stmt.handler.body.body, stmt.handler.body.start + 1, -1)
-        }
-        if (stmt.finalizer) visitStatementList(stmt.finalizer.body, stmt.finalizer.start + 1, -1)
-    }
-  }
-
-  function visitNonCounted (stmt) {
-    switch (stmt.type) {
-      case 'BlockStatement':
-        visitStatementList(stmt.body, stmt.start + 1, -1)
-        return
-      case 'ExportNamedDeclaration':
-      case 'ExportDefaultDeclaration':
-        visitNode(stmt.declaration)
-        return
-      case 'VariableDeclaration':
-        for (const declarator of stmt.declarations) visitNode(declarator)
+      }
+      case 'WithStatement':
+        this.position(node, opener)
+        this.expression(node.object, true, opener)
+        this.unsafe()
+        this.inWith++
+        this.slotStatement(node.body)
+        this.inWith--
         return
       default:
-        if (!STATEMENTS.has(stmt.type)) visitNode(stmt)
+        throw new Error(`Unsupported statement ${node.type}`)
     }
   }
 
-  function visitFunction (node) {
-    for (const param of node.params) visitNode(param)
-    const outer = fn
-    fn = {
-      init: false,
-      touchEveryProbe: (node.async || node.generator) && containsSuspension(node.body),
-      touched: false,
-    }
-    const body = node.body
-    if (body.type === 'BlockStatement') {
-      // A probe before 'use strict' would turn the directive into a plain expression.
-      const directives = countDirectives(body.body, code)
-      if (directives === 0) {
-        visitStatementList(body.body, body.start + 1, -1)
-      } else {
-        visitStatementList(body.body.slice(directives), body.body[directives - 1].end, -1)
+  variableDeclaration (node, opener) {
+    this.position(node, opener)
+    const declarations = node.declarations
+    for (let i = 0; i < declarations.length; i++) {
+      const declarator = declarations[i]
+      const init = declarator.init
+      if (init) {
+        const cheap = i === 0 ? opener : null
+        if (declarator.id.type === 'Identifier' && isAnonymousFunctionDefinition(init)) {
+          this.namedValue(init, cheap, { kind: 'declarator', node: declarator })
+        } else {
+          this.expression(init, true, cheap)
+        }
       }
+      this.pattern(declarator.id, false)
+    }
+  }
+
+  switchStatement (node, opener) {
+    this.position(node, opener)
+    this.expression(node.discriminant, true, opener)
+    // Function declarations of the case block count when it is entered, after the discriminant.
+    for (const switchCase of node.cases) this.scopeEntry(switchCase.consequent, 0, null)
+    const snapshot = this.snapshot()
+    let first = true
+    for (const switchCase of node.cases) {
+      if (!switchCase.test) continue
+      // A test runs only when no earlier one matched.
+      if (!first) this.unsafe()
+      first = false
+      this.expression(switchCase.test, true, null)
+    }
+    for (const switchCase of node.cases) {
+      this.unsafe()
+      this.restore(snapshot)
+      const colon = skipTrivia(this.code, switchCase.test ? switchCase.test.end : switchCase.start + 7)
+      this.statements(switchCase.consequent, 0, colon + 1)
+    }
+    this.unsafe()
+    this.restore(snapshot)
+  }
+
+  // --- Functions and classes ---
+
+  // A function or arrow expression, a method value or a declaration's body: `node` counts when the
+  // closure is created; its parameters and body run in an activation of their own.
+  functionNode (node, cheap, costly) {
+    this.position(node, cheap, costly)
+    this.functionBody(node)
+  }
+
+  functionBody (node) {
+    this.activation(() => {
+      this.init = false
+      for (const param of node.params) this.pattern(param, false)
+      // A generator's body starts at the first next(), not when it is called.
+      if (node.generator) this.suspend()
+      const body = node.body
+      if (body.type === 'BlockStatement') {
+        const directives = countDirectives(body.body, this.code)
+        const at = directives > 0 ? body.body[directives - 1].end : body.start + 1
+        const opener = { kind: 'prefix', at }
+        this.position(body, opener)
+        this.scopeEntry(body.body, directives, opener)
+        this.statements(body.body, directives, at)
+      } else {
+        this.expression(body, true, null)
+      }
+    })
+  }
+
+  // An anonymous function or class whose name comes from where it is defined: wrapping it would
+  // change its name, so it counts through `cheap`, the open point, or `costly`.
+  namedValue (node, cheap, costly) {
+    if (node.type === 'ClassExpression') {
+      this.position(node, cheap, costly)
+      this.classBody(node)
     } else {
-      // Arrow function with an expression body.
-      const line = recordedLine(body.start)
-      if (line !== 0) {
-        insert(body.start, 1, '(' + probeText(line) + ',')
-        insert(body.end, 0, ')')
-      }
-      visitNode(body)
+      this.functionNode(node, cheap, costly)
     }
-    fn = outer
   }
 
-  // Class field initializers and static blocks run as functions of their own. Static ones run when
-  // the class is defined, so they are initialiser code when the class is.
-  function visitClassMember (node) {
-    if (node.type === 'StaticBlock') {
-      const outer = fn
-      fn = { init: outer.init, touchEveryProbe: false, touched: false }
-      visitStatementList(node.body, skipTrivia(node.start + 6) + 1, -1)
-      fn = outer
-      return
+  // The class's own position has been recorded; this evaluates its definition.
+  classBody (node) {
+    const initialiser = this.init
+    const elements = node.body.body
+    if (node.superClass) {
+      this.expression(node.superClass, true, null)
     }
-    if (node.decorators) {
-      for (const decorator of node.decorators) visitNode(decorator)
+    // A constructor or private method header has no key to probe in: it counts once `extends` has
+    // been evaluated, or when the definition starts.
+    for (const element of elements) {
+      if (element.type === 'MethodDefinition' && hasHeaderWithoutKey(element)) this.position(element.value, null)
     }
-    if (node.computed) visitNode(node.key)
-    const value = node.value
-    if (!value) return
-    const outer = fn
-    fn = { init: node.static && outer.init, touchEveryProbe: false, touched: false }
-    const line = recordedLine(value.start)
-    if (line !== 0) {
-      if (NAMED_BY_BINDING.has(value.type)) {
-        // A synthetic private field just before this one records the line and keeps name inference.
-        const name = `#${prefix}p${syntheticNames++}`
-        insert(node.start, 1, `${node.static ? 'static ' : ''}${name}=(${probeText(line)},void 0);`)
+    if (node.superClass) this.unsafe()
+
+    for (const element of elements) {
+      if (element.type === 'MethodDefinition') {
+        if (hasHeaderWithoutKey(element)) {
+          this.functionBody(element.value)
+          continue
+        }
+        if (element.computed) {
+          // The header counts when the definition reaches the element, before its key.
+          const opener = { kind: 'wrap', node: element.key }
+          this.position(element.value, opener)
+          this.expression(element.key, true, opener)
+        } else {
+          this.position(element.value, null, { kind: 'methodKey', node: element.key })
+        }
+        this.functionBody(element.value)
+      } else if (isField(element) && element.computed) {
+        this.expression(element.key, true, null)
+      }
+    }
+
+    // Static fields and blocks run in order once the class is defined.
+    for (const element of elements) {
+      if (element.type === 'StaticBlock') {
+        this.init = initialiser
+        const at = skipTrivia(this.code, element.start + 6) + 1
+        const opener = { kind: 'prefix', at }
+        this.scopeEntry(element.body, 0, opener)
+        this.statements(element.body, 0, at)
+      } else if (isField(element) && element.static && element.value) {
+        this.init = initialiser
+        this.fieldValue(element)
+      }
+    }
+    this.init = initialiser
+
+    // Instance fields run at construction.
+    const fields = elements.filter(element => isField(element) && !element.static && element.value)
+    if (fields.length > 0) {
+      this.activation(() => {
+        this.init = false
+        for (const field of fields) this.fieldValue(field)
+      })
+    }
+  }
+
+  fieldValue (element) {
+    const value = element.value
+    if (isAnonymousFunctionDefinition(value)) {
+      this.namedValue(value, null, { kind: 'field', node: element })
+    } else {
+      this.expression(value, true, null)
+    }
+  }
+
+  // --- Expressions ---
+
+  /**
+   * Evaluates an expression.
+   *
+   * @param {object} node
+   * @param {boolean} wrapOk whether the node may be wrapped in parentheses with probes, which also
+   *   allows a probe right after it
+   * @param {object | null} opener realizes the instant at which the node begins
+   */
+  expression (node, wrapOk, opener) {
+    if (opener === null && wrapOk) opener = { kind: 'wrap', node }
+    const inChain = this.inChain
+    if (node.type !== 'MemberExpression' && node.type !== 'CallExpression') this.inChain = false
+    this.evaluate(node, wrapOk, opener)
+    this.inChain = inChain
+    if (this.point === null) this.latent = wrapOk ? { kind: 'after', node } : null
+  }
+
+  evaluate (node, wrapOk, opener) {
+    switch (node.type) {
+      case 'Identifier':
+      case 'ThisExpression':
+      case 'Super':
+        this.position(node, opener)
+        this.unsafe()
+        return
+      case 'Literal':
+        this.position(node, opener)
+        return
+      case 'TemplateLiteral':
+        this.position(node, opener)
+        for (const expression of node.expressions) {
+          this.expression(expression, true, null)
+          this.unsafe()
+        }
+        return
+      case 'TaggedTemplateExpression':
+        this.position(node, opener)
+        // Wrapping a member tag would lose its `this`; inside `with`, so would wrapping a name.
+        this.expression(node.tag, node.tag.type !== 'MemberExpression' && this.inWith === 0, opener)
+        // The template counts once the tag has been evaluated; its first substitution follows at once.
+        this.position(node.quasi, null)
+        for (const expression of node.quasi.expressions) this.expression(expression, true, null)
+        this.unsafe()
+        return
+      case 'ArrayExpression':
+        this.position(node, opener)
+        for (const element of node.elements) {
+          if (element === null) continue
+          if (element.type === 'SpreadElement') {
+            this.expression(element.argument, true, null)
+            this.unsafe()
+          } else {
+            this.expression(element, true, null)
+          }
+        }
+        return
+      case 'ObjectExpression':
+        this.position(node, opener)
+        this.objectProperties(node)
+        return
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression':
+        this.functionNode(node, opener, null)
+        return
+      case 'ClassExpression':
+        this.position(node, opener)
+        this.classBody(node)
+        return
+      case 'MemberExpression':
+        this.member(node, wrapOk, opener, true)
+        return
+      case 'ChainExpression': {
+        this.position(node, opener)
+        const chain = this.chain
+        this.chain = null
+        this.inChain = true
+        this.expression(node.expression, false, opener)
+        this.inChain = false
+        if (this.chain !== null) this.merge(this.chain)
+        this.chain = chain
+        return
+      }
+      case 'CallExpression':
+        this.call(node, opener)
+        return
+      case 'NewExpression':
+        this.position(node, opener)
+        this.expression(node.callee, true, opener)
+        this.arguments(node.arguments)
+        this.unsafe()
+        return
+      case 'ImportExpression':
+        this.position(node, opener)
+        this.expression(node.source, true, opener)
+        if (node.options) this.expression(node.options, true, null)
+        this.unsafe()
+        return
+      case 'UpdateExpression':
+        this.position(node, opener)
+        this.target(node.argument, opener, true)
+        this.unsafe()
+        return
+      case 'UnaryExpression':
+        this.unary(node, opener)
+        return
+      case 'BinaryExpression':
+        this.position(node, opener)
+        if (node.left.type === 'PrivateIdentifier') {
+          this.position(node.left, opener)
+        } else {
+          this.expression(node.left, true, opener)
+        }
+        this.expression(node.right, true, null)
+        if (node.operator !== '===' && node.operator !== '!==') this.unsafe()
+        return
+      case 'LogicalExpression': {
+        this.position(node, opener)
+        this.expression(node.left, true, opener)
+        const snapshot = this.branch()
+        this.expression(node.right, true, null)
+        this.merge(snapshot)
+        return
+      }
+      case 'ConditionalExpression': {
+        this.position(node, opener)
+        this.expression(node.test, true, opener)
+        let snapshot = this.branch()
+        this.expression(node.consequent, true, null)
+        this.merge(snapshot)
+        snapshot = this.branch()
+        this.expression(node.alternate, true, null)
+        this.merge(snapshot)
+        return
+      }
+      case 'AssignmentExpression':
+        this.assignment(node, opener)
+        return
+      case 'SequenceExpression': {
+        this.position(node, opener)
+        const expressions = node.expressions
+        for (let i = 0; i < expressions.length; i++) this.expression(expressions[i], true, i === 0 ? opener : null)
+        return
+      }
+      case 'YieldExpression':
+      case 'AwaitExpression':
+        this.position(node, opener)
+        if (node.argument) this.expression(node.argument, true, opener)
+        this.suspend()
+        return
+      case 'MetaProperty':
+        return
+      case 'ParenthesizedExpression':
+        this.evaluate(node.expression, wrapOk, opener)
+        return
+      default:
+        throw new Error(`Unsupported expression ${node.type}`)
+    }
+  }
+
+  objectProperties (node) {
+    for (const property of node.properties) {
+      if (property.type === 'SpreadElement') {
+        this.expression(property.argument, true, null)
+        this.unsafe()
+        continue
+      }
+      if (property.computed) this.expression(property.key, true, null)
+      const value = property.value
+      if (property.method || property.kind !== 'init') {
+        this.functionNode(value, null, property.computed ? null : { kind: 'methodKey', node: property.key })
+      } else if (property.shorthand) {
+        this.position(value, { kind: 'shorthand', node: value })
+        this.unsafe()
+      } else if (isAnonymousFunctionDefinition(value) && !isProtoSetter(property)) {
+        const opener = property.computed ? null : { kind: 'named', node: value, name: this.keyText(property.key) }
+        this.namedValue(value, null, opener)
       } else {
-        insert(value.start, 1, '(' + probeText(line) + ',')
-        insert(value.end, 0, ')')
+        this.expression(value, true, null)
       }
     }
-    visitNode(value)
-    fn = outer
   }
 
-  function visitNode (node) {
-    if (!node || typeof node !== 'object') return
-    const type = node.type
-    if (FUNCTION_TYPES.has(type)) {
-      visitFunction(node)
-      return
+  // The text of a non-computed key as an expression that evaluates to the property name.
+  keyText (key) {
+    if (key.type === 'Identifier') return JSON.stringify(key.name)
+    return this.code.slice(key.start, key.end)
+  }
+
+  /**
+   * @param {object} node a MemberExpression
+   * @param {boolean} wrapOk
+   * @param {object | null} opener
+   * @param {boolean} read whether the property is read; false for an assignment target
+   */
+  member (node, wrapOk, opener, read) {
+    this.position(node, opener)
+    const object = node.object
+    const inChain = this.inChain
+    if (object.type === 'Super') {
+      this.position(object, opener)
+    } else {
+      // Inside an optional chain, wrapping a part of the spine that holds an optional link would
+      // stop the short-circuit from reaching the rest of the chain.
+      const objectWrapOk = !(inChain && hasOptionalLink(object))
+      this.inChain = inChain && (object.type === 'MemberExpression' || object.type === 'CallExpression')
+      this.expression(object, objectWrapOk, opener)
+      this.inChain = inChain
     }
-    if (type === 'PropertyDefinition' || type === 'AccessorProperty' || type === 'StaticBlock') {
-      visitClassMember(node)
-      return
+    if (node.optional) this.optionalLink()
+    const property = node.property
+    if (node.computed) {
+      this.inChain = false
+      this.expression(property, true, null)
+      this.inChain = inChain
+    } else {
+      this.position(property, this.propertyOpener(node, inChain))
     }
-    if (type === 'BlockStatement' || STATEMENTS.has(type)) {
-      visitBodyStatement(node, -1)
-      return
+    if (read) this.unsafe()
+  }
+
+  // Realizes the instant right after a member's object is evaluated, before its property is read.
+  propertyOpener (node, inChain) {
+    if (node.property.type === 'Identifier') return { kind: 'keyed', node }
+    const object = node.object
+    if (node.optional || object.type === 'Super' || (inChain && hasOptionalLink(object))) return null
+    return { kind: 'after', node: object }
+  }
+
+  // What follows an optional link runs only when it did not short-circuit, up to the chain's end.
+  optionalLink () {
+    if (this.chain === null) {
+      this.chain = this.branch()
+    } else {
+      this.unsafe()
     }
-    const keys = CHILD_KEYS[type] || Object.keys(node)
-    for (const key of keys) {
-      if (SKIPPED_KEYS.has(key)) continue
-      const value = node[key]
-      if (!value || typeof value !== 'object') continue
-      if (Array.isArray(value)) {
-        for (const item of value) visitNode(item)
+  }
+
+  call (node, opener) {
+    this.position(node, opener)
+    const callee = node.callee
+    const inChain = this.inChain
+    if (callee.type === 'Super') {
+      this.position(callee, opener)
+    } else if (callee.type === 'MemberExpression') {
+      this.inChain = inChain
+      this.member(callee, false, opener, true)
+    } else {
+      this.inChain = inChain && callee.type === 'CallExpression'
+      this.expression(callee, false, opener)
+    }
+    this.inChain = false
+    if (node.optional) this.optionalLink()
+    this.arguments(node.arguments)
+    this.inChain = inChain
+    this.unsafe()
+  }
+
+  arguments (list) {
+    for (const argument of list) {
+      if (argument.type === 'SpreadElement') {
+        this.expression(argument.argument, true, null)
+        this.unsafe()
       } else {
-        visitNode(value)
+        this.expression(argument, true, null)
       }
     }
   }
 
-  // The header goes after the hashbang line and the directive prologue.
-  const body = program.body
-  const index = countDirectives(body, code)
-  let headerOffset = code.startsWith('#!') ? (lineStarts[1] ?? code.length) : 0
-  if (index > 0) headerOffset = body[index - 1].end
-  fn = { init: true, touchEveryProbe: isModule && containsSuspension(body), touched: false }
-  visitStatementList(index === 0 ? body : body.slice(index), headerOffset, -1)
+  unary (node, opener) {
+    this.position(node, opener)
+    const argument = node.argument
+    const operator = node.operator
+    if (operator === 'delete' && argument.type === 'MemberExpression') {
+      this.member(argument, false, opener, false)
+    } else if ((operator === 'delete' || operator === 'typeof') && argument.type === 'Identifier') {
+      this.position(argument, opener)
+    } else {
+      // `delete (probes, a?.b)` would delete nothing.
+      this.expression(argument, !(operator === 'delete' && argument.type === 'ChainExpression'), opener)
+    }
+    if (operator !== '!' && operator !== 'void') this.unsafe()
+  }
 
-  if (lineSet.size === 0 && initLineSet.size === 0) return
+  // The target of an update or a compound assignment: its reference is evaluated, then read. An
+  // identifier is a position only as the operand of an update.
+  target (node, opener, update) {
+    if (node.type === 'MemberExpression') {
+      this.member(node, false, opener, false)
+    } else if (update && node.type === 'Identifier') {
+      this.position(node, opener)
+    }
+    this.unsafe()
+  }
 
-  const lines = [...lineSet].sort((a, b) => a - b)
-  const initLines = [...initLineSet].sort((a, b) => a - b)
-  inserts.push([headerOffset, -1, -1, header(prefix, lines, initLines, fileIndex)])
-  inserts.sort(compareInserts)
+  assignment (node, opener) {
+    this.position(node, opener)
+    const { left, right, operator } = node
+    if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+      // The value is evaluated before the pattern.
+      this.expression(right, true, opener)
+      this.unsafe()
+      this.pattern(left, true)
+      return
+    }
+    if (operator === '=') {
+      if (left.type === 'MemberExpression') {
+        this.member(left, false, opener, false)
+        this.expression(right, true, null)
+      } else if (isAnonymousFunctionDefinition(right)) {
+        this.namedValue(right, opener, null)
+      } else {
+        this.expression(right, true, opener)
+      }
+      this.unsafe()
+      return
+    }
+    this.target(left, opener, false)
+    if (operator === '&&=' || operator === '||=' || operator === '??=') {
+      const snapshot = this.branch()
+      if (left.type === 'Identifier' && isAnonymousFunctionDefinition(right)) {
+        this.namedValue(right, null, { kind: 'named', node: right, name: JSON.stringify(left.name) })
+      } else {
+        this.expression(right, true, null)
+      }
+      this.unsafe()
+      this.merge(snapshot)
+      return
+    }
+    this.expression(right, true, null)
+    this.unsafe()
+  }
 
+  /**
+   * A binding or assignment pattern, once its value is known.
+   *
+   * @param {object} node
+   * @param {boolean} assign whether targets are assigned (true) or bound (false)
+   */
+  pattern (node, assign) {
+    switch (node.type) {
+      case 'Identifier':
+        if (assign || this.inWith > 0) this.unsafe()
+        return
+      case 'MemberExpression':
+        this.member(node, false, null, false)
+        this.unsafe()
+        return
+      case 'ObjectPattern':
+        this.unsafe()
+        for (const property of node.properties) {
+          if (property.type === 'RestElement') {
+            this.pattern(property.argument, assign)
+            continue
+          }
+          if (property.computed) this.expression(property.key, true, null)
+          this.unsafe()
+          this.pattern(property.value, assign)
+        }
+        return
+      case 'ArrayPattern':
+        this.unsafe()
+        for (const element of node.elements) {
+          if (element !== null) this.pattern(element, assign)
+          this.unsafe()
+        }
+        return
+      case 'RestElement':
+        this.unsafe()
+        this.pattern(node.argument, assign)
+        return
+      case 'AssignmentPattern': {
+        const { left, right } = node
+        if (left.type === 'MemberExpression') {
+          this.member(left, false, null, false)
+        }
+        this.unsafe()
+        const snapshot = this.branch()
+        if (left.type === 'Identifier' && isAnonymousFunctionDefinition(right)) {
+          this.namedValue(right, null, { kind: 'named', node: right, name: JSON.stringify(left.name) })
+        } else {
+          this.expression(right, true, null)
+        }
+        this.merge(snapshot)
+        if (left.type === 'MemberExpression') this.unsafe()
+        else this.pattern(left, assign)
+        return
+      }
+      default:
+        throw new Error(`Unsupported pattern ${node.type}`)
+    }
+  }
+
+  // --- Output ---
+
+  probeText (point) {
+    const p = this.prefix
+    let text = point.touch ? `${p}t||${p}r()` : ''
+    const masks = new Map()
+    for (const slot of point.slots) {
+      const word = Math.floor(slot / SLOTS_PER_WORD)
+      masks.set(word, (masks.get(word) ?? 0) | (1 << (slot % SLOTS_PER_WORD)))
+    }
+    for (const [word, mask] of masks) text += `${text ? ',' : ''}${p}${word}|=${mask}`
+    return text
+  }
+
+  insert (at, rank, text, node, sub = 0) {
+    const spanStart = node ? node.start : at
+    const spanEnd = node ? node.end : at
+    this.edits.push({ at, end: at, rank, text, spanStart, spanEnd, sub, sequence: this.sequence++ })
+  }
+
+  replace (start, end, text) {
+    const sequence = this.sequence++
+    this.edits.push({ at: start, end, rank: RANK_REPLACE, text, spanStart: start, spanEnd: end, sub: 0, sequence })
+  }
+
+  emit () {
+    const p = this.prefix
+    for (const point of this.points) {
+      if (point.slots.length === 0 && !point.touch) continue
+      const probes = this.probeText(point)
+      const { opener } = point
+      const node = opener.node
+      switch (opener.kind) {
+        case 'prefix':
+          this.insert(opener.at, RANK_PREFIX, `;${probes};`)
+          break
+        case 'slot':
+          // Outside every edit on the statement's own expression.
+          this.insert(node.start, RANK_OPENER, `{${probes};`, node, -1)
+          this.insert(node.end, RANK_CLOSER, '}', node, 2)
+          break
+        case 'wrap':
+          this.insert(node.start, RANK_OPENER, `(${probes},`, node)
+          this.insert(node.end, RANK_CLOSER, ')', node, 1)
+          break
+        case 'after':
+          this.insert(node.start, RANK_OPENER, `(${p}a(`, node, 1)
+          this.insert(node.end, RANK_CLOSER, `,${probes}))`, node)
+          break
+        case 'keyed': {
+          const property = node.property
+          if (!node.optional) {
+            const dot = this.dotBefore(node)
+            this.replace(dot, dot + 1, ' ')
+          }
+          this.replace(property.start, property.end, `[(${probes},${JSON.stringify(property.name)})]`)
+          break
+        }
+        case 'methodKey':
+          this.replace(node.start, node.end, `[(${probes},${this.keyText(node)})]`)
+          break
+        case 'shorthand': {
+          const key = node.name === '__proto__' ? '["__proto__"]' : node.name
+          this.replace(node.start, node.end, `${key}:(${probes},${node.name})`)
+          break
+        }
+        case 'declarator':
+          this.insert(node.start, RANK_PREFIX, `${p}d${this.syntheticNames++}=(${probes},void 0),`)
+          break
+        case 'field': {
+          const name = `${node.static ? 'static ' : ''}#${p}f${this.syntheticNames++}`
+          this.insert(node.start, RANK_PREFIX, `;${name}=(${probes},void 0);`)
+          break
+        }
+        case 'named':
+          this.insert(node.start, RANK_OPENER, `(${probes},{[${opener.name}]:`, node)
+          this.insert(node.end, RANK_CLOSER, `}[${opener.name}])`, node, 1)
+          break
+        default:
+          throw new Error(`Unknown opener ${opener.kind}`)
+      }
+    }
+  }
+
+  // The `.` between a member's object and its property.
+  dotBefore (node) {
+    const code = this.code
+    let i = node.object.end
+    for (;;) {
+      i = skipTrivia(code, i)
+      if (code.charCodeAt(i) === 41) { // `)` closing a parenthesized object
+        i++
+        continue
+      }
+      return i
+    }
+  }
+
+  // A statement that starts with an inserted `(` would continue the previous line's expression.
+  guardStatementStarts () {
+    const first = new Map()
+    for (const edit of this.edits) {
+      if (edit.at !== edit.end) continue
+      const current = first.get(edit.at)
+      if (current === undefined || compareEdits(edit, current) < 0) first.set(edit.at, edit)
+    }
+    for (const { node, where } of this.expressionStatements) {
+      const edit = first.get(node.start)
+      if (edit === undefined || edit.rank !== RANK_OPENER || edit.text[0] !== '(') continue
+      if (where === LIST) {
+        this.insert(node.start, RANK_PREFIX, ';')
+      } else if (where === SLOT) {
+        this.insert(node.start, RANK_OPENER, '{', { start: node.start, end: Infinity })
+        this.insert(node.end, RANK_CLOSER, '}', { start: -Infinity, end: node.end })
+      }
+    }
+  }
+
+  // Declares the slot words, the touch function and the reader. The functions are hoisted, so code
+  // that runs before the header (hoisted functions called through a circular require) works. The
+  // reader writes the module id into `o`, then a word index and its bits for each word with slots
+  // that ran, clears them, and returns the number of entries it wrote. It returns 0 when it already
+  // ran for boundary `g`.
+  header (words) {
+    const p = this.prefix
+    let reader = `function ${p}x(o,g){if(${p}g===g)return 0;${p}g=g;o[0]=${this.moduleId};var n=1;`
+    let names = `${p}t=0,${p}g=0,${p}c`
+    for (const word of words) {
+      reader += `if(${p}${word}){o[n++]=${word};o[n++]=${p}${word};${p}${word}=0}`
+      // Starting at 0 keeps `|=` on small integers.
+      names += `,${p}${word}=0`
+    }
+    reader += `${p}t=0;return n}`
+    const touch = `function ${p}r(){${p}t=1;var c=${p}c||(${p}c=` +
+      `globalThis[Symbol.for('dd-trace.line-coverage')]);if(c)c.q.push(${p}x)}`
+    // Passes a value on, so probes can run right after the expression that computes it.
+    const identity = `function ${p}a(v){return v}`
+    return `;var ${names};${touch}${reader}${identity}`
+  }
+}
+
+function compareEdits (a, b) {
+  return a.at - b.at ||
+    a.rank - b.rank ||
+    (a.rank === RANK_CLOSER
+      ? b.spanStart - a.spanStart || a.sub - b.sub
+      : a.rank === RANK_OPENER ? b.spanEnd - a.spanEnd || a.sub - b.sub : 0) ||
+    a.sequence - b.sequence
+}
+
+function applyEdits (code, edits) {
+  edits.sort(compareEdits)
   let out = ''
   let last = 0
-  for (const [offset, , , text] of inserts) {
-    out += code.slice(last, offset) + text
-    last = offset
+  for (const edit of edits) {
+    if (edit.at < last) throw new Error('Overlapping edits')
+    out += code.slice(last, edit.at) + edit.text
+    last = edit.end
   }
-  out += code.slice(last)
-  return { code: out, lines, initLines }
+  return out + code.slice(last)
+}
+
+function isField (element) {
+  return element.type === 'PropertyDefinition' || element.type === 'AccessorProperty'
+}
+
+// A constructor or private method has no key to probe in.
+function hasHeaderWithoutKey (method) {
+  return method.kind === 'constructor' || method.key.type === 'PrivateIdentifier'
+}
+
+function isAnonymousFunctionDefinition (node) {
+  const type = node.type
+  return type === 'ArrowFunctionExpression' ||
+    ((type === 'FunctionExpression' || type === 'ClassExpression') && !node.id)
+}
+
+// `__proto__: value` sets the prototype and does not name the value.
+function isProtoSetter (property) {
+  const key = property.key
+  return !property.computed && !property.shorthand &&
+    ((key.type === 'Identifier' && key.name === '__proto__') || (key.type === 'Literal' && key.value === '__proto__'))
+}
+
+// Whether the spine of a chain part holds an optional link (`?.`).
+function hasOptionalLink (node) {
+  for (;;) {
+    if (node.type === 'MemberExpression') {
+      if (node.optional) return true
+      node = node.object
+    } else if (node.type === 'CallExpression') {
+      if (node.optional) return true
+      node = node.callee
+    } else {
+      return false
+    }
+  }
 }
 
 // Number of leading statements that form a directive prologue, like 'use strict'.
@@ -484,38 +1285,37 @@ function countDirectives (statements, code) {
   return count
 }
 
-function isDeclaration (node) {
-  return node?.type === 'FunctionDeclaration' || node?.type === 'ClassDeclaration'
+// A probe for a list statement goes right after the previous token when only whitespace sits
+// between them, which keeps the statement's own columns, and right before the statement otherwise.
+function listInsertOffset (code, start, floor) {
+  for (let i = floor; i < start; i++) {
+    const c = code.charCodeAt(i)
+    if (c !== 32 && c !== 9 && c !== 10 && c !== 13) return start
+  }
+  return floor
+}
+
+// Offset of the first character after whitespace and comments.
+function skipTrivia (code, offset) {
+  while (offset < code.length) {
+    const c = code.charCodeAt(offset)
+    if (c === 32 || c === 9 || c === 10 || c === 13 || c === 0x20_28 || c === 0x20_29 || c === 0xA0 ||
+      c === 0xFE_FF || c === 11 || c === 12) {
+      offset++
+    } else if (c === 47 && code.charCodeAt(offset + 1) === 47) {
+      while (offset < code.length && !isLineBreak(code.charCodeAt(offset))) offset++
+    } else if (c === 47 && code.charCodeAt(offset + 1) === 42) {
+      const end = code.indexOf('*/', offset + 2)
+      offset = end === -1 ? code.length : end + 2
+    } else {
+      break
+    }
+  }
+  return offset
 }
 
 function isLineBreak (c) {
   return c === 10 || c === 13 || c === 0x20_28 || c === 0x20_29
-}
-
-function compareInserts (a, b) {
-  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
-}
-
-// Declares the line variables, the touch function and the reader. Both functions are hoisted, so
-// code that runs before the header (hoisted functions called through a circular import) still works.
-// The reader writes the file index and then the executed lines into `o`, initialiser lines negated,
-// clears them, and returns the number of entries it wrote. It returns 0 when it already ran for
-// boundary `g`.
-function header (prefix, lines, initLines, fileIndex) {
-  let reader = `function ${prefix}x(o,g){if(${prefix}g===g)return 0;${prefix}g=g;o[0]=${fileIndex};var n=1;`
-  for (const line of lines) {
-    reader += `if(${prefix}${line}){o[n++]=${line};${prefix}${line}=0}`
-  }
-  for (const line of initLines) {
-    reader += `if(${prefix}i${line}){o[n++]=${-line};${prefix}i${line}=0}`
-  }
-  reader += `${prefix}t=0;return n}`
-  const touch = `function ${prefix}r(){${prefix}t=1;var c=${prefix}c||(${prefix}c=` +
-    `globalThis[Symbol.for('dd-trace.line-coverage')]);if(c)c.q.push(${prefix}x)}`
-  let names = `${prefix}t=0,${prefix}g=0,${prefix}c`
-  for (const line of lines) names += `,${prefix}${line}`
-  for (const line of initLines) names += `,${prefix}i${line}`
-  return `;var ${names};${touch}${reader}`
 }
 
 function choosePrefix (code) {
@@ -523,6 +1323,28 @@ function choosePrefix (code) {
   let n = 0
   while (code.includes(prefix)) prefix = `$dd${++n}$`
   return prefix
+}
+
+// 1-based line of `offset`, given the offsets at which lines start.
+function lineAt (starts, offset) {
+  let low = 0
+  let high = starts.length - 1
+  while (low < high) {
+    const middle = (low + high + 1) >> 1
+    if (starts[middle] <= offset) low = middle
+    else high = middle - 1
+  }
+  return low + 1
+}
+
+function getNewlineStarts (code) {
+  const starts = [0]
+  let index = code.indexOf('\n')
+  while (index !== -1) {
+    starts.push(index + 1)
+    index = code.indexOf('\n', index + 1)
+  }
+  return starts
 }
 
 function getLineStarts (code) {
@@ -555,7 +1377,7 @@ function containsSuspension (node) {
   if (type === 'ForOfStatement' && node.await) return true
   if (FUNCTION_TYPES.has(type)) return false
   for (const key of Object.keys(node)) {
-    if (SKIPPED_KEYS.has(key)) continue
+    if (key === 'type' || key === 'start' || key === 'end' || key === 'range' || key === 'loc') continue
     const value = node[key]
     if (value && typeof value === 'object' && containsSuspension(value)) return true
   }
