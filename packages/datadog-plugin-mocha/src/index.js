@@ -6,6 +6,7 @@ const { clearTimeout, setTimeout } = require('node:timers')
 const { channel } = require('dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const lineCoverage = require('../../dd-trace/src/ci-visibility/line-coverage')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
@@ -293,6 +294,9 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
+    if (lineCoverage.isEnabled()) {
+      lineCoverage.enable({ root: this.sourceRoot })
+    }
     this._webdriverioScreenshotUploads = new WeakMap()
     this._webdriverioVideos = new Map()
     this._pendingWebdriverioMediaUploads = 0
@@ -757,6 +761,7 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test:start', (ctx) => {
+      if (lineCoverage.isActive()) lineCoverage.startTest()
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
       const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
@@ -823,6 +828,7 @@ class MochaPlugin extends CiPlugin {
     }) => {
       if (span) {
         const finishTime = span._getTime()
+        if (lineCoverage.isActive()) this.#exportLineCoverage(span)
         span.setTag(TEST_STATUS, status)
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
@@ -1648,6 +1654,21 @@ class MochaPlugin extends CiPlugin {
   }
 
   /** @param {object} span - Span owning one WebdriverIO attempt */
+  /**
+   * @param {import('../../dd-trace/src/opentracing/span')} span the finished test's span
+   */
+  #exportLineCoverage (span) {
+    const files = lineCoverage.finishTest(this.repositoryRoot || this.sourceRoot)
+    if (files.length === 0) return
+    const context = span.context()
+    this.tracer._exporter.exportCoverage({
+      sessionId: context._traceId,
+      suiteId: context._parentId,
+      testId: context._spanId,
+      files,
+    })
+  }
+
   #startWebdriverioVideo (span) {
     if (this.testFramework !== WEBDRIVERIO_FRAMEWORK ||
         !shouldRecordWebdriverioVideos ||
