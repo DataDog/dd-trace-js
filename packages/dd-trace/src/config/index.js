@@ -708,6 +708,22 @@ class Config extends ConfigBase {
       }
     }
 
+    if (this.DD_LOGS_OTEL_ENABLED || this.DD_METRICS_OTEL_ENABLED) {
+      try {
+        require('@opentelemetry/api')
+      } catch {
+        this.#deactivate('DD_LOGS_OTEL_ENABLED', 'DD_LOGS_OTEL_ENABLED requires the @opentelemetry/api package.')
+        this.#deactivate('DD_METRICS_OTEL_ENABLED', 'DD_METRICS_OTEL_ENABLED requires the @opentelemetry/api package.')
+      }
+    }
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      try {
+        require('@opentelemetry/api-logs')
+      } catch {
+        this.#deactivate('DD_LOGS_OTEL_ENABLED', 'DD_LOGS_OTEL_ENABLED requires the @opentelemetry/api-logs package.')
+      }
+    }
+
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {
