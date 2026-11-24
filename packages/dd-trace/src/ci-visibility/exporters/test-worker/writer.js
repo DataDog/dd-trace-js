@@ -1,11 +1,16 @@
 'use strict'
-const { JSONEncoder } = require('../../encode/json-encoder')
+
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
+const ByteBatch = require('../../encode/byte-batch')
+const { JSONEncoder } = require('../../encode/json-encoder')
+const { encodeWorkerTrace } = require('../../encode/worker-traces')
 const {
   createWebdriverioWorkerMessage,
   WEBDRIVERIO_WORKER_ENV,
 } = require('./webdriverio')
+
+/** @typedef {import('../../encode/worker-traces').WorkerTraceItem} WorkerTraceItem */
 
 function getVitestWorkerPort () {
   const port = globalThis.__vitest_worker__?.ctx?.port
@@ -13,28 +18,35 @@ function getVitestWorkerPort () {
 }
 
 class Writer {
-  #onTraceBatch
+  /** @type {ByteBatch<WorkerTraceItem> | undefined} */
+  #traceBatch
+  #maxTraceBytes
   #traceFlush
 
   /**
    * @param {number | null} interprocessCode
-   * @param {number} [traceBatchBytes]
+   * @param {number} [traceBatchBytes] JSON IPC frame budget for multi-trace batches.
    */
   constructor (interprocessCode, traceBatchBytes) {
-    this._encoder = new JSONEncoder(traceBatchBytes)
-    if (traceBatchBytes !== undefined) {
-      this.#onTraceBatch = this.#sendTraceBatch.bind(this)
-    }
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
     this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
+    if (traceBatchBytes === undefined) {
+      this._encoder = new JSONEncoder()
+    } else {
+      const largestEnvelope = this.#wrapPayload([], true)
+      const envelopeBytes = Buffer.byteLength(JSON.stringify(largestEnvelope) + '\n') - 2
+      const maxBatchBytes = traceBatchBytes - envelopeBytes
+      this.#traceBatch = new ByteBatch(maxBatchBytes)
+      this.#maxTraceBytes = maxBatchBytes - 2
+    }
   }
 
   /**
    * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
-    if (this.#onTraceBatch !== undefined) {
+    if (this.#traceBatch !== undefined) {
       this.#flushTraceBatches(onDone)
       return
     }
@@ -49,13 +61,18 @@ class Writer {
     }
   }
 
+  /** @param {unknown} payload */
   append (payload) {
-    if (this.#onTraceBatch === undefined) {
+    const batch = this.#traceBatch
+    if (batch === undefined) {
       this._encoder.encode(payload)
       return
     }
     try {
-      this._encoder.encode(payload, this.#onTraceBatch)
+      const { data, bytes } = encodeWorkerTrace(payload, this.#maxTraceBytes)
+      if (batch.append(data, bytes)) return
+      if (batch.count() > 0) this.#sendTraceBatch(batch.take())
+      if (!batch.append(data, bytes)) this.#sendTraceBatch([data])
     } catch (error) {
       log.error('Error encoding test worker trace: %s', error)
     }
@@ -65,8 +82,8 @@ class Writer {
    * @param {(error?: Error) => void} [onDone]
    */
   #flushTraceBatches (onDone) {
-    if (this._encoder.count() > 0) {
-      this.#sendTraceBatch(this._encoder.makePayload())
+    if (this.#traceBatch.count() > 0) {
+      this.#sendTraceBatch(this.#traceBatch.take())
     }
     const traceFlush = this.#traceFlush
     this.#traceFlush = undefined
@@ -78,17 +95,30 @@ class Writer {
   }
 
   /**
-   * @param {string[]} parts
+   * @param {WorkerTraceItem[]} traces
    */
-  #sendTraceBatch (parts) {
+  #sendTraceBatch (traces) {
     const traceFlush = this.#traceFlush ??= { pending: 0, error: undefined, onDone: undefined }
     traceFlush.pending++
-    this._sendPayload(parts, (error) => {
+    this._sendPayload(traces, (error) => {
       traceFlush.error ||= error
       if (--traceFlush.pending === 0) {
         traceFlush.onDone?.(traceFlush.error)
       }
     })
+  }
+
+  /**
+   * @param {unknown} data
+   * @param {boolean} [isVitestWorkerOld]
+   */
+  #wrapPayload (data, isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
+    // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
+    // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
+    const payload = isVitestWorkerOld
+      ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
+      : [this._interprocessCode, data]
+    return this._isWebdriverioWorker ? createWebdriverioWorkerMessage(payload) : payload
   }
 
   _sendPayload (data, onDone = () => {}) {
@@ -98,17 +128,7 @@ class Writer {
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
 
     try {
-      const serialized = Array.isArray(data) ? data.join('') : data
-      // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
-      // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
-      const isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
-      let payload = isVitestWorkerOld
-        ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data: serialized }
-        : [this._interprocessCode, serialized]
-      if (this._isWebdriverioWorker) {
-        payload = createWebdriverioWorkerMessage(payload)
-      }
-
+      const payload = this.#wrapPayload(data)
       const vitestWorkerPort = getVitestWorkerPort()
       if (vitestWorkerPort) {
         vitestWorkerPort.postMessage(payload)

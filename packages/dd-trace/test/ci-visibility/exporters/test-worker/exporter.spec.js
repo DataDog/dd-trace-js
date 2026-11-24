@@ -10,6 +10,9 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
+const { decodeWorkerTraces } = require('../../../../src/ci-visibility/encode/worker-traces')
+const Writer = require('../../../../src/ci-visibility/exporters/test-worker/writer')
+const id = require('../../../../src/id')
 const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
   '../../../config': () => {
     const loadConfig = proxyquire.noPreserveCache()
@@ -32,6 +35,24 @@ const {
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
+
+function testSpan () {
+  return {
+    trace_id: id('abcdef0123456789'),
+    span_id: id('0123456789abcdef'),
+    parent_id: id('0'),
+    name: 'test',
+    resource: 'test',
+    service: 'service',
+    type: 'test',
+    error: 0,
+    start: 1,
+    duration: 2,
+    meta: { value: '\x00é' },
+    metrics: { value: 1.5 },
+    trace_state: 'dd=s:1',
+  }
+}
 
 describe('CI Visibility Test Worker Exporter', () => {
   let send, originalSend
@@ -61,12 +82,39 @@ describe('CI Visibility Test Worker Exporter', () => {
       jestWorkerExporter.export(trace)
       jestWorkerExporter.export(traceSecond)
       jestWorkerExporter.flush()
-      sinon.assert.calledWith(send, [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send,
+        [JEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace), JSON.stringify(traceSecond)]]
+      )
+    })
+
+    it('sends plain traces without stringifying them and keeps rich traces in the same batch', () => {
+      const span = testSpan()
+      const rich = [{ ...span, meta_struct: { date: new Date(0) } }]
+      const nonFinite = [{ ...span, metrics: { value: NaN } }]
+      const optional = [{ ...span, service: undefined, type: undefined, trace_state: undefined }]
+      const exporter = new TestWorkerCiVisibilityExporter()
+
+      exporter.export([span])
+      exporter.export(rich)
+      exporter.export(nonFinite)
+      exporter.export(optional)
+      exporter.flush()
+
+      const [code, traces] = send.firstCall.args[0]
+      assert.strictEqual(code, JEST_WORKER_TRACE_PAYLOAD_CODE)
+      assert.ok(Array.isArray(traces[0]))
+      assert.strictEqual(traces[1], JSON.stringify(rich))
+      assert.strictEqual(traces[2], JSON.stringify(nonFinite))
+      const jsonTransport = JSON.parse(JSON.stringify(traces))
+      const expected = JSON.parse(JSON.stringify([[span], rich, nonFinite, optional]))
+      assert.deepStrictEqual(decodeWorkerTraces(traces), expected)
+      assert.deepStrictEqual(decodeWorkerTraces(jsonTransport), expected)
+      sinon.assert.calledOnce(send)
     })
 
     it('sends trace batches in order and waits for all of them even with an empty tail', () => {
       const trace = [{ type: 'test', meta: { value: 'é'.repeat(3 * 1024 * 1024) } }]
-      const oversizedTrace = [{ type: 'test', meta: { value: 'é'.repeat(4 * 1024 * 1024) } }]
+      const oversizedTrace = [{ type: 'test', meta: { value: '\x00'.repeat(2 * 1024 * 1024) } }]
       const exporter = new TestWorkerCiVisibilityExporter()
       const onDone = sinon.spy()
 
@@ -79,9 +127,9 @@ describe('CI Visibility Test Worker Exporter', () => {
       exporter.flush(onDone)
       sinon.assert.callCount(send, 3)
       const [first, second, third] = send.args
-      assert.deepStrictEqual(first[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      assert.deepStrictEqual(first[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace)]])
       assert.deepStrictEqual(second[0], first[0])
-      assert.deepStrictEqual(third[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([oversizedTrace])])
+      assert.deepStrictEqual(third[0], [JEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(oversizedTrace)]])
 
       const error = new Error('IPC channel closed')
       third[1](error)
@@ -109,7 +157,7 @@ describe('CI Visibility Test Worker Exporter', () => {
 
       sinon.assert.calledOnceWithExactly(
         send,
-        [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([first, last])],
+        [JEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(first), JSON.stringify(last)]],
         sinon.match.func
       )
     })
@@ -218,7 +266,7 @@ describe('CI Visibility Test Worker Exporter', () => {
 
       const [exitCode] = await once(worker, 'exit')
       assert.strictEqual(exitCode, 0)
-      assert.deepStrictEqual(messages, [[JEST_WORKER_TRACE_PAYLOAD_CODE, '[[{"name":"test"}]]']])
+      assert.deepStrictEqual(messages, [[JEST_WORKER_TRACE_PAYLOAD_CODE, ['[{"name":"test"}]']]])
     })
   })
 
@@ -237,7 +285,9 @@ describe('CI Visibility Test Worker Exporter', () => {
       cucumberWorkerExporter.export(trace)
       cucumberWorkerExporter.export(traceSecond)
       cucumberWorkerExporter.flush()
-      sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send,
+        [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace), JSON.stringify(traceSecond)]]
+      )
     })
 
     it('can export telemetry', () => {
@@ -293,7 +343,9 @@ describe('CI Visibility Test Worker Exporter', () => {
       mochaWorkerExporter.export(trace)
       mochaWorkerExporter.export(traceSecond)
       mochaWorkerExporter.flush()
-      sinon.assert.calledWith(send, [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send,
+        [MOCHA_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace), JSON.stringify(traceSecond)]]
+      )
     })
 
     it('can export telemetry', () => {
@@ -338,14 +390,14 @@ describe('CI Visibility Test Worker Exporter', () => {
             name === '_DD_TEST_OPTIMIZATION_WEBDRIVERIO_WORKER' ? 'true' : undefined,
         },
       })
-      const writer = new WebdriverioWriter(MOCHA_WORKER_TRACE_PAYLOAD_CODE)
+      const writer = new WebdriverioWriter(MOCHA_WORKER_TRACE_PAYLOAD_CODE, 1024)
       writer.append(trace)
       writer.flush()
 
       sinon.assert.calledWith(send, {
         origin: 'datadog',
         name: 'workerEvent',
-        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])],
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace)]],
       })
     })
   })
@@ -365,7 +417,9 @@ describe('CI Visibility Test Worker Exporter', () => {
       playwrightWorkerExporter.export(trace)
       playwrightWorkerExporter.export(traceSecond)
       playwrightWorkerExporter.flush()
-      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send,
+        [PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace), JSON.stringify(traceSecond)]]
+      )
     })
 
     it('can export telemetry', () => {
@@ -401,7 +455,9 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.export(trace)
       vitestWorkerExporter.export(traceSecond)
       vitestWorkerExporter.flush()
-      sinon.assert.calledWith(send, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledWith(send,
+        [VITEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace), JSON.stringify(traceSecond)]]
+      )
     })
 
     it('can export coverages', () => {
@@ -438,8 +494,46 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledWith(send, {
         __tinypool_worker_message__: true,
         interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
-        data: JSON.stringify([trace]),
+        data: [JSON.stringify(trace)],
       })
+    })
+
+    it('splits an escaped fallback frame one byte over the budget', () => {
+      process.env.TINYPOOL_WORKER_ID = '1'
+      const span = testSpan()
+      const traces = [[{ ...span, meta: { value: 'x'.repeat(1024) + '\x00\\"é😀\ud800' } }]]
+      if (typeof JSON.rawJSON === 'function') {
+        traces.push([{ ...span, meta_struct: { value: JSON.rawJSON('"\ud800x\udc00"') } }])
+      }
+
+      for (const trace of traces) {
+        const encoded = JSON.stringify(trace)
+        const single = {
+          __tinypool_worker_message__: true,
+          interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
+          data: [encoded],
+        }
+        const pair = { ...single, data: [encoded, encoded] }
+        const frameBytes = Buffer.byteLength(JSON.stringify(pair)) + 1
+
+        for (const bytesOverLimit of [0, 1]) {
+          send.resetHistory()
+          const byteLimit = frameBytes - bytesOverLimit
+          const writer = new Writer(VITEST_WORKER_TRACE_PAYLOAD_CODE, byteLimit)
+
+          writer.append(trace)
+          sinon.assert.notCalled(send)
+          writer.append(trace)
+          writer.flush()
+
+          const frames = send.args.map(([message]) => message)
+          assert.strictEqual(frames.length, bytesOverLimit + 1)
+          assert.deepStrictEqual(frames, bytesOverLimit === 0 ? [pair] : [single, single])
+          for (const message of frames) {
+            assert.ok(Buffer.byteLength(JSON.stringify(message)) + 1 <= byteLimit)
+          }
+        }
+      }
     })
 
     it('can export traces through the worker port in legacy thread workers (vitest <4)', () => {
@@ -457,7 +551,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
       vitestWorkerExporter.export(trace)
       vitestWorkerExporter.flush()
-      sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, [JSON.stringify(trace)]])
       sinon.assert.notCalled(send)
     })
 

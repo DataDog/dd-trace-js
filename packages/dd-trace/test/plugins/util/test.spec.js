@@ -686,6 +686,8 @@ describe('attempt to fix summary', () => {
             'test.status': 'pass',
           },
         },
+      ],
+      [
         {
           meta: {
             '_dd.has_dynamic_name': 'true',
@@ -698,7 +700,7 @@ describe('attempt to fix summary', () => {
     const onReport = sinon.spy(() => [executions.size, newTestsWithDynamicNames.size])
     workerTraceReportCh.subscribe(onReport)
     try {
-      publishWorkerTraces(workerTraceReportCh, JSON.stringify(traces), {
+      publishWorkerTraces(workerTraceReportCh, [JSON.stringify(traces[0]), JSON.stringify(traces[1])], {
         attemptToFixExecutions: executions,
         newTestsWithDynamicNames,
       }, 'suite-execution')
@@ -722,8 +724,10 @@ describe('attempt to fix summary', () => {
     try {
       publishWorkerTraces(workerTraceReportCh, '[', {})
       publishWorkerTraces(workerTraceReportCh, 'null', {})
+      publishWorkerTraces(workerTraceReportCh, ['{}'], {})
+      publishWorkerTraces(workerTraceReportCh, [['short']], {})
       sinon.assert.notCalled(onReport)
-      sinon.assert.calledTwice(logError)
+      sinon.assert.callCount(logError, 4)
 
       publishWorkerTraces(workerTraceReportCh, '[]', {})
       sinon.assert.calledOnceWithExactly(onReport, {

@@ -1,69 +1,51 @@
 'use strict'
 
+const ByteBatch = require('./byte-batch')
+
 class JSONEncoder {
-  #bytes = 2
-  #maxBytes
+  /** @type {ByteBatch<string> | undefined} */
+  #batch
+  /** @type {unknown[]} */
+  #payloads = []
 
   /**
    * @param {number} [maxBytes]
    */
   constructor (maxBytes) {
-    this.#maxBytes = maxBytes
-    this.payloads = []
+    if (maxBytes !== undefined) this.#batch = new ByteBatch(maxBytes)
   }
 
   /**
    * @param {unknown} payload
-   * @param {(parts: string[]) => void} [flushBatch]
    */
-  encode (payload, flushBatch) {
-    if (this.#maxBytes !== undefined) {
-      const serializedPayload = JSON.stringify(payload) ?? 'null'
-      const payloadBytes = Buffer.byteLength(serializedPayload)
-      if (payloadBytes + (this.payloads.length === 0 ? 0 : 1) > this.#maxBytes - this.#bytes) {
-        if (flushBatch === undefined) {
-          return false
-        }
-        if (this.payloads.length !== 0) {
-          flushBatch(this.makePayload())
-        }
-        if (payloadBytes + 2 > this.#maxBytes) {
-          flushBatch(['[', serializedPayload, ']'])
-          return true
-        }
-      }
-      this.#bytes += payloadBytes + (this.payloads.length === 0 ? 0 : 1)
-      this.payloads.push(serializedPayload)
-      return true
+  encode (payload) {
+    if (this.#batch !== undefined) {
+      const data = JSON.stringify(payload) ?? 'null'
+      return this.#batch.append(data, Buffer.byteLength(data))
     }
-    this.payloads.push(payload)
+    this.#payloads.push(payload)
     return true
   }
 
   count () {
-    return this.payloads.length
-  }
-
-  reset () {
-    this.#bytes = 2
-    this.payloads = []
+    return this.#batch?.count() ?? this.#payloads.length
   }
 
   makePayload () {
-    let data
-    if (this.#maxBytes === undefined) {
-      data = JSON.stringify(this.payloads)
-    } else if (this.payloads.length === 0) {
-      data = ['[', ']']
-    } else {
-      data = new Array(this.payloads.length * 2 + 1)
-      data[0] = '['
-      for (let index = 0; index < this.payloads.length; index++) {
-        data[index * 2 + 1] = this.payloads[index]
-        data[index * 2 + 2] = index === this.payloads.length - 1 ? ']' : ','
-      }
+    if (this.#batch === undefined) {
+      const data = JSON.stringify(this.#payloads)
+      this.#payloads = []
+      return data
     }
-    this.reset()
+    const items = this.#batch.take()
+    if (items.length === 0) return ['[', ']']
+
+    const data = new Array(items.length * 2 + 1)
+    data[0] = '['
+    for (let index = 0; index < items.length; index++) {
+      data[index * 2 + 1] = items[index]
+      data[index * 2 + 2] = index === items.length - 1 ? ']' : ','
+    }
     return data
   }
 }

@@ -4,6 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const { stripVTControlCharacters } = require('node:util')
+const { decodeWorkerTraces } = require('../../ci-visibility/encode/worker-traces')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
@@ -2438,7 +2439,7 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
  * Collects Test Optimization summaries before handing decoded traces to the exporter.
  *
  * @param {{ publish: (report: { traces: object[][], [TEST_SUITE_EXECUTION_ID]?: string }) => void }} reportChannel
- * @param {string} data - JSON-serialized traces from a worker
+ * @param {import('../../ci-visibility/encode/worker-traces').WorkerTraceBatch} data
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
  *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
@@ -2457,11 +2458,7 @@ function publishWorkerTraces (reportChannel, data, summaries, testSuiteExecution
 
   let traces
   try {
-    traces = JSON.parse(data)
-    if (!Array.isArray(traces)) {
-      log.error('Could not read worker trace batch: expected an array')
-      return
-    }
+    traces = decodeWorkerTraces(data)
     for (const trace of traces) {
       for (const span of trace) {
         if (testAnnotations && span.type === 'test' &&

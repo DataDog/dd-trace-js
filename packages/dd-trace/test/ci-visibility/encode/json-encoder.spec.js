@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../../../dd-trace/test/setup/core')
 const { JSONEncoder } = require('../../../src/ci-visibility/encode/json-encoder')
 
@@ -28,7 +27,6 @@ describe('CI Visibility JSON encoder', () => {
     const encoder = new JSONEncoder()
     encoder.encode(payload)
     encoder.encode(payloadSecond)
-    assertObjectContains(encoder.payloads, [payload, payloadSecond])
     assert.strictEqual(encoder.count(), 2)
     const serializedPayload = encoder.makePayload()
     assert.strictEqual(serializedPayload, JSON.stringify([payload, payloadSecond]))
@@ -58,17 +56,14 @@ describe('CI Visibility JSON encoder', () => {
     assert.strictEqual(reads, 1)
   })
 
-  it('starts a new batch only when the next item would exceed the UTF-8 byte limit', () => {
+  it('counts UTF-8 bytes and separators and releases the budget after sending', () => {
     const encoder = new JSONEncoder(8)
-    const batches = []
-    const flushBatch = parts => batches.push(parts.join(''))
 
-    encoder.encode('é', flushBatch)
-    encoder.encode(0, flushBatch)
-    assert.deepStrictEqual(batches, [])
-
-    encoder.encode(1, flushBatch)
-    flushBatch(encoder.makePayload())
-    assert.deepStrictEqual(batches, ['["é",0]', '[1]'])
+    assert.strictEqual(encoder.encode('é'), true)
+    assert.strictEqual(encoder.encode(0), true)
+    assert.strictEqual(encoder.encode(1), false)
+    assert.strictEqual(encoder.makePayload().join(''), '["é",0]')
+    assert.strictEqual(encoder.encode(1), true)
+    assert.strictEqual(encoder.makePayload().join(''), '[1]')
   })
 })

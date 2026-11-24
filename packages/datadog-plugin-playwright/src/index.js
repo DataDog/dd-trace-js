@@ -3,6 +3,7 @@
 const { basename } = require('node:path')
 
 const { storage } = require('../../datadog-core')
+const { decodeWorkerTraces } = require('../../dd-trace/src/ci-visibility/encode/worker-traces')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const getConfig = require('../../dd-trace/src/config')
@@ -335,7 +336,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:worker:report', ({ serializedTraces, takeFailureMedia }) => {
-      const traces = JSON.parse(serializedTraces)
+      const traces = decodeWorkerTraces(serializedTraces)
       const formattedTraces = []
       let formattedTestSpan
 
