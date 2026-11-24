@@ -3,16 +3,14 @@
 const MsgpackChunk = require('./chunk')
 
 /**
- * Encode an arbitrary JS value as a standalone msgpack buffer. Used by
- * `DataStreamsWriter` (pipeline stats) where the payload shape is decided at
- * runtime; encoder code that owns a `MsgpackChunk` should call
- * `chunk.writeX(...)` directly instead.
+ * Encode an arbitrary JS value as a standalone msgpack buffer.
  *
  * @param {unknown} value
+ * @param {number} [initialSize] Initial buffer size in bytes.
  * @returns {Buffer}
  */
-function encode (value) {
-  const bytes = new MsgpackChunk()
+function encode (value, initialSize) {
+  const bytes = new MsgpackChunk(initialSize)
   writeValue(bytes, value)
 
   return bytes.buffer.subarray(0, bytes.length)

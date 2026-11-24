@@ -7,6 +7,7 @@ const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
+const { encode: encodeMsgpack } = require('../../msgpack')
 const { eventTimeNano } = require('../../encode/tags-processors')
 
 const { protoSpanKind, protoTraceService } = getProtobufTypes()
@@ -51,7 +52,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  * @property {number} error - Error flag (0 or 1)
  * @property {{[key: string]: string}} meta - String key-value tags
  * @property {{[key: string]: number}} metrics - Numeric key-value tags
- * @property {{[key: string]: object}} [meta_struct] - Structured tags (JSON-serialized, bytes in protobuf)
+ * @property {{[key: string]: object}} [meta_struct] - Structured tags (one MessagePack value per key)
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds
  * @property {DDSpanEvent[]} [span_events] - Span events
@@ -259,13 +260,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    // meta_struct values carry their JSON serialization so receivers decode the same bytes for every
-    // protocol; only http/json additionally base64-encodes bytesValue, per the proto JSON mapping.
-    // TODO: meta_struct values are logically raw bytes. Sending them without JSON.stringify requires
-    // the backend decoding side to accept the unencoded bytes first.
     if (span.meta_struct) {
       for (const [key, value] of Object.entries(span.meta_struct)) {
-        const bytes = Buffer.from(JSON.stringify(value))
+        // Protobuf holds one buffer per attribute until the batch is serialized; start small.
+        const bytes = encodeMsgpack(value, 1024)
         attributes.push({ key, value: { bytesValue: this.#isJson ? bytes.toString('base64') : bytes } })
       }
     }

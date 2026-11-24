@@ -5,6 +5,7 @@ const http = require('node:http')
 const https = require('node:https')
 const { format, inspect } = require('node:util')
 
+const msgpack = require('@msgpack/msgpack')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -388,7 +389,7 @@ describe('OpenTelemetry Traces', () => {
       })
     })
 
-    it('encodes meta_struct values as base64 bytesValue attributes', () => {
+    it('encodes meta_struct entries as base64 MessagePack bytes', () => {
       const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({
         meta_struct: {
@@ -400,17 +401,11 @@ describe('OpenTelemetry Traces', () => {
       const decoded = decodePayload(transformer.transformSpans([span]))
       const attrs = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
 
-      const stackAttr = attrs.find(a => a.key === '_dd.stack')
-      assert.ok(stackAttr, '_dd.stack attribute should be present')
-      assert.notStrictEqual(stackAttr.value.bytesValue, undefined, '_dd.stack should have bytesValue')
-      const stackDecoded = JSON.parse(Buffer.from(stackAttr.value.bytesValue, 'base64').toString())
-      assert.deepStrictEqual(stackDecoded, { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] })
-
-      const bodyAttr = attrs.find(a => a.key === 'http.request.body')
-      assert.ok(bodyAttr, 'http.request.body attribute should be present')
-      assert.notStrictEqual(bodyAttr.value.bytesValue, undefined, 'http.request.body should have bytesValue')
-      const bodyDecoded = JSON.parse(Buffer.from(bodyAttr.value.bytesValue, 'base64').toString())
-      assert.deepStrictEqual(bodyDecoded, { key: 'value' })
+      for (const [key, expected] of Object.entries(span.meta_struct)) {
+        const attr = attrs.find(a => a.key === key)
+        assert.equal(typeof attr?.value.bytesValue, 'string', key)
+        assert.deepStrictEqual(msgpack.decode(Buffer.from(attr.value.bytesValue, 'base64')), expected)
+      }
     })
 
     it('excludes _dd.span_links and span.kind from attributes', () => {
@@ -999,7 +994,7 @@ describe('OpenTelemetry Traces', () => {
         ])
       })
 
-      it('encodes meta_struct values as their JSON bytes without base64', () => {
+      it('encodes meta_struct entries as raw MessagePack bytes', () => {
         const stack = { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] }
         const span = createMockSpan({ meta_struct: { '_dd.stack': stack } })
 
@@ -1007,7 +1002,7 @@ describe('OpenTelemetry Traces', () => {
         const stackAttr = attributes.find(attribute => attribute.key === '_dd.stack')
 
         assert.ok(stackAttr, '_dd.stack attribute should be present')
-        assert.deepStrictEqual(JSON.parse(Buffer.from(stackAttr.value.bytesValue).toString()), stack)
+        assert.deepStrictEqual(msgpack.decode(stackAttr.value.bytesValue), stack)
       })
     })
   })
