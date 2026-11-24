@@ -729,6 +729,17 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.meta[ERROR_MESSAGE], 'E_BOOM')
     })
 
+    it('should prefer an AggregateError message to its code', () => {
+      const error = new AggregateError([new Error('connection refused')], 'all connections failed')
+      error.code = 'ECONNREFUSED'
+      spanContext._tags.error = error
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], 'all connections failed')
+      assert.strictEqual(trace.meta[ERROR_TYPE], 'AggregateError')
+    })
+
     it('coerces non-string error tag values to meta strings', () => {
       spanContext._tags[ERROR_TYPE] = 42
       spanContext._tags[ERROR_MESSAGE] = { code: 'E_BOOM' }

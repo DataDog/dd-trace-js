@@ -363,9 +363,6 @@ function extractError (formattedSpan, error) {
   formattedSpan.error = 1
 
   if (isError(error)) {
-    // AggregateError only has a code and no message.
-    // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
-    // the code just generally be added, if available?
     const meta = formattedSpan.meta
     const message = error.message || error.code
     if (message != null) writeErrorMeta(meta, ERROR_MESSAGE, message)
