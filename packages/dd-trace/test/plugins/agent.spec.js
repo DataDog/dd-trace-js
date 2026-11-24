@@ -374,6 +374,137 @@ describe('test agent helper', () => {
     })
   })
 
+  describe('assertFirstTraceSpan with an operation', () => {
+    const expected = { resource: 'fixture.operation' }
+    const body = msgpack.encode([[expected]])
+    let clock
+
+    beforeEach(async () => {
+      const environment = sinon.stub(process, 'env').value({
+        ...process.env,
+        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+      })
+      try {
+        await agent.load([])
+      } finally {
+        environment.restore()
+      }
+      clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    })
+
+    afterEach(async () => {
+      clock?.restore()
+      await agent.close()
+    })
+
+    it('observes a span during a slow operation and still waits for completion', async () => {
+      let completed = false
+      const onSpan = sinon.spy(span => assert.strictEqual(span.resource, expected.resource))
+      await agent.assertFirstTraceSpan(onSpan, {
+        async operation () {
+          await clock.tickAsync(1000)
+          await postTrace(agent.port, '/v0.4/traces', body)
+          await postTrace(agent.port, '/v0.4/traces', body)
+          completed = true
+        },
+      })
+      assert.strictEqual(onSpan.callCount, 1)
+      assert.strictEqual(completed, true)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('accepts a span just before the delivery timeout after completion', async () => {
+      const trace = agent.assertFirstTraceSpan(expected, { operation: () => Promise.resolve() })
+      const delivery = clock.tickAsync(999).then(() => postTrace(agent.port, '/v0.4/traces', body))
+
+      await Promise.all([trace, delivery])
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('rejects a missing span at the delivery timeout after completion', async () => {
+      const trace = agent.assertFirstTraceSpan(expected, { operation: () => Promise.resolve() })
+      const rejection = assert.rejects(trace, { message: 'No matching trace received within 1000ms.' })
+
+      await clock.tickAsync(999)
+      assert.strictEqual(clock.countTimers(), 1)
+      await Promise.all([rejection, clock.tickAsync(1)])
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('removes the assertion when starting the operation throws', async () => {
+      const error = new Error('cannot start operation')
+      await assert.rejects(agent.assertFirstTraceSpan(expected, {
+        operation () {
+          throw error
+        },
+      }), error)
+      agent.reset()
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('reports a rejected operation even when a matching span arrived', async () => {
+      const error = new Error('operation failed')
+      await assert.rejects(agent.assertFirstTraceSpan(expected, {
+        async operation () {
+          await postTrace(agent.port, '/v0.4/traces', body)
+          throw error
+        },
+      }), error)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('waits for the operation when an early assertion rejects', async () => {
+      const error = new Error('unexpected span')
+      let completed = false
+      await assert.rejects(agent.assertFirstTraceSpan(() => { throw error }, {
+        rejectFirst: true,
+        async operation () {
+          await postTrace(agent.port, '/v0.4/traces', body)
+          completed = true
+        },
+      }), error)
+      assert.strictEqual(completed, true)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('does not restart the timer after cancellation', async () => {
+      const trace = agent.assertFirstTraceSpan(expected, { operation: () => Promise.resolve() })
+      trace.cancel()
+      await clock.tickAsync(0)
+      assert.strictEqual(clock.countTimers(), 0)
+      agent.reset()
+    })
+
+    for (const afterMatch of [false, true]) {
+      const teardown = afterMatch ? 'reset after a matching span' : 'cancellation before a matching span'
+      it(`handles a late operation rejection after ${teardown}`, async () => {
+        const error = new Error('operation failed after teardown')
+        let rejectOperation
+        const operation = new Promise((resolve, reject) => { rejectOperation = reject })
+        const trace = agent.assertFirstTraceSpan(expected, { operation: () => operation })
+
+        await clock.tickAsync(0)
+        if (afterMatch) {
+          await postTrace(agent.port, '/v0.4/traces', body)
+          assert.throws(() => agent.reset(), /1 trace expectation\(s\) were still armed/)
+        } else {
+          trace.cancel()
+        }
+
+        const onUnhandledRejection = sinon.spy()
+        process.once('unhandledRejection', onUnhandledRejection)
+        try {
+          rejectOperation(error)
+          await clock.tickAsync(0)
+          assert.strictEqual(onUnhandledRejection.callCount, 0)
+          await assert.rejects(trace, error)
+        } finally {
+          process.removeListener('unhandledRejection', onUnhandledRejection)
+        }
+      })
+    }
+  })
+
   describe('assertNoTraces', () => {
     afterEach(() => agent.close())
 
