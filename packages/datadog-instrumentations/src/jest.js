@@ -93,6 +93,8 @@ const testFnCh = channel('ci:jest:test:fn')
 const snapshotStorage = storage('ci:jest:snapshots')
 let activeSnapshotTrackers = 0
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
+const suiteSetupStartCh = channel('ci:jest:suite-setup:start')
+const suiteSetupFinishCh = channel('ci:jest:suite-setup:finish')
 const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 
@@ -362,6 +364,87 @@ function warnIfUnsupportedJestTestRunner (configs) {
     // eslint-disable-next-line no-console
     console.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
   }
+}
+
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
+/** @type {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined} */
+let lineCoverage
+
+/**
+ * The line-coverage module, loaded only when per-test line coverage is requested: it pulls in a parser.
+ *
+ * @returns {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined}
+ */
+function getLineCoverage () {
+  if (!isLineCoverageRequested) return
+  lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+  return lineCoverage
+}
+
+/** Source maps by path: Jest names its cache files after a hash of their content. */
+const sourceMapsByPath = new Map()
+
+const INLINE_SOURCE_MAP_RE = /\/\/[#@] sourceMappingURL=data:application\/json[^,]*;base64,([\w+/=]+)\s*$/
+
+/**
+ * The source map of code Jest transformed: the file its transformer cached, or the one the code
+ * carries inline.
+ *
+ * @param {string} code
+ * @param {string | null | undefined} sourceMapPath
+ * @returns {string | undefined}
+ */
+function getTransformedSourceMap (code, sourceMapPath) {
+  if (sourceMapPath) {
+    let sourceMap = sourceMapsByPath.get(sourceMapPath)
+    if (sourceMap === undefined) {
+      try {
+        sourceMap = readFileSync(sourceMapPath, 'utf8')
+      } catch {
+        return
+      }
+      sourceMapsByPath.set(sourceMapPath, sourceMap)
+    }
+    return sourceMap
+  }
+  const inline = INLINE_SOURCE_MAP_RE.exec(code.slice(-4096))
+  if (inline) return Buffer.from(inline[1], 'base64').toString('utf8')
+}
+
+const lineCoverageTransformers = new WeakSet()
+
+/**
+ * Hands the code of every CommonJS module of the repository that `transformer` returns to the
+ * line-coverage collector. This is the one place every Jest version passes module code through
+ * with its source map: from 30.4 the runtime compiles it in a class that is not exported.
+ *
+ * @param {object} transformer Jest's ScriptTransformer
+ * @returns {object}
+ */
+function instrumentScriptTransformer (transformer) {
+  if (!isLineCoverageRequested || typeof transformer?.transform !== 'function' ||
+      lineCoverageTransformers.has(transformer)) {
+    return transformer
+  }
+  lineCoverageTransformers.add(transformer)
+  transformer.transform = shimmer.wrapFunction(transformer.transform, transform => function (filename, options) {
+    const result = transform.apply(this, arguments)
+    const lineCoverage = getLineCoverage()
+    // ECMAScript modules (compiled as source text modules) are not instrumented yet.
+    if (!lineCoverage?.isActive() || options?.supportsStaticESM || options?.isInternalModule ||
+        typeof result?.code !== 'string' || !lineCoverage.shouldInstrument(filename)) {
+      return result
+    }
+    // The result is Jest's cached object: leave it as it is.
+    return {
+      ...result,
+      code: lineCoverage.instrumentSource(result.code, filename, {
+        reuse: true,
+        sourceMap: getTransformedSourceMap(result.code, result.sourceMapPath),
+      }),
+    }
+  })
+  return transformer
 }
 
 function getTestEnvironmentOptions (config) {
@@ -706,6 +789,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.rootDir = rootDir
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+      getLineCoverage()?.installGlobal(this.global)
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
       activeTestSuiteAbsolutePath = this.testSuiteAbsolutePath
@@ -2260,6 +2344,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.isModified = isModified
         ctx.hasDynamicName = hasDynamicName
         ctx.testSuiteAbsolutePath = this.testSuiteAbsolutePath
+        ctx.describeBlock = event.test.parent
         if (concurrentTestState) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx
@@ -2351,6 +2436,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             concurrentHookFns.set(event.hook, concurrentHookFn)
           }
           event.hook.fn = concurrentHookFn
+        }
+      }
+
+      if (isLineCoverageRequested) {
+        // A beforeAll hook is suite-scope setup, and its lines belong to every test of the block. The
+        // block's own afterAll hooks, like its tests, are not part of it.
+        if (event.name === 'hook_start' && event.hook.type === 'beforeAll') {
+          suiteSetupStartCh.publish({ describeBlock: event.hook.parent })
+        } else if (
+          (event.name === 'hook_start' && event.hook.type === 'afterAll') ||
+          ((event.name === 'hook_success' || event.name === 'hook_failure') && event.hook.type === 'beforeAll')
+        ) {
+          suiteSetupFinishCh.publish({})
         }
       }
 
@@ -4041,6 +4139,15 @@ function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
 }
 
 /**
+ * @param {object | Promise<object>} created what `createScriptTransformer` returned
+ * @returns {object | Promise<object>}
+ */
+function instrumentCreatedScriptTransformer (created) {
+  if (!isLineCoverageRequested) return created
+  return created?.then ? created.then(instrumentScriptTransformer) : instrumentScriptTransformer(created)
+}
+
+/**
  * Wrap `createScriptTransformer` to temporarily hide Datadog-specific
  * `testEnvironmentOptions` keys while Jest builds its transform config.
  *
@@ -4052,13 +4159,13 @@ function wrapCreateScriptTransformer (createScriptTransformer) {
     const testEnvironmentOptions = config?.testEnvironmentOptions
 
     if (!testEnvironmentOptions) {
-      return createScriptTransformer.apply(this, arguments)
+      return instrumentCreatedScriptTransformer(createScriptTransformer.apply(this, arguments))
     }
 
     const restoreTestEnvironmentOptions = removeDatadogTestEnvironmentOptions(testEnvironmentOptions)
 
     try {
-      const result = createScriptTransformer.apply(this, arguments)
+      const result = instrumentCreatedScriptTransformer(createScriptTransformer.apply(this, arguments))
 
       if (result?.then) {
         return result.finally(restoreTestEnvironmentOptions)
