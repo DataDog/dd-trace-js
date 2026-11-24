@@ -13,7 +13,7 @@
         "@actions/core": "^3.0.1",
         "@actions/github": "^9.1.1",
         "@babel/helpers": "^8.1.0",
-        "@datadog/openfeature-node-server": "2.7.0",
+        "@datadog/openfeature-node-server": "2.9.0",
         "@eslint/eslintrc": "^3.3.7",
         "@eslint/js": "^10.0.1",
         "@eslint/plugin-kit": "^0.7.3",
@@ -142,7 +142,7 @@
 
     "@cacheable/utils": ["@cacheable/utils@2.5.0", "", { "dependencies": { "hashery": "^1.5.1", "keyv": "^5.6.0" } }, "sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA=="],
 
-    "@datadog/flagging-core": ["@datadog/flagging-core@3.4.0", "", { "dependencies": { "@bufbuild/protobuf": "^2.13.0", "spark-md5": "^3.0.2" } }, "sha512-XYo9x3ozz/62dwNAtnBjxLlT09B+A+zntKssu/Gh5cn4x0ws3AamF8pFh14hrSNwYVmslfFs7ExDHxLF7JVqJw=="],
+    "@datadog/flagging-core": ["@datadog/flagging-core@3.6.0", "", { "dependencies": { "@bufbuild/protobuf": "^2.13.0", "@noble/ciphers": "^1.3.0", "spark-md5": "^3.0.2" } }, "sha512-EetUzLDV30Xlo5iPCTHidTtvJn1UVJnCvcJE9iyn4CuCZtICRC9ORsz/XshFlX2+93wezZ4hu4u+qMqpIo7IuA=="],
 
     "@datadog/libdatadog": ["@datadog/libdatadog@0.21.0", "", { "dependencies": { "@datadog/libdatadog-wasm": "0.21.0" } }, "sha512-6JQVv7LGBYG6uiY2wtno5paqP/G1UFXK1tA4LZEt2Bc9AzbCMtO2yrs1VfYDzMyVaFSj0+6QLdR8Hu5DQUODmw=="],
 
@@ -156,7 +156,7 @@
 
     "@datadog/native-metrics": ["@datadog/native-metrics@4.0.0", "", { "dependencies": { "node-addon-api": "^6.1.0", "node-gyp-build": "^3.9.0" } }, "sha512-rS6Qc8WAbOgbrtDYdqK15gi2xbuIEyfuquUH05g+2DOdiNAswNAGrlIuSdJZQF/qoJzjcFvxb9kCHu8BjiPfQQ=="],
 
-    "@datadog/openfeature-node-server": ["@datadog/openfeature-node-server@2.7.0", "", { "dependencies": { "@datadog/flagging-core": "3.4.0" } }, "sha512-6F2pkZFD9iadI5E1QsTOHFA4RlrlnKRK9yxz+xSoD5TsV2BhLU3vSqpky7VMJT5Dn2+aMZlFUu75jvwXnw56Lw=="],
+    "@datadog/openfeature-node-server": ["@datadog/openfeature-node-server@2.9.0", "", { "dependencies": { "@datadog/flagging-core": "3.6.0" } }, "sha512-sXA6cqyD+gCfyiEncks9g3XAWhHCLPnJ4zzXyLVopBVF7s7gG96UBGAXyn8MZEO6G40V5bXHaPuYXGH/1lDy6Q=="],
 
     "@datadog/pprof": ["@datadog/pprof@5.20.1", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.3.2", "source-map": "^0.8.0" } }, "sha512-0mUaO8gSsX84cjWJ4VvJIDNj6tka5NnqQysg8emetQPYv5ClKdfiRFHWm2DzPBEhVnj4yWXzaOGMO1UNl9Av/Q=="],
 
@@ -239,6 +239,8 @@
     "@mswjs/interceptors": ["@mswjs/interceptors@0.41.8", "", { "dependencies": { "@open-draft/deferred-promise": "^2.2.0", "@open-draft/logger": "^0.3.0", "@open-draft/until": "^2.0.0", "is-node-process": "^1.2.0", "outvariant": "^1.4.3", "strict-event-emitter": "^0.5.1" } }, "sha512-pRLMNKTSGRoLq+KnEB/7OY5vijw1XmcheAAOiv6pj7W1FG32kAGqj1C/RK/cqxRGr1Fh+zBi8sDur8kj3EQv6A=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
+
+    "@noble/ciphers": ["@noble/ciphers@1.3.0", "", {}, "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw=="],
 
     "@octokit/app": ["@octokit/app@16.1.2", "", { "dependencies": { "@octokit/auth-app": "^8.1.2", "@octokit/auth-unauthenticated": "^7.0.3", "@octokit/core": "^7.0.6", "@octokit/oauth-app": "^8.0.3", "@octokit/plugin-paginate-rest": "^14.0.0", "@octokit/types": "^16.0.0", "@octokit/webhooks": "^14.0.0" } }, "sha512-8j7sEpUYVj18dxvh0KWj6W/l6uAiVRBl1JBDVRqH1VHKAO/G5eRVl4yEoYACjakWers1DjUkcCHyJNQK47JqyQ=="],
 
