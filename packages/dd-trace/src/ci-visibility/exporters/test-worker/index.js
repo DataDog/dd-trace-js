@@ -99,14 +99,7 @@ class TestWorkerCiVisibilityExporter {
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
     this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
-    const useObjectEncoder = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === JEST_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
-    const traceEncoder = useObjectEncoder
-      ? new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
-      : undefined
+    const traceEncoder = new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
     this._writer = new Writer(interprocessTraceCode, traceEncoder)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
