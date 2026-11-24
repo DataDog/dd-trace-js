@@ -59,7 +59,7 @@ channel('ci:playwright:test-suite:finish').publish({
 })
 
 channel('ci:playwright:worker:report').publish({
-  serializedTraces: JSON.stringify([[
+  traces: [[
     {
       trace_id: '0000000000000001',
       span_id: '0000000000000002',
@@ -79,7 +79,7 @@ channel('ci:playwright:worker:report').publish({
       start: Date.now() * 1e6,
       duration: 1e6,
     },
-  ]]),
+  ]],
   screenshots: isPendingVideo
     ? undefined
     : [{

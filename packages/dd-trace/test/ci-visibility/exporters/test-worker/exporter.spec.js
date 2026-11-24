@@ -296,12 +296,14 @@ describe('CI Visibility Test Worker Exporter', () => {
       const trace = [makeSpan('test', 'webdriverio.test')]
       const webdriverioWorkerExporter = new TestWorkerCiVisibilityExporter()
       webdriverioWorkerExporter.export(trace)
+      sinon.assert.notCalled(send)
       webdriverioWorkerExporter.flush()
 
-      sinon.assert.calledWith(send, {
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], {
         origin: 'datadog',
         name: 'workerEvent',
-        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])],
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, JSON.parse(JSON.stringify([trace]))],
       })
     })
   })
@@ -314,15 +316,20 @@ describe('CI Visibility Test Worker Exporter', () => {
       delete process.env.DD_PLAYWRIGHT_WORKER
     })
 
-    it('can export traces', () => {
-      const trace = [{ type: 'test' }]
-      const traceSecond = [{ type: 'test', name: 'other' }]
+    it('batches traces with exact string identifiers until flush', () => {
+      const trace = [makeSpan('test', 'first')]
+      trace[0].span_id = id('fedcba9876543210')
+      trace[0].parent_id = id('abcdef0987654321')
+      const traceSecond = [makeSpan('test', 'other')]
       const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
       playwrightWorkerExporter.export(trace)
       playwrightWorkerExporter.export(traceSecond)
       sinon.assert.notCalled(send)
       playwrightWorkerExporter.flush()
-      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], [
+        PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE, JSON.parse(JSON.stringify([trace, traceSecond])),
+      ])
     })
 
     it('can export telemetry', () => {
@@ -335,7 +342,7 @@ describe('CI Visibility Test Worker Exporter', () => {
 
     it('does not break if process.send is undefined', () => {
       delete process.send
-      const trace = [{ type: 'test' }]
+      const trace = [makeSpan()]
       const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
       playwrightWorkerExporter.export(trace)
       playwrightWorkerExporter.flush()

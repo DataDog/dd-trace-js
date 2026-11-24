@@ -2448,7 +2448,7 @@ function finishProcessHostStartRunner (processHost) {
     // These messages are [code, payload]. The payload is test data
     if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
       workerReportCh.publish({
-        serializedTraces: message[1],
+        traces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
         videos: processHost[kDdPlaywrightFailureVideos]?.shift(),
       })

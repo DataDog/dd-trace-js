@@ -392,6 +392,46 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
+  describe(`playwright@${version} worker traces`, function () {
+    const it = version === 'latest' || satisfies(version, '>=1.38.0') ? createPlaywrightIt() : global.it.skip
+    useSandbox([`@playwright/test@${version}`])
+
+    it('round-trips trace, span, and parent IDs from parallel workers', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2 --workers=2',
+        {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+            DD_INJECT_FORCE: 'true',
+            TEST_DIR: './ci-visibility/playwright-worker-ids',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const spans = payloads.flatMap(({ payload }) => payload.events)
+            .filter(({ type, content }) => type === 'span' && content.name === 'playwright.worker.ids')
+            .map(({ content }) => content)
+          assert.strictEqual(spans.length, 2)
+          assert.notStrictEqual(spans[0].meta['ipc.worker'], spans[1].meta['ipc.worker'])
+          for (const span of spans) {
+            assert.strictEqual(span.meta['ipc.transport'], 'fork')
+            assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+            assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+            assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+            assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+  })
+
   describe(`playwright@${version} global errors`, function () {
     const it = createPlaywrightIt()
     this.timeout(60000)

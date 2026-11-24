@@ -333,8 +333,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots, videos }) => {
-      const traces = JSON.parse(serializedTraces)
+    this.addSub('ci:playwright:worker:report', ({ traces, screenshots, videos }) => {
       const formattedTraces = []
       let formattedTestSpan
 
