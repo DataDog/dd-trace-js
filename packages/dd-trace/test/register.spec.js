@@ -286,7 +286,8 @@ function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supports
     'node:module': { register },
     'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
     './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
-    './packages/dd-trace/src/register-loader': proxyquire('../src/register-loader', {}),
-    './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
+    './packages/dd-trace/src/register-loader': proxyquire('../src/register-loader', {
+      '../../../version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
+    }),
   })
 }
