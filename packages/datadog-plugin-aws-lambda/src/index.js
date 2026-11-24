@@ -14,6 +14,7 @@ const { patchConsole, unpatchConsole } = require('./console-patcher')
 const { extractDurableFunctionContext, extractDurableExecutionStatus } = require('./context/durable-function')
 const { getInvocationTags } = require('./invocation-metadata')
 const { tagObject } = require('./payload')
+const { getSpanPointerAttributes } = require('./span-pointers')
 const { addLambdaTriggerTags } = require('./xray')
 const { parseEventSource, extractTriggerTags, extractHTTPStatusCodeTag } = require('./trigger')
 
@@ -102,12 +103,18 @@ class AwsLambdaPlugin extends TracingPlugin {
     }
     let meta = {}
     try {
-      context.triggerTags = extractTriggerTags(context.event, context.context, parseEventSource(context.event))
+      const eventSource = parseEventSource(context.event)
+      context.triggerTags = extractTriggerTags(context.event, context.context, eventSource)
       meta = {
         ...getInvocationTags(context.context, context.stepFunctionContext, context.config?.datadogLambdaVersion),
         ...context.triggerTags,
       }
       context.durableFunctionContext = extractDurableFunctionContext(context.event)
+      const addSpanPointers = context.config?.addSpanPointers
+      // The shim falls back only for undefined; an explicit null stays disabled.
+      if (addSpanPointers === undefined ? this.config.addSpanPointers : addSpanPointers) {
+        context.spanPointers = getSpanPointerAttributes(eventSource, context.event)
+      }
     } catch (error) {
       log.debug('Unable to prepare Lambda invocation metadata: %s', error)
     }
@@ -221,6 +228,16 @@ class AwsLambdaPlugin extends TracingPlugin {
       if (context.durableFunctionContext) context.lambdaSpan.addTags(context.durableFunctionContext)
       const executionStatus = extractDurableExecutionStatus(context.event, context.result)
       if (executionStatus !== undefined) context.lambdaSpan.setTag('aws.durable.execution_status', executionStatus)
+      if (context.spanPointers) {
+        const root = context.inferredSpan?.span || context.lambdaSpan
+        for (const pointer of context.spanPointers) {
+          try {
+            root.addSpanPointer(pointer.kind, pointer.direction, pointer.hash)
+          } catch (error) {
+            log.debug('Unable to add Lambda span pointer: %s', error)
+          }
+        }
+      }
     } catch (error) {
       log.debug('Unable to tag completed Lambda invocation: %s', error)
     }
