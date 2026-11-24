@@ -5,6 +5,8 @@ import { inspect } from 'util'
 import { Octokit } from 'octokit'
 import pLimit from 'p-limit'
 
+import { getCheckRuns } from './workflow-jobs.mjs'
+
 const {
   BRANCH,
   CI,
@@ -46,28 +48,6 @@ let flakeCount = 0
 
 const LIMIT = 50
 
-/**
- * @typedef {{
- *   status?: number,
- *   url?: string,
- *   headers?: Record<string, string | number | undefined>,
- *   data?: { jobs?: unknown }
- * }} JobsAttemptResponse
- */
-
-/**
- * @param {JobsAttemptResponse} response
- */
-function redactHeaders (response) {
-  if (typeof response?.headers === 'object' && response.headers) {
-    for (const key of Object.keys(response.headers)) {
-      if (key.toLowerCase() === 'authorization') response.headers[key] = '<redacted>'
-    }
-  }
-
-  return response
-}
-
 async function checkWorkflowRuns (id, page = 1) {
   // This only gets the last attempt of every run.
   const response = await limit(() => octokit.rest.actions.listWorkflowRuns({
@@ -104,7 +84,7 @@ async function checkWorkflowRuns (id, page = 1) {
 
     flakeCount++
 
-    promises.push(checkWorkflowJobs(run.id, run.run_attempt - 1))
+    promises.push(checkWorkflowJobs(run))
   }
 
   // Only request next page if the current page was full.
@@ -115,30 +95,24 @@ async function checkWorkflowRuns (id, page = 1) {
   return Promise.all(promises)
 }
 
-async function checkWorkflowJobs (id, attempt, page = 1) {
-  if (attempt < 1) return
-
-  /** @type {JobsAttemptResponse | undefined} */
-  const response = await limit(() => octokit.rest.actions.listJobsForWorkflowRunAttempt({
-    attempt_number: attempt,
-    owner: 'DataDog',
-    repo: 'dd-trace-js',
-    run_id: id,
-    page,
-    per_page: LIMIT,
+async function checkWorkflowJobs (run) {
+  const jobs = await limit(() => getCheckRuns(octokit, run, true))
+  // GraphQL cannot filter by attempt. Successful runs can still contain allowed failures.
+  const earlierJobs = await Promise.all(jobs.map(async job => {
+    const { data } = await limit(() => octokit.rest.actions.getJobForWorkflowRun({
+      owner: 'DataDog',
+      repo: 'dd-trace-js',
+      job_id: job.id,
+    }))
+    if (!Number.isSafeInteger(data.run_attempt)) {
+      throw new TypeError(`Missing attempt for workflow job ${job.id}.`)
+    }
+    return data.run_attempt < run.run_attempt ? job : undefined
   }))
 
-  /** @type {unknown} */
-  const jobs = response?.data?.jobs
-
-  if (!Array.isArray(jobs)) {
-    throw new TypeError(`Unexpected jobs response shape (${inspect(redactHeaders(response), { depth: Infinity })})`)
-  }
-
-  for (const job of jobs) {
-    if (job.conclusion !== 'failure') continue
-
-    const workflow = job.workflow_name
+  for (const job of earlierJobs) {
+    if (!job) continue
+    const workflow = run.name
     // Merge matrix runs of same job together.
     const name = MERGE === 'true' ? job.name.split(' ', 1)[0] : job.name
 
@@ -150,14 +124,6 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
       reported.add(workflow)
     }
   }
-
-  // We've reached the last page and there are no more results.
-  if (jobs.length < LIMIT) {
-    // Check previous attempt to include successive failures.
-    return checkWorkflowJobs(id, attempt - 1)
-  }
-
-  return checkWorkflowJobs(id, attempt, page + 1)
 }
 
 await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
