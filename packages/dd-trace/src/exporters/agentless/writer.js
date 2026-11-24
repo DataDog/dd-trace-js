@@ -1,7 +1,5 @@
 'use strict'
 
-const { createAgentlessExporter } = require('@datadog/libdatadog')
-
 const { storage } = require('../../../../datadog-core')
 const getConfig = require('../../config')
 const log = require('../../log')
@@ -150,6 +148,13 @@ class AgentlessWriter extends BaseWriter {
     }
 
     this.#closeExporter()
+    let createAgentlessExporter
+    try {
+      ({ createAgentlessExporter } = require('@datadog/libdatadog'))
+    } catch (error) {
+      this.append = () => false
+      throw error
+    }
     const config = getConfig()
     const agent = this._url.protocol === 'https:' ? getHttpsProxyAgent(this._url) : undefined
     this.#exporter = createAgentlessExporter({
