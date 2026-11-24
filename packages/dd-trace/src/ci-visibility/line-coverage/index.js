@@ -25,9 +25,13 @@
 
 const fs = require('node:fs')
 const Module = require('node:module')
+const os = require('node:os')
 const path = require('node:path')
 
+const dc = require('dc-polyfill')
+
 const { storage } = require('../../../../datadog-core')
+const { addChildProcessEnv } = require('../../child-process-env')
 const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
@@ -43,6 +47,11 @@ const legacyStorage = storage('legacy')
 
 // Marks the context opened for a suite setup hook. Stores derived from it keep it.
 const SUITE_SETUP_OWNER = Symbol('dd-trace.line-coverage.suite-setup')
+
+// A child process started for a test (or suite setup) gets these variables. It counts everything it
+// runs as that owner's and, at exit, writes it to `<target>-<pid>.json`.
+const CHILD_TARGET = '_DD_LINE_COVERAGE_CHILD'
+const CHILD_ROOT = '_DD_LINE_COVERAGE_ROOT'
 
 let enabled = false
 let rootPrefix = ''
@@ -68,6 +77,14 @@ const ownerByTraceId = new Map()
 
 /** @type {WeakMap<Owner, string>} */
 const traceIdByOwner = new WeakMap()
+
+/** @type {string | undefined} where children write their lines */
+let childDirectory
+let childTargets = 0
+/** @type {WeakMap<Owner, string>} the target of each owner that started children */
+const childTargetByOwner = new WeakMap()
+/** @type {string | undefined} the target this process writes to, when it is such a child */
+let ownTarget
 
 const NO_STORE = {}
 let cachedStore = NO_STORE
@@ -139,6 +156,7 @@ function closeSetup () {
   updateWindows()
   const lines = new LineSet()
   collector.takeLines(owner, lines)
+  takeChildLines(owner, lines)
   let fixture = fixtures.get(suite)
   if (fixture === undefined) {
     fixture = new LineSet()
@@ -191,6 +209,7 @@ function finishTest (test, suites) {
   updateWindows()
   const coverage = new LineSet()
   collector.takeLines(test, coverage)
+  takeChildLines(test, coverage)
   if (suites) {
     for (const suite of suites) {
       const fixture = fixtures.get(suite)
@@ -250,6 +269,7 @@ function takeShared () {
   const collector = getCollector()
   collector.boundary()
   collector.takeLines(collector.unowned, unownedLines)
+  takeLateChildLines(unownedLines)
   const shared = [
     { shared: 'init', files: toFiles(collector.sharedInit) },
     { shared: 'suiteSetup', files: toFiles(suiteSetup) },
@@ -259,6 +279,139 @@ function takeShared () {
   suiteSetup = new LineSet()
   unownedLines = new LineSet()
   return shared
+}
+
+const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
+
+/**
+ * Gives a child process started for a test or a suite setup the variables that make it report
+ * what it runs to that owner. A child passes its own target on to its children.
+ *
+ * @param {{ callArgs?: unknown[], shell?: boolean }} context
+ */
+function onChildProcessStart (context) {
+  try {
+    const target = ownTarget ?? targetFor(resolveOwner())
+    if (target === undefined) return
+    addChildProcessEnv(context, { [CHILD_TARGET]: target, [CHILD_ROOT]: rootPrefix })
+  } catch (error) {
+    log.debug('Line coverage could not follow a child process: %s', error.message)
+  }
+}
+
+/**
+ * @param {Owner} owner
+ * @returns {string | undefined}
+ */
+function targetFor (owner) {
+  if (owner === getCollector().unowned) return
+  let target = childTargetByOwner.get(owner)
+  if (target === undefined) {
+    childDirectory ??= fs.mkdtempSync(path.join(os.tmpdir(), 'dd-line-coverage-'))
+    target = path.join(childDirectory, String(++childTargets))
+    childTargetByOwner.set(owner, target)
+  }
+  return target
+}
+
+/**
+ * Adds what the children of a closing owner wrote to `lines`. A child that is still running
+ * writes later, and its lines go to Shared.
+ *
+ * @param {Owner} owner
+ * @param {LineSet} lines
+ */
+function takeChildLines (owner, lines) {
+  const target = childTargetByOwner.get(owner)
+  if (target === undefined) return
+  childTargetByOwner.delete(owner)
+  readChildLines(name => name.startsWith(`${path.basename(target)}-`), lines)
+}
+
+/**
+ * Adds what children wrote after their owner closed to `lines`.
+ *
+ * @param {LineSet} lines
+ */
+function takeLateChildLines (lines) {
+  if (childDirectory === undefined) return
+  const open = new Set()
+  for (const owner of openTests) {
+    const target = childTargetByOwner.get(owner)
+    if (target !== undefined) open.add(path.basename(target))
+  }
+  readChildLines(name => !open.has(name.slice(0, name.indexOf('-'))), lines)
+}
+
+/**
+ * @param {(name: string) => boolean} accept
+ * @param {LineSet} lines
+ */
+function readChildLines (accept, lines) {
+  const collector = getCollector()
+  for (const name of fs.readdirSync(childDirectory)) {
+    if (!name.endsWith('.json') || !accept(name)) continue
+    const filename = path.join(childDirectory, name)
+    try {
+      const { files } = JSON.parse(fs.readFileSync(filename, 'utf8'))
+      for (const [source, sourceLines] of Object.entries(files)) {
+        const file = collector.fileIndex(source)
+        for (const line of sourceLines) lines.add(file, line)
+      }
+    } catch (error) {
+      log.debug('Line coverage could not read %s: %s', filename, error.message)
+    }
+    fs.rmSync(filename, { force: true })
+  }
+}
+
+/**
+ * Starts collecting in a child process started for a test or a suite setup. The child runs on that
+ * owner's behalf, so everything it runs is the owner's, initialiser code included. It writes its
+ * lines for the parent at exit.
+ */
+function enableChild () {
+  const target = getEnvironmentVariable(CHILD_TARGET)
+  const root = getEnvironmentVariable(CHILD_ROOT)
+  if (!target || !root || enabled) return
+  enable({ root })
+  ownTarget = target
+  const collector = getCollector()
+  const owner = collector.createOwner()
+  collector.resolveOwner = () => owner
+  collector.initToOwner = true
+  process.once('exit', () => writeChildLines(target, owner))
+}
+
+/**
+ * @param {string} target
+ * @param {Owner} owner
+ */
+function writeChildLines (target, owner) {
+  try {
+    const collector = getCollector()
+    collector.boundary()
+    const lines = new LineSet()
+    collector.takeLines(owner, lines)
+    collector.takeLines(collector.unowned, lines)
+    const files = {}
+    for (const [file, bitmap] of lines.bitmaps) {
+      const fileLines = []
+      for (let line = 0; line < bitmap.length * 8; line++) {
+        if (bitmap[line >> 3] & (1 << (line & 7))) fileLines.push(line)
+      }
+      files[collector.filename(file)] = fileLines
+    }
+    const temporary = `${target}-${process.pid}.tmp`
+    fs.writeFileSync(temporary, JSON.stringify({ files }))
+    fs.renameSync(temporary, `${target}-${process.pid}.json`)
+  } catch (error) {
+    log.debug('Line coverage could not write the lines of a child process: %s', error.message)
+  }
+}
+
+function removeChildDirectory () {
+  if (childDirectory !== undefined) fs.rmSync(childDirectory, { recursive: true, force: true })
 }
 
 /**
@@ -467,6 +620,8 @@ function enable ({ root, patchModuleLoader = true }) {
   const collector = getCollector()
   collector.resolveOwner = resolveOwner
   scheduleResets(collector)
+  childProcessChannel.subscribe({ start: onChildProcessStart })
+  process.once('exit', removeChildDirectory)
   let realRoot = root
   try {
     realRoot = fs.realpathSync(root)
@@ -543,6 +698,7 @@ function canLeavePromisesOut (asyncHooks) {
 
 module.exports = {
   enable,
+  enableChild,
   finishSuiteSetup,
   finishTest,
   getCollector,
