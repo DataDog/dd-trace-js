@@ -537,22 +537,14 @@ at the interruption ID, the tracer assigns its audio to that response and reject
 2.75.0 SDK artifact instead drops audio at that boundary; full playback requires the upstream correction. Tests
 also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
 
-With LLM Observability enabled, conversation billing is collected automatically after the session ends (unreleased).
-The tracer uses the conversation's existing SDK client and credentials to request conversation details: up to five
-requests within a 30-second retry window, with SDK retries disabled and a three-second request timeout. Up to eight
-collections may run concurrently; additional conversations are skipped. Credentials must permit reading conversation
-details. Retry timers do not keep the process alive, but in-flight HTTP can delay exit until completion or timeout.
-A custom fetcher that ignores cancellation continues to occupy collection capacity until it settles. Authentication
-failures stop collection, and collection errors do not affect the conversation. Missing or late billing, a closed client, process
-exit, or capacity limits can leave costs unavailable. Use a verified post-call webhook and
-[`submitConversationCost`](#llmobs-submit-conversation-cost) when delivery must survive process exit.
+Configure an ElevenLabs post-call transcription webhook, verify its signature, and submit its data with
+[`submitConversationCost`](#llmobs-submit-conversation-cost) (unreleased). The tracer makes no conversation-details
+requests or background billing polls. The conversation process can exit before billing arrives; the webhook handler
+must finish submitting and flushing its data before it exits. Pass the originating voice application as `mlApp`.
 
-Set `DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED=false` or
-`tracer.use('elevenlabs', { conversationCostEnabled: false })` to disable these additional requests. Explicit
-submissions continue to work. Reported USD totals include LLM and platform charges and belong to one dedicated
-conversation workflow; they are not allocated to response spans or inferred from audio, transcripts, or `context_usage`.
-Duplicate automatic and explicit observations use the same conversation owner. A user override must be submitted
-first; disable automatic collection when supplying overrides asynchronously.
+Reported USD totals include LLM and platform charges and belong to one dedicated conversation workflow. They are
+not allocated to response spans or inferred from audio, transcripts, or `context_usage`. Repeated webhook deliveries
+share the same conversation owner. Supply any user override on the first submission.
 
 Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 

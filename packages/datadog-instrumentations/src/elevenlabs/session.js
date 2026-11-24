@@ -47,7 +47,7 @@ function toolIdOf (value) {
 }
 
 /**
- * @typedef {{runInContext?: <T>(fn: () => T) => T, conversation?: boolean, billing?: object}} Scope
+ * @typedef {{runInContext?: <T>(fn: () => T) => T}} Scope
  * @typedef {{
  * id: bigint, input: AudioBuffer, output: AudioBuffer, userText: string,
  * responses: Map<string, string>, completed: Set<string>, calls: Map<string, object>,

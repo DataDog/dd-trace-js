@@ -5100,12 +5100,6 @@ describe('Config', () => {
       assert.strictEqual(Object.hasOwn(config.llmobs, 'sampleRate'), false)
     })
 
-    it('enables automatic ElevenLabs billing by default and accepts an environment opt-out', () => {
-      assert.strictEqual(getConfig().llmobs.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED, true)
-      process.env.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED = 'false'
-      assert.strictEqual(getConfig().llmobs.DD_LLMOBS_ELEVENLABS_CONVERSATION_COST_ENABLED, false)
-    })
-
     it('should disable llmobs by default', () => {
       const config = getConfig()
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
