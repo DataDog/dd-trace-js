@@ -28,6 +28,7 @@ module.exports = {
   AGENT_VERSION_TAG_KEY: 'agent_version',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
+  INTENT: '_ml_obs.meta.intent',
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',

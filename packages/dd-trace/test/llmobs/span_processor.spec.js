@@ -443,6 +443,31 @@ describe('span processor', () => {
       assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
+    it('forwards the intent to the payload', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'tool',
+        '_ml_obs.meta.intent': 'Check the weather',
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.strictEqual(payload.meta.intent, 'Check the weather')
+    })
+
     it('preserves existing span event metadata _dd fields when setting cost tags', () => {
       span = {
         _name: 'test',
