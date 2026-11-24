@@ -2,12 +2,21 @@
 
 const dc = require('dc-polyfill')
 
+const { storage } = require('../../datadog-core')
+
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const TraceContextExtractor = require('./context/extractor')
 const { injectAuthorizerSpan } = require('./context/http')
 const SpanInferrer = require('./span-inferrer')
+const { patchConsole, unpatchConsole } = require('./console-patcher')
+const { extractDurableFunctionContext, extractDurableExecutionStatus } = require('./context/durable-function')
+const { getInvocationTags } = require('./invocation-metadata')
+const { tagObject } = require('./payload')
+const { parseEventSource, extractTriggerTags, extractHTTPStatusCodeTag } = require('./trigger')
+
+const legacyStorage = storage('legacy')
 
 const invocationStartChannel = dc.channel('datadog:aws-lambda:invocation:start')
 const invocationEndChannel = dc.channel('datadog:aws-lambda:invocation:end')
@@ -31,6 +40,7 @@ class AwsLambdaPlugin extends TracingPlugin {
     }
     const extractor = new TraceContextExtractor(this.tracer, config)
     const apply = extracted => {
+      context.stepFunctionContext = extracted.stepFunctionContext
       const merge = context.config?.mergeXrayTraces ??
         context.config?.mergeDatadogXrayTraces ?? this.config.mergeXrayTraces
       if (extracted.source === 'event' || merge) {
@@ -89,11 +99,23 @@ class AwsLambdaPlugin extends TracingPlugin {
         log.debug('Unable to create Lambda inferred span: %s', error)
       }
     }
+    let meta = {}
+    try {
+      context.triggerTags = extractTriggerTags(context.event, context.context, parseEventSource(context.event))
+      meta = {
+        ...getInvocationTags(context.context, context.stepFunctionContext, context.config?.datadogLambdaVersion),
+        ...context.triggerTags,
+      }
+      context.durableFunctionContext = extractDurableFunctionContext(context.event)
+    } catch (error) {
+      log.debug('Unable to prepare Lambda invocation metadata: %s', error)
+    }
+    if (context.parent && (context.parentSource === 'event' || context.parentSource === 'xray')) {
+      meta['_dd.parent_source'] = context.parentSource
+    }
     const span = this.startSpan('aws.lambda', {
       childOf: context.inferredSpan?.span || context.parent || null,
-      meta: context.parent && (context.parentSource === 'event' || context.parentSource === 'xray')
-        ? { '_dd.parent_source': context.parentSource }
-        : undefined,
+      meta,
       kind: 'server',
       resource: functionName,
       service: resolveServiceName(functionName, this.config, context.config),
@@ -101,6 +123,17 @@ class AwsLambdaPlugin extends TracingPlugin {
     }, context)
 
     context.lambdaSpan = span
+    const injectLogs = context.config?.injectLogContext ?? context.config?.logInjection ??
+      this.config.injectLogContext ?? this.config.logInjection
+    context.lambdaLogContext = injectLogs ? { active: true } : undefined
+    context.currentStore.lambdaLogContext = context.lambdaLogContext
+    if (injectLogs) {
+      try {
+        patchConsole(console, getConsoleTraceContext)
+      } catch (error) {
+        log.debug('Unable to patch Lambda console: %s', error)
+      }
+    }
     invocationStartChannel.publish(context)
 
     return context.currentStore
@@ -131,33 +164,77 @@ class AwsLambdaPlugin extends TracingPlugin {
    * @param {object} context Invocation channel context.
    */
   asyncStart (context) {
-    invocationEndChannel.publish(context)
-    // Span.finish() is idempotent, so a span the impending-timeout monitor already finished when
-    // it fired is left untouched here.
-    // The shim's tracer.wrap finishes the invocation before onCompleteInvocation finishes its parent.
-    context.lambdaSpan?.finish()
-    const inferred = context.inferredSpan
-    let finishTime
     try {
-      if (inferred) {
-        if (context.error && !inferred.isAsync) inferred.span.setTag('error', context.error)
-        finishTime = inferred.isAsync ? context.lambdaSpan._startTime : Date.now()
-        inferred.span.finish(finishTime)
-      }
-    } catch (error) {
-      log.debug('Unable to finish Lambda inferred span: %s', error)
-    }
-    if ((context.config?.encodeAuthorizerContext ?? this.config.encodeAuthorizerContext) &&
-        context.result?.principalId && context.result?.policyDocument) {
+      this.#endInvocation(context)
+      invocationEndChannel.publish(context)
+      // Span.finish() is idempotent, so a span the impending-timeout monitor already finished when
+      // it fired is left untouched here.
+      // The shim's tracer.wrap finishes the invocation before onCompleteInvocation finishes its parent.
+      context.lambdaSpan?.finish()
+      const inferred = context.inferredSpan
+      let finishTime
       try {
-        const span = inferred?.span || context.lambdaSpan
-        finishTime ??= span._startTime + span._duration
-        injectAuthorizerSpan(this.tracer, context.result, span, context.event?.requestContext?.requestId, finishTime)
+        if (inferred) {
+          if (context.error && !inferred.isAsync) inferred.span.setTag('error', context.error)
+          finishTime = inferred.isAsync ? context.lambdaSpan._startTime : Date.now()
+          inferred.span.finish(finishTime)
+        }
       } catch (error) {
-        log.debug('Unable to inject Lambda authorizer context: %s', error)
+        log.debug('Unable to finish Lambda inferred span: %s', error)
       }
+      if ((context.config?.encodeAuthorizerContext ?? this.config.encodeAuthorizerContext) &&
+          context.result?.principalId && context.result?.policyDocument) {
+        try {
+          const span = inferred?.span || context.lambdaSpan
+          finishTime ??= span._startTime + span._duration
+          injectAuthorizerSpan(this.tracer, context.result, span, context.event?.requestContext?.requestId, finishTime)
+        } catch (error) {
+          log.debug('Unable to inject Lambda authorizer context: %s', error)
+        }
+      }
+    } finally {
+      if (context.lambdaLogContext) context.lambdaLogContext.active = false
     }
   }
+
+  /** @param {object} context Invocation channel context. */
+  #endInvocation (context) {
+    try {
+      if (context.config?.captureLambdaPayload ?? this.config.captureLambdaPayload) {
+        const depth = context.config?.captureLambdaPayloadMaxDepth ?? this.config.captureLambdaPayloadMaxDepth
+        tagObject(context.lambdaSpan, 'function.request', context.event, 0, depth)
+        tagObject(context.lambdaSpan, 'function.response', context.result, 0, depth)
+      }
+      const status = extractHTTPStatusCodeTag(context.triggerTags, context.result, context.isResponseStream)
+      if (context.triggerTags) {
+        context.triggerTags['http.status_code'] = status
+        context.lambdaSpan.setTag('http.status_code', status)
+        context.inferredSpan?.span.setTag('http.status_code', status)
+      }
+      // Preserve the source's inferred-span guard and its early return before Durable tagging.
+      if (context.inferredSpan && status?.length === 3 && status.startsWith('5')) {
+        context.lambdaSpan.setTag('error', 1)
+        return
+      }
+      if (context.durableFunctionContext) context.lambdaSpan.addTags(context.durableFunctionContext)
+      const executionStatus = extractDurableExecutionStatus(context.event, context.result)
+      if (executionStatus !== undefined) context.lambdaSpan.setTag('aws.durable.execution_status', executionStatus)
+    } catch (error) {
+      log.debug('Unable to tag completed Lambda invocation: %s', error)
+    }
+  }
+
+  /** @param {object} config Plugin configuration. */
+  configure (config) {
+    if (config === false || config.enabled === false) unpatchConsole(console)
+    return super.configure(config)
+  }
+}
+
+/** Reads only active invocation state; it cannot retain an event or leak IDs into the next invocation. */
+function getConsoleTraceContext () {
+  const store = legacyStorage.getStore()
+  return store?.lambdaLogContext?.active ? store.span?.context() : null
 }
 
 /**

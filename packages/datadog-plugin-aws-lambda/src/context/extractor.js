@@ -21,6 +21,7 @@ const { extractDatadogContext, extractXrayContext, getAWSTraceHeader } = require
  * @typedef {object} ExtractedContext
  * @property {import('../../../dd-trace/src/opentracing/span_context')|null} spanContext
  * @property {'event'|'xray'|'ddtrace'|undefined} source
+ * @property {import('./step-functions').StepFunctionContext|undefined} [stepFunctionContext]
  */
 
 class TraceContextExtractor {
@@ -84,8 +85,10 @@ class TraceContextExtractor {
         spanContext = this.#tracer.extract('text_map', custom._datadog === undefined ? custom : custom._datadog)
       }
     }
-    if (spanContext !== null) return { spanContext, source: 'event' }
-    return { spanContext: extractXrayContext(), source: 'xray' }
+    if (spanContext !== null) {
+      return { spanContext, source: 'event', stepFunctionContext: this.#stepFunction?.context }
+    }
+    return { spanContext: extractXrayContext(), source: 'xray', stepFunctionContext: this.#stepFunction?.context }
   }
 
   /**
