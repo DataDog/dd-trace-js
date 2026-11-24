@@ -21,11 +21,11 @@ const {
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
   getThreadLabels,
-  encodeProfileAsync,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
+/** @typedef {import('@datadog/pprof').CapturedProfile} CapturedProfile */
 
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
@@ -304,6 +304,10 @@ class NativeWallProfiler {
     profilerTelemetryMetrics.count(metric, [tag]).inc()
   }
 
+  /**
+   * @param {boolean} restart
+   * @returns {CapturedProfile | undefined}
+   */
   #stop (restart) {
     if (!this.#started) return
 
@@ -313,18 +317,8 @@ class NativeWallProfiler {
       this.#lastSampleCount = 0
     }
 
-    // Mark thread labels and trace endpoint label as good deduplication candidates
-    const lowCardinalityLabels = Object.keys(getThreadLabels())
-    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
-
-    // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
-    if (this.#customLabelKeys) {
-      for (const key of this.#customLabelKeys) {
-        lowCardinalityLabels.push(key)
-      }
-    }
-
-    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
+    // Labels are generated when the profile is visited
+    const profile = this.#pprof.time.stopAndCapture(restart, { generateLabels: this.#boundGenerateLabels })
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -460,8 +454,30 @@ class NativeWallProfiler {
     return this.#pprof.time.runWithContext([profilingContext, customLabels], fn)
   }
 
-  profile (restart) {
+  /**
+   * @param {boolean} restart
+   * @returns {CapturedProfile | undefined}
+   */
+  capture (restart) {
     return this.#stop(restart)
+  }
+
+  /**
+   * How pprof profiles of the captured profiles are built: thread, trace endpoint and custom labels are
+   * good deduplication candidates, and frames carry their column only for server-side unminification.
+   *
+   * @returns {import('@datadog/pprof').PprofSerializerOptions}
+   */
+  get pprofBuilderOptions () {
+    const lowCardinalityLabels = Object.keys(getThreadLabels())
+    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
+    // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
+    if (this.#customLabelKeys) {
+      for (const key of this.#customLabelKeys) {
+        lowCardinalityLabels.push(key)
+      }
+    }
+    return { lowCardinalityLabels, columnNumbers: 'emit' }
   }
 
   getInfo () {
@@ -470,10 +486,6 @@ class NativeWallProfiler {
       totalAsyncContextCount,
       usedAsyncContextCount,
     }
-  }
-
-  encode (profile) {
-    return encodeProfileAsync(profile)
   }
 
   stop () {

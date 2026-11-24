@@ -46,19 +46,17 @@ describe('profilers/native/space', () => {
   let NativeSpaceProfiler
   let logger
   let pprof
-  let profile0
+  let captured0
 
   beforeEach(() => {
     activeProfilers.length = 0
     logger = { error: sinon.stub() }
-    profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
-    }
+    captured0 = { visit: sinon.stub().returns({ hasMissingMapFiles: false }) }
     pprof = {
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub().returns(profile0),
+        capture: sinon.stub().returns(captured0),
         monitorOutOfMemory: sinon.stub(),
         CallbackMode: { Async: 1 },
       },
@@ -130,60 +128,44 @@ describe('profilers/native/space', () => {
     assert.strictEqual(profiler.getInfo(), undefined)
   })
 
-  it('should collect profiles from the pprof space profiler', () => {
+  it('should capture profiles from the pprof space profiler', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 
     profiler.start()
 
-    pprof.heap.profile.returns('profile')
-
-    const profile = profiler.profile(true)
+    const captured = profiler.capture(true)
     assert.strictEqual(profiler.isStarted(), true)
 
-    assert.strictEqual(profile, 'profile')
+    assert.strictEqual(captured, captured0)
+    // Visiting is left to the caller
+    sinon.assert.notCalled(captured0.visit)
   })
 
-  it('should collect profiles from the pprof space profiler and stop profiler if not restarted', () => {
+  it('should capture profiles from the pprof space profiler and stop profiler if not restarted', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 
     profiler.start()
 
-    pprof.heap.profile.returns('profile')
-
-    const profile = profiler.profile(false)
+    const captured = profiler.capture(false)
     assert.strictEqual(profiler.isStarted(), false)
 
-    assert.strictEqual(profile, 'profile')
+    assert.strictEqual(captured, captured0)
   })
 
-  it('should encode profiles using their encodeAsync method', () => {
+  it('should capture profiles with the mapper and pprof thread labels', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
-
-    profiler.start()
-    const profile = profiler.profile(true)
-    profiler.encode(profile)
-
-    sinon.assert.calledOnce(profile0.encodeAsync)
-  })
-
-  it('should use mapper if given', () => {
-    const profiler = makeSpace(NativeSpaceProfiler)
-
     const mapper = {}
-
     profiler.start({ mapper })
-    profiler.profile(true)
 
-    sinon.assert.calledWith(pprof.heap.profile, undefined, mapper)
+    profiler.capture(true)
+
+    sinon.assert.calledOnceWithExactly(pprof.heap.capture, sinon.match({ sourceMapper: mapper }))
+    const { generateLabels } = pprof.heap.capture.firstCall.args[0]
+    assert.deepStrictEqual(Object.keys(generateLabels()), ['thread name', 'thread id', 'os thread id'])
   })
 
-  it('should record the columns of frames for server-side unminification in their own field', () => {
-    const profiler = makeSpace(NativeSpaceProfiler)
-
-    profiler.start()
-    profiler.profile(true)
-
-    assert.strictEqual(pprof.heap.profile.firstCall.args[3], 'emit')
+  it('should build pprof profiles with the columns for server-side unminification in their own field', () => {
+    assert.deepStrictEqual(makeSpace(NativeSpaceProfiler).pprofBuilderOptions, { columnNumbers: 'emit' })
   })
 
   it('should not monitor out of memory when OOM monitoring is disabled', () => {

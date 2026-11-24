@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 require('../setup/core')
+const realShared = require('../../src/profiling/profilers/shared')
 
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
@@ -34,6 +35,49 @@ describe('profiler', function () {
   let flushInterval
   let buildProfilingRuntimeError
   let yieldToEventLoop
+  // Encoding of the wall and space profiles' pprof
+  let encodeWall
+  let encodeSpace
+
+  /**
+   * A captured profile, whose visit tells a FakePprofProfileBuilder which profile it built.
+   *
+   * @param {string} type
+   * @param {boolean} [hasMissingMapFiles]
+   */
+  function makeCaptured (type, hasMissingMapFiles = false) {
+    return {
+      visit: sinon.spy(visitor => {
+        visitor.profileType = type
+        return { hasMissingMapFiles }
+      }),
+    }
+  }
+
+  class FakePprofProfileBuilder {
+    #visitor = {}
+
+    constructor (options) {
+      this.options = options
+    }
+
+    visitor () {
+      return this.#visitor
+    }
+
+    build () {
+      return { profileType: this.#visitor.profileType }
+    }
+  }
+
+  // Fake builds are encoded by their stubs, real ones for real
+  const encodeProfileAsync = profile => {
+    switch (profile.profileType) {
+      case 'wall': return encodeWall(profile)
+      case 'space': return encodeSpace(profile)
+      default: return realShared.encodeProfileAsync(profile)
+    }
+  }
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
@@ -95,24 +139,26 @@ describe('profiler', function () {
 
     wallProfile = {}
     wallProfilePromise = Promise.resolve(wallProfile)
+    encodeWall = sinon.stub().returns(wallProfilePromise)
     wallProfiler = {
       type: 'wall',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().returns('profile'),
+      capture: sinon.stub().returns(makeCaptured('wall')),
+      pprofBuilderOptions: { columnNumbers: 'emit' },
       getInfo: sinon.stub().returns({}),
-      encode: sinon.stub().returns(wallProfilePromise),
     }
 
     spaceProfile = {}
     spaceProfilePromise = Promise.resolve(spaceProfile)
+    encodeSpace = sinon.stub().returns(spaceProfilePromise)
     spaceProfiler = {
       type: 'space',
       start: sinon.stub(),
       stop: sinon.stub(),
-      profile: sinon.stub().returns('profile'),
+      capture: sinon.stub().returns(makeCaptured('space')),
+      pprofBuilderOptions: { columnNumbers: 'pack' },
       getInfo: sinon.stub().returns({}),
-      encode: sinon.stub().returns(spaceProfilePromise),
     }
 
     logger = consoleLogger
@@ -147,8 +193,10 @@ describe('profiler', function () {
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
+          PprofProfileBuilder: FakePprofProfileBuilder,
         },
         'node:timers/promises': { setImmediate: yieldToEventLoop },
+        './profilers/shared': { ...realShared, encodeProfileAsync },
         ...stubs,
       }).Profiler
 
@@ -300,8 +348,8 @@ describe('profiler', function () {
       }
       spanFinishedChannel.publish({ context: () => context })
 
-      wallProfiler.encode.rejects(new Error('wall encoding failed'))
-      spaceProfiler.encode.rejects(new Error('space encoding failed'))
+      encodeWall.rejects(new Error('wall encoding failed'))
+      encodeSpace.rejects(new Error('space encoding failed'))
       const stopped = waitForStopped()
       profiler.stop()
       await stopped
@@ -309,8 +357,8 @@ describe('profiler', function () {
       profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false }))
       assert.strictEqual(profiler.enabled, true)
 
-      wallProfiler.encode.resolves(wallProfile)
-      spaceProfiler.encode.resolves(spaceProfile)
+      encodeWall.resolves(wallProfile)
+      encodeSpace.resolves(spaceProfile)
       const exported = new Promise(resolve => {
         exporter.export.callsFake(exportSpec => {
           resolve(exportSpec)
@@ -379,7 +427,7 @@ describe('profiler', function () {
     })
 
     it('should stop when capturing failed', async () => {
-      wallProfiler.profile.throws(new Error('boom'))
+      wallProfiler.capture.throws(new Error('boom'))
 
       await profiler.start(makeStartOptions({ logger }))
 
@@ -388,14 +436,14 @@ describe('profiler', function () {
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
-      sinon.assert.notCalled(wallProfiler.encode)
-      sinon.assert.notCalled(spaceProfiler.encode)
+      sinon.assert.notCalled(encodeWall)
+      sinon.assert.notCalled(encodeSpace)
       sinon.assert.notCalled(exporter.export)
     })
 
     it('should not stop when encoding failed', async () => {
       const rejected = Promise.reject(new Error('boom'))
-      wallProfiler.encode.returns(rejected)
+      encodeWall.returns(rejected)
 
       await profiler.start(makeStartOptions({ logger }))
 
@@ -446,11 +494,11 @@ describe('profiler', function () {
 
       const collection = profiler._collect('periodic')
 
-      sinon.assert.calledOnceWithMatch(wallProfiler.profile, true)
-      sinon.assert.calledOnceWithMatch(spaceProfiler.profile, true)
+      sinon.assert.calledOnceWithMatch(wallProfiler.capture, true)
+      sinon.assert.calledOnceWithMatch(spaceProfiler.capture, true)
       sinon.assert.calledOnce(capture)
-      sinon.assert.notCalled(wallProfiler.encode)
-      sinon.assert.notCalled(spaceProfiler.encode)
+      sinon.assert.notCalled(encodeWall)
+      sinon.assert.notCalled(encodeSpace)
       resume()
       await collection
       sinon.assert.calledOnce(exporter.export)
@@ -459,30 +507,46 @@ describe('profiler', function () {
     it('staggers encoder starts without waiting for the previous encoding to finish', async () => {
       let resumeNext
       let resolveWall
-      yieldToEventLoop.onSecondCall().callsFake(() => new Promise(resolve => { resumeNext = resolve }))
-      wallProfiler.encode.returns(new Promise(resolve => { resolveWall = resolve }))
+      // Each profile is visited, and its encoder started, after a yield: the third yield comes before
+      // the space profile's visit, once the wall profile's encoder started
+      yieldToEventLoop.onThirdCall().callsFake(() => new Promise(resolve => { resumeNext = resolve }))
+      encodeWall.returns(new Promise(resolve => { resolveWall = resolve }))
       await profiler.start(makeStartOptions())
+      const flushMicrotasks = async () => {
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+      }
 
       const collection = profiler._collect('periodic')
-      await Promise.resolve()
-      sinon.assert.calledOnce(wallProfiler.encode)
-      sinon.assert.notCalled(spaceProfiler.encode)
+      await flushMicrotasks()
+      sinon.assert.calledOnce(encodeWall)
+      sinon.assert.notCalled(encodeSpace)
 
       resumeNext()
-      await Promise.resolve()
-      sinon.assert.calledOnce(spaceProfiler.encode)
+      await flushMicrotasks()
+      sinon.assert.calledOnce(encodeSpace)
       sinon.assert.notCalled(exporter.export)
       resolveWall(wallProfile)
       await collection
       sinon.assert.calledOnce(exporter.export)
     })
 
+    it('should submit the other pprof profiles when visiting one fails', async () => {
+      wallProfiler.capture.returns({ visit: sinon.stub().throws(new Error('wall visit failed')) })
+      await profiler.start(makeStartOptions())
+
+      await profiler._collect('periodic')
+
+      sinon.assert.notCalled(encodeWall)
+      sinon.assert.calledOnce(exporter.export)
+      assert.deepStrictEqual(Object.keys(exporter.export.firstCall.args[0].profiles), ['space'])
+    })
+
     it('keeps compression concurrent while staggering encoder starts', async () => {
       const callbacks = []
       const gzip = sinon.stub().callsFake((data, options, callback) => { callbacks.push(callback) })
       initProfiler({ zlib: { gzip } })
-      wallProfiler.encode.resolves(Buffer.from('wall'))
-      spaceProfiler.encode.resolves(Buffer.from('space'))
+      encodeWall.resolves(Buffer.from('wall'))
+      encodeSpace.resolves(Buffer.from('space'))
       const env = process.env
       process.env = { ...env, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
       try {
@@ -494,8 +558,8 @@ describe('profiler', function () {
       const collection = profiler._collect('periodic')
       await clock.tickAsync(0)
 
-      sinon.assert.calledOnce(wallProfiler.encode)
-      sinon.assert.calledOnce(spaceProfiler.encode)
+      sinon.assert.calledOnce(encodeWall)
+      sinon.assert.calledOnce(encodeSpace)
       sinon.assert.calledTwice(gzip)
       sinon.assert.notCalled(exporter.export)
       for (const callback of callbacks) callback(null, Buffer.from('compressed'))
@@ -506,13 +570,13 @@ describe('profiler', function () {
     for (const failure of ['throws', 'rejects']) {
       it(`continues encoding later profiles when an earlier encoder ${failure}`, async () => {
         const error = new Error('wall encoding failed')
-        wallProfiler.encode[failure](error)
+        encodeWall[failure](error)
         await profiler.start(makeStartOptions())
 
         await profiler._collect('periodic')
 
-        sinon.assert.calledOnce(wallProfiler.encode)
-        sinon.assert.calledOnce(spaceProfiler.encode)
+        sinon.assert.calledOnce(encodeWall)
+        sinon.assert.calledOnce(encodeSpace)
         sinon.assert.calledOnce(exporter.export)
         sinon.assert.calledOnceWithExactly(consoleLogger.error, error)
         assert.deepStrictEqual(exporter.export.firstCall.args[0].profiles, { space: spaceProfile })
@@ -529,11 +593,11 @@ describe('profiler', function () {
 
       profiler.stop()
 
-      sinon.assert.calledOnceWithMatch(wallProfiler.profile, false)
-      sinon.assert.calledOnceWithMatch(spaceProfiler.profile, false)
-      sinon.assert.callOrder(wallProfiler.profile, spaceProfiler.profile, wallProfiler.stop, spaceProfiler.stop)
-      sinon.assert.notCalled(wallProfiler.encode)
-      sinon.assert.notCalled(spaceProfiler.encode)
+      sinon.assert.calledOnceWithMatch(wallProfiler.capture, false)
+      sinon.assert.calledOnceWithMatch(spaceProfiler.capture, false)
+      sinon.assert.callOrder(wallProfiler.capture, spaceProfiler.capture, wallProfiler.stop, spaceProfiler.stop)
+      sinon.assert.notCalled(encodeWall)
+      sinon.assert.notCalled(encodeSpace)
       assert.strictEqual(profiler.enabled, false)
       assert.strictEqual(profiler.isStopping(), true)
       assert.throws(() => profiler.start(makeStartOptions()), {
@@ -555,8 +619,8 @@ describe('profiler', function () {
       profiler.stop()
       await stopped
 
-      sinon.assert.calledTwice(wallProfiler.profile)
-      sinon.assert.calledTwice(spaceProfiler.profile)
+      sinon.assert.calledTwice(wallProfiler.capture)
+      sinon.assert.calledTwice(spaceProfiler.capture)
       assert.strictEqual(profiler.enabled, false)
       resumePeriodic()
       await collection
@@ -590,7 +654,7 @@ describe('profiler', function () {
 
       let resolveEncode
       wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
-      wallProfiler.encode.returns(wallProfilePromise)
+      encodeWall.returns(wallProfilePromise)
 
       profiler.stop()
       wallProfiler.start.resetHistory()
@@ -623,7 +687,7 @@ describe('profiler', function () {
 
       let rejectEncode
       wallProfilePromise = new Promise((resolve, reject) => { rejectEncode = reject })
-      wallProfiler.encode.returns(wallProfilePromise)
+      encodeWall.returns(wallProfilePromise)
 
       const stoppedListener = sinon.spy()
       profiler.on('stopped', stoppedListener)
@@ -658,7 +722,7 @@ describe('profiler', function () {
 
       const collectionError = new Error('collection failed')
       const stopError = new Error('stop failed')
-      wallProfiler.profile.throws(collectionError)
+      wallProfiler.capture.throws(collectionError)
       wallProfiler.stop.throws(stopError)
 
       profiler.stop()
@@ -673,10 +737,10 @@ describe('profiler', function () {
     async function shouldExportProfiles (compression, magicBytes) {
       wallProfile = Buffer.from('uncompressed profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
-      wallProfiler.encode.returns(wallProfilePromise)
+      encodeWall.returns(wallProfilePromise)
       spaceProfile = Buffer.from('uncompressed profile - space')
       spaceProfilePromise = Promise.resolve(spaceProfile)
-      spaceProfiler.encode.returns(spaceProfilePromise)
+      encodeSpace.returns(spaceProfilePromise)
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -731,10 +795,10 @@ describe('profiler', function () {
     it('should refresh the compression method after a restart', async () => {
       wallProfile = Buffer.from('uncompressed profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
-      wallProfiler.encode.returns(wallProfilePromise)
+      encodeWall.returns(wallProfilePromise)
       spaceProfile = Buffer.from('uncompressed profile - space')
       spaceProfilePromise = Promise.resolve(spaceProfile)
-      spaceProfiler.encode.returns(spaceProfilePromise)
+      encodeSpace.returns(spaceProfilePromise)
 
       const nextExport = () => new Promise(resolve => {
         exporter.export.callsFake(exportSpec => {
@@ -789,10 +853,10 @@ describe('profiler', function () {
 
       wallProfile = Buffer.from('profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
-      wallProfiler.encode.returns(wallProfilePromise)
+      encodeWall.returns(wallProfilePromise)
       spaceProfile = Buffer.from('profile - space')
       spaceProfilePromise = Promise.resolve(spaceProfile)
-      spaceProfiler.encode.returns(spaceProfilePromise)
+      encodeSpace.returns(spaceProfilePromise)
 
       const env = process.env
       try {
@@ -880,8 +944,13 @@ describe('profiler', function () {
       // to the real debugChannel.
       const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
         './config': configStub,
-        '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
+        '@datadog/pprof': {
+          SourceMapper: SourceMapperStub,
+          setLogger: sinon.stub(),
+          PprofProfileBuilder: FakePprofProfileBuilder,
+        },
         'node:timers/promises': { setImmediate: yieldToEventLoop },
+        './profilers/shared': { ...realShared, encodeProfileAsync },
       }).Profiler
       const realProfiler = new RealLogProfiler()
       const { debugChannel } = require('../../src/log/channels')
@@ -990,12 +1059,8 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, false)
     })
 
-    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
-      const token = 'dd:has-missing-map-files'
-      wallProfiler.profile.returns({
-        comment: [1],
-        stringTable: { strings: ['', token] },
-      })
+    it('should set hasMissingSourceMaps to true when any profile has frames with missing source maps', async () => {
+      wallProfiler.capture.returns(makeCaptured('wall', true))
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -1013,7 +1078,7 @@ describe('profiler', function () {
       assert.strictEqual(infos.hasMissingSourceMaps, true)
     })
 
-    it('should set hasMissingSourceMaps to false when no profile has the comment token', async () => {
+    it('should set hasMissingSourceMaps to false when no profile has frames with missing source maps', async () => {
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -1080,8 +1145,10 @@ describe('profiler', function () {
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
+          PprofProfileBuilder: FakePprofProfileBuilder,
         },
         'node:timers/promises': { setImmediate: yieldToEventLoop },
+        './profilers/shared': { ...realShared, encodeProfileAsync },
       }).ServerlessProfiler
 
       interval = 1 * 1000
@@ -1148,12 +1215,8 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, true)
     })
 
-    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
-      const token = 'dd:has-missing-map-files'
-      wallProfiler.profile.returns({
-        comment: [1],
-        stringTable: { strings: ['', token] },
-      })
+    it('should set hasMissingSourceMaps to true when any profile has frames with missing source maps', async () => {
+      wallProfiler.capture.returns(makeCaptured('wall', true))
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {

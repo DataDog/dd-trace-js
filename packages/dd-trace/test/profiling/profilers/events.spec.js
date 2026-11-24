@@ -56,7 +56,7 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
   try {
     startChannel.publish(ctx)
     finishChannel.publish(ctx)
-    return toPprof(profiler, profiler.profile(true, startTime, new Date()))
+    return toPprof(profiler, profiler.capture(true, startTime, new Date()))
   } finally {
     profiler.stop()
   }
@@ -111,7 +111,7 @@ describe('profilers/events', () => {
       const factor = Math.max(1, Math.min(availableParallelism(), effectiveLibuvThreadCount)) + 2
       const expectedSampleCount = maxCpuSamples * factor
       const eventsToEmit = expectedSampleCount + 2 // Emit a few more to ensure the limit is enforced
-      // Do 2 rounds to verify the limit is reset after each profiler.profile() call.
+      // Do 2 rounds to verify the limit is reset after each profiler.capture() call.
       for (let rounds = 0; rounds < 2; rounds++) {
         for (let i = 0; i < eventsToEmit; i++) {
           // Simulate a DNS lookup event
@@ -119,7 +119,7 @@ describe('profilers/events', () => {
           startCh.publish(ctx)
           finishCh.publish(ctx)
         }
-        const profile = toPprof(profiler, profiler.profile(true, startTime, new Date()))
+        const profile = toPprof(profiler, profiler.capture(true, startTime, new Date()))
         const sampleCount = profile.sample.length
         assert.equal(sampleCount, expectedSampleCount)
       }
@@ -175,7 +175,7 @@ describe('profilers/events', () => {
           }]
         },
       })
-      const profile = toPprof(profiler, profiler.profile(true, startTime, new Date()))
+      const profile = toPprof(profiler, profiler.capture(true, startTime, new Date()))
       const labels = collectLabels(profile.sample[0], profile.stringTable)
 
       assert.equal(labels['gc reason'], 'construct_retained,forced')
@@ -204,7 +204,7 @@ describe('profilers/events', () => {
       const ctx = { operation: 'gzip' }
       dc.channel('apm:zlib:operation:start').publish(ctx)
       dc.channel('apm:zlib:operation:finish').publish(ctx)
-      captured = profiler.profile(true, startDate, endDate)
+      captured = profiler.capture(true, startDate, endDate)
     } finally {
       now.restore()
       profiler.stop()

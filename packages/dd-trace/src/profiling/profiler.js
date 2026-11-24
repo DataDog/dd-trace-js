@@ -7,7 +7,7 @@ const crashtracker = require('../crashtracking')
 const log = require('../log')
 const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
-const { threadNamePrefix } = require('./profilers/shared')
+const { encodeProfileAsync, threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
@@ -27,13 +27,17 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
-const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
-
-function profileHasMissingSourceMaps (profile) {
-  const strings = profile?.stringTable?.strings
-  if (!strings) return false
-  return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
-}
+/** @typedef {import('@datadog/pprof').CapturedProfile} CapturedProfile */
+/** @typedef {import('./config').ProfilingProfiler} ProfilingProfiler */
+/** @typedef {{ profiler: ProfilingProfiler, captured: CapturedProfile, info: unknown }} Capture */
+/**
+ * Profiles that are built together, and the builder of their encoded payload.
+ *
+ * @typedef {{
+ *   captures: Capture[],
+ *   builder: import('@datadog/pprof').PprofProfileBuilder,
+ * }} Batch
+ */
 
 function processInfo (infos, info, type) {
   if (info !== undefined) {
@@ -416,18 +420,18 @@ class Profiler extends EventEmitter {
       const startDate = this.#lastStart
       const endDate = new Date()
       const snapshotTags = this.#currentSnapshotTags
-      const profiles = []
-
+      const captures = []
       crashtracker.withProfilerSerializing(() => {
-        // collect profiles synchronously so that profilers can be safely stopped asynchronously
+        // Capture profiles synchronously so that profilers can be safely stopped asynchronously. Only
+        // what has to happen now does; visiting the profiles, which normalizes them, is deferred.
         for (const profiler of this.#profilers) {
           const info = profiler.getInfo()
-          const profile = profiler.profile(restart, startDate, endDate)
+          const captured = profiler.capture(restart, startDate, endDate)
           if (!restart) {
             log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
           }
-          if (!profile) continue
-          profiles.push({ profiler, profile, info })
+          if (!captured) continue
+          captures.push({ profiler, captured, info })
         }
       })
 
@@ -436,57 +440,120 @@ class Profiler extends EventEmitter {
         this._capture(this._timeoutInterval, endDate)
       }
 
-      let hasEncoded = false
+      if (captures.length === 0) return
 
-      const encodedProfiles = {}
-      const infos = this.#createInitialInfos()
-      const compressionFn = this.#getCompressionFn()
-
-      // encode and export asynchronously
-      const encodeProfile = async ({ profiler, profile, info }) => {
-        try {
-          const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && compressionFn !== undefined
-            ? await compressionFn(encoded, this.#compressionOptions)
-            : encoded
-          encodedProfiles[profiler.type] = compressed
-          if (profileHasMissingSourceMaps(profile)) {
-            infos.hasMissingSourceMaps = true
-          }
-          processInfo(infos, info, profiler.type)
-          // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-          log.debug(() => {
-            const profileJson = JSON.stringify(profile, (_, value) => {
-              return typeof value === 'bigint' ? value.toString() : value
-            })
-            return `Collected ${profiler.type} profile: ` + profileJson
-          })
-          hasEncoded = true
-        } catch (error) {
-          // If encoding one of the profile types fails, we should still try to
-          // encode and submit the other profile types.
-          log.error(error)
-        }
-      }
-
-      const encodings = []
-      for (const profile of profiles) {
-        // Separate synchronous encoder prefixes without waiting for compression/export to finish.
-        // eslint-disable-next-line no-await-in-loop -- Encoder starts must yield, not their entire async tasks.
-        await yieldToEventLoop()
-        encodings.push(encodeProfile(profile))
-      }
-      await Promise.all(encodings)
-
-      if (hasEncoded) {
-        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotTags, snapshotKind)
-        profileSubmittedChannel.publish()
-        log.debug('Submitted profiles')
-      }
+      await this.#submitCaptures(captures, startDate, endDate, snapshotTags, snapshotKind)
     } catch (error) {
       log.error(error)
       this.#stop()
     }
+  }
+
+  /**
+   * Submits a cycle's captured profiles, built in batches, each with its own builder: a batch for each
+   * profile, a pprof profile built as its profiler's pprofBuilderOptions tell. Each visit of a profile
+   * into its batch's builder, which normalizes it, and each batch's building and encoding start after
+   * a yield to the event loop, as they start with synchronous work; encodings then proceed
+   * concurrently. A batch whose visit or encoding fails is left out, with its profilers' infos.
+   *
+   * @param {Capture[]} captures
+   * @param {Date} start
+   * @param {Date} end
+   * @param {Record<string, string|number|boolean|undefined>} snapshotTags
+   * @param {string} snapshotKind
+   */
+  async #submitCaptures (captures, start, end, snapshotTags, snapshotKind) {
+    const compressionFn = this.#getCompressionFn()
+    const encodings = []
+    const encodedBatches = []
+    for (const batch of this.#createBatches(captures)) {
+      // eslint-disable-next-line no-await-in-loop -- Visits must yield, between them and to the encoders.
+      const visit = await this.#visitBatch(batch)
+      if (visit === undefined) continue
+      // eslint-disable-next-line no-await-in-loop -- Encoder starts must yield, not their entire async tasks.
+      await yieldToEventLoop()
+      encodings.push(this.#encodeBatch(batch, compressionFn).then(
+        encoded => { encodedBatches.push({ batch, visit, encoded }) },
+        // If one of the batches fails, we should still try to encode and submit the others.
+        error => { log.error(error) }
+      ))
+    }
+    await Promise.all(encodings)
+    if (encodedBatches.length === 0) return
+
+    const infos = this.#createInitialInfos()
+    const profiles = {}
+    for (const { batch, visit, encoded } of encodedBatches) {
+      if (visit.hasMissingMapFiles) {
+        infos.hasMissingSourceMaps = true
+      }
+      for (const { profiler, info } of batch.captures) {
+        processInfo(infos, info, profiler.type)
+      }
+      profiles[batch.captures[0].profiler.type] = encoded
+    }
+    await this.#submit(profiles, infos, start, end, snapshotTags, snapshotKind)
+    profileSubmittedChannel.publish()
+    log.debug('Submitted profiles')
+  }
+
+  /**
+   * @param {Capture[]} captures
+   * @returns {Batch[]}
+   */
+  #createBatches (captures) {
+    const { PprofProfileBuilder } = require('@datadog/pprof')
+    return captures.map(capture => ({
+      captures: [capture],
+      builder: new PprofProfileBuilder(capture.profiler.pprofBuilderOptions),
+    }))
+  }
+
+  /**
+   * Visits a batch's profiles into its builder, each after a yield to the event loop.
+   *
+   * @param {Batch} batch
+   * @returns {Promise<{ hasMissingMapFiles: boolean } | undefined>} undefined if a visit failed, which
+   *   can leave partial data in the builder
+   */
+  async #visitBatch ({ captures, builder }) {
+    let hasMissingMapFiles = false
+    for (const { captured } of captures) {
+      // eslint-disable-next-line no-await-in-loop -- Each visit is synchronous work to separate.
+      await yieldToEventLoop()
+      try {
+        if (captured.visit(builder.visitor()).hasMissingMapFiles) {
+          hasMissingMapFiles = true
+        }
+      } catch (error) {
+        log.error(error)
+        return
+      }
+    }
+    return { hasMissingMapFiles }
+  }
+
+  /**
+   * Builds and encodes a batch, and compresses it with the compression function, if any.
+   *
+   * @param {Batch} batch
+   * @param {((buffer: Buffer, options: unknown) => Promise<Buffer>) | undefined} compressionFn
+   * @returns {Promise<Buffer>}
+   */
+  async #encodeBatch ({ captures, builder }, compressionFn) {
+    const built = builder.build()
+    const encoded = await encodeProfileAsync(built)
+    const compressed = compressionFn === undefined
+      ? encoded
+      : await compressionFn(encoded, this.#compressionOptions)
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => {
+      const profileJson = JSON.stringify(built, (_, value) => {
+        return typeof value === 'bigint' ? value.toString() : value
+      })
+      return `Collected ${captures[0].profiler.type} profile: ` + profileJson
+    })
+    return compressed
   }
 
   /**
