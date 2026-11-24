@@ -523,6 +523,10 @@ export interface GeneratedConfig {
   OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: number;
+  OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: string | undefined;
+  OTEL_EXPORTER_OTLP_PROFILES_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: "http/protobuf";
+  OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
@@ -533,6 +537,7 @@ export interface GeneratedConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
+  OTEL_PROFILES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;
@@ -1220,6 +1225,10 @@ export interface GeneratedEnvVarConfig {
   OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: number;
+  OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: string | undefined;
+  OTEL_EXPORTER_OTLP_PROFILES_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: "http/protobuf";
+  OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
@@ -1231,6 +1240,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
+  OTEL_PROFILES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;

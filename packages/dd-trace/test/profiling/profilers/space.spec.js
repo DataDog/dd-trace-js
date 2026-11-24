@@ -26,8 +26,10 @@ function makeSpace (Cls, {
   exportStrategies = [],
   tags = {},
   exporters = [],
+  otlp = false,
 } = {}) {
   const profiler = new Cls({
+    OTEL_PROFILES_EXPORTER: otlp ? 'otlp' : undefined,
     DD_PROFILING_HEAP_SAMPLING_INTERVAL: heapSamplingInterval,
     DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled,
     DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: oomMonitoringEnabled,
@@ -162,6 +164,20 @@ describe('profilers/native/space', () => {
     sinon.assert.calledOnceWithExactly(pprof.heap.capture, sinon.match({ sourceMapper: mapper }))
     const { generateLabels } = pprof.heap.capture.firstCall.args[0]
     assert.deepStrictEqual(Object.keys(generateLabels()), ['thread name', 'thread id', 'os thread id'])
+  })
+
+  it('should capture profiles with the semantic conventions\' thread labels for OTLP', () => {
+    const profiler = makeSpace(NativeSpaceProfiler, { otlp: true })
+    profiler.start()
+
+    profiler.capture(true)
+
+    const { generateLabels } = pprof.heap.capture.firstCall.args[0]
+    assert.deepStrictEqual(generateLabels(), {
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+    })
   })
 
   it('should build pprof profiles with the columns for server-side unminification in their own field', () => {

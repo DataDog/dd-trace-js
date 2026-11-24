@@ -3,8 +3,11 @@
 const { EventEmitter } = require('events')
 const { setImmediate: yieldToEventLoop } = require('node:timers/promises')
 const dc = require('dc-polyfill')
+const { version } = require('../../../../package.json')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
+const { transformAttributes } = require('../opentelemetry/otlp/attributes')
+const { buildResourceAttributes } = require('../opentelemetry/resource-attributes')
 const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { encodeProfileAsync, threadNamePrefix } = require('./profilers/shared')
@@ -31,13 +34,57 @@ function findWebSpan (startedSpans, spanId) {
 /** @typedef {import('./config').ProfilingProfiler} ProfilingProfiler */
 /** @typedef {{ profiler: ProfilingProfiler, captured: CapturedProfile, info: unknown }} Capture */
 /**
- * Profiles that are built together, and the builder of their encoded payload.
+ * Profiles that are built together, and the builder of their encoded payload: a pprof or an OTLP one.
  *
  * @typedef {{
  *   captures: Capture[],
- *   builder: import('@datadog/pprof').PprofProfileBuilder,
+ *   builder: import('@datadog/pprof').PprofProfileBuilder | import('@datadog/pprof').OtelProfilesBuilder,
  * }} Batch
  */
+
+/**
+ * The OTLP resource of the profiles: the attributes the other OTLP signals send, the SDK's, and the process's, which
+ * pprof uploads have as the process_id and runtime_version tags, leaving out unset values.
+ *
+ * @param {import('../config/config-base')} config
+ */
+function buildOtlpResourceAttributes (config) {
+  const attributes = {
+    ...buildResourceAttributes(config),
+    'telemetry.sdk.name': 'datadog',
+    'telemetry.sdk.language': 'nodejs',
+    'telemetry.sdk.version': version,
+    'process.pid': process.pid,
+    'process.runtime.name': 'nodejs',
+    // Without process.version's "v", as the semantic conventions and the OpenTelemetry SDK have it
+    'process.runtime.version': process.versions.node,
+  }
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value === undefined || value === null) {
+      delete attributes[key]
+    }
+  }
+  return transformAttributes(attributes)
+}
+
+// The eBPF host profiler's names of the sample types it shares with pprof profiles, so OTLP profiles of a measure have
+// one name whichever profiler made them. Wall time, which it doesn't have, is named the same way as CPU time.
+const OTLP_SAMPLE_TYPE_NAMES = new Map([
+  ['wall/nanoseconds', 'wall-time'],
+  ['cpu/nanoseconds', 'cpu-time'],
+  ['inuse_objects/count', 'heap-live-samples'],
+  ['inuse_space/bytes', 'heap-live-size'],
+  ['alloc_objects/count', 'alloc-samples'],
+  ['alloc_space/bytes', 'alloc-size'],
+])
+
+/**
+ * @param {{ type: string, unit: string }} sampleType
+ * @returns {{ type: string, unit: string }}
+ */
+function renameOtlpSampleType ({ type, unit }) {
+  return { type: OTLP_SAMPLE_TYPE_NAMES.get(`${type}/${unit}`) ?? type, unit }
+}
 
 function processInfo (infos, info, type) {
   if (info !== undefined) {
@@ -66,6 +113,7 @@ class Profiler extends EventEmitter {
   #exporters
   #flushInterval
   #lastStart
+  #otlp = false
   #profileSeq = 0
   #profilers
   #spanFinishListener
@@ -223,9 +271,10 @@ class Profiler extends EventEmitter {
     }
 
     try {
-      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport, otlp } =
         buildProfilingRuntime(config)
       this.#config = config
+      this.#otlp = otlp
       this.#exporters = exporters
       this.#flushInterval = flushInterval
       this.#profilers = profilers
@@ -449,12 +498,24 @@ class Profiler extends EventEmitter {
     }
   }
 
+  #createOtlpBuilder () {
+    const { OtelProfilesBuilder } = require('@datadog/pprof')
+    return new OtelProfilesBuilder({
+      resourceAttributes: buildOtlpResourceAttributes(this.#config),
+      scope: { name: 'dd-trace-js', version },
+      // Only frames for server-side unminification carry their columns, as in pprof uploads
+      columns: 'missing-source-maps',
+      renameSampleType: renameOtlpSampleType,
+    })
+  }
+
   /**
-   * Submits a cycle's captured profiles, built in batches, each with its own builder: a batch for each
-   * profile, a pprof profile built as its profiler's pprofBuilderOptions tell. Each visit of a profile
-   * into its batch's builder, which normalizes it, and each batch's building and encoding start after
-   * a yield to the event loop, as they start with synchronous work; encodings then proceed
-   * concurrently. A batch whose visit or encoding fails is left out, with its profilers' infos.
+   * Submits a cycle's captured profiles, built in batches, each with its own builder: as pprof, a
+   * batch for each profile, built as its profiler's pprofBuilderOptions tell; as OTLP, one batch, a
+   * request in which the profiles share the dictionary. Each visit of a profile into its batch's
+   * builder, which normalizes it, and each batch's building and encoding start after a yield to the
+   * event loop, as they start with synchronous work; encodings then proceed concurrently. A profile
+   * whose visit fails is left out, and so is a batch whose encoding fails, with their profilers' infos.
    *
    * @param {Capture[]} captures
    * @param {Date} start
@@ -463,7 +524,8 @@ class Profiler extends EventEmitter {
    * @param {string} snapshotKind
    */
   async #submitCaptures (captures, start, end, snapshotTags, snapshotKind) {
-    const compressionFn = this.#getCompressionFn()
+    // OTLP requests aren't compressed yet
+    const compressionFn = this.#otlp ? undefined : this.#getCompressionFn()
     const encodings = []
     const encodedBatches = []
     for (const batch of this.#createBatches(captures)) {
@@ -483,18 +545,23 @@ class Profiler extends EventEmitter {
 
     const infos = this.#createInitialInfos()
     const profiles = {}
+    let otlp
     for (const { batch, visit, encoded } of encodedBatches) {
       if (visit.hasMissingMapFiles) {
         infos.hasMissingSourceMaps = true
       }
-      for (const { profiler, info } of batch.captures) {
+      for (const { profiler, info } of visit.captures) {
         processInfo(infos, info, profiler.type)
       }
-      profiles[batch.captures[0].profiler.type] = encoded
+      if (this.#otlp) {
+        otlp = encoded
+      } else {
+        profiles[batch.captures[0].profiler.type] = encoded
+      }
     }
-    await this.#submit(profiles, infos, start, end, snapshotTags, snapshotKind)
+    await this.#submit(profiles, infos, start, end, snapshotTags, snapshotKind, otlp)
     profileSubmittedChannel.publish()
-    log.debug('Submitted profiles')
+    log.debug(this.#otlp ? 'Submitted OTLP profiles' : 'Submitted profiles')
   }
 
   /**
@@ -502,6 +569,9 @@ class Profiler extends EventEmitter {
    * @returns {Batch[]}
    */
   #createBatches (captures) {
+    if (this.#otlp) {
+      return [{ captures, builder: this.#createOtlpBuilder() }]
+    }
     const { PprofProfileBuilder } = require('@datadog/pprof')
     return captures.map(capture => ({
       captures: [capture],
@@ -510,27 +580,30 @@ class Profiler extends EventEmitter {
   }
 
   /**
-   * Visits a batch's profiles into its builder, each after a yield to the event loop.
+   * Visits a batch's profiles into its builder, each after a yield to the event loop. A profile whose
+   * visit fails is left out: the OTLP builder only adds a visit's profiles when it completes, and a pprof
+   * batch has no other profile.
    *
    * @param {Batch} batch
-   * @returns {Promise<{ hasMissingMapFiles: boolean } | undefined>} undefined if a visit failed, which
-   *   can leave partial data in the builder
+   * @returns {Promise<{ captures: Capture[], hasMissingMapFiles: boolean } | undefined>} the captures
+   *   that were visited, or undefined if none was
    */
   async #visitBatch ({ captures, builder }) {
+    const visited = []
     let hasMissingMapFiles = false
-    for (const { captured } of captures) {
+    for (const capture of captures) {
       // eslint-disable-next-line no-await-in-loop -- Each visit is synchronous work to separate.
       await yieldToEventLoop()
       try {
-        if (captured.visit(builder.visitor()).hasMissingMapFiles) {
+        if (capture.captured.visit(builder.visitor()).hasMissingMapFiles) {
           hasMissingMapFiles = true
         }
+        visited.push(capture)
       } catch (error) {
         log.error(error)
-        return
       }
     }
-    return { hasMissingMapFiles }
+    return visited.length === 0 ? undefined : { captures: visited, hasMissingMapFiles }
   }
 
   /**
@@ -546,13 +619,15 @@ class Profiler extends EventEmitter {
     const compressed = compressionFn === undefined
       ? encoded
       : await compressionFn(encoded, this.#compressionOptions)
-    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => {
-      const profileJson = JSON.stringify(built, (_, value) => {
-        return typeof value === 'bigint' ? value.toString() : value
+    if (!this.#otlp) {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.debug(() => {
+        const profileJson = JSON.stringify(built, (_, value) => {
+          return typeof value === 'bigint' ? value.toString() : value
+        })
+        return `Collected ${captures[0].profiler.type} profile: ` + profileJson
       })
-      return `Collected ${captures[0].profiler.type} profile: ` + profileJson
-    })
+    }
     return compressed
   }
 
@@ -563,8 +638,9 @@ class Profiler extends EventEmitter {
    * @param {Date} end
    * @param {Record<string, string|number|boolean|undefined>} snapshotTags
    * @param {string} snapshotKind
+   * @param {Buffer} [otlp] - The cycle's encoded OTLP request, in place of pprof profiles
    */
-  #submit (profiles, infos, start, end, snapshotTags, snapshotKind) {
+  async #submit (profiles, infos, start, end, snapshotTags, snapshotKind, otlp) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {
@@ -578,13 +654,16 @@ class Profiler extends EventEmitter {
       ? [...this.#customLabelKeys]
       : undefined
     const exportSpec = { profiles, infos, start, end, tags: snapshotTags, endpointCounts, customAttributes }
+    if (otlp !== undefined) {
+      exportSpec.otlp = otlp
+    }
     const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)
       })
     )
 
-    return Promise.all(tasks)
+    await Promise.all(tasks)
   }
 }
 

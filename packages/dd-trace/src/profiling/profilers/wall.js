@@ -20,6 +20,8 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
+  getNonJSThreadsOtelLabels,
+  getOtelThreadLabels,
   getThreadLabels,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
@@ -63,6 +65,7 @@ class NativeWallProfiler {
   #asyncContextFrameEnabled = false
   #captureSpanData = false
   #codeHotspotsEnabled = false
+  #otlp = false
   #contextCountGaugeUpdater
   collectsCpuTime = false
   #currentContext
@@ -86,6 +89,7 @@ class NativeWallProfiler {
   #boundSpanFinished = this.#spanFinished.bind(this)
   #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
+  #boundGenerateOtelLabels = this.#generateOtelLabels.bind(this)
 
   get type () { return 'wall' }
 
@@ -96,6 +100,7 @@ class NativeWallProfiler {
   constructor (config, { asyncContextFrameEnabled, flushInterval }) {
     this.#asyncContextFrameEnabled = asyncContextFrameEnabled
     this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.#otlp = config.OTEL_PROFILES_EXPORTER === 'otlp'
     this.collectsCpuTime = config.DD_PROFILING_CPU_ENABLED
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
@@ -317,8 +322,12 @@ class NativeWallProfiler {
       this.#lastSampleCount = 0
     }
 
-    // Labels are generated when the profile is visited
-    const profile = this.#pprof.time.stopAndCapture(restart, { generateLabels: this.#boundGenerateLabels })
+    // Labels are generated when the profile is visited, in the format it's exported in
+    const options = this.#otlp
+      // Every sample with a context is a timestamped observation, as the timeline needs
+      ? { generateLabels: this.#boundGenerateOtelLabels, samplePerContext: true }
+      : { generateLabels: this.#boundGenerateLabels }
+    const profile = this.#pprof.time.stopAndCapture(restart, options)
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -344,6 +353,19 @@ class NativeWallProfiler {
     }
 
     return profile
+  }
+
+  /**
+   * The labels of an OTLP sample: the thread's, as semantic-convention attributes. Its time is a sample
+   * timestamp, not a label.
+   *
+   * @param {{ node: { name: string } }} sample
+   */
+  #generateOtelLabels ({ node }) {
+    if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
+      return getNonJSThreadsOtelLabels()
+    }
+    return getOtelThreadLabels()
   }
 
   _generateLabels ({ node, context }) {

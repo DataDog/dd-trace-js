@@ -26,8 +26,10 @@ function makeWall (Cls, {
   heartbeatInterval = 60 * 1e3,
   timelineEnabled = false,
   v8ProfilerBugWorkaroundEnabled = false,
+  otlp = false,
 } = {}) {
   return new Cls({
+    OTEL_PROFILES_EXPORTER: otlp ? 'otlp' : undefined,
     DD_PROFILING_CODEHOTSPOTS_ENABLED: codeHotspotsEnabled,
     DD_PROFILING_CPU_ENABLED: cpuProfilingEnabled,
     DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: endpointCollectionEnabled,
@@ -231,6 +233,32 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     assert.strictEqual(profiler.isStarted(), false)
     sinon.assert.calledTwice(pprof.time.stopAndCapture)
+  })
+
+  it('should capture OTLP profiles with timestamps as sample timestamps instead of labels', () => {
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true, otlp: true })
+    profiler.start()
+
+    assert.strictEqual(profiler.capture(true), captured0)
+
+    sinon.assert.calledOnceWithExactly(pprof.time.stopAndCapture, true, sinon.match({ samplePerContext: true }))
+    assert.strictEqual(profiler.isStarted(), true)
+    const { generateLabels } = pprof.time.stopAndCapture.firstCall.args[1]
+    // Semantic-convention attributes and Datadog execution context labels, and no end_timestamp_ns: the time is the
+    // sample's timestamp
+    const threadLabels = {
+      'thread.name': 'Main Event Loop',
+      'thread.id': 0,
+      'process.context.label.datadog.os_thread_id': require('@datadog/pprof').getNativeThreadId().toString(),
+    }
+    assert.deepStrictEqual(generateLabels({ node: {}, context: undefined }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, asyncId: 7 } }), threadLabels)
+    assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
+      'thread.name': 'Non-JS threads',
+    })
+
+    profiler.capture(false)
+    assert.strictEqual(profiler.isStarted(), false)
   })
 
   it('should capture pprof profiles with pprof labels', () => {

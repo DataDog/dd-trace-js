@@ -685,11 +685,18 @@ class Config extends ConfigBase {
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
-      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
-      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
-      if (profilingExporters.length === 0) {
-        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      // With OTLP, profiles go to the OTLP profiles endpoint instead of the agent.
+      if (this.OTEL_PROFILES_EXPORTER !== 'otlp') {
+        const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+        setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+        if (profilingExporters.length === 0) {
+          setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+        }
       }
+    }
+
+    if (this.OTEL_PROFILES_EXPORTER === 'none' && !trackedConfigOrigins.has('profiling.DD_PROFILING_ENABLED')) {
+      setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
     }
 
     if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
@@ -843,6 +850,11 @@ class Config extends ConfigBase {
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
+    }
+    if (this.OTEL_PROFILES_EXPORTER === 'otlp' && !this.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT) {
+      // The OTLP specification's path for the profiles signal while it is in development
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT', `${defaultOtlpBase}/v1development/profiles`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_PROFILES_HEADERS')
     }
 
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? false)
