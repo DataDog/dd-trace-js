@@ -167,10 +167,9 @@ class AgentlessConfigurationSource {
     headers['Accept-Encoding'] = 'gzip'
     let endpoint = this.#config.endpoint
     const supportsDependentFlags = getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)
-    if (supportsDependentFlags || endpoint.searchParams.has(DEPENDENT_FLAG_CAPABILITY_PARAMETER)) {
+    if (supportsDependentFlags) {
       endpoint = new URL(endpoint)
-      endpoint.searchParams.delete(DEPENDENT_FLAG_CAPABILITY_PARAMETER)
-      if (supportsDependentFlags) endpoint.searchParams.set(DEPENDENT_FLAG_CAPABILITY_PARAMETER, 'v1')
+      endpoint.searchParams.set(DEPENDENT_FLAG_CAPABILITY_PARAMETER, 'v1')
     }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     // The CDN uses this header to attribute the usage of this request to the service.

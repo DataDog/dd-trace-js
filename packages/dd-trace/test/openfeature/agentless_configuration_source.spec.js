@@ -154,8 +154,6 @@ describe('AgentlessConfigurationSource', () => {
     it(`gates initial and conditional capability parameters for ${JSON.stringify(capabilities)}`, async () => {
       getEvaluatorCapabilities.returns(capabilities)
       config.endpoint.searchParams.set('token', 'preserved')
-      config.endpoint.searchParams.append('cap_dependent-flags-variant-key', 'stale')
-      config.endpoint.searchParams.append('cap_dependent-flags-variant-key', 'v2')
       responses.push(
         { statusCode: 200, headers: { etag: '"v1"' }, body: responseBody() },
         { statusCode: 304 }
