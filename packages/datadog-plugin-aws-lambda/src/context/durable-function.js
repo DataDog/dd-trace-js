@@ -40,7 +40,7 @@ function extractDurableExecutionStatus (event, result) {
  * @returns {{ executionName: string, executionId: string }|undefined}
  */
 function parseDurableExecutionArn (arn) {
-  const match = arn.match(/\/durable-execution\/([^/]+)\/([^/]+)$/)
+  const match = /\/durable-execution\/([^/]+)\/([^/]+)$/.exec(arn)
   if (match) return { executionName: match[1], executionId: match[2] }
 }
 
