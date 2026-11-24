@@ -29,8 +29,10 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 let activeBufferSize = 0
 
 /**
- * @typedef {Omit<import('node:http').RequestOptions, 'agent'> & {
+ * @typedef {Omit<import('node:http').RequestOptions, 'agent'|'timeout'> & {
  *   agent?: import('node:http').Agent|false,
+ *   timeout?: number|false,
+ *   responseType?: 'text'|'none',
  *   url?: string|URL|object,
  *   retry?: boolean,
  *   deferTimeoutAbort?: boolean,
@@ -46,6 +48,7 @@ let activeBufferSize = 0
  */
 function prepareRequestOptions (options, contentLength) {
   const connectionOptions = { ...options }
+  if (options.timeout === false) connectionOptions.timeout = 0
 
   if (options.url) {
     const url = parseUrl(options.url)
@@ -125,7 +128,7 @@ function request (data, options, callback) {
   }
 
   // The timeout should be kept low to avoid excessive queueing.
-  const timeout = options.timeout || 2000
+  const timeout = options.timeout === false ? 0 : options.timeout || 2000
   const dataArray = Array.isArray(data) ? data : [data]
   const contentLength = byteLength(dataArray)
   let connectionOptions
@@ -146,8 +149,6 @@ function request (data, options, callback) {
   const onResponse = (res, complete, handleError) => {
     markEndpointReached(connectionOptions)
 
-    const chunks = []
-
     res.setTimeout(timeout)
 
     res.once('aborted', () => {
@@ -160,6 +161,21 @@ function request (data, options, callback) {
       handleError(error)
     })
 
+    if (options.responseType === 'none') {
+      // Status-only intakes can complete on headers without buffering a body or exposing a query-string API key.
+      res.resume()
+      const status = res.statusCode
+      if (status >= 200 && status <= 299) {
+        complete(null, '', status, res.headers)
+      } else {
+        const error = new log.NoTransmitError(`HTTP error code: ${status}`)
+        error.status = status
+        complete(error, null, status, res.headers)
+      }
+      return
+    }
+
+    const chunks = []
     res.on('data', chunk => {
       chunks.push(chunk)
     })

@@ -11,15 +11,15 @@ const log = require('../../../dd-trace/src/log')
 const { LambdaDogStatsD } = require('../../src/metrics/dogstatsd')
 
 describe('Lambda DogStatsD source contracts', () => {
-  let clock, socket, callbacks, debug
+  let clock, socket, callbacks, errorLog
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     callbacks = []
     socket = new EventEmitter()
-    socket.send = sinon.spy((message, port, host, callback) => callbacks.push(callback))
+    socket.send = sinon.spy((...args) => callbacks.push(args.at(-1)))
     socket.unref = sinon.spy()
     sinon.stub(dgram, 'createSocket').returns(socket)
-    debug = sinon.stub(log, 'debug')
+    errorLog = sinon.stub(log, 'error')
   })
   afterEach(() => sinon.restore())
 
@@ -35,7 +35,8 @@ describe('Lambda DogStatsD source contracts', () => {
     it(`sends exact distribution packet ${JSON.stringify(packet)}`, async () => {
       const client = new LambdaDogStatsD()
       client.distribution('metric', value, timestamp, tags)
-      sinon.assert.calledOnceWithExactly(socket.send, Buffer.from(packet), 8125, '127.0.0.1', sinon.match.func)
+      const message = Buffer.from(packet + '\n')
+      sinon.assert.calledOnceWithExactly(socket.send, message, 0, message.length, 8125, '127.0.0.1', sinon.match.func)
       callbacks[0]()
       await client.flush()
     })
@@ -50,11 +51,12 @@ describe('Lambda DogStatsD source contracts', () => {
     })
   }
 
-  it('unrefs the UDP4 socket', () => {
+  it('uses the shared client and unrefs its sockets', () => {
     const client = new LambdaDogStatsD()
     assert.ok(client)
-    sinon.assert.calledOnceWithExactly(dgram.createSocket, 'udp4')
-    sinon.assert.calledOnce(socket.unref)
+    sinon.assert.calledWithExactly(dgram.createSocket, 'udp4')
+    sinon.assert.calledWithExactly(dgram.createSocket, 'udp6')
+    sinon.assert.calledTwice(socket.unref)
   })
 
   it('immediately resolves idle flushes without allocating timers', async () => {
@@ -112,7 +114,7 @@ describe('Lambda DogStatsD source contracts', () => {
     const flush = client.flush()
     callbacks[0](new Error('callback failure'))
     await flush
-    sinon.assert.calledWithExactly(debug, 'Unable to send metric packet: %s', 'callback failure')
+    sinon.assert.calledWithExactly(errorLog, 'DogStatsDClient: UDP error', sinon.match({ message: 'callback failure' }))
     assert.strictEqual(clock.countTimers(), 0)
   })
 
@@ -123,8 +125,7 @@ describe('Lambda DogStatsD source contracts', () => {
       const client = new LambdaDogStatsD()
       client.distribution('metric', 1)
       await client.flush()
-      sinon.assert.calledWithExactly(debug, 'Unable to send metric packet: %s',
-        error instanceof Error ? error.message : 'Unknown socket send failure')
+      sinon.assert.calledWithExactly(errorLog, 'DogStatsDClient: UDP error sending metrics', error)
       assert.strictEqual(clock.countTimers(), 0)
     })
   }
@@ -148,7 +149,6 @@ describe('Lambda DogStatsD source contracts', () => {
     sinon.assert.notCalled(done)
     await clock.tickAsync(1)
     await oldFlush
-    sinon.assert.calledWithExactly(debug, 'Timed out before sending all metric payloads')
     client.distribution('new', 2)
     const nextDone = sinon.spy()
     const newFlush = client.flush().then(nextDone)

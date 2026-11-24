@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { EventEmitter } = require('node:events')
 const { stringify } = require('node:querystring')
 const { deflateSync } = require('node:zlib')
 
@@ -10,7 +9,6 @@ const nock = require('nock')
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
-const log = require('../../../dd-trace/src/log')
 const { APIClient } = require('../../src/metrics/api')
 
 const baseUrl = 'https://www.example.com'
@@ -56,25 +54,20 @@ describe('Lambda metrics direct API source contracts', () => {
     scope.done()
   })
 
-  it('does not impose a timeout or transport retries on the source request', async () => {
-    const debug = sinon.stub(log, 'debug')
-    const response = new EventEmitter()
-    response.statusCode = 202
-    response.resume = sinon.spy()
-    const req = new EventEmitter()
-    req.write = sinon.spy()
-    req.end = sinon.spy()
-    const request = sinon.stub().returns(req)
-    const Client = proxyquire('../../src/metrics/api', { 'node:https': { request } }).APIClient
-    const pending = new Client('key', baseUrl).sendMetrics(metrics)
-    const [options, callback] = request.firstCall.args
-    assert.strictEqual(options.timeout, undefined)
-    callback(response)
-    await pending
-    sinon.assert.calledOnce(response.resume)
-    sinon.assert.calledOnceWithExactly(req.write, deflateSync(Buffer.from(JSON.stringify({ series: metrics }))))
-    sinon.assert.calledOnce(req.end)
-    response.emit('error', new Error('body failed after headers'))
-    sinon.assert.calledWithExactly(debug, 'Unable to read Lambda metric response: %s', 'body failed after headers')
+  it('uses shared HTTP delivery with source completion/timeout and processor-owned retries', async () => {
+    const request = sinon.stub().callsFake((body, options, callback) => callback(null, '', 202))
+    const Client = proxyquire('../../src/metrics/api', {
+      '../../../dd-trace/src/exporters/common/request': request,
+    }).APIClient
+    await new Client('key', baseUrl).sendMetrics(metrics)
+    sinon.assert.calledOnceWithExactly(request, deflateSync(Buffer.from(JSON.stringify({ series: metrics }))), {
+      url: `${baseUrl}/api/v1/distribution_points?api_key=key`,
+      method: 'POST',
+      headers: { 'Content-Encoding': 'deflate' },
+      timeout: false,
+      responseType: 'none',
+      retry: false,
+      keepProcessAlive: true,
+    }, sinon.match.func)
   })
 })

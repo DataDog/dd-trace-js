@@ -700,6 +700,51 @@ describe('dogstatsd', () => {
     })
   })
 
+  for (const timestamp of [12345, 0, -1]) {
+    it(`supports internally dated distributions at ${timestamp} seconds`, () => {
+      client = createDogStatsDClient()
+      client.distribution('test.distribution', 2, ['tag:value'], timestamp)
+      client.flush()
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(),
+        `test.distribution:2|d|#tag:value|T${timestamp}\n`)
+    })
+  }
+
+  for (const includeEntityId of [undefined, false]) {
+    it(`keeps entity metadata configurable for internal clients: ${includeEntityId}`, () => {
+      const loadDogstatsd = proxyquire.noCallThru()
+      const { DogStatsDClient: Client } = loadDogstatsd('../src/dogstatsd', {
+        dgram,
+        '../../datadog-core': datadogCore,
+        './log': log,
+        './serverless': { createServerlessDeliveryTracker },
+        './exporters/common/docker': { entityId: 'entity-id' },
+      })
+      const instance = new Client({ host: '127.0.0.1', port: 8125, tags: [], lookup: dns.lookup, includeEntityId })
+      instance.distribution('metric', 1, [], 100)
+      instance.flush()
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), includeEntityId === false
+        ? 'metric:1|d|T100\n'
+        : 'metric:1|d|c:entity-id|T100\n')
+    })
+  }
+
+  it('tracks earlier UDP sends and new sends through a bounded flush', () => {
+    const callbacks = []
+    udp4.send = sinon.spy((...args) => callbacks.push(args.at(-1)))
+    client = createDogStatsDClient({ flushTimeoutMs: 1000 })
+    client.distribution('first', 1)
+    client.flush()
+    const done = sinon.spy()
+    client.flush(done)
+    client.distribution('second', 2)
+    client.flush()
+    callbacks[0]()
+    sinon.assert.notCalled(done)
+    callbacks[1]()
+    sinon.assert.calledOnce(done)
+  })
+
   it('should send gauges', () => {
     client = createDogStatsDClient()
 
