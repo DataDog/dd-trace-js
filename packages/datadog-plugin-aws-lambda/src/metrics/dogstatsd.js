@@ -6,7 +6,7 @@ const log = require('../../../dd-trace/src/log')
 
 const TAG_RE = /[^\w:/.-]/gu
 
-// Core DogStatsD aggregates distributions and has no per-point timestamp/awaited-send contract.
+// Core DogStatsD buffers newline-terminated packets and has no per-point timestamp parameter.
 // Keep the Lambda extension's one-point packets private rather than changing the public tracer client.
 class LambdaDogStatsD {
   static #resolvedFlush = Promise.resolve()
