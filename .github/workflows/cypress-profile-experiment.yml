@@ -1,0 +1,40 @@
+# Temporary experiment: compares Cypress run phases and CPU profiles on Node 18 and Node 26. Not meant to be merged.
+name: Cypress profile experiment
+
+on:
+  push:
+    branches: [rochdev/cypress-node18-profile-experiment]
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, latest]
+    name: cypress profile (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - name: Cache Cypress binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-binary-14.5.4
+      - run: npm run test:integration:cypress
+        env:
+          CYPRESS_VERSION: 14.5.4
+          CYPRESS_MODULE_TYPE: commonJS
+          SPEC: zz-profile-experiment
+          CYPRESS_PROFILE_DIR: ${{ github.workspace }}/cypress-profiles
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: cypress-profiles-node-${{ matrix.version }}
+          path: cypress-profiles
