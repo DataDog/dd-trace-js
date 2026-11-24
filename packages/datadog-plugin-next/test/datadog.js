@@ -15,7 +15,7 @@ const config = {
   },
 }
 
-const tracer = require('../../..').init({
+const tracer = require('dd-trace').init({
   service: 'test',
   flushInterval: 0,
   plugins: false,
