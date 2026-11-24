@@ -262,6 +262,14 @@ function decodeWebdriverioScreenshot (screenshot) {
  * @param {string[]} specs
  * @returns {string|undefined}
  */
+/**
+ * @param {object} [suite] a Mocha suite
+ * @yields {object} the suite and its ancestors
+ */
+function * enclosingSuites (suite) {
+  for (; suite; suite = suite.parent) yield suite
+}
+
 function getJasmineFailureFile (result, specs) {
   const resultFile = normalizeJasmineFile(result?.file || result?.filename)
   if (resultFile) {
@@ -285,6 +293,8 @@ class MochaPlugin extends CiPlugin {
   static id = 'mocha'
 
   #pendingWebdriverioVideos = new Set()
+  /** @type {WeakMap<object, { coverage: object, suite: object }>} line coverage of running tests, by span */
+  #lineCoverageTests = new WeakMap()
   #webdriverioJasmineAnnotations = new Map()
   #webdriverioCapture
   #webdriverioVideoFlushTimer
@@ -295,7 +305,7 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
     if (lineCoverage.isEnabled()) {
-      lineCoverage.enable({ root: this.sourceRoot })
+      lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
     }
     this._webdriverioScreenshotUploads = new WeakMap()
     this._webdriverioVideos = new Map()
@@ -717,6 +727,14 @@ class MochaPlugin extends CiPlugin {
       this._exportPendingWorkerTracesForTestSuite(testSuiteKey)
     })
 
+    this.addSub('ci:mocha:suite-setup:start', ({ suite }) => {
+      if (lineCoverage.isActive()) lineCoverage.startSuiteSetup(suite)
+    })
+
+    this.addSub('ci:mocha:suite-setup:finish', () => {
+      if (lineCoverage.isActive()) lineCoverage.finishSuiteSetup()
+    })
+
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -761,9 +779,11 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test:start', (ctx) => {
-      if (lineCoverage.isActive()) lineCoverage.startTest()
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
+      if (lineCoverage.isActive()) {
+        this.#lineCoverageTests.set(span, { coverage: lineCoverage.startTest(), suite: ctx.suite })
+      }
       const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
       if (!isDisabled || isAttemptToFix) this.#startWebdriverioVideo(span)
 
@@ -1048,6 +1068,7 @@ class MochaPlugin extends CiPlugin {
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
+      if (this.testSessionSpan && lineCoverage.isActive()) this.#exportSharedLineCoverage()
       if (this.testSessionSpan) {
         const {
           isSuitesSkippingEnabled,
@@ -1653,12 +1674,14 @@ class MochaPlugin extends CiPlugin {
     }
   }
 
-  /** @param {object} span - Span owning one WebdriverIO attempt */
   /**
    * @param {import('../../dd-trace/src/opentracing/span')} span the finished test's span
    */
   #exportLineCoverage (span) {
-    const files = lineCoverage.finishTest(this.repositoryRoot || this.sourceRoot)
+    const test = this.#lineCoverageTests.get(span)
+    if (test === undefined) return
+    this.#lineCoverageTests.delete(span)
+    const files = lineCoverage.finishTest(test.coverage, enclosingSuites(test.suite))
     if (files.length === 0) return
     const context = span.context()
     this.tracer._exporter.exportCoverage({
@@ -1669,6 +1692,14 @@ class MochaPlugin extends CiPlugin {
     })
   }
 
+  #exportSharedLineCoverage () {
+    const sessionId = this.testSessionSpan.context()._traceId
+    for (const { shared, files } of lineCoverage.takeShared()) {
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+    }
+  }
+
+  /** @param {object} span - Span owning one WebdriverIO attempt */
   #startWebdriverioVideo (span) {
     if (this.testFramework !== WEBDRIVERIO_FRAMEWORK ||
         !shouldRecordWebdriverioVideos ||
