@@ -4,12 +4,37 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { getPayloadSize } = require('./payload-size')
 
+/**
+ * @typedef {object} BullQueue
+ * @property {string} [name]
+ *
+ * @typedef {object} BullJobOpts
+ * @property {Record<string, string>} [_datadog] Text-map carrier injected by the producer plugin.
+ *
+ * @typedef {object} BullJob
+ * @property {unknown} data
+ * @property {BullJobOpts} [opts]
+ * @property {BullQueue} [queue]
+ *
+ * @typedef {object} BullStore
+ * @property {import('../../dd-trace/src/opentracing/span')} [span]
+ *
+ * @typedef {object} BullProcessJobContext
+ * @property {[BullJob]} arguments
+ * @property {BullQueue} [self]
+ * @property {BullStore} [currentStore]
+ */
+
 const spans = new WeakMap()
 
 class BullProcessJobPlugin extends ConsumerPlugin {
   static id = 'bull'
   static prefix = 'tracing:orchestrion:bull:Queue_processJob'
 
+  /**
+   * @param {BullProcessJobContext} ctx
+   * @returns {BullStore | undefined}
+   */
   bindStart (ctx) {
     const job = ctx.arguments[0]
     if (!job) return ctx.currentStore
@@ -32,6 +57,9 @@ class BullProcessJobPlugin extends ConsumerPlugin {
     return ctx.currentStore
   }
 
+  /**
+   * @param {BullProcessJobContext} ctx
+   */
   start (ctx) {
     const job = ctx.arguments[0]
     const span = ctx.currentStore?.span
@@ -42,6 +70,9 @@ class BullProcessJobPlugin extends ConsumerPlugin {
     this.tracer.setCheckpoint(['direction:in', `topic:${queueName}`, 'type:bull'], span, getPayloadSize(job.data))
   }
 
+  /**
+   * @param {BullProcessJobContext} ctx
+   */
   asyncEnd (ctx) {
     ctx.currentStore?.span?.finish()
   }
