@@ -10,7 +10,7 @@ const { transformAttributes } = require('../opentelemetry/otlp/attributes')
 const { buildResourceAttributes } = require('../opentelemetry/resource-attributes')
 const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
-const { encodeProfileAsync, threadNamePrefix } = require('./profilers/shared')
+const { createOtelLinkExtractor, encodeProfileAsync, threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
@@ -505,6 +505,7 @@ class Profiler extends EventEmitter {
       scope: { name: 'dd-trace-js', version },
       // Only frames for server-side unminification carry their columns, as in pprof uploads
       columns: 'missing-source-maps',
+      extractLink: createOtelLinkExtractor(),
       renameSampleType: renameOtlpSampleType,
     })
   }

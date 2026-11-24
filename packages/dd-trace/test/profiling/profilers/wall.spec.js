@@ -12,6 +12,7 @@ require('../../setup/core')
 const { storage } = require('../../../../datadog-core')
 const { isACFActive } = require('../../../../datadog-core/src/storage')
 const { endpointNameFromTags } = require('../../../src/profiling/webspan-utils')
+const id = require('../../../src/id')
 
 // Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
 // names off the tracer config. Map the legacy flat option names to the (config, runtime)
@@ -256,6 +257,43 @@ describe('profilers/native/wall', () => {
     assert.deepStrictEqual(generateLabels({ node: { name: 'Non JS threads activity' } }), {
       'thread.name': 'Non-JS threads',
     })
+    // A span's IDs, for the sample's link. The trace ID is its lower 64 bits' identifier and the hex of its upper 64
+    // bits, as span contexts have them.
+    const ref = {
+      spanId: 42n,
+      rootSpanId: 41n,
+      traceIdLow: id('00000000000000ff', 16),
+      traceIdHigh: '0123456789abcdef',
+    }
+    assert.deepStrictEqual(generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref } } }), {
+      ...threadLabels,
+      'span id': 42n,
+      'trace id': 0x0123456789abcdef00000000000000ffn,
+    })
+    // Made once for the span's samples
+    assert.strictEqual(ref.traceId, 0x0123456789abcdef00000000000000ffn)
+    const traceIdOf = (traceIdLow, traceIdHigh) => {
+      const labels = generateLabels({
+        node: {},
+        context: { timestamp: 1234n, context: { ref: { spanId: 42n, traceIdLow, traceIdHigh } } },
+      })
+      return labels['trace id']
+    }
+    // A 64-bit trace ID, without upper bits
+    assert.strictEqual(traceIdOf(id('00000000000000ff', 16), undefined), 0xffn)
+    // A 128-bit identifier has its upper bits itself
+    assert.strictEqual(
+      traceIdOf(id('0123456789abcdef00000000000000ff', 16), 'ffffffffffffffff'),
+      0x0123456789abcdef00000000000000ffn
+    )
+    // Upper bits that aren't 64 bits of hex are left out, rather than throw
+    assert.strictEqual(traceIdOf(id('00000000000000ff', 16), 'not hex'), 0xffn)
+    // Without a trace ID there is no link to make
+    const refWithoutTrace = { spanId: 42n, rootSpanId: 41n }
+    assert.deepStrictEqual(
+      generateLabels({ node: {}, context: { timestamp: 1234n, context: { ref: refWithoutTrace } } }),
+      threadLabels
+    )
 
     profiler.capture(false)
     assert.strictEqual(profiler.isStarted(), false)

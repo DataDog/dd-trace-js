@@ -8,6 +8,9 @@ const OS_THREAD_ID_LABEL = 'os thread id'
 const THREAD_ID_LABEL = 'thread id'
 const SPAN_ID_LABEL = 'span id'
 const LOCAL_ROOT_SPAN_ID_LABEL = 'local root span id'
+// Carries a span's 128-bit trace ID in OTLP sample labels, until createOtelLinkExtractor() turns it and the span ID
+// into the sample's link
+const TRACE_ID_LABEL = 'trace id'
 
 // Semantic-convention attributes of OTLP thread labels. thread.id is the managed thread ID: the worker's threadId.
 const OTEL_THREAD_NAME = 'thread.name'
@@ -60,6 +63,44 @@ function getNonJSThreadsOtelLabels () {
   return nonJSThreadsOtelLabels
 }
 
+/**
+ * Returns a link extractor for an OTLP profiles builder: it turns a sample's span ID and trace ID labels into the
+ * sample's link, and removes them from the labels. Links are cached, as the samples of a span share one.
+ */
+function createOtelLinkExtractor () {
+  const links = new Map()
+  /** @param {Array<[string, string | number | bigint]>} labels */
+  return labels => {
+    let spanId
+    let traceId
+    const otherLabels = []
+    for (const label of labels) {
+      if (label[0] === SPAN_ID_LABEL) {
+        spanId = label[1]
+      } else if (label[0] === TRACE_ID_LABEL) {
+        traceId = label[1]
+      } else {
+        otherLabels.push(label)
+      }
+    }
+    if (typeof spanId !== 'bigint' || typeof traceId !== 'bigint') {
+      return { labels: otherLabels }
+    }
+    // A span ID tells the span, and so its trace, apart, so it's the key on its own
+    let link = links.get(spanId)
+    if (link === undefined) {
+      const traceIdBytes = Buffer.alloc(16)
+      traceIdBytes.writeBigUInt64BE(BigInt.asUintN(64, traceId >> 64n), 0)
+      traceIdBytes.writeBigUInt64BE(BigInt.asUintN(64, traceId), 8)
+      const spanIdBytes = Buffer.alloc(8)
+      spanIdBytes.writeBigUInt64BE(BigInt.asUintN(64, spanId))
+      link = { traceId: traceIdBytes, spanId: spanIdBytes }
+      links.set(spanId, link)
+    }
+    return { link, labels: otherLabels }
+  }
+}
+
 function getNonJSThreadsLabels () {
   return { [THREAD_NAME_LABEL]: 'Non-JS threads', [THREAD_ID_LABEL]: 'NA', [OS_THREAD_ID_LABEL]: 'NA' }
 }
@@ -75,11 +116,13 @@ module.exports = {
   OS_THREAD_ID_LABEL,
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
+  TRACE_ID_LABEL,
   threadNamePrefix,
   eventLoopThreadName,
   getNonJSThreadsLabels,
   getNonJSThreadsOtelLabels,
   getThreadLabels: cacheThreadLabels(),
   getOtelThreadLabels: cacheOtelThreadLabels(),
+  createOtelLinkExtractor,
   encodeProfileAsync,
 }
