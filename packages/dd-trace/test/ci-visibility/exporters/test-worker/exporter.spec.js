@@ -171,15 +171,20 @@ describe('CI Visibility Test Worker Exporter', () => {
       delete process.env.CUCUMBER_WORKER_ID
     })
 
-    it('can export traces', () => {
-      const trace = [{ type: 'test' }]
-      const traceSecond = [{ type: 'test', name: 'other' }]
+    it('batches traces with exact string identifiers until flush', () => {
+      const trace = [makeSpan('test', 'first')]
+      trace[0].span_id = id('fedcba9876543210')
+      trace[0].parent_id = id('abcdef0987654321')
+      const traceSecond = [makeSpan('test', 'other')]
       const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
       cucumberWorkerExporter.export(trace)
       cucumberWorkerExporter.export(traceSecond)
       sinon.assert.notCalled(send)
       cucumberWorkerExporter.flush()
-      sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], [
+        CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.parse(JSON.stringify([trace, traceSecond])),
+      ])
     })
 
     it('can export telemetry', () => {
@@ -202,7 +207,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
       const onDone = sinon.spy()
 
-      cucumberWorkerExporter.export([{ type: 'test' }])
+      cucumberWorkerExporter.export([makeSpan()])
       cucumberWorkerExporter.flush(onDone)
 
       assert.strictEqual(callbacks.length, 1)
@@ -212,7 +217,7 @@ describe('CI Visibility Test Worker Exporter', () => {
 
     it('does not break if process.send is undefined', () => {
       delete process.send
-      const trace = [{ type: 'test' }]
+      const trace = [makeSpan()]
       const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
       cucumberWorkerExporter.export(trace)
       cucumberWorkerExporter.flush()

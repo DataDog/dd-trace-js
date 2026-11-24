@@ -100,7 +100,8 @@ class TestWorkerCiVisibilityExporter {
 
     this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
     const useObjectEncoder = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE ||
-      interprocessTraceCode === JEST_WORKER_TRACE_PAYLOAD_CODE
+      interprocessTraceCode === JEST_WORKER_TRACE_PAYLOAD_CODE ||
+      interprocessTraceCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
     const traceEncoder = useObjectEncoder
       ? new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
       : undefined

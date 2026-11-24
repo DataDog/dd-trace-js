@@ -236,6 +236,34 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
+  it('round-trips trace, span, and parent IDs from a parallel worker', async () => {
+    const transport = version === 'latest' || Number.parseInt(version, 10) >= 13 ? 'thread' : 'fork'
+    childProcess = exec(
+      './node_modules/.bin/cucumber-js ci-visibility/cucumber-worker-ids/ids.feature' +
+      ' --require ci-visibility/cucumber-worker-ids/steps.js --parallel 2',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+          DD_INJECT_FORCE: 'true',
+        },
+      }
+    )
+    await receiver.gatherPayloadsUntilChildExit(childProcess, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+      const spans = payloads.flatMap(({ payload }) => payload.events)
+        .filter(({ type, content }) => type === 'span' && content.name === 'cucumber.worker.ids')
+      assert.strictEqual(spans.length, 1)
+      const { content: span } = spans[0]
+      assert.strictEqual(span.meta['ipc.transport'], transport)
+      assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+      assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+      assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+      assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+    })
+    assert.strictEqual(childProcess.exitCode, 0)
+  })
+
   for (const dynamic of [false, true]) {
     for (const parallel of [false, true]) {
       // Cucumber only exposes native retry attempt boundaries from version 8.
