@@ -16,6 +16,7 @@ const FIRST_RETRY_MAX_MS = 10_000
 const SECOND_RETRY_MIN_MS = 5000
 const SECOND_RETRY_MAX_MS = 30_000
 const RETRY_JITTER = 0.2
+const DEPENDENT_FLAG_CAPABILITY_PARAMETER = 'cap_dependent-flags-variant-key'
 const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuration poll failed (%s); ' +
   'no configuration has been applied yet, so flag evaluations return their default values'
 
@@ -165,9 +166,11 @@ class AgentlessConfigurationSource {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
     let endpoint = this.#config.endpoint
-    if (getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)) {
+    const supportsDependentFlags = getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)
+    if (supportsDependentFlags || endpoint.searchParams.has(DEPENDENT_FLAG_CAPABILITY_PARAMETER)) {
       endpoint = new URL(endpoint)
-      endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
+      endpoint.searchParams.delete(DEPENDENT_FLAG_CAPABILITY_PARAMETER)
+      if (supportsDependentFlags) endpoint.searchParams.set(DEPENDENT_FLAG_CAPABILITY_PARAMETER, 'v1')
     }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     // The CDN uses this header to attribute the usage of this request to the service.

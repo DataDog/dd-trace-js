@@ -220,8 +220,11 @@ describe('OpenFeature Remote Config', () => {
     })
 
     it('should not advertise capability or register a handler without Remote Config delivery', () => {
+      getEvaluatorCapabilities.returns(['dependent-flag-variant-key-v1'])
+
       enable(rc, getOpenfeatureProxy, false)
 
+      sinon.assert.notCalled(getEvaluatorCapabilities)
       sinon.assert.notCalled(rc.updateCapabilities)
       sinon.assert.notCalled(rc.setProductHandler)
     })
