@@ -11,6 +11,7 @@ if (process.env.PLAYWRIGHT_PROJECT_NAME) {
 if (process.env.PLAYWRIGHT_NATIVE_PROJECT_FIRST) projects.reverse()
 
 module.exports = {
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR,
   testDir: './playwright-dynamic-atr',
   testMatch: '**/*-test.js',
   projects,

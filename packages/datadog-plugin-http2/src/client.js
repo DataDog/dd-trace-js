@@ -15,7 +15,7 @@ const {
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
-const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -197,6 +197,7 @@ function normalizeConfig (config) {
 
   return {
     ...config,
+    queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
     validateStatus,
     filter,
     headers,

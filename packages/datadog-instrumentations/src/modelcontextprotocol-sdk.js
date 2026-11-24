@@ -49,6 +49,30 @@ function finishServerRequest (protocol, requestId) {
   serverRequestCh.asyncEnd.publish(ctx)
 }
 
+/**
+ * Plugins can replace the request a handler gets and the result the SDK sends. A failing transform keeps the result.
+ *
+ * @param {{ request: object, transformResult?: (result: unknown) => unknown }} ctx
+ * @param {Function} handler
+ * @param {object} thisArg
+ * @param {unknown[]} args
+ */
+function callRequestHandler (ctx, handler, thisArg, args) {
+  const result = args[0] === ctx.request
+    ? handler.apply(thisArg, args)
+    : handler.call(thisArg, ctx.request, ...Array.prototype.slice.call(args, 1))
+  const { transformResult } = ctx
+  if (!transformResult) return result
+
+  return Promise.resolve(result).then(value => {
+    try {
+      return transformResult(value)
+    } catch {
+      return value
+    }
+  })
+}
+
 function wrapRequestHandler (protocol, handler) {
   if (wrappedRequestHandlers.has(handler)) return handler
 
@@ -58,7 +82,7 @@ function wrapRequestHandler (protocol, handler) {
 
     let result
     try {
-      result = handler.apply(this, arguments)
+      result = callRequestHandler(ctx, handler, this, arguments)
     } catch (err) {
       ctx.error = err
       throw err
@@ -256,3 +280,5 @@ addHook({
   wrapMcpServer(exports.McpServer)
   return exports
 })
+
+module.exports = { addTraceContextToRequest, callRequestHandler }

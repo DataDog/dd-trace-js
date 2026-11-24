@@ -6,7 +6,6 @@ const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
   applyHttpOtelSemantics,
-  decomposeServerUrl,
   otelHttpResourceName,
 } = require('../../../src/plugins/util/http-otel-semantics')
 
@@ -37,67 +36,38 @@ describe('http-otel-semantics', () => {
     }
   })
 
-  describe('decomposeServerUrl', () => {
-    it('splits scheme, address, port, path, and query', () => {
-      assert.deepStrictEqual(
-        decomposeServerUrl('http://localhost:8200/a/b?demo=1', 'http://localhost:8200/a/b?demo=1'),
-        { scheme: 'http', address: 'localhost', port: 8200, path: '/a/b', query: 'demo=1' }
-      )
-    })
-
-    it('populates implicit scheme-default ports', () => {
-      assert.strictEqual(decomposeServerUrl('http://example.com/p', '').port, 80)
-      assert.strictEqual(decomposeServerUrl('https://example.com/p', '').port, 443)
-    })
-
-    it('populates explicit scheme-default ports', () => {
-      assert.strictEqual(decomposeServerUrl('http://example.com:80/p', '').port, 80)
-      assert.strictEqual(decomposeServerUrl('https://example.com:443/p', '').port, 443)
-    })
-
-    it('keeps an explicit non-default port and omits an absent query', () => {
-      const parts = decomposeServerUrl('http://h:8080/', 'http://h:8080/')
-      assert.strictEqual(parts.path, '/')
-      assert.strictEqual(parts.port, 8080)
-      assert.strictEqual(parts.query, undefined)
-    })
-
-    it('takes the query from the obfuscated URL so redaction is preserved', () => {
-      const parts = decomposeServerUrl('http://h/x?secret=1', 'http://h/x?<redacted>')
-      assert.strictEqual(parts.query, '<redacted>')
-    })
-
-    it('strips brackets from an IPv6 server.address and populates its default port', () => {
-      const parts = decomposeServerUrl('http://[::1]/p', 'http://[::1]/p')
-      assert.strictEqual(parts.address, '::1')
-      assert.strictEqual(parts.port, 80)
-    })
-
-    it('omits port 0', () => {
-      assert.strictEqual(decomposeServerUrl('http://example.com:0/p', '').port, undefined)
-    })
-
-    it('omits server.address and server.port when the Host header is absent', () => {
-      // extractURL builds `http://undefined/...` when req.headers.host is missing.
-      const parts = decomposeServerUrl('http://undefined/p', 'http://undefined/p')
-      assert.strictEqual(parts.address, undefined)
-      assert.strictEqual(parts.port, undefined)
-      assert.strictEqual(parts.path, '/p')
-    })
-
-    it('falls back to the root path for a malformed URL while still reading its query', () => {
-      assert.deepStrictEqual(
-        decomposeServerUrl('not-a-valid-url?x=1', 'not-a-valid-url?x=1'),
-        { scheme: undefined, address: undefined, port: undefined, path: '/', query: 'x=1' }
-      )
-    })
-  })
-
   describe('applyHttpOtelSemantics', () => {
     const run = (meta, metrics = {}, error = 0) => {
       const span = { meta, metrics, error }
       applyHttpOtelSemantics(span)
       return span
+    }
+
+    for (const [url, expectedMeta, expectedMetrics] of [
+      ['http://localhost:8200/a/b?demo=1', {
+        'url.scheme': 'http', 'server.address': 'localhost', 'url.path': '/a/b', 'url.query': 'demo=1',
+      }, { 'server.port': 8200 }],
+      ['http://h/p', { 'url.scheme': 'http', 'server.address': 'h', 'url.path': '/p' }, { 'server.port': 80 }],
+      ['https://h/p', { 'url.scheme': 'https', 'server.address': 'h', 'url.path': '/p' }, { 'server.port': 443 }],
+      ['http://h:80/p', { 'url.scheme': 'http', 'server.address': 'h', 'url.path': '/p' }, { 'server.port': 80 }],
+      ['https://h:443/p', { 'url.scheme': 'https', 'server.address': 'h', 'url.path': '/p' }, { 'server.port': 443 }],
+      ['http://h:8080/', { 'url.scheme': 'http', 'server.address': 'h', 'url.path': '/' }, { 'server.port': 8080 }],
+      ['http://h/x?<redacted>', {
+        'url.scheme': 'http', 'server.address': 'h', 'url.path': '/x', 'url.query': '<redacted>',
+      }, { 'server.port': 80 }],
+      ['http://[::1]/p', { 'url.scheme': 'http', 'server.address': '::1', 'url.path': '/p' }, { 'server.port': 80 }],
+      ['http://h:0/p', { 'url.scheme': 'http', 'server.address': 'h', 'url.path': '/p' }, {}],
+      ['http://undefined/p', { 'url.scheme': 'http', 'url.path': '/p' }, {}],
+      ['http://h/p?', { 'url.scheme': 'http', 'server.address': 'h', 'url.path': '/p' }, { 'server.port': 80 }],
+      ['not-a-valid-url?x=1', { 'url.path': '/', 'url.query': 'x=1' }, {}],
+      ['/p?x=1', { 'url.path': '/p', 'url.query': 'x=1' }, {}],
+    ]) {
+      it(`decomposes the server URL ${url} in the formatted span`, () => {
+        const { meta, metrics } = run({ 'span.kind': 'server', 'http.url': url })
+
+        assert.deepStrictEqual(meta, { 'span.kind': 'server', ...expectedMeta })
+        assert.deepStrictEqual(metrics, expectedMetrics)
+      })
     }
 
     it('renames client attributes and removes the Datadog ones', () => {

@@ -52,7 +52,7 @@ const REPOSITORY_METADATA_KEYS = [
 
 const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
-const { getUserProviderGitMetadata } = require('./util/user-provided-git')
+const { getUserProviderGitMetadata, validateGitCommitSha } = require('./util/user-provided-git')
 const {
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -86,6 +86,7 @@ const {
   TEST_SUITE_EXECUTION_ID,
   getTestSuiteExecutionKey,
   getFileAndLineNumberFromError,
+  getNonDependencyStackFramesFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
@@ -115,8 +116,18 @@ const {
 
 const legacyStorage = storage('legacy')
 const DI_OPERATION_TIMEOUT_MS = 2000
+const DI_STACK_FRAMES_TO_COMPARE = 2
+const DI_CALLER_FRAME_LINE_TOLERANCE = 2
 const DI_LOGGER_THREAD_ID = threadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${threadId}`
 const DI_LOGGER_THREAD_NAME = threadId === 0 ? 'MainThread' : `WorkerThread:${threadId}`
+
+const DI_SNAPSHOT_DEPENDENCY_FOLDERS = [
+  'node_modules',
+  'node:',
+  '.pnpm',
+  '.yarn',
+  '.pnp',
+]
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -200,6 +211,32 @@ function disableTestImpactAnalysis (libraryConfig) {
   })
 }
 
+function normalizeSnapshotFileName (fileName) {
+  return fileName.startsWith('file://') ? fileName.slice('file://'.length) : fileName
+}
+
+function getNonDependencySnapshotStackFrames (snapshot, repositoryRoot) {
+  if (!snapshot.stack) {
+    return []
+  }
+
+  const frames = []
+  for (const frame of snapshot.stack) {
+    if (!frame || typeof frame.fileName !== 'string' || !Number.isInteger(frame.lineNumber)) {
+      continue
+    }
+
+    const file = normalizeSnapshotFileName(frame.fileName)
+    if (!file.includes(repositoryRoot) || DI_SNAPSHOT_DEPENDENCY_FOLDERS.some(pattern => file.includes(pattern))) {
+      continue
+    }
+
+    frames.push({ file, line: frame.lineNumber })
+  }
+
+  return frames
+}
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -207,6 +244,8 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.diBreakpointHitPromise = undefined
     this.diBreakpointHitResolvers = []
+    this.diBreakpointHitSpans = []
+    this.testErrorStackFrames = []
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
     this._pendingWorkerTracesByTestSuite = new Map()
@@ -444,8 +483,9 @@ module.exports = class CiPlugin extends Plugin {
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
         [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
       } = diffMetadata
+      const commitSha = this.testEnvironmentMetadata[GIT_COMMIT_SHA]
       const targetCommit = commitHeadSha ||
-        (isCustomCheckout ? this.testEnvironmentMetadata[GIT_COMMIT_SHA] : undefined)
+        (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
 
       const baseBranchSha = pullRequestBaseBranchSha ||
         getPullRequestBaseBranch(pullRequestBaseBranch, this.repositoryRoot)
@@ -855,7 +895,8 @@ module.exports = class CiPlugin extends Plugin {
 
     this.testConfiguration = {
       repositoryUrl,
-      sha,
+      // The `git.commit.sha` tag reports malformed values as provided, but they must not select backend data.
+      sha: validateGitCommitSha(sha) ? sha : undefined,
       gitRoot: this.repositoryRoot,
       osVersion,
       osPlatform,
@@ -954,34 +995,44 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    if (this.filterDiBreakpointHitByStack && !this.#isExpectedDiBreakpointHit(snapshot)) {
+      log.debug('Ignoring Dynamic Instrumentation snapshot because it does not match the failed test stack')
+      return
+    }
+
     for (const resolve of this.diBreakpointHitResolvers) {
       resolve()
     }
     this.diBreakpointHitResolvers.length = 0
 
-    if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
+    while (this.diBreakpointHitSpans[0]?.context()._isFinished) {
+      this.diBreakpointHitSpans.shift()
+    }
+    const testSpan = this.diBreakpointHitSpans.shift() || this.activeTestSpan
+
+    if (!testSpan || testSpan.context()._isFinished) {
       // This is unexpected and is caused by a race condition.
       log.warn('Breakpoint snapshot could not be attached to the active test span')
       return
     }
 
     const stackIndex = this.testErrorStackIndex
+    const activeTestSpanContext = testSpan.context()
 
-    this.activeTestSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
-    this.activeTestSpan.setTag(
+    testSpan.setTag(DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+    testSpan.setTag(
       `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`,
       snapshot.id
     )
-    this.activeTestSpan.setTag(
+    testSpan.setTag(
       `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_FILE_SUFFIX}`,
       snapshot.probe.location.file
     )
-    this.activeTestSpan.setTag(
+    testSpan.setTag(
       `${DI_DEBUG_ERROR_PREFIX}.${stackIndex}.${DI_DEBUG_ERROR_LINE_SUFFIX}`,
       Number(snapshot.probe.location.lines[0])
     )
 
-    const activeTestSpanContext = this.activeTestSpan.context()
     const topStackFrame = snapshot.stack?.[0]
 
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
@@ -999,6 +1050,39 @@ module.exports = class CiPlugin extends Plugin {
         span_id: activeTestSpanContext.toSpanId(),
       },
     })
+  }
+
+  #isExpectedDiBreakpointHit (snapshot) {
+    const failureFrames = this.testErrorStackFrames
+    if (failureFrames.length < DI_STACK_FRAMES_TO_COMPARE) {
+      return true
+    }
+
+    const snapshotFrames = getNonDependencySnapshotStackFrames(snapshot, this.repositoryRoot)
+    if (snapshotFrames.length < DI_STACK_FRAMES_TO_COMPARE) {
+      return true
+    }
+
+    for (let i = 0; i < DI_STACK_FRAMES_TO_COMPARE; i++) {
+      const expectedFrame = failureFrames[i]
+      const snapshotFrame = snapshotFrames[i]
+
+      if (expectedFrame.file !== snapshotFrame.file) {
+        return false
+      }
+
+      if (i === 0 && expectedFrame.line !== snapshotFrame.line) {
+        return false
+      }
+
+      // Vite can report a slightly shifted caller line in debugger snapshots compared to error stacks.
+      // Keep the probe frame exact and only tolerate a small caller-frame offset.
+      if (i > 0 && Math.abs(expectedFrame.line - snapshotFrame.line) > DI_CALLER_FRAME_LINE_TOLERANCE) {
+        return false
+      }
+    }
+
+    return true
   }
 
   /**
@@ -1019,6 +1103,16 @@ module.exports = class CiPlugin extends Plugin {
       resolve()
     }
     this.diBreakpointHitResolvers.length = 0
+    this.diBreakpointHitSpans.length = 0
+  }
+
+  /**
+   * Queue the test span expected to receive the next Dynamic Instrumentation breakpoint hit.
+   *
+   * @param {import('../../../datadog-core/src/opentracing/span')} span
+   */
+  queueDiBreakpointHitSpan (span) {
+    this.diBreakpointHitSpans.push(span)
   }
 
   /**
@@ -1134,6 +1228,7 @@ module.exports = class CiPlugin extends Plugin {
     log.debug('Adding breakpoint for Dynamic Instrumentation')
 
     this.testErrorStackIndex = stackIndex
+    this.testErrorStackFrames = getNonDependencyStackFramesFromError(err, this.repositoryRoot)
     const activeProbeKey = `${file}:${line}`
 
     if (this.fileLineToProbeId.has(activeProbeKey)) {

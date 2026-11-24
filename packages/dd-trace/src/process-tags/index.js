@@ -72,7 +72,7 @@ function buildProcessTags (config) {
 // Singleton with constant defaults so pre-init reads don't blow up
 const processTags = module.exports = {
   /**
-   * @param {import('../config/config-base')} config
+   * @param {import('../config/config-base')} [config]
    */
   initialize (config) {
     // check if one of the properties added during build exist and if so return

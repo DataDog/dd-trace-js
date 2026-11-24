@@ -116,6 +116,26 @@ const SchemaBuilder = lazyClass(() => require('./schemas/schema_builder').Schema
   'getSchema',
 ])
 
+let http
+
+/** @type {typeof import('./http').setHttpClientCheckpoint} */
+function setHttpClientCheckpoint (tracer, span, parentContext, headers) {
+  http ??= require('./http')
+  return http.setHttpClientCheckpoint(tracer, span, parentContext, headers)
+}
+
+/** @type {typeof import('./http').isAwsSdkRequest} */
+function isAwsSdkRequest (parentSpan, invocationId) {
+  http ??= require('./http')
+  return http.isAwsSdkRequest(parentSpan, invocationId)
+}
+
+/** @type {typeof import('./http').setHttpServerCheckpoint} */
+function setHttpServerCheckpoint (tracer, span, headers) {
+  http ??= require('./http')
+  return http.setHttpServerCheckpoint(tracer, span, headers)
+}
+
 module.exports = {
   DsmPathwayCodec,
   DataStreamsCheckpointer,
@@ -129,4 +149,8 @@ module.exports = {
   getHeadersSize,
   getMessageSize,
   getSizeOrZero,
+
+  isAwsSdkRequest,
+  setHttpClientCheckpoint,
+  setHttpServerCheckpoint,
 }

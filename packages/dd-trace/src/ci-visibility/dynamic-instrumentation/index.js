@@ -203,7 +203,8 @@ class TestVisDynamicInstrumentation {
     // Allow the parent to exit even if the worker is still running
     this.worker.unref?.()
 
-    this.breakpointSetChannel.port2.on('message', (probeId) => {
+    this.breakpointSetChannel.port2.on('message', ({ probeId, error }) => {
+      if (error) log.error('Test Optimization - Dynamic Instrumentation failed to set probe', error)
       const probeState = this.#probeStateById.get(probeId)
       if (probeState?.resolveSet) {
         probeState.resolveSet()
@@ -230,7 +231,8 @@ class TestVisDynamicInstrumentation {
       }
     }).unref?.()
 
-    this.breakpointRemoveChannel.port2.on('message', (probeId) => {
+    this.breakpointRemoveChannel.port2.on('message', ({ probeId, error }) => {
+      if (error) log.error('Test Optimization - Dynamic Instrumentation failed to remove probe', error)
       const probeState = this.#probeStateById.get(probeId)
       if (probeState?.resolveRemove) {
         probeState.resolveRemove()

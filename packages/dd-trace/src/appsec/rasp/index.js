@@ -1,11 +1,14 @@
 'use strict'
 
+const { types } = require('node:util')
+
 const web = require('../../plugins/util/web')
 const {
   setUncaughtExceptionCaptureCallbackStart,
   expressMiddlewareError,
   fastifyMiddlewareError,
   routerMiddlewareError,
+  nextRequestStart,
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
@@ -14,7 +17,13 @@ const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
 
-const { DatadogRaspAbortError } = require('./utils')
+const { DatadogRaspAbortError, hasBlockingAbort, markToBlockOnDetection } = require('./utils')
+
+// Same bound as the `cause` chain; libraries keep the abort error one or two errors deep.
+const MAX_WRAPPING_ERRORS = 10
+
+// Error.isError is available from Node.js 24, and util.types.isNativeError is deprecated from 24.2.0 (DEP0197).
+const isError = Error.isError ?? types.isNativeError
 
 function removeAllListeners (emitter, event) {
   const listeners = emitter.listeners(event)
@@ -41,6 +50,52 @@ function findDatadogRaspAbortError (err, deep = 10) {
   if (err?.cause && deep > 0) {
     return findDatadogRaspAbortError(err.cause, deep - 1)
   }
+}
+
+/**
+ * Finds the abort error of the request in the errors held by the own data properties of an error, for libraries that
+ * throw their own error and keep the original one outside of `cause` (sequelize's `parent`, typeorm's `driverError`).
+ * Only native errors are walked, and getters are not called.
+ *
+ * @param {unknown} error
+ * @param {import('http').IncomingMessage} req
+ * @returns {DatadogRaspAbortError | undefined}
+ */
+function findWrappedDatadogRaspAbortError (error, req) {
+  if (!isError(error)) return
+
+  const errors = [error]
+  for (let i = 0; i < errors.length; i++) {
+    for (const key of Reflect.ownKeys(errors[i])) {
+      // Before Node.js 22, reading the descriptor of `stack` formats the stack trace and calls Error.prepareStackTrace.
+      if (key === 'stack') continue
+
+      const value = Reflect.getOwnPropertyDescriptor(errors[i], key)?.value
+      if (!isError(value)) continue
+
+      if (value instanceof DatadogRaspAbortError) {
+        if (value.req === req) return value
+      } else if (errors.length < MAX_WRAPPING_ERRORS) {
+        errors.push(value)
+      }
+    }
+  }
+}
+
+/**
+ * Finds the abort error of the request in the error of a failed operation
+ *
+ * @param {unknown} error
+ * @param {import('http').IncomingMessage} [failedRequest]
+ * @returns {DatadogRaspAbortError | undefined}
+ */
+function resolveAbortError (error, failedRequest) {
+  const directError = findDatadogRaspAbortError(error)
+  if (directError) return directError
+
+  if (!hasBlockingAbort(failedRequest)) return
+
+  return findWrappedDatadogRaspAbortError(error, failedRequest)
 }
 
 function handleUncaughtExceptionMonitor (error) {
@@ -84,8 +139,8 @@ function handleUncaughtExceptionMonitor (error) {
   }
 }
 
-function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
-  const abortError = findDatadogRaspAbortError(error)
+function blockOnDatadogRaspAbortError ({ error, req: failedRequest, isTopLevel }) {
+  const abortError = resolveAbortError(error, failedRequest)
   if (!abortError) return false
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
@@ -106,6 +161,10 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   return true
 }
 
+function onNextRequestStart ({ req, ignoreError }) {
+  markToBlockOnDetection(req, ignoreError)
+}
+
 function enable (config) {
   ssrf.enable(config)
   sqli.enable(config)
@@ -117,6 +176,7 @@ function enable (config) {
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   routerMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
+  nextRequestStart.subscribe(onNextRequestStart)
 }
 
 function disable () {
@@ -130,6 +190,7 @@ function disable () {
   expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
   routerMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+  nextRequestStart.unsubscribe(onNextRequestStart)
 }
 
 module.exports = {

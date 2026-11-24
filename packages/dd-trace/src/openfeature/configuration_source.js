@@ -1,5 +1,6 @@
 'use strict'
 
+const { normalizeService } = require('../config/normalize-service')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 const { warnRemoteConfigFlagSelection, withFlagSelection } = require('./flag-selection')
@@ -11,6 +12,8 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
+const USAGE_SERVICE_REJECTED_MESSAGE =
+  'Feature Flags: service %s has no normalized name; DD-Service header not sent'
 const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
   'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
   'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
@@ -73,6 +76,7 @@ function create (config, applyConfiguration) {
     requestTimeoutMs: requestTimeoutSeconds * 1000,
     apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
     env: config.env,
+    service: usageService(config.service),
   }, applyConfiguration)
 }
 
@@ -113,6 +117,22 @@ function endpoint (config, configuredBaseUrl) {
   }
 
   return url
+}
+
+/**
+ * Selects the DD-Service value: the tracer service, normalized with the same function as the inferred service. For
+ * example, `My Service` becomes `my_service`.
+ *
+ * If nothing is left of the normalized name, no value is sent. The normalized name has only ASCII characters, so
+ * Node.js cannot throw on the header. The tracer service itself does not change. The CDN alone decides which values it
+ * uses.
+ *
+ * @param {string | undefined} service - Tracer service name.
+ */
+function usageService (service) {
+  const name = normalizeService(service)
+  if (service && !name) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
+  return name || undefined
 }
 
 /**

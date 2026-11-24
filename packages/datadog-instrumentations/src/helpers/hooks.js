@@ -58,7 +58,6 @@ module.exports = {
   '@smithy/smithy-client': () => require('../aws-sdk'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
   aerospike: () => require('../aerospike'),
-  ai: () => require('../ai'),
   amqp10: () => require('../amqp10'),
   amqplib: () => require('../amqplib'),
   avsc: () => require('../avsc'),

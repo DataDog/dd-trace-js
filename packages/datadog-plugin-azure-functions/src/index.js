@@ -1,5 +1,10 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
+
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { getIsAzureContainerApp } = require('../../dd-trace/src/serverless')
@@ -24,6 +29,9 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static type = 'serverless'
   static prefix = 'tracing:datadog:azure:functions:invoke'
 
+  /** @type {string | undefined} */
+  #routePrefix
+
   bindStart (ctx) {
     const meta = getMetaForTrigger(ctx)
     const triggerType = triggerMap[ctx.methodName]
@@ -34,7 +42,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
     if (isHttpTrigger) {
       const { httpRequest } = ctx
-      const path = (new URL(httpRequest.url)).pathname
+      const url = new URL(httpRequest.url)
+      const path = url.pathname
       const req = {
         method: httpRequest.method,
         headers: Object.fromEntries(httpRequest.headers),
@@ -42,21 +51,40 @@ class AzureFunctionsPlugin extends TracingPlugin {
       }
       // Patch the request to create web context
       const webContext = web.patch(req)
-      webContext.config = this.config
-      webContext.tracer = this.tracer
-      webContext.paths = [path]
+      const operationName = this.operationName()
       // Creates a standard span and an inferred proxy span if headers are present
-      span = web.startServerlessSpanWithInferredProxy(
-        this.tracer,
-        this.config,
-        this.operationName(),
-        req,
-        ctx
-      )
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        req.headers.host = url.host
+        req.url = path + getTraceQuery(url)
+        req.socket = { encrypted: url.protocol === 'https:' }
+        span = web.startSpan(
+          this.tracer,
+          this.config,
+          req,
+          undefined,
+          operationName,
+          ctx
+        )
+        const route = ctx.invocationContext.options.trigger.route?.trim() || ctx.functionName
+        const prefix = this.#routePrefix ??= getRoutePrefix()
+        web.setRoute(req, prefix + (route.startsWith('/') ? route : `/${route}`))
+      } else {
+        webContext.config = this.config
+        webContext.tracer = this.tracer
+        webContext.paths = [path]
+        span = web.startServerlessSpanWithInferredProxy(
+          this.tracer,
+          this.config,
+          operationName,
+          req,
+          ctx
+        )
+        webContext.span = span
+      }
+
       span._integrationName = 'azure-functions'
       span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
-      webContext.span = span
       webContext.azureFunctionCtx = ctx
       ctx.webContext = webContext
     } else {
@@ -99,6 +127,34 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+function getRoutePrefix () {
+  let prefix = getEnvironmentVariable('AzureFunctionsJobHost__extensions__http__routePrefix')
+  if (prefix === undefined) {
+    try {
+      const root = getEnvironmentVariable('AzureWebJobsScriptRoot') || process.cwd()
+      const contents = fs.readFileSync(path.join(root, 'host.json'), 'utf8')
+      prefix = JSON.parse(contents.replace(/^\uFEFF/, '')).extensions?.http?.routePrefix ?? 'api'
+    } catch (error) {
+      log.debug('Cannot determine Azure Functions route prefix: %s', error.code || error.name)
+      return ''
+    }
+  }
+  return typeof prefix === 'string' && prefix ? `/${prefix}` : ''
+}
+
+/**
+ * @param {URL} url
+ */
+function getTraceQuery (url) {
+  const search = url.search
+  if (search) {
+    for (const name of url.searchParams.keys()) {
+      if (name.toLowerCase() === 'code') return ''
+    }
+  }
+  return search
 }
 
 function getMetaForTrigger ({ functionName, methodName, invocationContext }) {

@@ -8,13 +8,14 @@ const { REDACTED_PLACEHOLDER } = require('./redaction')
 /** @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} PropertyDescriptor */
 /** @typedef {Map<unknown, unknown> | Set<unknown>} Collection */
 /** @typedef {(name: string) => boolean} IsRedactedIdentifier */
+/** @typedef {{ get: (this: Collection) => number }} SizeDescriptor */
 
 const mapEntries = Map.prototype.entries
 const mapKeys = Map.prototype.keys
 const mapSet = Map.prototype.set
-const mapSizeGetter = Object.getOwnPropertyDescriptor(Map.prototype, 'size').get
+const mapSizeGetter = /** @type {SizeDescriptor} */ (Object.getOwnPropertyDescriptor(Map.prototype, 'size')).get
 const setAdd = Set.prototype.add
-const setSizeGetter = Object.getOwnPropertyDescriptor(Set.prototype, 'size').get
+const setSizeGetter = /** @type {SizeDescriptor} */ (Object.getOwnPropertyDescriptor(Set.prototype, 'size')).get
 const setValues = Set.prototype.values
 const mapIteratorNext = Object.getPrototypeOf(mapEntries.call(new Map())).next
 const setIteratorNext = Object.getPrototypeOf(setValues.call(new Set())).next

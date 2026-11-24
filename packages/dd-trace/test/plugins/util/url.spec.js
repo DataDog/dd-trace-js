@@ -183,13 +183,13 @@ describe('plugins/util/url', () => {
     const strippedUrl = 'http://perdu.com/path'
 
     it('returns the stripped url when there is no query', () => {
-      const config = { queryStringObfuscation: 'secret' }
+      const config = { queryStringObfuscation: /secret/gi }
 
       assert.strictEqual(url.buildClientHttpUrl(config, base, '/path', strippedUrl), strippedUrl)
     })
 
     it('includes the query with sensitive values obfuscated', () => {
-      const config = { queryStringObfuscation: 'secret' }
+      const config = { queryStringObfuscation: /secret/gi }
 
       assert.strictEqual(
         url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),

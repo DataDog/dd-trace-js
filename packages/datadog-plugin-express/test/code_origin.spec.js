@@ -155,6 +155,11 @@ describe('Plugin', () => {
     })
   })
 
+  /**
+   * @param {string} path
+   * @param {{ line: number, method?: string, type?: string }} frame
+   * @returns {Promise<void>}
+   */
   function assertCodeOrigin (path, frame) {
     return new Promise((resolve, reject) => {
       listener = app.listen(0, host, async () => {

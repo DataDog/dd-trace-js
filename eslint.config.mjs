@@ -860,6 +860,7 @@ export default [
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
+      'unicorn/prefer-options-parameter': 'off',
       'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
       'unicorn/prefer-reflect-apply': 'off', // lots | questionable benefit
       'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
@@ -867,6 +868,7 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
+      'unicorn/require-spread-parentheses': 'off',
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
       // These remaining rules need focused rewrites before activation.
@@ -1302,10 +1304,7 @@ export default [
   },
   ...carrierFieldsConfig,
   {
-    // The Next.js fixture apps import dd-trace the way a customer does
-    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
-    // stub written into node_modules (see test/index.spec.js), so it never appears
-    // in a manifest the extraneous-dependency rules can read.
+    // The Next.js sandbox provides the checkout tracer at test time.
     name: 'dd-trace/datadog-plugin-next/fixtures',
     plugins: {
       import: eslintPluginImport,
@@ -1313,6 +1312,7 @@ export default [
     files: [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
+      'packages/datadog-plugin-next/test/datadog.js',
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',

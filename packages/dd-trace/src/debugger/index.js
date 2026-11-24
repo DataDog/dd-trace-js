@@ -231,7 +231,7 @@ function logWorkerError (error, reason = error.reason) {
  * Sends the new configuration to the worker thread via the config channel.
  * Does nothing if the worker is not started.
  *
- * @param {import('../config/config-base')} config - The updated tracer configuration object
+ * @param {Config} config - The updated tracer configuration object
  */
 function configure (config) {
   if (configChannel === null) return
@@ -339,7 +339,7 @@ function detectDebuggerEndpoint (config, cb) {
 
   log.debug('[debugger] Detecting available debugger endpoints...')
 
-  fetchAgentInfo(config.url, (err, agentInfo) => {
+  fetchAgentInfo(/** @type {URL} */ (config.url), (err, agentInfo) => {
     if (err) {
       log.warn('[debugger] Failed to query agent %s endpoint, falling back to %s',
         DEBUGGER_INPUT_V2,

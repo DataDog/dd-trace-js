@@ -1368,4 +1368,66 @@ describe('createWrapRouterMethod', () => {
       }
     }
   })
+
+  describe('router >=2 route registration', () => {
+    const routeCreateCh = dc.channel('datadog:router:route:create')
+
+    // Router 2.x shape, built per test since the hook wraps the prototype; verbs go through `route()`.
+    function makeFakeRouter () {
+      function FakeRouter (options = {}) {
+        if (!(this instanceof FakeRouter)) return new FakeRouter(options)
+        Object.assign(this, { caseSensitive: options.caseSensitive, strict: options.strict, stack: [] })
+      }
+      FakeRouter.prototype.handle = function handle () {}
+      FakeRouter.prototype.route = function route (path) {
+        const route = { path }
+        this.stack.push({ route, handle () {} })
+        return route
+      }
+      FakeRouter.prototype.use = function use (fn) { this.stack.push({ handle: fn }) }
+      FakeRouter.prototype.get = function get (path) { this.route(path) }
+      return FakeRouter
+    }
+
+    let Router
+
+    beforeEach(() => {
+      const instrument = require('../src/helpers/instrument')
+      const addHook = sinon.spy()
+      proxyquire('../src/router', { './helpers/instrument': { ...instrument, addHook } })
+      const routerHook = addHook.getCalls().find(call => {
+        return call.args[0].name === 'router' && call.args[0].versions[0] === '>=2' && !call.args[0].file
+      }).args[1]
+      Router = routerHook(makeFakeRouter())
+
+      const listener = data => events.push(data)
+      routeCreateCh.subscribe(listener)
+      subscriptions.push([routeCreateCh, listener])
+    })
+
+    it('publishes the returned Route once with the default Router options', () => {
+      const router = Router()
+      const route = router.route('/items/:id')
+
+      assert.strictEqual(route, router.stack.at(-1).route)
+      assert.deepStrictEqual(events, [{ route, sensitive: false, strict: false }])
+      assert.strictEqual(events[0].route, route)
+    })
+
+    it('publishes the caseSensitive and strict Router options', () => {
+      const route = Router({ caseSensitive: true, strict: true }).route('/items/:id')
+
+      assert.deepStrictEqual(events, [{ route, sensitive: true, strict: true }])
+    })
+
+    it('publishes once for router.get and not for router.use', () => {
+      const router = Router()
+      router.use(function middleware (req, res, next) { next() })
+      assert.strictEqual(events.length, 0)
+
+      router.get('/items/:id')
+      assert.strictEqual(events.length, 1)
+      assert.strictEqual(events[0].route, router.stack.at(-1).route)
+    })
+  })
 })
