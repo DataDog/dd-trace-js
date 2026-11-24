@@ -4,6 +4,7 @@ const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { trace } = require('@opentelemetry/api')
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { isInt64 } = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 /**
@@ -231,7 +232,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     if (typeof body === 'string') {
       return { stringValue: body }
     } else if (typeof body === 'number') {
-      if (Number.isInteger(body)) {
+      if (isInt64(body)) {
         return { intValue: body }
       }
       return { doubleValue: body }

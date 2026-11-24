@@ -849,6 +849,43 @@ describe('OpenTelemetry Traces', () => {
       })
     })
 
+    describe('int64 range', () => {
+      // Doubles adjacent to the signed 64-bit bounds: the last accepted values and the first rejected ones.
+      const INT64_VALUES = { min: -(2 ** 63), max: 2 ** 63 - 1024 }
+      const OUT_OF_RANGE_VALUES = { below_min: -(2 ** 63) - 2048, above_max: 2 ** 63, huge: 1e20 }
+      const values = { ...INT64_VALUES, ...OUT_OF_RANGE_VALUES }
+      const expected = Object.entries(values).map(([key, value]) => ({
+        key,
+        value: key in INT64_VALUES ? { intValue: value } : { doubleValue: value },
+      }))
+
+      /** @param {object[]} attributes */
+      function pickValueAttributes (attributes) {
+        return attributes
+          .filter(({ key }) => key in values)
+          .map(({ key, value }) => ({ key, value }))
+      }
+
+      for (const protocol of ['http/json', 'http/protobuf']) {
+        it(`exports integers outside the int64 range as doubles with ${protocol}`, () => {
+          const transformer = new OtlpTraceTransformer(values, protocol)
+          const span = createMockSpan({
+            metrics: values,
+            span_events: [{ name: 'event', startTime: 1700000000010, attributes: values }],
+          })
+
+          const payload = transformer.transformSpans([span])
+          const decoded = protocol === 'http/json' ? decodePayload(payload) : decodeProtobufPayload(payload)
+          const { resource, scopeSpans } = decoded.resourceSpans[0]
+          const otlpSpan = scopeSpans[0].spans[0]
+
+          assert.deepStrictEqual(pickValueAttributes(otlpSpan.attributes), expected)
+          assert.deepStrictEqual(pickValueAttributes(resource.attributes), expected)
+          assert.deepStrictEqual(pickValueAttributes(otlpSpan.events[0].attributes), expected)
+        })
+      }
+    })
+
     describe('http/protobuf', () => {
       /**
        * @param {object[]} spans - DD-formatted spans
