@@ -638,6 +638,86 @@ describe('request', function () {
     })
   })
 
+  describe('status-only requests', () => {
+    for (const status of [undefined, 199, 200, 299, 300, 403, 500]) {
+      it(`completes on headers at status ${status}, discarding the body and hiding query credentials`, () => {
+        const response = new EventEmitter()
+        response.headers = {}
+        response.statusCode = status
+        response.setTimeout = sinon.spy()
+        response.resume = sinon.spy()
+        response.destroy = sinon.spy()
+        const req = new EventEmitter()
+        req.setTimeout = sinon.spy()
+        req.write = sinon.spy()
+        req.end = sinon.spy()
+        let respond
+        const createRequest = (options, callback) => {
+          respond = callback
+          assert.strictEqual(options.timeout, 0)
+          return req
+        }
+        const statusRequest = proxyquire('../../../src/exporters/common/request', {
+          http: { ...http, request: createRequest },
+          './docker': docker,
+        })
+        const callback = sinon.spy()
+        statusRequest('', {
+          url: 'http://localhost/metrics?api_key=secret',
+          method: 'POST',
+          responseType: 'none',
+          timeout: false,
+          retry: false,
+        }, callback)
+        sinon.assert.notCalled(callback)
+        respond(response)
+        sinon.assert.calledOnce(callback)
+        sinon.assert.calledOnce(response.resume)
+        sinon.assert.calledWithExactly(req.setTimeout, 0, sinon.match.func)
+        sinon.assert.calledWithExactly(response.setTimeout, 0)
+        assert.strictEqual(response.listenerCount('data'), 0)
+        assert.strictEqual(callback.firstCall.args[2], status)
+        const error = callback.firstCall.args[0]
+        if (status >= 200 && status <= 299) {
+          assert.strictEqual(error, null)
+        } else {
+          assert.strictEqual(error.message, `HTTP error code: ${status}`)
+          assert.strictEqual(error.status, status)
+          assert.ok(!error.message.includes('secret'))
+        }
+        // The body can fail after this intake has already acknowledged the request.
+        response.emit('error', new Error('body failed'))
+        response.emit('aborted')
+        response.emit('end')
+        sinon.assert.calledOnce(callback)
+      })
+    }
+
+    it('keeps body-completion semantics when the response mode is omitted', () => {
+      const response = new EventEmitter()
+      response.headers = {}
+      response.statusCode = 200
+      response.setTimeout = sinon.spy()
+      const req = new EventEmitter()
+      req.setTimeout = sinon.spy()
+      req.write = sinon.spy()
+      req.end = sinon.spy()
+      let respond
+      const bodyRequest = proxyquire('../../../src/exporters/common/request', {
+        http: { ...http, request: (options, callback) => { respond = callback; return req } },
+        './docker': docker,
+      })
+      const callback = sinon.spy()
+      bodyRequest('', { timeout: 0 }, callback)
+      respond(response)
+      sinon.assert.notCalled(callback)
+      response.emit('data', Buffer.from('body'))
+      response.emit('end')
+      sinon.assert.calledOnceWithExactly(callback, null, 'body', 200, {})
+      sinon.assert.calledWithExactly(req.setTimeout, 2000, sinon.match.func)
+    })
+  })
+
   it('should have a configurable timeout', done => {
     nock('http://localhost:80')
       .put('/path')

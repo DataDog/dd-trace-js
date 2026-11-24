@@ -49,6 +49,8 @@ const TYPE_LABELS = ['count', 'gauge', 'distribution', 'histogram']
  * @property {string[]} tags
  * @property {typeof import('node:dns').lookup} lookup
  * @property {URL|string} [metricsProxyUrl]
+ * @property {boolean} [includeEntityId] Defaults to true.
+ * @property {number} [flushTimeoutMs] Bound flush waits and include deliveries started while waiting.
  */
 
 /**
@@ -85,6 +87,7 @@ const identityRefreshChannel = channel('datadog:identity:refresh')
  * @implements {DogStatsD}
  */
 class DogStatsDClient {
+  #entityId
   #family
   #host
   #httpOptions
@@ -106,6 +109,7 @@ class DogStatsDClient {
    * @param {boolean} [telemetryEnabled] - Whether to collect client telemetry
    */
   constructor (options, telemetryEnabled = false) {
+    this.#entityId = options.includeEntityId === false ? undefined : entityId
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
       this.#httpOptions = {
@@ -119,7 +123,9 @@ class DogStatsDClient {
     this.#family = isIP(options.host)
     this.#host = options.host
     this.#port = options.port
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
+    this.#serverlessDeliveryTracker = options.flushTimeoutMs === undefined
+      ? createServerlessDeliveryTracker()
+      : new (require('./serverless/telemetry-delivery-tracker'))(options.flushTimeoutMs)
 
     if (telemetryEnabled) {
       this.telemetry = {
@@ -196,8 +202,14 @@ class DogStatsDClient {
     this._add(stat, value, TYPE_GAUGE, tags)
   }
 
-  distribution (stat, value, tags) {
-    this._add(stat, value, TYPE_DISTRIBUTION, tags)
+  /**
+   * @param {string} stat
+   * @param {number} value
+   * @param {string[]} [tags]
+   * @param {number} [timestamp] Unix seconds, for internally submitted dated distributions.
+   */
+  distribution (stat, value, tags, timestamp) {
+    this._add(stat, value, TYPE_DISTRIBUTION, tags, undefined, undefined, timestamp)
   }
 
   histogram (stat, value, tags) {
@@ -449,9 +461,10 @@ class DogStatsDClient {
    * @param {string[]} tags - The metric tags
    * @param {string} [tagsPrefix] - Serialized global tags
    * @param {DogStatsDBufferState} [state] - Payload state receiving the metric
+   * @param {number} [timestamp] - Unix seconds for a dated distribution
    * @memberof DogStatsDClient
    */
-  _add (stat, value, type, tags, tagsPrefix = this.#tagsPrefix, state = this.#metrics) {
+  _add (stat, value, type, tags, tagsPrefix = this.#tagsPrefix, state = this.#metrics, timestamp) {
     let message = `${stat}:${value}|${type}`
 
     if (tags?.length) {
@@ -462,9 +475,10 @@ class DogStatsDClient {
       message += tagsPrefix
     }
 
-    if (entityId) {
-      message += `|c:${entityId}`
+    if (this.#entityId) {
+      message += `|c:${this.#entityId}`
     }
+    if (timestamp != null) message += `|T${timestamp}`
 
     this._write(`${message}\n`, state)
   }
