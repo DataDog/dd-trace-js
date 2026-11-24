@@ -95,8 +95,10 @@ if (shouldInit && !skipVitestWorkerInit) {
   tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
-  // A child process started by a test reports the lines it runs to that test.
-  if (getEnvironmentVariable('_DD_LINE_COVERAGE_CHILD')) {
+  // A worker thread or a child process started by a test reports the lines it runs to that test.
+  if (require('../packages/dd-trace/src/ci-visibility/line-coverage/worker-threads').getParentSettings()) {
+    require('../packages/dd-trace/src/ci-visibility/line-coverage').enableWorker()
+  } else if (getEnvironmentVariable('_DD_LINE_COVERAGE_CHILD')) {
     require('../packages/dd-trace/src/ci-visibility/line-coverage').enableChild()
   }
 }
