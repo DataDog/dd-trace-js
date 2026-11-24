@@ -668,24 +668,25 @@ describe('bundler transform', () => {
 
   it('rewrites real targets with export hooks', async () => {
     for (const esm of [false, true]) {
-      const tracer = await runRealRewrite({
-        channel: 'tracing:orchestrion:ai:getTracer:start',
+      const file = esm ? 'language/parser.mjs' : 'language/parser.js'
+      const parser = await runRealRewrite({
+        channel: 'tracing:orchestrion:graphql:apm:graphql:parser:start',
         esm,
-        file: esm ? 'dist/index.mjs' : 'dist/index.js',
-        main: 'dist/index.js',
-        name: 'ai',
-        run: exports => exports.getTracer(),
+        file,
+        main: 'index.js',
+        name: 'graphql',
+        run: exports => exports.parse(),
         source: esm
-          ? 'export function getTracer () { return "tracer" }\n'
-          : 'function getTracer () { return "tracer" }\nmodule.exports = { getTracer }\n',
-        version: '6.0.0',
+          ? 'export function parse () { return "parsed" }\n'
+          : 'function parse () { return "parsed" }\nmodule.exports = { parse }\n',
+        version: '16.0.0',
       })
 
-      assert.equal(tracer.value, 'tracer')
-      assert.equal(tracer.starts, 1)
-      assert.deepStrictEqual(tracer.payloads, esm
-        ? [{ activate: true, package: 'ai', path: 'ai/dist/index.mjs', version: '6.0.0' }]
-        : [{ hasModule: true, package: 'ai', path: 'ai', version: '6.0.0' }])
+      assert.equal(parser.value, 'parsed')
+      assert.equal(parser.starts, 1)
+      assert.deepStrictEqual(parser.payloads, esm
+        ? [{ activate: true, package: 'graphql', path: `graphql/${file}`, version: '16.0.0' }]
+        : [{ hasModule: true, package: 'graphql', path: `graphql/${file}`, version: '16.0.0' }])
     }
   })
 

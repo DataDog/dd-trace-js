@@ -22,7 +22,10 @@
 
 /** @satisfies {InstrumentationRegistryEntry[]} */
 const registry = [
-  { instrumentations: require('./instrumentations/ai') },
+  {
+    activate: { setup: () => require('../../ai') },
+    instrumentations: require('./instrumentations/ai'),
+  },
   { activate: true, instrumentations: require('./instrumentations/async-mutex') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
