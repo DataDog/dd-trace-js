@@ -32,6 +32,23 @@ const {
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
+function makeSpan (type = 'test', name = 'vitest.test') {
+  return {
+    trace_id: id('12345678123456781234567812345678'),
+    span_id: id('1234567812345678'),
+    parent_id: id('0'),
+    name,
+    resource: name,
+    service: 'tests',
+    type,
+    error: 0,
+    meta: {},
+    metrics: {},
+    start: 1_700_000_000_000_000_000,
+    duration: 1_000_000,
+  }
+}
+
 describe('CI Visibility Test Worker Exporter', () => {
   let send, originalSend
 
@@ -53,15 +70,20 @@ describe('CI Visibility Test Worker Exporter', () => {
       delete process.env.JEST_WORKER_ID
     })
 
-    it('can export traces', () => {
-      const trace = [{ type: 'test' }]
-      const traceSecond = [{ type: 'test', name: 'other' }]
+    it('batches traces with exact string identifiers until flush', () => {
+      const trace = [makeSpan('test', 'first')]
+      trace[0].span_id = id('fedcba9876543210')
+      trace[0].parent_id = id('abcdef0987654321')
+      const traceSecond = [makeSpan('test', 'other')]
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
       jestWorkerExporter.export(trace)
       jestWorkerExporter.export(traceSecond)
       sinon.assert.notCalled(send)
       jestWorkerExporter.flush()
-      sinon.assert.calledWith(send, [JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], [
+        JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.parse(JSON.stringify([trace, traceSecond])),
+      ])
     })
 
     it('can export coverages', () => {
@@ -85,7 +107,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
       const onDone = sinon.spy()
 
-      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.export([makeSpan()])
       jestWorkerExporter.exportCoverage({ sessionId: '1', suiteId: '1', files: ['test.js'] })
       jestWorkerExporter.exportDiLogs({ testSessionId: '1' }, { message: 'test log' })
       jestWorkerExporter.exportTelemetry({ type: 'ciVisEvent', name: 'test_event' })
@@ -125,7 +147,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
       const onDone = sinon.spy()
 
-      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.export([makeSpan()])
       jestWorkerExporter.flush(onDone)
 
       sinon.assert.calledOnceWithExactly(onDone, error)
@@ -133,7 +155,7 @@ describe('CI Visibility Test Worker Exporter', () => {
 
     it('does not break if process.send is undefined', () => {
       delete process.send
-      const trace = [{ type: 'test' }]
+      const trace = [makeSpan()]
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
       jestWorkerExporter.export(trace)
       jestWorkerExporter.flush()
@@ -309,23 +331,6 @@ describe('CI Visibility Test Worker Exporter', () => {
   })
 
   context('when the process is a vitest worker', () => {
-    function makeSpan (type = 'test', name = 'vitest.test') {
-      return {
-        trace_id: id('12345678123456781234567812345678'),
-        span_id: id('1234567812345678'),
-        parent_id: id('0'),
-        name,
-        resource: name,
-        service: 'tests',
-        type,
-        error: 0,
-        meta: {},
-        metrics: {},
-        start: 1_700_000_000_000_000_000,
-        duration: 1_000_000,
-      }
-    }
-
     afterEach(() => {
       delete process.env.DD_VITEST_WORKER
       delete process.env.TINYPOOL_WORKER_ID
