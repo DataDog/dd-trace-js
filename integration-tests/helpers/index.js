@@ -683,12 +683,14 @@ async function packTarballWithLock (tarballPath, env) {
  * @param {boolean} isGitRepo
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
+ * @param {{ useCheckoutTracer?: boolean }} [options]
  */
 async function createSandbox (
   dependencies = [],
   isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'],
-  followUpCommand
+  followUpCommand,
+  { useCheckoutTracer = false } = {}
 ) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
@@ -707,7 +709,7 @@ async function createSandbox (
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
-  if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
+  if (!useCheckoutTracer && (noSandbox === '1' || noSandbox.toLowerCase() === 'true')) {
     // Execute integration tests without a sandbox. This is useful when you have other components
     // linked into dd-trace and want to run the integration tests against them.
 
@@ -734,7 +736,7 @@ async function createSandbox (
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
   await Promise.all([
-    packTarballWithLock(out, restOfEnv),
+    useCheckoutTracer ? undefined : packTarballWithLock(out, restOfEnv),
     copyIntegrationTests(integrationTestsPaths, folder),
   ])
 
@@ -756,7 +758,20 @@ async function createSandbox (
     execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, { ...addOptions, timeout: 300_000 })
   }
 
-  execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)
+  if (useCheckoutTracer) {
+    const tracerPackage = path.join(folder, 'node_modules', 'dd-trace')
+    const checkout = path.resolve(__dirname, '../..')
+    await fs.mkdir(tracerPackage, { recursive: true })
+    await Promise.all([
+      fs.writeFile(
+        path.join(tracerPackage, 'package.json'),
+        JSON.stringify({ name: 'dd-trace', version: '0.0.0-local', main: 'index.js' })
+      ),
+      fs.writeFile(path.join(tracerPackage, 'index.js'), `module.exports = require(${JSON.stringify(checkout)})\n`),
+    ])
+  } else {
+    execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)
+  }
 
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
