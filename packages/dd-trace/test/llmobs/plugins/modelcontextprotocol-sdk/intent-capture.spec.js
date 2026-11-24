@@ -53,7 +53,7 @@ function findServerToolSpan ({ apmSpans, llmobsSpans }, tool) {
 
 describe('integrations', () => {
   describe('modelcontextprotocol-sdk intent capture', () => {
-    useEnv({ DD_MCP_CAPTURE_INTENT: 'true' })
+    useEnv({ DD_MCP_CAPTURE_INTENT: 'true', DD_MCP_ENRICHMENT_ENABLED: 'false' })
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/server', '>=2', version => {
@@ -84,19 +84,6 @@ describe('integrations', () => {
             properties: { telemetry: { type: 'string' } },
             required: ['telemetry'],
             additionalProperties: false,
-          }),
-        }, async args => {
-          receivedArguments = args
-          return TOOL_RESULT
-        })
-        server.registerTool('session-report', {
-          description: 'Has its own telemetry object',
-          inputSchema: serverModule.fromJsonSchema({
-            type: 'object',
-            properties: {
-              telemetry: { type: 'object', properties: { conversation_id: { type: 'string' } } },
-            },
-            required: ['telemetry'],
           }),
         }, async args => {
           receivedArguments = args
@@ -200,13 +187,6 @@ describe('integrations', () => {
 
         const { llmobsSpan } = findServerToolSpan(await getEvents(2), 'weather')
         assert.equal(llmobsSpan.meta.intent, 'a'.repeat(1024))
-      })
-
-      it('keeps a conversation_id telemetry argument without session capture', async () => {
-        await client.callTool({ name: 'session-report', arguments: { telemetry: { conversation_id: 'app-value' } } })
-
-        assert.deepStrictEqual(receivedArguments, { telemetry: { conversation_id: 'app-value' } })
-        await getEvents(2)
       })
 
       it('keeps a telemetry argument that the tool declares', async () => {

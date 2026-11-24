@@ -11,6 +11,7 @@ const { withVersions } = require('../../../setup/mocha')
 const { useLlmObs } = require('../../util')
 
 const TOOL_RESULT = { content: [{ type: 'text', text: 'sunny' }] }
+const ECHOED_ID = '0123456789abcdef0123456789abcdef'
 const CONVERSATION_ID_PATTERN = /conversation_id for this server is "([0-9a-f]{32})"/
 
 /**
@@ -29,7 +30,7 @@ function getInstructedConversationId (result) {
 
 describe('integrations', () => {
   describe('modelcontextprotocol-sdk session capture', () => {
-    useEnv({ DD_MCP_CAPTURE_SESSION: 'true' })
+    useEnv({ DD_MCP_CAPTURE_INTENT: 'false' })
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/server', '>=2', version => {
@@ -52,6 +53,10 @@ describe('integrations', () => {
           receivedArguments = args
           return TOOL_RESULT
         })
+        server.registerTool('broken', { description: 'Fails without a message', inputSchema: {} }, async () => ({
+          isError: true,
+          content: [],
+        }))
 
         const [clientTransport, serverTransport] = serverModule.InMemoryTransport.createLinkedPair()
         if (transportSessionId) serverTransport.sessionId = transportSessionId
@@ -111,15 +116,43 @@ describe('integrations', () => {
         it('uses the echoed conversation ID and removes the telemetry argument', async () => {
           const result = await client.callTool({
             name: 'weather',
-            arguments: { city: 'Rome', telemetry: { conversation_id: 'abc' } },
+            arguments: { city: 'Rome', telemetry: { conversation_id: ECHOED_ID } },
           })
 
           assert.deepStrictEqual(result.content, TOOL_RESULT.content)
           assert.deepStrictEqual(receivedArguments, { city: 'Rome' })
 
           const span = findServerToolSpan(await getEvents(2))
-          assert.equal(span.session_id, 'abc')
+          assert.equal(span.session_id, ECHOED_ID)
+          assert.ok(span.tags.includes('mcp_session_source:echoed'))
           assert.deepStrictEqual(JSON.parse(span.meta.input.value).params.arguments, { city: 'Rome' })
+        })
+
+        it('generates a session ID for an echoed value it did not generate', async () => {
+          const result = await client.callTool({
+            name: 'weather',
+            arguments: { city: 'Rome', telemetry: { conversation_id: 'made-up' } },
+          })
+
+          const span = findServerToolSpan(await getEvents(2))
+          assert.equal(span.session_id, getInstructedConversationId(result))
+          assert.ok(span.tags.includes('mcp_session_source:generated'))
+        })
+
+        it('removes a null telemetry argument', async () => {
+          const result = await client.callTool({ name: 'weather', arguments: { city: 'Rome', telemetry: null } })
+
+          assert.equal(result.isError, undefined)
+          assert.deepStrictEqual(receivedArguments, { city: 'Rome' })
+          await getEvents(2)
+        })
+
+        it('does not add the instruction to an error result without text', async () => {
+          const result = await client.callTool({ name: 'broken', arguments: {} })
+
+          assert.deepStrictEqual(result.content, [])
+          const span = (await getEvents(2)).llmobsSpans.find(span => span.name === 'broken')
+          assert.match(span.session_id, /^[0-9a-f]{32}$/)
         })
       })
 
@@ -150,24 +183,36 @@ describe('integrations', () => {
           const sessionIds = llmobsSpans.filter(span => span.name === 'weather').map(span => span.session_id)
           assert.deepStrictEqual(sessionIds, [first, first])
         })
+      })
 
-        it('generates another ID once the pending one is 2 seconds old', async () => {
-          const clock = sinon.useFakeTimers({ now: Date.now(), toFake: ['performance'] })
-          try {
-            const first = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
-            await getEvents(2)
-            clock.tick(1999)
-            const second = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
-            await getEvents(2)
-            clock.tick(2000)
-            const third = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
-            await getEvents(2)
+      describe('a pending ID on one connection', () => {
+        let client
+        let server
+        let clock
 
-            assert.equal(getInstructedConversationId(second), getInstructedConversationId(first))
-            assert.notEqual(getInstructedConversationId(third), getInstructedConversationId(second))
-          } finally {
-            clock.restore()
-          }
+        before(async () => {
+          clock = sinon.useFakeTimers({ now: Date.now(), toFake: ['performance'] })
+          ;({ client, server } = await connect())
+        })
+
+        after(async () => {
+          clock.restore()
+          await client?.close()
+          await server?.close()
+        })
+
+        it('expires 2 seconds after it was generated, even when it was reused', async () => {
+          const first = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+          await getEvents(2)
+          clock.tick(1999)
+          const second = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+          await getEvents(2)
+          clock.tick(1)
+          const third = await client.callTool({ name: 'weather', arguments: { city: 'Oslo' } })
+          await getEvents(2)
+
+          assert.equal(getInstructedConversationId(second), getInstructedConversationId(first))
+          assert.notEqual(getInstructedConversationId(third), getInstructedConversationId(second))
         })
       })
 
@@ -231,6 +276,63 @@ describe('integrations', () => {
         })
         assert.deepStrictEqual(second.content, TOOL_RESULT.content)
         assert.equal(findServerToolSpan(await getEvents(2)).session_id, conversationId)
+      })
+    })
+  })
+
+  describe('modelcontextprotocol-sdk with MCP enrichment disabled', () => {
+    useEnv({ DD_MCP_ENRICHMENT_ENABLED: 'false' })
+    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+
+    withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/server', '>=2', version => {
+      let client
+      let server
+      let receivedArguments
+
+      before(async () => {
+        const serverModule = require(`../../../../../../versions/@modelcontextprotocol/server@${version}`).get()
+        const clientModule = require('../../../../../../versions/@modelcontextprotocol/client@2').get()
+
+        server = new serverModule.McpServer({ name: 'test-server', version: '1.0.0' })
+        server.registerTool('weather', {
+          description: 'Has its own telemetry object',
+          inputSchema: serverModule.fromJsonSchema({
+            type: 'object',
+            properties: { telemetry: { type: 'object', properties: { conversation_id: { type: 'string' } } } },
+          }),
+        }, async args => {
+          receivedArguments = args
+          return TOOL_RESULT
+        })
+        server.registerTool('plain', { description: 'No arguments', inputSchema: {} }, async () => TOOL_RESULT)
+
+        const [clientTransport, serverTransport] = serverModule.InMemoryTransport.createLinkedPair()
+        await server.connect(serverTransport)
+        client = new clientModule.Client({ name: 'test-client', version: '1.0.0' })
+        await client.connect(clientTransport)
+      })
+
+      after(async () => {
+        await client?.close()
+        await server?.close()
+      })
+
+      it('keeps tool schemas unchanged', async () => {
+        const result = await client.listTools()
+
+        assert.equal(result.tools.find(tool => tool.name === 'plain').inputSchema.properties?.telemetry, undefined)
+        await getEvents(2)
+      })
+
+      it('passes a tool its own telemetry argument and sets no session ID', async () => {
+        const result = await client.callTool({
+          name: 'weather',
+          arguments: { telemetry: { conversation_id: 'app-value' } },
+        })
+
+        assert.deepStrictEqual(result.content, TOOL_RESULT.content)
+        assert.deepStrictEqual(receivedArguments, { telemetry: { conversation_id: 'app-value' } })
+        assert.equal(findServerToolSpan(await getEvents(2)).session_id, undefined)
       })
     })
   })

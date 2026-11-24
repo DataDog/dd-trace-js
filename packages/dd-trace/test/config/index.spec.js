@@ -376,27 +376,27 @@ describe('Config', () => {
     })
   })
 
-  describe('DD_MCP_CAPTURE_INTENT', () => {
-    it('defaults to false', () => {
-      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, false)
+  describe('DD_MCP_ENRICHMENT_ENABLED', () => {
+    it('defaults to true', () => {
+      assert.strictEqual(getConfig().mcp.DD_MCP_ENRICHMENT_ENABLED, true)
     })
 
-    it('can be enabled with the environment variable', () => {
-      process.env.DD_MCP_CAPTURE_INTENT = 'true'
+    it('can be disabled with the environment variable', () => {
+      process.env.DD_MCP_ENRICHMENT_ENABLED = 'false'
 
-      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, true)
+      assert.strictEqual(getConfig().mcp.DD_MCP_ENRICHMENT_ENABLED, false)
     })
   })
 
-  describe('DD_MCP_CAPTURE_SESSION', () => {
-    it('defaults to false', () => {
-      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_SESSION, false)
+  describe('DD_MCP_CAPTURE_INTENT', () => {
+    it('has no default, so MCP enrichment decides', () => {
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, undefined)
     })
 
-    it('can be enabled with the environment variable', () => {
-      process.env.DD_MCP_CAPTURE_SESSION = 'true'
+    it('can be set with the environment variable', () => {
+      process.env.DD_MCP_CAPTURE_INTENT = 'false'
 
-      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_SESSION, true)
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, false)
     })
   })
 

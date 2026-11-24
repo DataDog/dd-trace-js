@@ -500,8 +500,8 @@ export interface GeneratedConfig {
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   mcp: {
-    DD_MCP_CAPTURE_INTENT: boolean;
-    DD_MCP_CAPTURE_SESSION: boolean;
+    DD_MCP_CAPTURE_INTENT: boolean | undefined;
+    DD_MCP_ENRICHMENT_ENABLED: boolean;
   };
   middlewareTracingEnabled: boolean;
   openai: {
@@ -832,8 +832,8 @@ export interface GeneratedEnvVarConfig {
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
-  DD_MCP_CAPTURE_INTENT: boolean;
-  DD_MCP_CAPTURE_SESSION: boolean;
+  DD_MCP_CAPTURE_INTENT: boolean | undefined;
+  DD_MCP_ENRICHMENT_ENABLED: boolean;
   DD_MERGE_XRAY_TRACES: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MIN_COLD_START_DURATION: number;

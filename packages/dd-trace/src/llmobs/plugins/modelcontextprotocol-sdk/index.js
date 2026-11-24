@@ -16,6 +16,8 @@ const {
 
 // Parallel first calls of a conversation arrive together, before the agent has seen any ID
 const PENDING_CONVERSATION_ID_MS = 2000
+// The shape of IDs this integration generates, so values an agent made up are not used as sessions
+const CONVERSATION_ID_PATTERN = /^[0-9a-f]{32}$/
 /** @type {WeakMap<object, { conversationId: string, time: number }>} */
 const pendingConversationIds = new WeakMap()
 
@@ -95,17 +97,18 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
   }
 
   /**
-   * With intent or session capture, tools/list results ask the model for a `telemetry` argument, and tools/call
-   * requests reach the tool without it. The instrumentation passes `ctx.request` to the handler and applies
-   * `ctx.transformResult` to its result.
+   * With MCP enrichment, tools/list results ask the model for a `telemetry` argument, and tools/call requests reach
+   * the tool without it. The instrumentation passes `ctx.request` to the handler and applies `ctx.transformResult` to
+   * its result. `DD_MCP_CAPTURE_INTENT` predates `DD_MCP_ENRICHMENT_ENABLED` and overrides it for intent capture.
    *
    * @param {object} ctx
    */
   start (ctx) {
     super.start(ctx)
+    const mcpConfig = this._tracerConfig.mcp
     const options = {
-      intent: this._tracerConfig.mcp?.DD_MCP_CAPTURE_INTENT,
-      session: this._tracerConfig.mcp?.DD_MCP_CAPTURE_SESSION,
+      intent: mcpConfig?.DD_MCP_CAPTURE_INTENT ?? mcpConfig?.DD_MCP_ENRICHMENT_ENABLED,
+      session: mcpConfig?.DD_MCP_ENRICHMENT_ENABLED,
     }
     if (!ctx.llmobs || (!options.intent && !options.session)) return
 
@@ -113,10 +116,10 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     if (method === 'tools/list') {
       ctx.transformResult = result => injectTelemetrySchema(result, options)
     } else if (method === 'tools/call') {
-      const stripped = stripTelemetry(ctx.request, options)
+      const stripped = stripTelemetry(ctx.request)
       if (stripped) {
         ctx.request = stripped.request
-        ctx.llmobs.intent = stripped.intent
+        if (options.intent) ctx.llmobs.intent = stripped.intent
       }
       if (options.session) this.#captureSession(ctx, stripped?.conversationId)
     }
@@ -133,14 +136,16 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span || getTransportSessionId(ctx) || this._tagger.getSessionId(span)) return
 
-    if (conversationId) {
+    if (conversationId && CONVERSATION_ID_PATTERN.test(conversationId)) {
       if (pendingConversationIds.get(ctx.server)?.conversationId === conversationId) {
         pendingConversationIds.delete(ctx.server)
       }
+      ctx.llmobs.sessionSource = 'echoed'
     } else {
       const id = getNewConversationId(ctx.server)
       conversationId = id
       ctx.transformResult = result => addConversationIdInstruction(result, id)
+      ctx.llmobs.sessionSource = 'generated'
     }
     this._tagger.tagSessionId(span, conversationId)
   }
@@ -158,6 +163,7 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     }
     const sessionId = getTransportSessionId(ctx)
     if (sessionId) spanTags.mcp_session_id = String(sessionId)
+    if (ctx.llmobs?.sessionSource) spanTags.mcp_session_source = ctx.llmobs.sessionSource
     if (request?.method === 'tools/call') {
       spanTags.mcp_tool = request.params?.name || 'unknown_tool'
       spanTags.mcp_tool_kind = 'server'
@@ -177,9 +183,9 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
 function getNewConversationId (server) {
   const now = performance.now()
   const pending = server && pendingConversationIds.get(server)
-  const conversationId = pending && now - pending.time < PENDING_CONVERSATION_ID_MS
-    ? pending.conversationId
-    : randomUUID().replaceAll('-', '')
+  if (pending && now - pending.time < PENDING_CONVERSATION_ID_MS) return pending.conversationId
+
+  const conversationId = randomUUID().replaceAll('-', '')
   if (server) pendingConversationIds.set(server, { conversationId, time: now })
   return conversationId
 }

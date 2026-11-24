@@ -146,7 +146,7 @@ const INTENT_PROPERTY = {
 const CONVERSATION_ID_PROPERTY = {
   type: 'string',
   description: 'Required on every call after your first call to this server: the conversation_id from an earlier ' +
-    'result of this server. Omit it only on your first call.',
+    'result of this server. Omit only this field on your first call.',
 }
 
 /**
@@ -215,17 +215,16 @@ function injectTelemetrySchema (result, options) {
 }
 
 /**
- * Only the keys of the enabled captures count, so a tool's own `telemetry` argument is not taken.
+ * Any other value is the tool's own `telemetry` argument, which must reach the tool unchanged.
  *
  * @param {unknown} telemetry
- * @param {TelemetryOptions} options
- * @returns {telemetry is { intent?: unknown, conversation_id?: unknown }}
+ * @returns {telemetry is { intent?: unknown, conversation_id?: unknown } | null}
  */
-function isInjectedTelemetry (telemetry, { intent, session }) {
+function isInjectedTelemetry (telemetry) {
+  if (telemetry === null) return true
   if (!isObject(telemetry)) return false
   for (const key of Object.keys(telemetry)) {
-    const enabled = key === INTENT_KEY ? intent : key === CONVERSATION_ID_KEY && session
-    if (!enabled) return false
+    if (key !== INTENT_KEY && key !== CONVERSATION_ID_KEY) return false
   }
   return true
 }
@@ -235,18 +234,17 @@ function isInjectedTelemetry (telemetry, { intent, session }) {
  * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
- * @param {TelemetryOptions} options
  * @returns {{ request: object, intent?: string, conversationId?: string } | undefined}
  */
-function stripTelemetry (request, options) {
+function stripTelemetry (request) {
   const args = request?.params?.arguments
-  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY], options)) return
+  if (!isObject(args) || !Object.hasOwn(args, TELEMETRY_KEY) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
   return {
     request: { ...request, params: { ...request.params, arguments: rest } },
-    intent: capString(telemetry.intent, MAX_INTENT_LENGTH),
-    conversationId: capString(telemetry.conversation_id, MAX_CONVERSATION_ID_LENGTH),
+    intent: capString(telemetry?.intent, MAX_INTENT_LENGTH),
+    conversationId: capString(telemetry?.conversation_id, MAX_CONVERSATION_ID_LENGTH),
   }
 }
 
@@ -267,6 +265,8 @@ function capString (value, maxLength) {
  */
 function addConversationIdInstruction (result, conversationId) {
   if (!isObject(result) || !Array.isArray(result.content)) return result
+  // The instruction would otherwise become the error message of an error result without text
+  if (result.isError && !result.content.some(item => item?.type === 'text' && item.text)) return result
 
   const text = `Your conversation_id for this server is "${conversationId}". Add "telemetry": ` +
     `{"conversation_id": "${conversationId}"} to the arguments of every later tool call to this server, including ` +

@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const path = require('node:path')
 const { inspect } = require('node:util')
 const { describe, it, before, after } = require('mocha')
+const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 
 const {
@@ -50,6 +51,7 @@ describe('integrations', () => {
   let server
 
   describe('modelcontextprotocol-sdk', () => {
+    useEnv({ DD_MCP_ENRICHMENT_ENABLED: 'false' })
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
