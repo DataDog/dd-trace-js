@@ -2292,6 +2292,15 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_LINE_COVERAGE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization",
+        "internal": true
+      }
+    ],
     "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [
       {
         "implementation": "C",

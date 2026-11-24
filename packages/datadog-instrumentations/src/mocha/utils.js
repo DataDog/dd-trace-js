@@ -714,6 +714,7 @@ function getOnTestHandler (isMain, config = {}) {
       testSuiteAbsolutePath,
       title,
       testStartLine,
+      suite: test.parent,
     }
 
     if (!isMain) {
