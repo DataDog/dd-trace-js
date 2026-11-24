@@ -112,8 +112,30 @@ describe('CI Visibility Test Worker Exporter', () => {
       sinon.assert.calledOnce(send)
     })
 
+    it('sends a packed singleton over the batch target after pending traces', () => {
+      const smallSpan = testSpan()
+      const largeSpan = testSpan()
+      largeSpan.meta.value = 'x'.repeat(1024 * 1024)
+      const exporter = new TestWorkerCiVisibilityExporter()
+
+      exporter.export([smallSpan])
+      sinon.assert.notCalled(send)
+      exporter.export([largeSpan])
+
+      sinon.assert.calledTwice(send)
+      for (const [index, span] of [smallSpan, largeSpan].entries()) {
+        const [code, traces] = send.args[index][0]
+        assert.strictEqual(code, JEST_WORKER_TRACE_PAYLOAD_CODE)
+        assert.ok(Array.isArray(traces[0]))
+        assert.deepStrictEqual(decodeWorkerTraces(traces), JSON.parse(JSON.stringify([[span]])))
+      }
+
+      exporter.flush()
+      sinon.assert.calledTwice(send)
+    })
+
     it('sends trace batches in order and waits for all of them even with an empty tail', () => {
-      const trace = [{ type: 'test', meta: { value: 'é'.repeat(3 * 1024 * 1024) } }]
+      const trace = [{ type: 'test', meta: { value: 'é'.repeat(3 * 512 * 1024) } }]
       const oversizedTrace = [{ type: 'test', meta: { value: '\x00'.repeat(2 * 1024 * 1024) } }]
       const exporter = new TestWorkerCiVisibilityExporter()
       const onDone = sinon.spy()
@@ -496,6 +518,34 @@ describe('CI Visibility Test Worker Exporter', () => {
         interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
         data: [JSON.stringify(trace)],
       })
+    })
+
+    it('splits JSON worker batches one byte over 4 MiB', () => {
+      process.env.TINYPOOL_WORKER_ID = '1'
+      const first = [{ type: 'test', name: '' }]
+      const encodedFirst = JSON.stringify(first)
+      const frame = {
+        __tinypool_worker_message__: true,
+        interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
+        data: [encodedFirst, encodedFirst],
+      }
+      const remainingBytes = 4 * 1024 * 1024 - Buffer.byteLength(JSON.stringify(frame)) - 1
+
+      for (const extraBytes of [0, 1]) {
+        send.resetHistory()
+        const second = [{ type: 'test', name: 'x'.repeat(remainingBytes + extraBytes) }]
+        const encodedSecond = JSON.stringify(second)
+        const exporter = new TestWorkerCiVisibilityExporter()
+
+        exporter.export(first)
+        exporter.export(second)
+        exporter.flush()
+
+        const frames = send.args.map(([message]) => message.data)
+        const expected = extraBytes === 0 ? [[encodedFirst, encodedSecond]] : [[encodedFirst], [encodedSecond]]
+        assert.strictEqual(frames.length, expected.length)
+        assert.deepStrictEqual(frames, expected)
+      }
     })
 
     it('splits an escaped fallback frame one byte over the budget', () => {

@@ -10,6 +10,8 @@ const {
   WEBDRIVERIO_WORKER_ENV,
 } = require('./webdriverio')
 
+const TRACE_BATCH_TARGET_BYTES = 4 * 1024 * 1024
+
 /** @typedef {import('../../encode/worker-traces').WorkerTraceItem} WorkerTraceItem */
 
 function getVitestWorkerPort () {
@@ -25,20 +27,19 @@ class Writer {
 
   /**
    * @param {number | null} interprocessCode
-   * @param {number} [traceBatchBytes] JSON IPC frame budget for multi-trace batches.
+   * @param {number} [maxPackedFrameBytes] JSON IPC frame budget for packing an individual trace.
    */
-  constructor (interprocessCode, traceBatchBytes) {
+  constructor (interprocessCode, maxPackedFrameBytes) {
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
     this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
-    if (traceBatchBytes === undefined) {
+    if (maxPackedFrameBytes === undefined) {
       this._encoder = new JSONEncoder()
     } else {
       const largestEnvelope = this.#wrapPayload([], true)
       const envelopeBytes = Buffer.byteLength(JSON.stringify(largestEnvelope) + '\n') - 2
-      const maxBatchBytes = traceBatchBytes - envelopeBytes
-      this.#traceBatch = new ByteBatch(maxBatchBytes)
-      this.#maxTraceBytes = maxBatchBytes - 2
+      this.#traceBatch = new ByteBatch(Math.min(maxPackedFrameBytes, TRACE_BATCH_TARGET_BYTES) - envelopeBytes)
+      this.#maxTraceBytes = maxPackedFrameBytes - envelopeBytes - 2
     }
   }
 

@@ -21,7 +21,7 @@ const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const Writer = require('./writer')
 
-const TRACE_BATCH_BYTES = 8 * 1024 * 1024
+const MAX_PACKED_TRACE_FRAME_BYTES = 8 * 1024 * 1024
 
 function getInterprocessTraceCode () {
   const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
@@ -98,7 +98,7 @@ class TestWorkerCiVisibilityExporter {
     const interprocessLogsCode = getInterprocessLogsCode()
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
-    this._writer = new Writer(interprocessTraceCode, TRACE_BATCH_BYTES)
+    this._writer = new Writer(interprocessTraceCode, MAX_PACKED_TRACE_FRAME_BYTES)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
     if (interprocessTelemetryCode) {
