@@ -27,6 +27,14 @@ function makeEvents (Cls, { codeHotspotsEnabled, flushInterval, timelineSampling
   }, { flushInterval })
 }
 
+// The pprof profile of a captured profile, as the profiler builds it
+function toPprof (profiler, captured) {
+  const { PprofProfileBuilder } = require('@datadog/pprof')
+  const builder = new PprofProfileBuilder(profiler.pprofBuilderOptions)
+  captured.visit(builder.visitor())
+  return builder.build()
+}
+
 function collectLabels (sample, stringTable) {
   const labels = {}
   for (const label of sample.label) {
@@ -47,8 +55,7 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
   try {
     startChannel.publish(ctx)
     finishChannel.publish(ctx)
-    const stopProfiling = profiler.profile(true, startTime, new Date())
-    return stopProfiling()
+    return toPprof(profiler, profiler.profile(true, startTime, new Date()))
   } finally {
     profiler.stop()
   }
@@ -111,8 +118,7 @@ describe('profilers/events', () => {
           startCh.publish(ctx)
           finishCh.publish(ctx)
         }
-        const stopProfiling = profiler.profile(true, startTime, new Date())
-        const profile = stopProfiling()
+        const profile = toPprof(profiler, profiler.profile(true, startTime, new Date()))
         const sampleCount = profile.sample.length
         assert.equal(sampleCount, expectedSampleCount)
       }
@@ -168,14 +174,62 @@ describe('profilers/events', () => {
           }]
         },
       })
-      const stopProfiling = profiler.profile(true, startTime, new Date())
-      const profile = stopProfiling()
+      const profile = toPprof(profiler, profiler.profile(true, startTime, new Date()))
       const labels = collectLabels(profile.sample[0], profile.stringTable)
 
       assert.equal(labels['gc reason'], 'construct_retained,forced')
     } finally {
       profiler.stop()
     }
+  })
+
+  it('builds timeline profiles of the period with a synthetic frame', () => {
+    const startDate = new Date(1_000_000)
+    const endDate = new Date(1_065_000)
+    const profiler = makeEvents(EventsProfiler, {
+      flushInterval: 65_000,
+      timelineSamplingEnabled: false,
+      codeHotspotsEnabled: true,
+    })
+    // Timeline samples' times are on the clock of performance entries, which needn't agree with Date.now()
+    const performanceNanos = () =>
+      BigInt(Math.round(performance.timeOrigin * 1_000_000)) + BigInt(Math.round(performance.now() * 1_000_000))
+    profiler.start()
+    let captured
+    let before
+    let after
+    try {
+      const ctx = { operation: 'gzip' }
+      before = performanceNanos()
+      dc.channel('apm:zlib:operation:start').publish(ctx)
+      dc.channel('apm:zlib:operation:finish').publish(ctx)
+      after = performanceNanos()
+      captured = profiler.profile(true, startDate, endDate)
+    } finally {
+      profiler.stop()
+    }
+    const profile = toPprof(profiler, captured)
+    const strings = profile.stringTable.strings
+    const valueType = t => `${strings[t.type]}/${strings[t.unit]}`
+
+    assert.deepStrictEqual(profile.sampleType.map(valueType), ['timeline/nanoseconds'])
+    assert.strictEqual(valueType(profile.periodType), 'timeline/nanoseconds')
+    assert.strictEqual(Number(profile.period), 1)
+    assert.strictEqual(Number(profile.timeNanos), endDate.getTime() * 1_000_000)
+    assert.strictEqual(Number(profile.durationNanos), 65_000 * 1_000_000)
+    // One frame, whose name displays as blank
+    assert.strictEqual(profile.location.length, 1)
+    assert.deepStrictEqual(profile.function.map(f => strings[f.name]), [' '])
+    // The sample's time is its end_timestamp_ns label
+    const labels = collectLabels(profile.sample[0], profile.stringTable)
+    const endTimestamp = BigInt(labels.end_timestamp_ns)
+    // Between the event's start and finish, give or take the rounding of each reading
+    assert.ok(
+      endTimestamp >= before - 1000n && endTimestamp <= after + 1000n,
+      `${endTimestamp} in [${before}, ${after}]`
+    )
+    // A captured profile can be visited again
+    assert.deepStrictEqual(toPprof(profiler, captured).sample.length, 1)
   })
 
   it('captures async crypto events with per-op labels', () => {

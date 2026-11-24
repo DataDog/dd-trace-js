@@ -1,16 +1,6 @@
 'use strict'
 
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
-const {
-  Function: PprofFunction,
-  Label,
-  Line,
-  Location,
-  Profile,
-  Sample,
-  StringTable,
-  ValueType,
-} = require('../../../../../vendor/dist/pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 const { SAMPLING_INTERVAL } = require('../constants')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
@@ -22,15 +12,30 @@ const POISSON_RESET_FACTOR = 2
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 
-// While this is an "events profiler", meaning it emits a pprof file based on events observed as
-// perf_hooks events, the emitted pprof file uses the type "timeline".
-const pprofValueType = 'timeline'
-const pprofValueUnit = 'nanoseconds'
+// While this is an "events profiler", meaning it emits a profile based on events observed as
+// perf_hooks events, the emitted profile uses the type "timeline".
+const TIMELINE_SAMPLE_TYPE = { type: 'timeline', unit: 'nanoseconds' }
+
+// A synthetic single-frame stack for timeline samples: profiles need samples to have one. Its name is
+// a single space, which displays as blank, as frames with an empty name get a placeholder name.
+const TIMELINE_FRAME = { name: ' ', file: '', missingMapFile: false }
 
 const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
-function labelFromStr (stringTable, key, valStr) {
-  return new Label({ key, str: stringTable.dedup(safeToString(valStr)) })
+/**
+ * @typedef {import('@datadog/pprof').SampleLabel} SampleLabel
+ * @typedef {import('@datadog/pprof').ProfileVisitor} ProfileVisitor
+ * @typedef {import('@datadog/pprof').CapturedProfile} CapturedProfile
+ * @typedef {import('perf_hooks').PerformanceEntry} PerformanceEntry
+ */
+
+/**
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {SampleLabel}
+ */
+function stringLabel (key, value) {
+  return [key, safeToString(value)]
 }
 
 // We don't want to invoke toString for objects and functions, rather we'll
@@ -49,10 +54,6 @@ function safeToString (val) {
   }
 }
 
-function labelFromStrStr (stringTable, keyStr, valStr) {
-  return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
-}
-
 function getMaxSamples (flushInterval, samplingInterval) {
   const maxCpuSamples = flushInterval / samplingInterval
 
@@ -65,11 +66,10 @@ function getMaxSamples (flushInterval, samplingInterval) {
   return Math.min(100_000, Math.floor(maxCpuSamples * factor))
 }
 
+// Decorators add the labels of an event type's samples. Labels that many samples share are cached:
+// visitors don't modify labels.
 class GCDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-    this.reasonLabelKey = stringTable.dedup('gc reason')
-    this.kindLabelKey = stringTable.dedup('gc type')
+  constructor () {
     this.kindLabels = []
     this.reasonLabels = []
     this.flagObj = {}
@@ -81,7 +81,7 @@ class GCDecorator {
       } else if (key.startsWith('NODE_PERFORMANCE_GC_')) {
         // It's a constant for a kind of GC
         const kind = key.slice(20).toLowerCase()
-        this.kindLabels[value] = labelFromStr(stringTable, this.kindLabelKey, kind)
+        this.kindLabels[value] = stringLabel('gc type', kind)
       }
     }
 
@@ -94,16 +94,20 @@ class GCDecorator {
     if (this.kindLabels[minorMarkGCKind] === undefined) {
       const { NODE_MAJOR } = require('../../../../../version')
       const minorGCLabel = NODE_MAJOR >= 22 ? 'minor_mark_sweep' : 'minor_mark_compact'
-      this.kindLabels[minorMarkGCKind] = labelFromStr(stringTable, this.kindLabelKey, minorGCLabel)
+      this.kindLabels[minorMarkGCKind] = stringLabel('gc type', minorGCLabel)
     }
   }
 
-  decorateSample (sampleInput, item) {
+  /**
+   * @param {SampleLabel[]} labels
+   * @param {PerformanceEntry & { detail: { kind: number, flags: number } }} item
+   */
+  decorateSample (labels, item) {
     const { kind, flags } = item.detail
-    sampleInput.label.push(this.getKindLabel(kind))
+    labels.push(this.getKindLabel(kind))
     const reasonLabel = this.getReasonLabel(flags)
     if (reasonLabel) {
-      sampleInput.label.push(reasonLabel)
+      labels.push(reasonLabel)
     }
   }
 
@@ -112,7 +116,7 @@ class GCDecorator {
     if (kindLabel === undefined) {
       // Gracefully handle GC kinds we don't have a label for (e.g. a value
       // introduced by a future Node.js/V8 version).
-      kindLabel = labelFromStr(this.stringTable, this.kindLabelKey, `unknown_${kind}`)
+      kindLabel = stringLabel('gc type', `unknown_${kind}`)
       this.kindLabels[kind] = kindLabel
     }
     return kindLabel
@@ -131,7 +135,7 @@ class GCDecorator {
           reasonStr += key
         }
       }
-      reasonLabel = labelFromStr(this.stringTable, this.reasonLabelKey, reasonStr)
+      reasonLabel = stringLabel('gc reason', reasonStr)
       this.reasonLabels[flags] = reasonLabel
     }
     return reasonLabel
@@ -139,94 +143,68 @@ class GCDecorator {
 }
 
 class DNSDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-    this.operationNameLabelKey = stringTable.dedup('operation')
-    this.hostLabelKey = stringTable.dedup('host')
-    this.addressLabelKey = stringTable.dedup('address')
-    this.portLabelKey = stringTable.dedup('port')
-  }
-
-  decorateSample (sampleInput, item) {
-    const labels = sampleInput.label
-    const stringTable = this.stringTable
-    function addLabel (labelNameKey, labelValue) {
-      labels.push(labelFromStr(stringTable, labelNameKey, labelValue))
-    }
+  /**
+   * @param {SampleLabel[]} labels
+   * @param {PerformanceEntry & { detail: Record<string, unknown> }} item
+   */
+  decorateSample (labels, item) {
     const op = item.name
-    addLabel(this.operationNameLabelKey, item.name)
+    labels.push(stringLabel('operation', op))
     const detail = item.detail
     switch (op) {
       case 'lookup':
-        addLabel(this.hostLabelKey, detail.hostname)
+        labels.push(stringLabel('host', detail.hostname))
         break
       case 'lookupService':
-        addLabel(this.addressLabelKey, detail.host)
-        labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
+        labels.push(stringLabel('address', detail.host), ['port', /** @type {number} */ (detail.port)])
         break
       case 'getHostByAddr':
-        addLabel(this.addressLabelKey, detail.host)
+        labels.push(stringLabel('address', detail.host))
         break
       default:
         if (op.startsWith('query')) {
-          addLabel(this.hostLabelKey, detail.host)
+          labels.push(stringLabel('host', detail.host))
         }
     }
   }
 }
 
 class NetDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-    this.operationNameLabelKey = stringTable.dedup('operation')
-    this.hostLabelKey = stringTable.dedup('host')
-    this.portLabelKey = stringTable.dedup('port')
-  }
-
-  decorateSample (sampleInput, item) {
-    const labels = sampleInput.label
-    const stringTable = this.stringTable
-    function addLabel (labelNameKey, labelValue) {
-      labels.push(labelFromStr(stringTable, labelNameKey, labelValue))
-    }
+  /**
+   * @param {SampleLabel[]} labels
+   * @param {PerformanceEntry & { detail: Record<string, unknown> }} item
+   */
+  decorateSample (labels, item) {
     const op = item.name
-    addLabel(this.operationNameLabelKey, op)
+    labels.push(stringLabel('operation', op))
     if (op === 'connect') {
       const detail = item.detail
-      addLabel(this.hostLabelKey, detail.host)
-      labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
+      labels.push(stringLabel('host', detail.host), ['port', /** @type {number} */ (detail.port)])
     }
   }
 }
 
 class KeyValueDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-  }
-
-  decorateSample (sampleInput, item) {
-    const labels = sampleInput.label
-    const stringTable = this.stringTable
+  /**
+   * @param {SampleLabel[]} labels
+   * @param {PerformanceEntry & { detail: Record<string, unknown> }} item
+   */
+  decorateSample (labels, item) {
     for (const [key, value] of Object.entries(item.detail)) {
-      switch (typeof value) {
-        case 'string':
-          labels.push(labelFromStrStr(stringTable, key, value))
-          break
-        case 'number':
-          labels.push(new Label({ key: stringTable.dedup(key), num: value }))
+      if (typeof value === 'string' || typeof value === 'number') {
+        labels.push([key, value])
       }
     }
   }
 }
 
 class ZlibDecorator {
-  constructor (stringTable) {
-    this.stringTable = stringTable
-    this.operationNameLabelKey = stringTable.dedup('operation')
-  }
-
-  decorateSample (sampleInput, item) {
-    sampleInput.label.push(labelFromStr(this.stringTable, this.operationNameLabelKey, item.detail.operation))
+  /**
+   * @param {SampleLabel[]} labels
+   * @param {PerformanceEntry & { detail: Record<string, unknown> }} item
+   */
+  decorateSample (labels, item) {
+    labels.push(stringLabel('operation', item.detail.operation))
   }
 }
 
@@ -241,31 +219,21 @@ const decoratorTypes = {
   zlib: ZlibDecorator,
 }
 
-// Translates performance entries into pprof samples.
+/**
+ * A timeline sample: an event's duration, end time and labels.
+ *
+ * @typedef {{ values: number[], timestamp: bigint, labels: SampleLabel[] }} TimelineSample
+ */
+
+// Translates performance entries into timeline samples, to be visited into a profile.
 class EventSerializer {
   #sampleCount = 0
 
   constructor (maxSamples) {
-    this.stringTable = new StringTable()
+    /** @type {TimelineSample[]} */
     this.samples = []
-    this.locations = []
-    this.functions = []
     this.decorators = {}
     this.maxSamples = maxSamples
-
-    // A synthetic single-frame location to serve as the location for timeline
-    // samples. We need these as the profiling backend (mimicking official pprof
-    // tool's behavior) ignores these.
-    const fn = new PprofFunction({ id: this.functions.length + 1, name: this.stringTable.dedup('') })
-    this.functions.push(fn)
-    const line = new Line({ functionId: fn.id })
-    const location = new Location({ id: this.locations.length + 1, line: [line] })
-    this.locations.push(location)
-    this.locationId = [location.id]
-
-    this.timestampLabelKey = this.stringTable.dedup(END_TIMESTAMP_LABEL)
-    this.spanIdKey = this.stringTable.dedup(SPAN_ID_LABEL)
-    this.rootSpanIdKey = this.stringTable.dedup(LOCAL_ROOT_SPAN_ID_LABEL)
   }
 
   addEvent (item) {
@@ -293,14 +261,18 @@ class EventSerializer {
     }
   }
 
+  /**
+   * @param {PerformanceEntry & { _ddSpanId?: bigint, _ddRootSpanId?: bigint }} item
+   * @returns {TimelineSample | undefined}
+   */
   #createSample (item) {
     const { entryType, startTime, duration, _ddSpanId, _ddRootSpanId } = item
     let decorator = this.decorators[entryType]
     if (!decorator) {
       const DecoratorCtor = decoratorTypes[entryType]
       if (DecoratorCtor) {
-        decorator = new DecoratorCtor(this.stringTable)
-        decorator.eventTypeLabel = labelFromStrStr(this.stringTable, 'event', entryType)
+        decorator = new DecoratorCtor()
+        decorator.eventTypeLabel = stringLabel('event', entryType)
         this.decorators[entryType] = decorator
       } else {
         // Shouldn't happen but it's better to not rely on observer only getting
@@ -309,44 +281,51 @@ class EventSerializer {
       }
     }
     const endTime = startTime + duration
-    const label = [
-      decorator.eventTypeLabel,
-      new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) }),
-    ]
+    /** @type {SampleLabel[]} */
+    const labels = [decorator.eventTypeLabel]
     if (_ddSpanId) {
-      label.push(
-        new Label({ key: this.spanIdKey, num: _ddSpanId }))
+      labels.push([SPAN_ID_LABEL, _ddSpanId])
     }
     if (_ddRootSpanId) {
-      label.push(new Label({ key: this.rootSpanIdKey, num: _ddRootSpanId }))
+      labels.push([LOCAL_ROOT_SPAN_ID_LABEL, _ddRootSpanId])
     }
-
-    const sampleInput = {
-      value: [Math.round(duration * MS_TO_NS)],
-      locationId: this.locationId,
-      label,
+    decorator.decorateSample(labels, item)
+    return {
+      values: [Math.round(duration * MS_TO_NS)],
+      timestamp: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)),
+      labels,
     }
-    decorator.decorateSample(sampleInput, item)
-    return new Sample(sampleInput)
   }
 
-  createProfile (startDate, endDate) {
-    const timeValueType = new ValueType({
-      type: this.stringTable.dedup(pprofValueType),
-      unit: this.stringTable.dedup(pprofValueUnit),
-    })
-
-    return new Profile({
-      sampleType: [timeValueType],
-      timeNanos: endDate.getTime() * MS_TO_NS,
-      periodType: timeValueType,
-      period: 1,
-      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
-      sample: this.samples,
-      location: this.locations,
-      function: this.functions,
-      stringTable: this.stringTable,
-    })
+  /**
+   * The serializer's samples as a profile of the period, to be visited. The serializer must not
+   * get more events.
+   *
+   * @param {Date} startDate
+   * @param {Date} endDate
+   * @returns {CapturedProfile}
+   */
+  capture (startDate, endDate) {
+    const samples = this.samples
+    return {
+      /** @param {ProfileVisitor} visitor */
+      visit (visitor) {
+        visitor.metadata({
+          sampleTypes: [TIMELINE_SAMPLE_TYPE],
+          periodType: TIMELINE_SAMPLE_TYPE,
+          period: 1,
+          timeNanos: BigInt(endDate.getTime()) * BigInt(MS_TO_NS),
+          durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
+        })
+        const stackId = visitor.stack([visitor.frame(TIMELINE_FRAME)])
+        for (const { values, timestamp, labels } of samples) {
+          visitor.sample({ stackId, values, labels, timestamp })
+        }
+        const result = { hasMissingMapFiles: false }
+        visitor.end?.(result)
+        return result
+      },
+    }
   }
 }
 
@@ -431,7 +410,7 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
 }
 
 /**
- * This class generates pprof files with timeline events. It combines an event
+ * This class generates profiles with timeline events. It combines an event
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
@@ -486,13 +465,28 @@ class EventsProfiler {
     }
   }
 
+  /**
+   * @param {boolean} restart
+   * @param {Date} startDate
+   * @param {Date} endDate
+   * @returns {CapturedProfile}
+   */
   profile (restart, startDate, endDate) {
     if (!restart) {
       this.stop()
     }
     const thatEventSerializer = this.#eventSerializer
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
-    return () => thatEventSerializer.createProfile(startDate, endDate)
+    return thatEventSerializer.capture(startDate, endDate)
+  }
+
+  /**
+   * How pprof profiles of the captured profiles are built: samples' times are end_timestamp_ns labels.
+   *
+   * @returns {import('@datadog/pprof').PprofSerializerOptions}
+   */
+  get pprofBuilderOptions () {
+    return { timestampLabel: END_TIMESTAMP_LABEL }
   }
 
   getInfo () {
@@ -501,8 +495,14 @@ class EventsProfiler {
     }
   }
 
+  /**
+   * @param {CapturedProfile} profile
+   */
   encode (profile) {
-    return encodeProfileAsync(profile())
+    const { PprofProfileBuilder } = require('@datadog/pprof')
+    const builder = new PprofProfileBuilder(this.pprofBuilderOptions)
+    profile.visit(builder.visitor())
+    return encodeProfileAsync(builder.build())
   }
 }
 
