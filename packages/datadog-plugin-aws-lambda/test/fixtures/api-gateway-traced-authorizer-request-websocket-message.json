@@ -1,0 +1,27 @@
+{
+  "requestContext": {
+    "routeKey": "hello",
+    "authorizer": {
+      "_datadog": "eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiI2NTQ1NDA2NzQ3NDUzNjg0NjAwIiwieC1kYXRhZG9nLXBhcmVudC1pZCI6IjY1NDU0MDY3NDc0NTM2ODQ2MDAiLCJ4LWRhdGFkb2ctc2FtcGxpbmctcHJpb3JpdHkiOiIxIiwieC1kYXRhZG9nLXBhcmVudC1zcGFuLWZpbmlzaC10aW1lIjoxNjY2NjMzNTY2OTMxLCJ4LWRhdGFkb2ctYXV0aG9yaXppbmctcmVxdWVzdGlkIjoiYWhWV3NIVkFtalFGcTZnPSJ9",
+      "scope": "this is just a string",
+      "principalId": "foo"
+    },
+    "messageId": "ahVmYcavmjQCI1w=",
+    "eventType": "MESSAGE",
+    "extendedRequestId": "ahVmYGOMmjQFhyg=",
+    "requestTime": "24/Oct/2022:17:47:46 +0000",
+    "messageDirection": "IN",
+    "stage": "dev",
+    "connectedAt": 1666633565827,
+    "requestTimeEpoch": 1666633666203,
+    "identity": {
+      "sourceIp": "24.193.182.233"
+    },
+    "requestId": "ahVmYGOMmjQFhyg=",
+    "domainName": "85fj5nw29d.execute-api.eu-west-1.amazonaws.com",
+    "connectionId": "ahVWscZqmjQCI1w=",
+    "apiId": "85fj5nw29d"
+  },
+  "body": "{\"action\": \"hello\", \"message\":\"in\"}",
+  "isBase64Encoded": false
+}
