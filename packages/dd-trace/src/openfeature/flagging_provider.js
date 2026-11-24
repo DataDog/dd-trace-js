@@ -42,6 +42,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {number} */
   #initializationTimeoutMs
 
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #initializationHold
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
@@ -117,6 +120,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       // No configuration can arrive, so fail now instead of waiting for the timeout.
       this.setError(this.#configurationSourceError)
     } else {
+      // The upstream initialization timer and every configuration source poll timer are unref'd. Without a ref'd
+      // handle, an otherwise idle process awaiting `setProviderAndWait` exits with code 0 while initialization is
+      // still pending. Hold the process until initialization settles, which the timeout bounds.
+      clearTimeout(this.#initializationHold)
+      this.#initializationHold = setTimeout(() => {}, this.#initializationTimeoutMs)
       log.debug('Feature Flags: waiting for provider initialization (timeout %dms)...', this.#initializationTimeoutMs)
     }
 
@@ -136,6 +144,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // An empty update leaves upstream initialization pending until configuration arrives or it times out.
     if (configuration == null) return
     this.#waitingForConfiguration = false
+    this.#releaseInitializationHold()
 
     if (wasWaiting) {
       this.#logInitialConfiguration()
@@ -151,6 +160,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     const wasWaiting = this.#waitingForConfiguration
     super.setError(error)
     this.#waitingForConfiguration = false
+    this.#releaseInitializationHold()
     if (!wasWaiting) return
 
     try {
@@ -160,6 +170,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
         error instanceof Error ? error.message : String(error)
       )
     } catch { /* logging failure must not affect initialization */ }
+  }
+
+  #releaseInitializationHold () {
+    clearTimeout(this.#initializationHold)
+    this.#initializationHold = undefined
   }
 
   #logInitialConfiguration () {
@@ -181,6 +196,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   onClose () {
     this.#configurationSource?.stop()
     this.#configurationSource = undefined
+    // No configuration can arrive once the source stops, so a pending initialization must not hold the process.
+    this.#releaseInitializationHold()
     this.#spanEnrichmentHook?.destroy()
     this.#spanEnrichmentHook = undefined
     this.#flagEvalEVPHook?.destroy()
