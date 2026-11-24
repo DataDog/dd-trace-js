@@ -90,15 +90,12 @@ function getInterprocessTelemetryCode () {
  * Sends trace, coverage, log and telemetry payloads from workers to the test framework's main process.
  */
 class TestWorkerCiVisibilityExporter {
-  #flushTracesImmediately
-
   constructor () {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()
     const interprocessLogsCode = getInterprocessLogsCode()
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
-    this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
     const includeAgentFields = !getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
     this._writer = new Writer(interprocessTraceCode, encodeTrace.bind(null, includeAgentFields))
     this._coverageWriter = new Writer(interprocessCoverageCode)
@@ -113,8 +110,6 @@ class TestWorkerCiVisibilityExporter {
 
   export (payload) {
     this._writer.append(payload)
-    // Keep the Vitest worker's buffer to one trace, including on JSON-based fork transports.
-    if (this.#flushTracesImmediately) this._writer.flush()
   }
 
   exportCoverage ({ sessionId, suiteId, files }) {

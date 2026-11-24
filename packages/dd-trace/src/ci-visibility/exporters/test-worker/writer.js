@@ -6,15 +6,18 @@ const {
   WEBDRIVERIO_WORKER_ENV,
 } = require('./webdriverio')
 
+const TRACE_BATCH_TARGET_BYTES = 2 * 1024 * 1024
+
 function getVitestWorkerPort () {
   const port = globalThis.__vitest_worker__?.ctx?.port
   return typeof port?.postMessage === 'function' ? port : undefined
 }
 
-/** @template T */
+/** @template {object} T */
 class Writer {
-  /** @type {T[]} */
+  /** @type {object[]} */
   #payloads = []
+  #batchBytes = 0
   #encodePayload
   #pendingFlushes = 0
   #flushCallbacks = []
@@ -22,7 +25,7 @@ class Writer {
 
   /**
    * @param {number | null} interprocessCode
-   * @param {(payload: T) => object} [encodePayload]
+   * @param {(payload: T) => { payload: object, bytes: number }} [encodePayload]
    */
   constructor (interprocessCode, encodePayload) {
     this.#encodePayload = encodePayload
@@ -42,10 +45,10 @@ class Writer {
     if (this.#payloads.length > 0) {
       const payloads = this.#payloads
       this.#payloads = []
-      const payload = this.#encodePayload ? payloads.map(this.#encodePayload) : payloads
+      this.#batchBytes = 0
 
       this.#pendingFlushes++
-      this._sendPayload(payload, error => {
+      this._sendPayload(payloads, error => {
         this.#flushError ||= error
         this.#pendingFlushes--
         this.#finishFlush()
@@ -67,7 +70,25 @@ class Writer {
 
   /** @param {T} payload */
   append (payload) {
-    this.#payloads.push(payload)
+    if (!this.#encodePayload) {
+      this.#payloads.push(payload)
+      return
+    }
+
+    let encoded
+    try {
+      encoded = this.#encodePayload(payload)
+    } catch (error) {
+      this.#flushError ||= error
+      log.error('Error encoding test worker trace: %s', error)
+      return
+    }
+
+    if (this.#payloads.length > 0 && this.#batchBytes + encoded.bytes > TRACE_BATCH_TARGET_BYTES) this.flush()
+    this.#payloads.push(encoded.payload)
+    this.#batchBytes += encoded.bytes
+    // A trace is indivisible. Send it alone if it exceeds the target batch size.
+    if (this.#batchBytes > TRACE_BATCH_TARGET_BYTES) this.flush()
   }
 
   _sendPayload (data, onDone = () => {}) {
@@ -86,43 +107,27 @@ class Writer {
       payload = createWebdriverioWorkerMessage(payload)
     }
 
-    const vitestWorkerPort = getVitestWorkerPort()
-    if (vitestWorkerPort) {
-      try {
+    try {
+      const vitestWorkerPort = getVitestWorkerPort()
+      if (vitestWorkerPort) {
         vitestWorkerPort.postMessage(payload)
-      } catch (error) {
-        log.error('Error posting message to vitest worker port', error)
-      } finally {
-        onDone()
-      }
-      return
-    }
-
-    // child_process workers (jest default, cucumber)
-    if (process.send) {
-      process.send(payload, (error) => {
-        if (error) log.error('Error sending message to parent process', error)
-        onDone(error)
-      })
-      return
-    }
-
-    // worker_threads (jest --workerThreads, vitest)
-    const { isMainThread, parentPort } = require('node:worker_threads')
-    if (!isMainThread && parentPort) {
-      try {
-        parentPort.postMessage(payload)
-      } catch (error) {
-        log.error('Error posting message to parent port', error)
-        onDone(error)
+      } else if (process.send) {
+        process.send(payload, (error) => {
+          if (error) log.error('Error sending message to test worker parent: %s', error)
+          onDone(error)
+        })
         return
+      } else {
+        const { parentPort } = require('node:worker_threads')
+        parentPort?.postMessage(payload)
       }
-      // postMessage has no acknowledgement callback. Completion means the
-      // message was accepted by the local port, not processed by the parent.
-      onDone()
+    } catch (error) {
+      log.error('Error sending message to test worker parent: %s', error)
+      onDone(error)
       return
     }
 
+    // postMessage completes when the port accepts the message.
     onDone()
   }
 }
