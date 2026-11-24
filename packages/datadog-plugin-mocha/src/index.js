@@ -304,9 +304,6 @@ class MochaPlugin extends CiPlugin {
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
-    if (lineCoverage.isEnabled()) {
-      lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
-    }
     this._webdriverioScreenshotUploads = new WeakMap()
     this._webdriverioVideos = new Map()
     this._pendingWebdriverioMediaUploads = 0
@@ -1153,6 +1150,14 @@ class MochaPlugin extends CiPlugin {
     this.addBind('ci:mocha:global:run', (ctx) => {
       return ctx.currentStore
     })
+  }
+
+  configure (config, shouldGetEnvironmentData) {
+    super.configure(config, shouldGetEnvironmentData)
+    // Coverage files are relative to the repository root, which is known only once configured.
+    if (this._enabled && lineCoverage.isEnabled()) {
+      lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
+    }
   }
 
   /**
