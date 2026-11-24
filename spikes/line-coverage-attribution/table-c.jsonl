@@ -1,0 +1,16 @@
+{"tier":"ignition","flags":" --no-sparkplug --no-maglev --no-turbofan"} {"node":"v24.22.3","plainNs":42.3,"rawStore":"136.91 [136.36..137.51]","addon":"44.76 [44.56..45.04]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 26864 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"sparkplug","flags":" --sparkplug --always-sparkplug --no-maglev --no-turbofan"} {"node":"v24.22.3","plainNs":22.28,"rawStore":"92.36 [92.00..93.31]","addon":"33.08 [32.95..33.17]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 26902 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"maglev","flags":" --maglev --no-turbofan"} {"node":"v24.22.3","plainNs":1.63,"rawStore":"29.51 [29.46..29.68]","addon":"20.04 [19.98..20.42]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 26925 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"turbofan","flags":" "} {"node":"v24.22.3","plainNs":0.57,"rawStore":"17.42 [17.39..17.52]","addon":"15.29 [15.24..15.32]","fastShare":1,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 26962 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"ignition","flags":"--experimental-async-context-frame --no-sparkplug --no-maglev --no-turbofan"} {"node":"v22.23.5","plainNs":42.73,"rawStore":"116.39 [116.33..116.92]","addon":"45.11 [45.07..46.23]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 26998 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"sparkplug","flags":"--experimental-async-context-frame --sparkplug --always-sparkplug --no-maglev --no-turbofan"} {"node":"v22.23.5","plainNs":20.06,"rawStore":"74.57 [74.53..75.22]","addon":"34.92 [34.82..35.02]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 27047 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"maglev","flags":"--experimental-async-context-frame --maglev --no-turbofan"} {"node":"v22.23.5","plainNs":19.88,"rawStore":"74.59 [74.50..75.15]","addon":"36.50 [36.30..36.66]","fastShare":0,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 27110 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
+{"tier":"turbofan","flags":"--experimental-async-context-frame "} {"node":"v22.23.5","plainNs":0.98,"rawStore":"12.11 [12.10..12.15]","addon":"17.98 [17.92..18.09]","fastShare":1,"switches":2}
+/home/bits/attribution-spike/run-c.sh: line 7: 27202 Segmentation fault         (core dumped) $n $extra $f bench-c.js $N 11
