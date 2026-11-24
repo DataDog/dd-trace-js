@@ -162,6 +162,7 @@ export async function getRestJobs (api, run) {
   const perPage = 100
   const jobs = []
   const attempt = run.run_attempt ?? 1
+  let expectedTotal
 
   for (let page = 1; ; page++) {
     // eslint-disable-next-line no-await-in-loop -- the response determines whether another page is needed
@@ -175,14 +176,23 @@ export async function getRestJobs (api, run) {
     })
 
     const batch = response?.data?.jobs
-    if (!Array.isArray(batch)) {
+    const total = response?.data?.total_count
+    if (!Array.isArray(batch) || !Number.isSafeInteger(total) || total < 0 ||
+        (expectedTotal !== undefined && total !== expectedTotal)) {
       throw new TypeError(
         `Unexpected jobs response for workflow run ${run.id}, attempt ${attempt}, ` +
         `page ${page}, per_page ${perPage} (HTTP ${response?.status}).`
       )
     }
+    expectedTotal ??= total
 
     jobs.push(...batch)
-    if (batch.length < perPage) return jobs
+    if (jobs.length === total) return jobs
+    if (batch.length < perPage || jobs.length > total) {
+      throw new Error(
+        `Expected ${total} jobs for workflow run ${run.id}, attempt ${attempt}, ` +
+        `but received ${jobs.length} by page ${page}.`
+      )
+    }
   }
 }
