@@ -107,7 +107,7 @@ describe('datadog-esbuild plugin', () => {
         [pkg, version],
         ['express', '4.22.1'],
         ['left-pad', '1.3.0'],
-        ['ai', '6.0.0'],
+        ['@wdio/runner', '9.0.0'],
         ['@modelcontextprotocol/sdk', '1.27.1'],
       ]) {
         const packageDir = path.join(projectDir, 'node_modules', name)
@@ -266,15 +266,15 @@ describe('datadog-esbuild plugin', () => {
     })
 
     it('rewrites targets with neither activation nor export hooks without publishing', async () => {
-      const resourcePath = path.join(projectDir, 'node_modules/ai/dist/index.js')
+      const resourcePath = path.join(projectDir, 'node_modules/@wdio/runner/build/index.js')
       fs.mkdirSync(path.dirname(resourcePath), { recursive: true })
-      fs.writeFileSync(resourcePath, 'function getTracer () { return {} }\nmodule.exports = { getTracer }\n')
-      const resolved = resolve('ai/dist/index.js')
+      fs.writeFileSync(resourcePath, 'class Runner { async run () { return true } }\nmodule.exports = { Runner }\n')
+      const resolved = resolve('@wdio/runner/build/index.js')
       const onLoad = captureOnLoad()
       const result = await onLoad(resolved)
 
       assert.equal(resolved.pluginData.rewriteOnly, true)
-      assert.match(result.contents, /orchestrion:ai:getTracer/)
+      assert.match(result.contents, /orchestrion:@wdio\/runner:Runner_run/)
       assert.doesNotMatch(result.contents, /dd-trace:bundler:load|payload.module/)
     })
 
