@@ -58,6 +58,7 @@ function job ({ id, name, end, steps = [] }) {
 function run ({ id, name, path, duration, sha = '1234567890abcdef' }) {
   return {
     id,
+    node_id: `workflow-${id}`,
     name,
     path,
     event: 'push',
@@ -240,7 +241,7 @@ describe('CI duration report', () => {
     }
     const codeowners = '/.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js\n'
     const snapshot = await collectSnapshot(
-      api,
+      { rest: api },
       codeowners,
       new Date('2026-09-10T13:00:00.000Z'),
       '2026-09-08..2026-09-10'
@@ -274,13 +275,78 @@ describe('CI duration report', () => {
       },
     }
     const snapshot = await collectSnapshot(
-      api,
+      { rest: api },
       '',
       new Date('2026-09-10T13:00:00.000Z'),
       '2026-09-10..2026-09-10'
     )
 
     assert.deepStrictEqual(snapshot.anchors, [anchor])
+  })
+
+  it('uses GraphQL summaries for slow workflows and REST steps for system tests and reruns', async () => {
+    const anchor = run({ id: 1, name: 'All Green', path: '.github/workflows/all-green.yml', duration: 60 })
+    const slow = run({ id: 2, name: 'AppSec', path: '.github/workflows/appsec.yml', duration: 500 })
+    const system = run({
+      id: 3, name: 'System Tests', path: '.github/workflows/system-tests.yml@master', duration: 510,
+    })
+    const rerun = {
+      ...run({ id: 4, name: 'APM', path: '.github/workflows/apm-integrations.yml', duration: 520 }),
+      run_attempt: 2,
+    }
+    const restRequests = []
+    const graphqlRequests = []
+    const api = {
+      rest: {
+        actions: {
+          listWorkflowRuns: () => Promise.resolve({ data: { workflow_runs: [anchor] } }),
+          listWorkflowRunsForRepo: () => Promise.resolve({ data: { workflow_runs: [slow, system, rerun] } }),
+          listJobsForWorkflowRunAttempt: options => {
+            restRequests.push([options.run_id, options.attempt_number])
+            return Promise.resolve({
+              data: {
+                jobs: [job({
+                  id: options.run_id,
+                  name: 'system job',
+                  end: 490,
+                  steps: [step({ name: 'Run FEATURE scenario', start: 10, end: 100 })],
+                })],
+              },
+            })
+          },
+        },
+      },
+      graphql: (query, variables) => {
+        graphqlRequests.push(variables.id)
+        return Promise.resolve({
+          node: {
+            runAttempt: 1,
+            checkSuite: {
+              checkRuns: {
+                pageInfo: { hasNextPage: false },
+                nodes: [{
+                  name: 'appsec job',
+                  detailsUrl: 'https://example.com/jobs/appsec',
+                  conclusion: 'SUCCESS',
+                  startedAt: timestamp(0),
+                  completedAt: timestamp(480),
+                }],
+              },
+            },
+          },
+        })
+      },
+    }
+
+    const snapshot = await collectSnapshot(api, '', new Date('2026-09-10T13:00:00.000Z'))
+
+    assert.deepStrictEqual(graphqlRequests, [slow.node_id])
+    assert.deepStrictEqual(restRequests, [[system.id, 1], [rerun.id, 2]])
+    const appsec = snapshot.workflows.find(workflow => workflow.id === slow.id)
+    assert.strictEqual(appsec.analysis.jobs[0].durationMs, 480 * 1000)
+    const systemTests = snapshot.workflows.find(workflow => workflow.id === system.id)
+    assert.strictEqual(systemTests.analysis.scenarios[0].name, 'FEATURE')
+    assert.strictEqual(systemTests.analysis.scenarios[0].durationMs, 90 * 1000)
   })
 
   it('uses the original run creation time for the stale warning', async () => {
@@ -295,8 +361,8 @@ describe('CI duration report', () => {
         listWorkflowRunsForRepo: () => Promise.resolve({ data: { workflow_runs: [anchor] } }),
       },
     }
-    const boundary = await collectSnapshot(api, '', new Date('2026-09-08T12:00:00.000Z'))
-    const stale = await collectSnapshot(api, '', new Date('2026-09-08T12:00:00.001Z'))
+    const boundary = await collectSnapshot({ rest: api }, '', new Date('2026-09-08T12:00:00.000Z'))
+    const stale = await collectSnapshot({ rest: api }, '', new Date('2026-09-08T12:00:00.001Z'))
 
     assert.strictEqual(boundary.stale, false)
     assert.strictEqual(stale.stale, true)
