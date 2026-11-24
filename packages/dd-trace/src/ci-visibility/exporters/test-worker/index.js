@@ -19,6 +19,7 @@ const {
 } = require('../../../plugins/util/test')
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
+const TraceObjectEncoder = require('../../encode/trace-object-encoder')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
@@ -86,12 +87,10 @@ function getInterprocessTelemetryCode () {
 }
 
 /**
- * Lightweight exporter whose writers only do simple JSON serialization
- * of trace, coverage and logs payloads, which they send to the test framework's main process.
- * Currently used by Jest, Cucumber and Mocha workers.
+ * Sends trace, coverage, log and telemetry payloads from workers to the test framework's main process.
  */
 class TestWorkerCiVisibilityExporter {
-  #sendTracesDirectly
+  #flushTracesImmediately
 
   constructor () {
     const interprocessTraceCode = getInterprocessTraceCode()
@@ -99,8 +98,11 @@ class TestWorkerCiVisibilityExporter {
     const interprocessLogsCode = getInterprocessLogsCode()
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
-    this.#sendTracesDirectly = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
-    this._writer = new Writer(interprocessTraceCode)
+    this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
+    const traceEncoder = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
+      ? new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
+      : undefined
+    this._writer = new Writer(interprocessTraceCode, traceEncoder)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
     if (interprocessTelemetryCode) {
@@ -112,12 +114,9 @@ class TestWorkerCiVisibilityExporter {
   }
 
   export (payload) {
-    if (this.#sendTracesDirectly) {
-      // Keep each IPC message to one trace so a large test file cannot overflow a JSON string.
-      this._writer.sendTrace(payload)
-    } else {
-      this._writer.append(payload)
-    }
+    this._writer.append(payload)
+    // Keep the Vitest worker's buffer to one trace, including on JSON-based fork transports.
+    if (this.#flushTracesImmediately) this._writer.flush()
   }
 
   exportCoverage (formattedCoverage) {

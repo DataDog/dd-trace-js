@@ -12,40 +12,18 @@ function getVitestWorkerPort () {
   return typeof port?.postMessage === 'function' ? port : undefined
 }
 
-/**
- * @param {unknown} value
- */
-function isNormalizedByJson (value) {
-  return typeof value === 'number' && (!Number.isFinite(value) || Object.is(value, -0))
-}
-
-/**
- * @param {import('../../../span_format').FormattedSpan} span
- */
-function encodeTraceSpan (span) {
-  // Structured clone skips JSON's toJSON hooks and preserves non-finite numbers.
-  // Use the old conversion for spans with nested data or numbers that JSON changes.
-  if (span.meta_struct !== undefined || span.span_events !== undefined ||
-      Object.values(span.metrics).some(isNormalizedByJson)) {
-    // eslint-disable-next-line unicorn/prefer-structured-clone
-    return JSON.parse(JSON.stringify(span))
-  }
-
-  return {
-    ...span,
-    trace_id: span.trace_id.toString(),
-    span_id: span.span_id.toString(),
-    parent_id: span.parent_id.toString(),
-  }
-}
-
 class Writer {
+  #encoder
   #pendingFlushes = 0
   #flushCallbacks = []
   #flushError
 
-  constructor (interprocessCode) {
-    this._encoder = new JSONEncoder()
+  /**
+   * @param {number | null} interprocessCode
+   * @param {JSONEncoder | import('../../encode/trace-object-encoder')} [encoder]
+   */
+  constructor (interprocessCode, encoder = new JSONEncoder()) {
+    this.#encoder = encoder
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
     this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -57,35 +35,21 @@ class Writer {
    * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
-    const count = this._encoder.count()
+    const count = this.#encoder.count()
     if (onDone) this.#flushCallbacks.push(onDone)
 
     if (count > 0) {
-      const payload = this._encoder.makePayload()
+      const payload = this.#encoder.makePayload()
 
-      this.#send(payload)
+      this.#pendingFlushes++
+      this._sendPayload(payload, error => {
+        this.#flushError ||= error
+        this.#pendingFlushes--
+        this.#finishFlush()
+      })
     } else {
       this.#finishFlush()
     }
-  }
-
-  /**
-   * @param {import('../../../span_format').FormattedSpan[]} trace
-   */
-  sendTrace (trace) {
-    this.#send([trace.map(encodeTraceSpan)])
-  }
-
-  /**
-   * @param {string | object[][]} payload
-   */
-  #send (payload) {
-    this.#pendingFlushes++
-    this._sendPayload(payload, error => {
-      this.#flushError ||= error
-      this.#pendingFlushes--
-      this.#finishFlush()
-    })
   }
 
   #finishFlush () {
@@ -99,7 +63,7 @@ class Writer {
   }
 
   append (payload) {
-    this._encoder.encode(payload)
+    this.#encoder.encode(payload)
   }
 
   _sendPayload (data, onDone = () => {}) {

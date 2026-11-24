@@ -329,6 +329,7 @@ describe('CI Visibility Test Worker Exporter', () => {
     afterEach(() => {
       delete process.env.DD_VITEST_WORKER
       delete process.env.TINYPOOL_WORKER_ID
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
       delete globalThis.__vitest_worker__
     })
 
@@ -368,14 +369,15 @@ describe('CI Visibility Test Worker Exporter', () => {
       }
     }
 
-    it('preserves the JSON representation of non-finite metrics and negative zero', () => {
+    it('drops non-finite metrics and normalizes negative zero for intake', () => {
       process.env.DD_VITEST_WORKER = '1'
       const span = makeSpan()
-      span.metrics = { nan: NaN, positive: Infinity, negative: -Infinity, finite: 1 }
+      span.metrics = { nan: NaN, positive: Infinity, negative: -Infinity, finite: 1, url: 'https://example.com' }
       const zeroSpan = makeSpan()
       zeroSpan.metrics = { signedZero: -0 }
       const trace = [span, zeroSpan]
       const expected = JSON.parse(JSON.stringify([trace]))
+      expected[0][0].metrics = { finite: 1, url: 'https://example.com' }
       const exporter = new TestWorkerCiVisibilityExporter()
 
       exporter.export(trace)
@@ -385,7 +387,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       assert.strictEqual(zeroSpan.metrics.signedZero, -0)
     })
 
-    it('preserves JSON conversion of structured metadata and span events', () => {
+    it('preserves JSON conversion of structured metadata and span events for the Agent fallback', () => {
       process.env.DD_VITEST_WORKER = '1'
       const metadataSpan = makeSpan()
       metadataSpan.meta_struct = {
@@ -407,6 +409,22 @@ describe('CI Visibility Test Worker Exporter', () => {
       assert.deepStrictEqual(send.firstCall.args[0], [VITEST_WORKER_TRACE_PAYLOAD_CODE, expected])
       assert.strictEqual(metadataSpan.meta_struct.nested.values[1], Infinity)
       assert.strictEqual(eventSpan.span_events[0].attributes.value, Infinity)
+    })
+
+    it('omits structured metadata and span events that the agentless intake does not use', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
+      const span = makeSpan()
+      const expected = JSON.parse(JSON.stringify([[span]]))
+      const toJSON = sinon.spy()
+      span.meta_struct = { nested: { toJSON } }
+      span.span_events = [{ name: 'event', startTime: 1_700_000_000_000 }]
+      const exporter = new TestWorkerCiVisibilityExporter()
+
+      exporter.export([span])
+
+      assert.deepStrictEqual(send.firstCall.args[0], [VITEST_WORKER_TRACE_PAYLOAD_CODE, expected])
+      sinon.assert.notCalled(toJSON)
     })
 
     it('waits for all automatically flushed traces before signaling final completion', () => {
