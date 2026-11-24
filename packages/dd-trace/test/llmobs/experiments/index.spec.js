@@ -128,10 +128,20 @@ describe('LLMObs Experiments facade', () => {
       sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
 
-    it('returns a no-op when app key is missing', () => {
-      const exp = createExperiments({ site: 's', DD_API_KEY: 'k', llmobs: { DD_LLMOBS_ENABLED: true } })
-      assert.ok(exp instanceof NoopExperiments)
-    })
+    for (const missing of [
+      ['DD_API_KEY'],
+      ['DD_APP_KEY'],
+      ['DD_API_KEY', 'DD_APP_KEY'],
+    ]) {
+      it(`returns a no-op when ${missing.join(' and ')} is missing`, () => {
+        const config = enabledConfig()
+        for (const name of missing) config[name] = undefined
+
+        const exp = createExperiments(config)
+
+        assert.ok(exp instanceof NoopExperiments)
+      })
+    }
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())

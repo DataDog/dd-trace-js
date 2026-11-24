@@ -12,6 +12,8 @@ const repoRoot = path.resolve(__dirname, '../../../..')
 const rulesBundle = 'vendor/dist/@datadog/openfeature-node-server/rules-based/index.js'
 const expectedTracedFiles = [
   'vendor/dist/@datadog/openfeature-node-server/index.js',
+  'vendor/dist/@datadog/flagging-core/index.js',
+  'packages/dd-trace/src/openfeature/flag-selection.js',
   'packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook.js',
   'packages/dd-trace/src/openfeature/writers/flag-evaluations.js',
   'packages/dd-trace/src/openfeature/writers/flag-evaluation-worker.js',
@@ -103,6 +105,8 @@ describe('OpenFeature file tracing', () => {
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flagging_provider'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/configuration_source'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/agentless_configuration_source'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flag-selection'))}),
+        require.resolve(${JSON.stringify(path.join(repoRoot, 'vendor/dist/@datadog/flagging-core'))}),
         require.resolve(${JSON.stringify(path.join(repoRoot, 'vendor/dist/@datadog/openfeature-node-server'))}),
         require.resolve(${JSON.stringify(path.join(repoRoot, rulesBundle))}),
         require.resolve('@openfeature/server-sdk'),
@@ -126,7 +130,7 @@ describe('OpenFeature file tracing', () => {
           })
 
           assert.strictEqual(result.status, 0, result.stderr)
-          assert.deepStrictEqual(JSON.parse(result.stdout), Array(12).fill(false))
+          assert.deepStrictEqual(JSON.parse(result.stdout), Array(14).fill(false))
         }
       }
     }

@@ -26,6 +26,14 @@ const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
 
+// Preserve the first redirect target across independently evaluated outgoing requests.
+const REDIRECT_TARGET_ATTRIBUTES = new Set([
+  'appsec.api.redirection.move_target',
+  'appsec.api.redirection.redirect_target',
+  'api.security.redirection.move_target',
+  'api.security.redirection.redirect_target',
+])
+
 const COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH = 4096
 const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
 const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
@@ -560,6 +568,7 @@ function reportAttributes (attributes, req, rootSpan) {
 
   const tags = {}
   for (let [tag, value] of Object.entries(attributes)) {
+    if (REDIRECT_TARGET_ATTRIBUTES.has(tag) && rootSpan.context().hasTag(tag)) continue
     if (isSchemaAttribute(tag)) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
       value = gzippedValue.toString('base64')

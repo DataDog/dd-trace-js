@@ -20,6 +20,9 @@ const {
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
+  nextResponseBody,
+  nextJsonResponse,
+  nextAppRouteResponse,
   expressProcessParams,
   fastifyQueryParams,
   responseBody,
@@ -27,6 +30,7 @@ const {
   responseSetHeader,
   informationalResponse,
   routerParam,
+  routerRouteCreate,
   fastifyResponseChannel,
   fastifyPathParams,
   stripeCheckoutSessionCreate,
@@ -41,6 +45,7 @@ const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const lambda = require('./lambda')
 const rasp = require('./rasp')
+const { onRouteCreate } = require('./api_security/normalized-route')
 const httpRequest = require('./handlers/http-request')
 const httpResponse = require('./handlers/http-response')
 const auth = require('./handlers/auth')
@@ -62,12 +67,16 @@ const channelHandlers = [
   [queryParser, httpRequest.onRequestQueryParsed],
   [nextBodyParsed, httpRequest.onRequestBodyParsed],
   [nextQueryParsed, httpRequest.onRequestQueryParsed],
+  [nextResponseBody, httpResponse.onNextResponseBody],
+  [nextJsonResponse, httpResponse.onNextJsonResponse],
+  [nextAppRouteResponse, httpResponse.onNextAppRouteResponse],
   [expressProcessParams, httpRequest.onRequestProcessParams],
   [fastifyBodyParser, httpRequest.onRequestBodyParsed],
   [fastifyQueryParams, httpRequest.onRequestQueryParsed],
   [fastifyCookieParser, httpRequest.onRequestCookieParser],
   [fastifyPathParams, httpRequest.onRequestProcessParams],
   [routerParam, httpRequest.onRequestProcessParams],
+  [routerRouteCreate, onRouteCreate],
   [responseBody, httpResponse.onResponseBody],
   [fastifyResponseChannel, httpResponse.onResponseBody],
   [responseWriteHead, httpResponse.onResponseWriteHead],

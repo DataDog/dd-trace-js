@@ -18,8 +18,8 @@ const {
   GIT_COMMIT_HEAD_SHA,
 } = require('./tags')
 
-const { normalizeRef } = require('./ci')
-const { filterSensitiveInfoFromRepository } = require('./url')
+const { normalizeCommitSha, normalizeRef } = require('./ci')
+const { filterSensitiveInfoFromRepository, isScpStyleRepositoryUrl } = require('./url')
 
 function removeEmptyValues (tagsAndValues) {
   const filteredTags = {}
@@ -36,7 +36,7 @@ function removeEmptyValues (tagsAndValues) {
 // https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87
 // The `.git` suffix is optional in this version
 function validateGitRepositoryUrl (repoUrl) {
-  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\/?|#[-\w.]+)$/.test(repoUrl)
+  return isScpStyleRepositoryUrl(repoUrl) || /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\/?|#[-\w.]+)$/.test(repoUrl)
 }
 
 function validateGitCommitSha (gitCommitSha) {
@@ -73,7 +73,7 @@ function getUserProviderGitMetadata () {
 
   // Key value pairs are grouped in pairs of two
   return removeEmptyValues([
-    GIT_COMMIT_SHA, DD_GIT_COMMIT_SHA,
+    GIT_COMMIT_SHA, normalizeCommitSha(DD_GIT_COMMIT_SHA),
     GIT_BRANCH, branch,
     GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
     GIT_TAG, tag,
@@ -85,8 +85,8 @@ function getUserProviderGitMetadata () {
     GIT_COMMIT_AUTHOR_EMAIL, DD_GIT_COMMIT_AUTHOR_EMAIL,
     GIT_COMMIT_AUTHOR_DATE, DD_GIT_COMMIT_AUTHOR_DATE,
     GIT_PULL_REQUEST_BASE_BRANCH, DD_GIT_PULL_REQUEST_BASE_BRANCH,
-    GIT_PULL_REQUEST_BASE_BRANCH_SHA, DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-    GIT_COMMIT_HEAD_SHA, DD_GIT_COMMIT_HEAD_SHA,
+    GIT_PULL_REQUEST_BASE_BRANCH_SHA, normalizeCommitSha(DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA),
+    GIT_COMMIT_HEAD_SHA, normalizeCommitSha(DD_GIT_COMMIT_HEAD_SHA),
   ])
 }
 

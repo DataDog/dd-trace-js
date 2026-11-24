@@ -167,7 +167,7 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
  * @param {number} rate
  */
 function formatKnuthRate (rate) {
-  const string = Number(rate).toFixed(6)
+  const string = rate.toFixed(6)
   for (let i = string.length - 1; i > 0; i--) {
     if (string[i] === '0') continue
     return string.slice(0, i + (string[i] === '.' ? 0 : 1))

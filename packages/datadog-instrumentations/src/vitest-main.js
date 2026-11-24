@@ -1055,6 +1055,15 @@ function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
+      // Tag retries are resolved during declaration, after the callback's own options were captured.
+      if (config.tags) {
+        config.tags = config.tags.map(tag => tag.retry === undefined
+          ? tag
+          : {
+              ...tag,
+              meta: { ...tag.meta, __ddTestOptHasFrameworkRetry: true },
+            })
+      }
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
       config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
@@ -1188,6 +1197,11 @@ function safeWorkspaceProject (ctx) {
   return project
 }
 
+function hasCachedSpecifications (ctx) {
+  const cachedSpecs = ctx?.specifications?._cachedSpecs
+  return typeof cachedSpecs?.size === 'number' && cachedSpecs.size > 0
+}
+
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (this.ctx.config.shard && this.ctx.state.pathsSet.size > 0 && arguments[0].length === 0) {
@@ -1220,13 +1234,16 @@ function getFinishWrapper (exitOrClose) {
 
     // pathsSet contains candidates before sharding, including files that never run.
     const hasNoTestFiles = this.state.pathsSet.size === 0
-    const isEmptyShard = emptyShardContexts.has(this)
+    const files = this.state.getFiles()
+    const tests = getTypeTasks(files)
+    const isEmptyShard = emptyShardContexts.has(this) ||
+      (this.config.shard && this.config.passWithNoTests && !areAllSuitesSkipped &&
+        files.length === 0 && hasCachedSpecifications(this))
     const hasUnexpectedEmptySession = hasNoTestFiles && !isEmptyShard &&
       !areAllSuitesSkipped && !this.config.passWithNoTests
     if (!error && hasUnexpectedEmptySession) {
       error = new Error('No test files were found.')
     }
-    const tests = getTypeTasks(this.state.getFiles())
     const hasExecutedTests = tests.some(test =>
       test.mode !== 'skip' && test.mode !== 'todo' &&
       (test.result?.state === 'pass' || test.result?.state === 'fail')
@@ -1280,6 +1297,13 @@ function getFinishWrapper (exitOrClose) {
 function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
     return function (...args) {
+      const entrypoint = oldCliOrStartVitest.name
+      if (testSessionStartCh.hasSubscribers && (entrypoint === 'createVitest' || entrypoint === 'startVitest')) {
+        const isCreate = entrypoint === 'createVitest'
+        const isLegacySignature = typeof args[0] === 'string'
+        const overridesIndex = isCreate ? (isLegacySignature ? 2 : 1) : (isLegacySignature ? 3 : 2)
+        args[overridesIndex] = noWorkerInit.addBrowserAnnotationPlugin(args[overridesIndex])
+      }
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
         return oldCliOrStartVitest.apply(this, args)
       }
@@ -2077,6 +2101,16 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const createVitestExport = findExportByName(cliApiPackage, 'createVitest')
   if (createVitestExport) {
     shimmer.wrap(cliApiPackage, createVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  }
+  // Newer CLI chunks call the bundled namespace instead of the direct function exports.
+  for (const [key, value] of Object.entries(cliApiPackage)) {
+    if (value && typeof value === 'object' && typeof value.startVitest === 'function') {
+      cliApiPackage[key] = {
+        ...value,
+        startVitest: cliApiPackage[startVitestExport.key],
+      }
+      if (createVitestExport) cliApiPackage[key].createVitest = cliApiPackage[createVitestExport.key]
+    }
   }
   wrapMessagePortOn()
 

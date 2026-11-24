@@ -101,18 +101,31 @@ function extractMetrics (response) {
 
   if (!tokenUsage) return metrics
 
-  if (tokenUsage.promptTokenCount) {
-    metrics.inputTokens = tokenUsage.promptTokenCount
+  // Gemini reports thinking tokens (`thoughtsTokenCount`) and tool-use prompt tokens
+  // (`toolUsePromptTokenCount`) outside of `candidatesTokenCount` / `promptTokenCount`.
+  const { thoughtsTokenCount, toolUsePromptTokenCount, cachedContentTokenCount } = tokenUsage
+  const inputTokens = (tokenUsage.promptTokenCount || 0) + (toolUsePromptTokenCount || 0)
+  const outputTokens = (tokenUsage.candidatesTokenCount || 0) + (thoughtsTokenCount || 0)
+
+  if (inputTokens) {
+    metrics.inputTokens = inputTokens
   }
 
-  if (tokenUsage.candidatesTokenCount) {
-    metrics.outputTokens = tokenUsage.candidatesTokenCount
+  if (outputTokens) {
+    metrics.outputTokens = outputTokens
   }
 
-  const totalTokens = tokenUsage.totalTokenCount ||
-                    (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
+  const totalTokens = tokenUsage.totalTokenCount || inputTokens + outputTokens
   if (totalTokens) {
     metrics.totalTokens = totalTokens
+  }
+
+  if (cachedContentTokenCount) {
+    metrics.cacheReadTokens = cachedContentTokenCount
+  }
+
+  if (thoughtsTokenCount) {
+    metrics.reasoningOutputTokens = thoughtsTokenCount
   }
 
   return metrics
@@ -121,10 +134,10 @@ function extractMetrics (response) {
 /**
  * Extract metadata from config
  * @param {object} config
- * @returns {object}
+ * @returns {object | undefined}
  */
 function extractMetadata (config) {
-  if (!config) return {}
+  if (!config) return
 
   const fieldMap = {
     temperature: 'temperature',
@@ -143,9 +156,13 @@ function extractMetadata (config) {
     automatic_function_calling: 'automaticFunctionCalling',
   }
 
-  const metadata = {}
+  let metadata
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
-    metadata[metadataKey] = config[configKey] ?? null
+    const value = config[configKey]
+    if (value != null) {
+      metadata ??= {}
+      metadata[metadataKey] = value
+    }
   }
 
   return metadata

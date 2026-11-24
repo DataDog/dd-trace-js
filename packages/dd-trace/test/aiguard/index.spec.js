@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
 const { inspect, isDeepStrictEqual } = require('node:util')
+const vm = require('node:vm')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -154,6 +155,7 @@ describe('AIGuard SDK', () => {
     )
   }
 
+  /** @type {(meta: Record<string, unknown>, metaStruct?: object | null) => Promise<void>} */
   const assertAIGuardSpan = async (meta, metaStruct = null) => {
     await agent.assertFirstTraceSpan(span => {
       assert.strictEqual(span.name, 'ai_guard')
@@ -1332,13 +1334,6 @@ describe('AIGuard SDK', () => {
     })
   })
 
-  it('test missing required fields uses noop as default', async () => {
-    const client = new AIGuard(tracer, { aiguard: { DD_AI_GUARD_ENDPOINT: 'http://aiguard' } })
-    const result = await client.evaluate(toolCall)
-    assert.strictEqual(result.action, 'ALLOW')
-    assert.strictEqual(result.reason, 'AI Guard is not enabled')
-  })
-
   it('test ai_guard.event tag on root span', async () => {
     mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
@@ -1396,6 +1391,355 @@ describe('AIGuard SDK', () => {
       const guardSpan = traces[0].find(span => span.name === 'ai_guard')
       assert.ok(parentSpan && guardSpan, 'expected both explicit-parent and ai_guard spans')
       assert.strictEqual(guardSpan.parent_id.toString(), parentSpan.span_id.toString())
+    })
+  })
+
+  describe('custom tags', () => {
+    const mockAllow = () => mockRequest({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    const assertGuardSpan = (callback) => agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'ai_guard')
+      callback(span)
+    }, { rejectFirst: true })
+
+    it('sets custom tags on the ai_guard span', async () => {
+      mockAllow()
+
+      const evaluation = await aiguard.evaluate(prompt, {
+        tags: { 'app.flow': 'checkout', team: 'payments', attempt: 2, retry: false },
+      })
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, {
+          'app.flow': 'checkout',
+          team: 'payments',
+          'ai_guard.action': 'ALLOW',
+        })
+        assert.strictEqual(span.metrics.attempt, 2)
+        assert.strictEqual(span.metrics.retry, 0)
+      })
+    })
+
+    it('ignores reserved ai_guard keys so core values win', async () => {
+      mockRequest({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: true } } },
+      })
+
+      await aiguard.evaluate(toolCall, {
+        tags: {
+          'ai_guard.action': 'DENY',
+          'ai_guard.target': 'prompt',
+          'ai_guard.blocked': 'true',
+          'ai_guard.tool_name': 'evil',
+          'ai_guard.custom': 'value',
+          ai_guard: 'DENY',
+          kept: 'yes',
+        },
+      })
+
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, {
+          'ai_guard.action': 'ALLOW',
+          'ai_guard.target': 'tool',
+          'ai_guard.tool_name': 'calc',
+          kept: 'yes',
+        })
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.blocked'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.custom'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard'))
+      })
+    })
+
+    it('ignores the reserved ai_guard key when its value is an object', async () => {
+      mockRequest({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: true } } },
+      })
+
+      await aiguard.evaluate(prompt, { tags: { ai_guard: { action: 'DENY', target: 'tool' } } })
+
+      await assertGuardSpan(span => {
+        assertObjectContains(span.meta, { 'ai_guard.action': 'ALLOW', 'ai_guard.target': 'prompt' })
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard'))
+      })
+    })
+
+    for (const value of [2, true]) {
+      it(`drops a non-string service.name (${value}) so the span can still be exported`, async () => {
+        mockAllow()
+
+        const evaluation = await aiguard.evaluate(prompt, { tags: { 'service.name': value, kept: 'yes' } })
+
+        assert.strictEqual(evaluation.action, 'ALLOW')
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.service, 'ai_guard_demo')
+          assertObjectContains(span.meta, { kept: 'yes', 'ai_guard.action': 'ALLOW' })
+        })
+      })
+    }
+
+    it('keeps a string service.name override', async () => {
+      mockAllow()
+
+      await aiguard.evaluate(prompt, { tags: { 'service.name': 'custom-service' } })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.service, 'custom-service')
+      })
+    })
+
+    it('drops invalid and oversized entries and keeps boundary values', async () => {
+      mockAllow()
+      const maxKey = 'k'.repeat(200)
+      const tooLongKey = 'x'.repeat(201)
+      const maxValue = 'v'.repeat(25_000)
+
+      const evaluation = await aiguard.evaluate(prompt, {
+        tags: {
+          [maxKey]: 'max-key',
+          [tooLongKey]: 'dropped',
+          '': 'empty-key',
+          'value.max': maxValue,
+          'value.too_long': 'w'.repeat(25_001),
+          'value.object': { nested: 'x' },
+          'value.array': ['x'],
+          'value.null': null,
+          'value.undefined': undefined,
+          'value.symbol': Symbol('x'),
+          'value.bigint': 1n,
+          'value.function': () => {},
+          'value.nan': Number.NaN,
+          'value.infinity': Infinity,
+          'value.valid': 'ok',
+        },
+      })
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.meta[maxKey], 'max-key')
+        assert.strictEqual(span.meta['value.max'], maxValue)
+        assert.strictEqual(span.meta['value.valid'], 'ok')
+        for (const key of [
+          tooLongKey,
+          '',
+          'value.too_long',
+          'value.object',
+          'value.object.nested',
+          'value.array',
+          'value.null',
+          'value.undefined',
+          'value.symbol',
+          'value.bigint',
+          'value.function',
+          'value.nan',
+          'value.infinity',
+        ]) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected meta key: ${key}`)
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric key: ${key}`)
+        }
+      })
+    })
+
+    for (const [description, tags] of [
+      ['null', null],
+      ['an array', ['a', 'b']],
+      ['a string', 'tag'],
+      ['a number', 42],
+      ['a function', () => {}],
+    ]) {
+      it(`ignores tags given as ${description}`, async () => {
+        mockAllow()
+
+        const evaluation = await aiguard.evaluate(prompt, { tags })
+
+        assert.strictEqual(evaluation.action, 'ALLOW')
+        await assertGuardSpan(span => {
+          for (const key of ['0', '1', 'leaked']) {
+            assert.ok(!Object.hasOwn(span.meta, key), `Unexpected meta key: ${key}`)
+            assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric key: ${key}`)
+          }
+          assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+        })
+      })
+    }
+
+    for (const [description, createTags] of [
+      ['an object from another realm', () => vm.runInNewContext("({ 'team.name': 'checkout' })")],
+      ['an object with a custom prototype', () => Object.assign(Object.create({ inherited: 'skip' }), {
+        'team.name': 'checkout',
+      })],
+      ['a class instance', () => new (class Tags { constructor () { this['team.name'] = 'checkout' } })()],
+    ]) {
+      it(`sets own enumerable tags given as ${description}`, async () => {
+        mockAllow()
+
+        await aiguard.evaluate(prompt, { tags: createTags() })
+
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.meta['team.name'], 'checkout')
+          assert.ok(!Object.hasOwn(span.meta, 'inherited'), 'Unexpected meta key: inherited')
+        })
+      })
+    }
+
+    it('does not copy custom tags into reserved keys when the ai_guard span is the trace root', async () => {
+      mockAllow()
+
+      await aiguard.evaluate(prompt, { tags: { 'usr.id': 'x', 'http.client_ip': '6.6.6.6' } })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.parent_id.toString(), '0')
+        assert.strictEqual(span.meta['usr.id'], 'x')
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.usr.id'))
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.http.client_ip'))
+      })
+    })
+
+    it('accepts tags in the noop implementation', async () => {
+      const result = await new NoopAIGuard().evaluate(prompt, { tags: { a: 'b' } })
+
+      assert.strictEqual(result.action, 'ALLOW')
+    })
+
+    it('passes tags through the integrations evaluate helper', async () => {
+      mockAllow()
+      const { evaluate } = require('../../src/aiguard/integrations/evaluate')
+
+      await evaluate(undefined, aiguard, [prompt], {
+        block: false,
+        source: 'auto',
+        integration: 'openai',
+        tags: { 'app.flow': 'auto' },
+      })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.meta['app.flow'], 'auto')
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+      })
+    })
+  })
+
+  describe('MCP servers', () => {
+    const mcpServers = [{
+      id: 'mcp_b77bc22583ac5006',
+      managed_by: 'client',
+      url: 'https://mcp.example.com',
+      transport: 'streamable_http',
+      tools: { search: 'search' },
+    }]
+    const mcpToolCall = [{
+      role: 'assistant',
+      tool_calls: [{
+        id: 'dd_mcp_1',
+        function: { name: 'search', arguments: '{"q":"x"}' },
+        mcp: { server_id: 'mcp_b77bc22583ac5006' },
+      }],
+    }]
+    const allow = { body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } } }
+    const meta = { service: config.service, env: config.env }
+
+    it('sends mcp_servers after the messages and the meta', async () => {
+      mockRequest(allow)
+
+      await aiguard.evaluate(mcpToolCall, { mcpServers })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(
+        request.firstCall.args[0],
+        JSON.stringify({ data: { attributes: { messages: mcpToolCall, meta, mcp_servers: mcpServers } } })
+      )
+    })
+
+    for (const servers of [undefined, []]) {
+      it(`sends the payload of earlier versions with ${JSON.stringify(servers)} servers`, async () => {
+        mockRequest(allow)
+
+        await aiguard.evaluate(toolCall, { mcpServers: servers })
+
+        assertRequest(toolCall)
+        await assertAIGuardSpan({ 'ai_guard.target': 'tool' }, { messages: toolCall })
+      })
+    }
+
+    it('reports the sent mcp_servers and the mcp references in the meta-struct', async () => {
+      mockRequest(allow)
+
+      await aiguard.evaluate(mcpToolCall, { mcpServers })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.target': 'tool', 'ai_guard.tool_name': 'search', 'ai_guard.action': 'ALLOW' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    it('reports mcp_servers for a failed evaluation', async () => {
+      mockRequest({ status: 503, body: { errors: [{ title: 'Unavailable' }] } })
+
+      await rejects(() => aiguard.evaluate(mcpToolCall, { mcpServers }), { name: 'AIGuardClientError' })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.target': 'tool', 'error.type': 'AIGuardClientError' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    it('reports mcp_servers for a blocked evaluation', async () => {
+      mockRequest({ body: { data: { attributes: { action: 'DENY', reason: 'No', is_blocking_enabled: true } } } })
+
+      await rejects(() => aiguard.evaluate(mcpToolCall, { mcpServers }), { name: 'AIGuardAbortError' })
+
+      await assertAIGuardSpan(
+        { 'ai_guard.action': 'DENY', 'ai_guard.blocked': 'true' },
+        { messages: mcpToolCall, mcp_servers: mcpServers }
+      )
+    })
+
+    for (const withServers of [true, false]) {
+      const description = withServers ? 'over the sent list' : 'without MCP'
+      it(`never lets extra_metastruct set mcp_servers ${description}`, async () => {
+        mockRequest({
+          body: {
+            data: {
+              attributes: {
+                action: 'ALLOW',
+                extra_metastruct: [{ key: 'mcp_servers', value: [{ id: 'forged' }] }, { key: 'custom', value: 1 }],
+              },
+            },
+          },
+        })
+        const messages = withServers ? mcpToolCall : toolCall
+
+        await aiguard.evaluate(messages, withServers ? { mcpServers } : undefined)
+
+        await assertAIGuardSpan(
+          { 'ai_guard.action': 'ALLOW' },
+          withServers ? { messages, mcp_servers: mcpServers, custom: 1 } : { messages, custom: 1 }
+        )
+      })
+    }
+
+    it('sends the payload of earlier versions when mcpServers is not an array', async () => {
+      mockRequest(allow)
+      const notAList = /** @type {never} */ (/** @type {unknown} */ ('mcp_b77bc22583ac5006'))
+
+      await aiguard.evaluate(toolCall, { mcpServers: notAList })
+
+      assertRequest(toolCall)
+    })
+
+    it('reports the sent mcp_servers when the caller changes them while evaluation is pending', async () => {
+      const servers = structuredClone(mcpServers)
+      const resolveRequest = mockDeferredRequest()
+
+      const evaluation = aiguard.evaluate(mcpToolCall, { mcpServers: servers })
+      servers[0].tools.search = 'changed'
+      resolveRequest(allow)
+      await evaluation
+
+      assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]).data.attributes.mcp_servers, mcpServers)
+      await assertAIGuardSpan({ 'ai_guard.action': 'ALLOW' }, { messages: mcpToolCall, mcp_servers: mcpServers })
     })
   })
 

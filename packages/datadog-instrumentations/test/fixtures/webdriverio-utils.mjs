@@ -24,3 +24,12 @@ async function executeAsync (fn, retries, args = [], timeout) {
 }
 
 export { executeAsync, testFrameworkFnWrapper }
+
+const runSpec = function (title, specFn, origFn) {
+  const wrappedFn = function (...args) {
+    return specFn.apply(this, args)
+  }
+  return origFn(title, wrappedFn)
+}
+
+export { runSpec }

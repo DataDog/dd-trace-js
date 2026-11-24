@@ -107,6 +107,13 @@ describe('Plugin', () => {
 - `withNamingSchema(agent, ...)` — tests naming schema conventions
 - `withPeerService(agent, ...)` — tests peer service tag
 
+### Version Coverage
+
+Before reporting a version as untested, trace the exact case through the instrumentation range, `withVersions`, the
+version resolver, and each `useSandbox` call in the suite. A dedicated sandbox with a pinned root dependency can own
+one exact release outside a surrounding `withVersions` block. Report a gap only when no executed test materializes
+and invokes that version through the public entry point.
+
 ## ESM Integration Tests
 
 ESM tests verify the plugin works with native ES module imports. They live in `packages/datadog-plugin-<name>/test/integration-test/`.
@@ -194,13 +201,13 @@ describe('esm', () => {
 
 ## Running Tests
 
-dd-trace uses a non-standard dependency installation for plugin tests. Libraries under test are installed per-version via `yarn services`, not through the normal `node_modules`. The `:ci` script handles this automatically.
+dd-trace uses a non-standard dependency installation for plugin tests. Libraries under test are installed per-version via `npm run services` (which drives `scripts/install_plugin_modules.js` and a Bun workspace install), not through the normal `node_modules`. The `:ci` script handles this automatically.
 
 ```bash
-# CI command (preferred) — runs yarn services for dependency installation, then tests
+# CI command (preferred) — runs `npm run services` for dependency installation, then tests
 PLUGINS="<name>" npm run test:plugins:ci
 
-# Unit tests only (assumes yarn services already ran)
+# Unit tests only (assumes `npm run services` already ran)
 PLUGINS="<name>" npm run test:plugins
 
 # With external services (e.g., databases, message brokers)

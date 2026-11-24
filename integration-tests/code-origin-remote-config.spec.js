@@ -50,7 +50,7 @@ describe('Code Origin Remote Config', function () {
   async function request (url) {
     const response = await fetch(new URL(url, proc.url))
     assert.strictEqual(response.status, 200)
-    return response.json()
+    return /** @type {Promise<Record<string, unknown>>} */ (response.json())
   }
 
   const addRemoteConfigAndWaitForAck = (sdkConfig) => {

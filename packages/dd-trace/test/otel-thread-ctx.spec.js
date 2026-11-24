@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -13,6 +15,8 @@ const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const { getConfigFresh } = require('./helpers/config')
+
+const execFileAsync = promisify(execFile)
 
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
@@ -653,7 +657,6 @@ describe('otel-thread-ctx', () => {
       sinon.assert.notCalled(context.appendAttributes)
       webTags['resource.name'] = 'GET /x'
       endpointResolvedCh.publish(activeSpan)
-      endpointResolvedCh.publish(activeSpan)
       sinon.assert.calledOnce(context.appendAttributes)
       assert.equal(context.attributes[1], 'GET /x')
     })
@@ -702,7 +705,33 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnce(parentContext.appendAttributes)
     })
 
-    it('appends the endpoint only once per record', () => {
+    it('updates the remaining descendants after waiters finish out of order', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const parent = makeSpan({ tags: webTags })
+      const children = Array.from({ length: 5 }, () => makeSpan())
+      for (const child of children) {
+        cachedWebTags.set(child, webTags)
+        activeSpan = child
+        enterCh.publish()
+      }
+
+      for (const index of [1, 4, 0]) spanFinishCh.publish(children[index])
+      webTags['http.route'] = '/stream'
+      endpointResolvedCh.publish(parent)
+
+      for (const [index, context] of constructedContexts.entries()) {
+        if (index === 2 || index === 3) {
+          assert.equal(context.attributes[1], 'GET /stream')
+          sinon.assert.calledOnce(context.appendAttributes)
+        } else {
+          assert.equal(context.attributes[1], undefined)
+          sinon.assert.notCalled(context.appendAttributes)
+        }
+      }
+      for (const child of children) spanFinishCh.publish(child)
+    })
+
+    it('refines the endpoint in existing records', () => {
       const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
       cachedWebTags.set(parent, webTags)
       cachedWebTags.set(child, webTags)
@@ -714,11 +743,12 @@ describe('otel-thread-ctx', () => {
 
       webTags['http.route'] = '/x'
       endpointResolvedCh.publish(parent)
-      // A second announcement for the same request (the cache guarantees one,
-      // but the waiters are gone either way) must not append again.
+      webTags['http.route'] = '/x/y'
       endpointResolvedCh.publish(parent)
       for (const context of constructedContexts) {
-        sinon.assert.calledOnce(context.appendAttributes)
+        sinon.assert.calledTwice(context.appendAttributes)
+        assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+        assert.equal(context.appendAttributes.secondCall.args[0][1], 'GET /x/y')
       }
     })
 
@@ -844,6 +874,30 @@ describe('otel-thread-ctx', () => {
       endpointResolvedCh.publish(outerSpan)
       sinon.assert.calledOnce(context.appendAttributes)
       assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('moves a live waiter between unresolved requests', () => {
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const outer = makeSpan({ tags: outerTags })
+      const inner = makeSpan({ tags: innerTags })
+      activeSpan = makeSpan()
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const [context] = constructedContexts
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      outerTags['http.route'] = '/outer'
+      endpointResolvedCh.publish(outer)
+      assert.equal(context.attributes[1], undefined)
+      sinon.assert.notCalled(context.appendAttributes)
+
+      innerTags['http.route'] = '/inner'
+      endpointResolvedCh.publish(inner)
+      assert.equal(context.attributes[1], 'GET /inner')
+      sinon.assert.calledOnce(context.appendAttributes)
+      spanFinishCh.publish(activeSpan)
     })
 
     it('keeps showing the outer endpoint until a nearer request settles its own', () => {
@@ -983,5 +1037,41 @@ describe('otel-thread-ctx', () => {
       assert.equal(m.start(), true)
       assert.throws(() => m.getThreadLocalMetadata(), /unsupported value type/)
     })
+  })
+})
+
+/**
+ * @param {string} scenario
+ * @param {boolean} [otelSemantics]
+ */
+function runRetentionScenario (scenario, otelSemantics = false) {
+  return execFileAsync(process.execPath, [
+    '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
+  ], {
+    env: {
+      ...process.env,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: String(otelSemantics),
+      DD_CRASHTRACKING_ENABLED: 'false',
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+    },
+  })
+}
+
+describe('otel-thread-ctx waiter retention', () => {
+  it('releases finished and retargeted waiters before the request ends', async () => {
+    const scenarios = [
+      'finish', 'retarget', 'finish-resolved', 'retarget-resolved',
+      'late', 'late-resolved', 'late-no-web', 'late-own', 'late-promoted',
+    ]
+    await Promise.all(scenarios.map(scenario => runRetentionScenario(scenario)))
+  })
+
+  it('keeps route updates and retargeting after collecting reactivated records', async () => {
+    await Promise.all(['retained', 'retained-resolved'].map(scenario => runRetentionScenario(scenario)))
+  })
+
+  it('refines native endpoints as nested HTTP routes resolve', async () => {
+    await runRetentionScenario('refinement', true)
   })
 })

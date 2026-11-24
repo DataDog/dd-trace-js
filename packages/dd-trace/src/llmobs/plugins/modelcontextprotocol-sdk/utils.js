@@ -52,4 +52,185 @@ function formatOutput (result) {
   }
 }
 
-module.exports = { formatInput, formatOutput }
+const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
+const CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo'
+const MAX_CLIENT_INFO_TAG_LENGTH = 256
+
+/**
+ * @param {unknown} value
+ */
+function safeStringify (value) {
+  if (value === undefined) return
+  try {
+    return JSON.stringify(value)
+  } catch {}
+}
+
+/**
+ * Copies `_meta` keys except the trace context.
+ * @param {Record<string, unknown>} target
+ * @param {Record<string, unknown>} [source]
+ */
+function copyMetaKeys (target, source) {
+  if (!source) return false
+
+  let copied = false
+  for (const key of Object.keys(source)) {
+    if (key === DISTRIBUTED_TRACE_META_KEY) continue
+    target[key] = source[key]
+    copied = true
+  }
+  return copied
+}
+
+/**
+ * Formats a server request as JSON-RPC without the trace context. Before a handler runs, SDK 2.x moves the reserved
+ * `io.modelcontextprotocol/*` `_meta` keys into `mcpReq.envelope` and drops the JSON-RPC id. Both are put back, so the
+ * input matches the request that the client sent.
+ * @param {{ method?: string, id?: string|number, params?: { _meta?: Record<string, unknown> } }} [request]
+ * @param {{ id?: string|number, envelope?: Record<string, unknown> }} [mcpReq]
+ */
+function formatServerInput (request, mcpReq) {
+  let params = request?.params
+  const meta = {}
+  const hasEnvelopeKeys = copyMetaKeys(meta, mcpReq?.envelope)
+  const hasRequestKeys = copyMetaKeys(meta, params?._meta)
+
+  const rest = {}
+  let hasRest = false
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (key === '_meta') continue
+      rest[key] = value
+      hasRest = true
+    }
+  }
+  if (hasEnvelopeKeys || hasRequestKeys) {
+    params = { ...rest, _meta: meta }
+  } else if (params?._meta !== undefined) {
+    // `_meta` held only the trace context that the client tracer added, so drop `params` if nothing else is left.
+    params = hasRest ? rest : undefined
+  }
+
+  return safeStringify({ method: request?.method, params, jsonrpc: '2.0', id: request?.id ?? mcpReq?.id })
+}
+
+/**
+ * Client identity comes from the request envelope on stateless requests and from the handshake otherwise.
+ * @param {Record<string, unknown>} [envelope]
+ * @param {{ getClientVersion?: () => unknown }} [server]
+ */
+function getClientInfoTags (envelope, server) {
+  const clientInfo = envelope?.[CLIENT_INFO_META_KEY] ?? server?.getClientVersion?.()
+  const tags = {}
+  if (!clientInfo || typeof clientInfo !== 'object') return tags
+
+  for (const field of ['name', 'title', 'version']) {
+    const value = clientInfo[field]
+    if (value) tags[`mcp_client_${field}`] = String(value).slice(0, MAX_CLIENT_INFO_TAG_LENGTH)
+  }
+  return tags
+}
+
+const TELEMETRY_KEY = 'telemetry'
+const INTENT_KEY = 'intent'
+// The client writes the intent, so a cap keeps the span event under the intake size limit.
+const MAX_INTENT_LENGTH = 1024
+const TELEMETRY_SCHEMA = {
+  type: 'object',
+  properties: {
+    [INTENT_KEY]: {
+      type: 'string',
+      description: 'Briefly describe the wider context task, and why this tool was chosen. Omit argument values, ' +
+        'PII/secrets. Use English.',
+    },
+  },
+  required: [INTENT_KEY],
+  additionalProperties: false,
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * UI-only tools cannot be called by the model, so they get no telemetry parameter.
+ *
+ * @param {{ _meta?: { ui?: { visibility?: unknown } } }} tool
+ */
+function isModelCallable (tool) {
+  const visibility = tool._meta?.ui?.visibility
+  return !Array.isArray(visibility) || visibility.includes('model')
+}
+
+/**
+ * Returns a copy of a tools/list result where each model-callable tool requires a `telemetry` argument with the
+ * caller's intent. The SDK's own tool objects are not changed, because it validates calls against them.
+ *
+ * @param {{ tools?: unknown }} result
+ */
+function injectTelemetrySchema (result) {
+  if (!isObject(result) || !Array.isArray(result.tools)) return result
+
+  const tools = result.tools.map(tool => {
+    if (!isObject(tool) || !isModelCallable(tool)) return tool
+
+    const inputSchema = isObject(tool.inputSchema) ? tool.inputSchema : {}
+    const properties = isObject(inputSchema.properties) ? inputSchema.properties : {}
+    if (Object.hasOwn(properties, TELEMETRY_KEY)) return tool
+    const required = Array.isArray(inputSchema.required) ? inputSchema.required : []
+    return {
+      ...tool,
+      inputSchema: {
+        type: 'object',
+        ...inputSchema,
+        properties: { ...properties, [TELEMETRY_KEY]: TELEMETRY_SCHEMA },
+        required: required.includes(TELEMETRY_KEY) ? required : [...required, TELEMETRY_KEY],
+      },
+    }
+  })
+  return { ...result, tools }
+}
+
+/**
+ * @param {unknown} telemetry
+ * @returns {telemetry is { intent?: unknown }}
+ */
+function isInjectedTelemetry (telemetry) {
+  if (!isObject(telemetry)) return false
+  for (const key of Object.keys(telemetry)) {
+    if (key !== INTENT_KEY) return false
+  }
+  return true
+}
+
+/**
+ * Returns a copy of a tools/call request without the `telemetry` argument, and the intent it carried, or `undefined`
+ * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
+ *
+ * @param {{ params?: { arguments?: unknown } }} request
+ * @returns {{ request: object, intent?: string } | undefined}
+ */
+function stripTelemetry (request) {
+  const args = request?.params?.arguments
+  if (!isObject(args) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
+
+  const { [TELEMETRY_KEY]: telemetry, ...rest } = args
+  const { intent } = telemetry
+  const capped = typeof intent === 'string' ? intent.slice(0, MAX_INTENT_LENGTH) || undefined : undefined
+  return { request: { ...request, params: { ...request.params, arguments: rest } }, intent: capped }
+}
+
+module.exports = {
+  formatInput,
+  formatOutput,
+  formatServerInput,
+  getClientInfoTags,
+  injectTelemetrySchema,
+  safeStringify,
+  stripTelemetry,
+}

@@ -4,6 +4,7 @@ const { getHeadersSize, getSizeOrZero } = require('../../dd-trace/src/datastream
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
+const { getSubscriptionName, getTopicName } = require('./resource-names')
 
 /**
  * PULL SUBSCRIPTION: Service explicitly pulls messages from Pub/Sub and processes them.
@@ -104,9 +105,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     let childOf = this.tracer.extract('text_map', message.attributes)
 
+    let pubsubRequestContext
     const isFirstMessage = batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = reconstructPubSubRequestContext(message.attributes)
+      pubsubRequestContext = reconstructPubSubRequestContext(
+        message.attributes, childOf, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
       if (pubsubRequestContext) {
         childOf = pubsubRequestContext
       }
@@ -125,14 +129,21 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'receive',
     }
 
+    // The topic is only known from cached subscription metadata or the name the producer propagated.
+    const topicFullName = getTopicName(topic)
+    if (topicFullName) meta['gcp.pubsub.topic.name'] = topicFullName
+    // Before 4.0 a subscription created with an auto-detected project keeps `{{projectId}}` in its name; the
+    // subscriber resolved it to open the stream that delivered this message.
+    const subscriptionFullName = getSubscriptionName(subscription.name) ??
+      getSubscriptionName(message._subscriber?.name)
+    if (subscriptionFullName) meta['gcp.pubsub.subscription.name'] = subscriptionFullName
+
+    let batchContext
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
-      // Use JSON format like producer for proper span link parsing
-      meta['_dd.span_links'] = JSON.stringify([{
-        trace_id: batchRequestTraceId,
-        span_id: batchRequestSpanId,
-        flags: 0,
-      }])
+      batchContext = pubsubRequestContext || reconstructPubSubRequestContext(
+        message.attributes, null, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
     }
 
     const metrics = {
@@ -160,6 +171,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta,
       metrics,
     }, ctx)
+
+    if (batchContext) span.addLink({ context: batchContext })
 
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())

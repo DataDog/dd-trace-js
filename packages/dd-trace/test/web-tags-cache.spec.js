@@ -363,16 +363,20 @@ describe('web-tags-cache', () => {
       sinon.assert.calledWith(endpointResolved, span)
     })
 
-    it('announces the endpoint only once', () => {
+    it('announces only changes to the endpoint', () => {
       const trace = makeTrace()
-      const tags = { ...WEB, 'http.method': 'GET', 'http.route': '/x' }
+      const tags = { ...WEB, 'http.method': 'GET' }
       const span = makeSpan(trace, { spanId: 'a', tags })
       webTagsCache.getCachedWebTags(span)
 
-      tagsUpdateCh.publish(span)
-      tags['http.route'] = '/y'
+      tags['http.route'] = '/x'
       tagsUpdateCh.publish(span)
       sinon.assert.calledOnce(endpointResolved)
+      tagsUpdateCh.publish(span)
+      sinon.assert.calledOnce(endpointResolved)
+      tags['http.route'] = '/y'
+      tagsUpdateCh.publish(span)
+      sinon.assert.calledTwice(endpointResolved)
     })
 
     it('announces the web-server span rather than the descendant being updated', () => {
@@ -383,7 +387,7 @@ describe('web-tags-cache', () => {
       // to be judged against the request's tag bag and not whichever bag the
       // updated span happens to own.
       const trace = makeTrace()
-      const tags = { ...WEB, 'http.method': 'GET', 'http.route': '/x' }
+      const tags = { ...WEB, 'http.method': 'GET' }
       const parent = makeSpan(trace, { spanId: 'a', tags })
       const child = makeSpan(trace, {
         spanId: 'b',
@@ -395,6 +399,7 @@ describe('web-tags-cache', () => {
       tagsUpdateCh.publish(child)
       sinon.assert.notCalled(endpointResolved)
 
+      tags['http.route'] = '/x'
       tagsUpdateCh.publish(parent)
       sinon.assert.calledOnce(endpointResolved)
       sinon.assert.calledWith(endpointResolved, parent)

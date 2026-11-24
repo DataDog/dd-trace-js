@@ -93,6 +93,18 @@ describe('get-test-management-tests', () => {
     })
   })
 
+  it('does not fetch test management tests without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getTestManagementTests(DEFAULT_PARAMS, (error) => {
+      assert.strictEqual(
+        error.message,
+        'Test management tests were not fetched because Datadog API key is not defined.'
+      )
+      done()
+    })
+  })
+
   it('should return cached data on second call without hitting API', (done) => {
     const scope = nock(BASE_URL)
       .post('/api/v2/test/libraries/test-management/tests')

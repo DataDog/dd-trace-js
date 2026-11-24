@@ -88,9 +88,7 @@ exports.getHooks = function getHooks (names) {
   for (const { module } of rewriterInstrumentations) {
     if (!requested.has(module.name)) continue
     // Fresh objects, including the versions array: callers may adjust a hook
-    // for their own registration (the ai and
-    // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
-    // not leak into any other call.
+    // for their own registration, which must not leak into any other call.
     const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
     sourceRewritePaths.set(hook, module.filePath)
     hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)

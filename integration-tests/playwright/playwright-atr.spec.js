@@ -32,6 +32,14 @@ const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
+
+let outputDirId = 0
+
+// Concurrent runs share the sandbox. Playwright removes its output dir on startup and worker artifacts on exit.
+function getUniqueOutputDir () {
+  return `./test-results-atr-${++outputDirId}`
+}
+
 const nodeShardIndex = ['oldest', 'latest'].indexOf(TEST_OPTIMIZATION_NODE_SHARD)
 const nodeShard = nodeShardIndex === -1 ? undefined : { index: nodeShardIndex, count: 2 }
 
@@ -45,6 +53,8 @@ versions.forEach((version) => {
 
   describe(`playwright@${version} native project retry attribution`, function () {
     this.timeout(60000)
+    // Leave time for post-exit drain and process/intake cleanup before Mocha starts a retry.
+    const collectionOptions = { hardTimeout: this.timeout() - 10_000 }
     const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
@@ -56,6 +66,7 @@ versions.forEach((version) => {
           ...getCiVisAgentlessConfig(receiver.port),
           TEST_DIR: './ci-visibility/playwright-native-retries',
           DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
         },
       })
       const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -66,7 +77,7 @@ versions.forEach((version) => {
           const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retries.length, 2)
           assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
-        })
+        }, collectionOptions)
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 1)
     })
@@ -77,6 +88,8 @@ versions.forEach((version) => {
 
   contextRetryLimits(`playwright@${version} retry exhaustion metadata`, function () {
     this.timeout(60000)
+    // Leave time for post-exit drain and process/intake cleanup before Mocha starts a retry.
+    const collectionOptions = { hardTimeout: this.timeout() - 10_000 }
     const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
@@ -92,6 +105,7 @@ versions.forEach((version) => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
             DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
             DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
           },
         })
         const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -121,7 +135,7 @@ versions.forEach((version) => {
             assert.strictEqual(sessions.length, 1)
             assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
             assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -138,6 +152,7 @@ versions.forEach((version) => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
             DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
           },
         })
         const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -148,7 +163,7 @@ versions.forEach((version) => {
             const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retries.length, 3)
             assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -164,6 +179,7 @@ versions.forEach((version) => {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
             DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
             DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
           },
         })
         const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -184,7 +200,7 @@ versions.forEach((version) => {
             assert.strictEqual(sessions.length, 1)
             assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
             assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
-          })
+          }, collectionOptions)
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
@@ -255,6 +271,7 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -304,6 +321,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -333,6 +351,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
               PLAYWRIGHT_EXPECTED_FAILURE: outcome,
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           })
           const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -372,6 +391,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: retryMode === 'flat-zero' ? '0' : '1',
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(retryMode !== 'flat-zero'),
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           })
           const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -401,6 +421,7 @@ versions.forEach((version) => {
                     TEST_DIR: './ci-visibility/playwright-dynamic-atr',
                     DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
                     DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '3,3,3,3,3',
+                    PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
                   },
                 })
               const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -498,6 +519,7 @@ versions.forEach((version) => {
                   DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
                   PLAYWRIGHT_PROJECT_NAME: name,
                   PLAYWRIGHT_NATIVE_PROJECT_FIRST: nativeFirst ? '1' : '',
+                  PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
                 },
               })
             const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -560,6 +582,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: scenario.buckets,
               ...scenario.env,
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           })
           const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -601,6 +624,7 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -639,6 +663,7 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -683,6 +708,7 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )
@@ -715,6 +741,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'false',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
               PLAYWRIGHT_EXPECTED_FAILURE: outcome,
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           })
           const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -746,6 +773,7 @@ versions.forEach((version) => {
               PLAYWRIGHT_SNAPSHOT_CASE: snapshot,
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'false',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           })
           const eventsPromise = receiver.gatherPayloadsUntilChildExit(
@@ -790,6 +818,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
               TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
             },
           }
         )

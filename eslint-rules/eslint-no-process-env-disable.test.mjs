@@ -61,8 +61,8 @@ ruleTester.run('eslint-no-process-env-disable', noProcessEnvDisable, {
     },
     {
       code: '/* eslint-disable no-console, eslint-rules/eslint-process-env */\nprocess.env.CI',
-      filename: path.join(repositoryRoot, 'ci/diagnose.js'),
-      options: [{ allowFiles: ['ci/diagnose.js'] }],
+      filename: path.join(repositoryRoot, 'ci/init.js'),
+      options: [{ allowFiles: ['ci/init.js'] }],
     },
     {
       code: '// eslint-disable-next-line eslint-rules/eslint-process-env\nprocess.env.CI',

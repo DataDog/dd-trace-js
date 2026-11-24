@@ -12,6 +12,10 @@ const nextMajor = Number(require('next/package.json').version.split('.')[0])
 
 const config = {
   experimental: {},
+  images: { domains: ['127.0.0.1'] },
+  async rewrites () {
+    return [{ source: '/image-optimizer', destination: '/_next/image' }]
+  },
 }
 
 // The `eslint` config key was removed in Next.js 16; it triggers an "Unrecognized
@@ -26,6 +30,7 @@ if (nextMajor < 16) {
 // nearest lockfile and walks up past the monorepo when one sits higher in the
 // tree. Pin the root to this app so tracing stays scoped to it.
 if (nextMajor >= 16) {
+  config.images.dangerouslyAllowLocalIP = true
   config.turbopack = {
     root: __dirname,
   }
@@ -36,6 +41,7 @@ if (nextMajor >= 16) {
 // `require('dd-trace')` resolves to the process tracer at runtime, the same way a
 // customer configures it. Pages API routes are externalized without this.
 if (nextMajor >= 15) {
+  config.outputFileTracingRoot = __dirname
   config.serverExternalPackages = ['dd-trace']
 } else if (nextMajor >= 13) {
   config.experimental.serverComponentsExternalPackages = ['dd-trace']
@@ -53,6 +59,7 @@ if (satisfies(VERSION, '<11')) {
 // Additionally, webpack was having problems with our use of 'worker_threads', so we don't resolve it
 if (satisfies(VERSION, '<=11')) {
   config.webpack = (config, { webpack }) => {
+    if (satisfies(VERSION, '<11.1')) config.externals.push('dd-trace', /^node:/)
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(/^node:/, resource => {
         resource.request = resource.request.replace(/^node:/, '')

@@ -23,7 +23,7 @@ function resolveWorkflowNameExpression (checkName, workflowName) {
 }
 
 /**
- * @param {string} value
+ * @param {unknown} value
  */
 function normalizeWhitespace (value) {
   return String(value).trim().replaceAll(/\s+/g, ' ')
@@ -43,8 +43,7 @@ function extractJobRecords (workflowFileName, workflowName, jobsDefinition) {
 
   for (const [jobId, jobDefinition] of Object.entries(jobsDefinition)) {
     if (!jobDefinition || typeof jobDefinition !== 'object') continue
-    /** @type {{ name?: string }} */
-    const jobObject = /** @type {{ name?: string }} */ (jobDefinition)
+    const jobObject = /** @type {{ name?: unknown }} */ (jobDefinition)
 
     const rawCheckName = normalizeWhitespace(jobObject.name || jobId)
     const resolvedCheckName = normalizeWhitespace(resolveWorkflowNameExpression(rawCheckName, workflowName))

@@ -510,6 +510,8 @@ class PlaywrightPlugin extends CiPlugin {
         testSourceFileAbsolutePath
       )
 
+      span.addTags(ctx.extraTags)
+
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
@@ -699,6 +701,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:skip', ({
+      extraTags,
       testName,
       testSuiteAbsolutePath,
       testSourceFileAbsolutePath,
@@ -725,6 +728,7 @@ class PlaywrightPlugin extends CiPlugin {
         testSourceFileAbsolutePath
       )
 
+      span.addTags(extraTags)
       span.setTag(TEST_STATUS, 'skip')
       span.setTag(TEST_FINAL_STATUS, 'skip')
 

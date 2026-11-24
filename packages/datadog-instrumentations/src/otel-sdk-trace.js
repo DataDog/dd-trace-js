@@ -21,16 +21,18 @@ if (isOtelSdkEnabled()) {
   // @opentelemetry/sdk-trace's TracerProvider instead of sdk-trace-node's
   // NodeTracerProvider, so the hook above no longer intercepts it. Wrap this
   // export too, otherwise DD_TRACE_OTEL_ENABLED spans never reach the tracer.
-  addHook({
-    name: '@opentelemetry/sdk-trace',
-    file: 'build/src/TracerProvider.js',
-    versions: ['*'],
-  }, (mod) => {
-    shimmer.wrap(mod, 'TracerProvider', () => {
-      return tracer.TracerProvider
+  for (const file of ['build/src/TracerProvider.js', 'dist/TracerProvider.cjs', 'dist/TracerProvider.mjs']) {
+    addHook({
+      name: '@opentelemetry/sdk-trace',
+      file,
+      versions: ['*'],
+    }, (mod) => {
+      shimmer.wrap(mod, 'TracerProvider', () => {
+        return tracer.TracerProvider
+      })
+      return mod
     })
-    return mod
-  })
+  }
 }
 
 function isOtelSdkEnabled () {

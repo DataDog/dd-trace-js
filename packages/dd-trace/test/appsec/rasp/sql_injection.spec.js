@@ -4,7 +4,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../../datadog-core')
-const { pgQueryStart, mysql2OuterQueryStart } = require('../../../src/appsec/channels')
+const { pgQueryStart, mysql2OuterQueryStart, wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const { withRequest } = require('../../../src/appsec/store')
 
@@ -17,7 +17,7 @@ describe('RASP - sql_injection', () => {
 
   beforeEach(() => {
     waf = {
-      run: sinon.stub(),
+      runSubContext: sinon.stub().returns({ duration: 1000 }),
     }
 
     sqli = proxyquire('../../../src/appsec/rasp/sql_injection', {
@@ -53,11 +53,11 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      const ephemeral = {
+      const subcontextData = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'postgresql',
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.runSubContext, subcontextData, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -73,7 +73,7 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no store', () => {
@@ -86,7 +86,7 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no req', () => {
@@ -99,7 +99,7 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no query', () => {
@@ -110,7 +110,69 @@ describe('RASP - sql_injection', () => {
 
       pgQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
+    })
+  })
+
+  describe('query caching', () => {
+    const query = { query: { text: 'SELECT 1' } }
+
+    for (const [description, result] of [
+      ['missing context', undefined],
+      ['timeout', { timeout: true }],
+      ['native error', { errorCode: -2 }],
+      ['blocking action', { actions: { block_request: { status_code: 403 } } }],
+    ]) {
+      it(`does not reevaluate the query after a ${description}`, () => {
+        enterStore(withRequest(undefined, {}))
+        waf.runSubContext.onFirstCall().returns(result)
+        pgQueryStart.publish(query)
+        pgQueryStart.publish(query)
+        pgQueryStart.publish(query)
+
+        sinon.assert.calledOnce(waf.runSubContext)
+      })
+    }
+
+    it('deduplicates the same query text across database systems', () => {
+      enterStore(withRequest(undefined, {}))
+      pgQueryStart.publish(query)
+      mysql2OuterQueryStart.publish({ sql: 'SELECT 1' })
+      pgQueryStart.publish(query)
+      mysql2OuterQueryStart.publish({ sql: 'SELECT 1' })
+
+      sinon.assert.calledOnce(waf.runSubContext)
+    })
+
+    it('invalidates the originating request without invalidating the active request', () => {
+      const first = {}
+      const second = {}
+      enterStore(withRequest(undefined, first))
+      pgQueryStart.publish(query)
+      enterStore(withRequest(undefined, second))
+      pgQueryStart.publish(query)
+
+      wafRunFinished.publish({ req: first, payload: { [addresses.HTTP_INCOMING_BODY]: 'new input' } })
+      pgQueryStart.publish(query)
+      sinon.assert.calledTwice(waf.runSubContext)
+
+      enterStore(withRequest(undefined, first))
+      pgQueryStart.publish(query)
+      sinon.assert.calledThrice(waf.runSubContext)
+    })
+
+    it('invalidates queries when resolver inputs are evaluated in a subcontext', () => {
+      const req = {}
+      enterStore(withRequest(undefined, req))
+      pgQueryStart.publish(query)
+      wafRunFinished.publish({
+        req,
+        payload: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { field: {} } },
+        isSubcontext: true,
+      })
+      pgQueryStart.publish(query)
+
+      sinon.assert.calledTwice(waf.runSubContext)
     })
   })
 
@@ -124,11 +186,11 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      const ephemeral = {
+      const subcontextData = {
         [addresses.DB_STATEMENT]: 'SELECT 1',
         [addresses.DB_SYSTEM]: 'mysql',
       }
-      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'sql_injection' })
+      sinon.assert.calledOnceWithExactly(waf.runSubContext, subcontextData, { type: 'sql_injection' })
     })
 
     it('should not analyze sql injection if rasp is disabled', () => {
@@ -142,7 +204,7 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no store', () => {
@@ -153,7 +215,7 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no req', () => {
@@ -164,7 +226,7 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
 
     it('should not analyze sql injection if no query', () => {
@@ -175,7 +237,7 @@ describe('RASP - sql_injection', () => {
 
       mysql2OuterQueryStart.publish(ctx)
 
-      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(waf.runSubContext)
     })
   })
 })

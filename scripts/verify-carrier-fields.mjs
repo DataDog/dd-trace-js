@@ -1,3 +1,5 @@
+/* eslint unicorn/no-top-level-side-effects: off -- The CLI guard prevents changes to global state on import. */
+
 import { pathToFileURL } from 'node:url'
 
 import { ESLint } from 'eslint'

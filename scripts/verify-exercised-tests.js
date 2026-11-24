@@ -196,7 +196,7 @@ function formatEnvValue (name, value) {
 }
 
 /**
- * @param {string} maybe
+ * @param {string | number | boolean | null | undefined} maybe
  * @returns {string|null}
  */
 function unwrapLiteralEnvValue (maybe) {
@@ -304,7 +304,7 @@ function findUnquotedGlobstar (script) {
 function parseExportAssignments (run) {
   /** @type {Record<string, string>} */
   const out = {}
-  const lines = String(run).split('\n')
+  const lines = run.split('\n')
   for (const line of lines) {
     const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
     if (!m) continue
@@ -375,7 +375,7 @@ function extractScriptInvocations (run, knownScripts) {
   /** @type {{ tool: 'yarn'|'npm', script: string, explicit: boolean }[]} */
   const out = []
 
-  const tokens = shellSplit(String(run))
+  const tokens = shellSplit(run)
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]
 

@@ -39,6 +39,9 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
 } = require('../../src/plugins/util/test')
 
 describe('CiPlugin', () => {
@@ -47,16 +50,21 @@ describe('CiPlugin', () => {
   let getCodeOwnersFileEntries
   let getRepositoryRoot
   let getTestEnvironmentMetadata
+  let getUserProviderGitMetadata
   let incrementCountMetric
+  let logError
 
   beforeEach(() => {
     distributionMetric = sinon.stub()
     getCodeOwnersFileEntries = sinon.stub()
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
+    getUserProviderGitMetadata = sinon.stub().returns({})
     incrementCountMetric = sinon.stub()
+    logError = sinon.spy()
 
     CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
+      '../log': { error: logError },
       '../ci-visibility/telemetry': {
         ...require('../../src/ci-visibility/telemetry'),
         distributionMetric,
@@ -65,6 +73,7 @@ describe('CiPlugin', () => {
       './util/git': {
         getRepositoryRoot,
       },
+      './util/user-provided-git': { getUserProviderGitMetadata },
       './util/test': {
         ...require('../../src/plugins/util/test'),
         getCodeOwnersFileEntries,
@@ -116,6 +125,75 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
   })
 
+  it('uses the selected checkout root for CODEOWNERS instead of the CI workspace', () => {
+    getTestEnvironmentMetadata.returns({
+      ...getTestEnvironmentMetadataPayload(),
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      [CI_WORKSPACE_PATH]: '/workspace',
+    })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, '/workspace/tools')
+    sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/workspace/tools')
+    assert.strictEqual(plugin.testEnvironmentMetadata[CI_WORKSPACE_PATH], '/workspace')
+    sinon.assert.notCalled(getRepositoryRoot)
+  })
+
+  it('does not use a CI workspace as a repository root when local discovery fails', () => {
+    getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), [CI_WORKSPACE_PATH]: '/workspace' })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.repositoryRoot, process.cwd())
+    sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, process.cwd())
+  })
+
+  for (const custom of [false, true]) {
+    it(`scopes Test Management PR-head overrides to the CI checkout (custom=${custom})`, () => {
+      getTestEnvironmentMetadata.returns({
+        ...getTestEnvironmentMetadataPayload(),
+        'git.checkout.root': '/workspace/tools',
+        'git.checkout.is_custom': custom ? 'true' : undefined,
+        [GIT_COMMIT_HEAD_SHA]: 'outer-pr-head',
+        [GIT_COMMIT_HEAD_MESSAGE]: 'outer PR message',
+      })
+      const plugin = createPlugin('jest_worker')
+
+      assert.strictEqual(plugin.testConfiguration.commitHeadSha, custom ? undefined : 'outer-pr-head')
+      assert.strictEqual(plugin.testConfiguration.commitHeadMessage, custom ? undefined : 'outer PR message')
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_HEAD_SHA], 'outer-pr-head')
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_HEAD_MESSAGE], 'outer PR message')
+    })
+  }
+
+  for (const [sha, requestSha] of [['a'.repeat(40), 'a'.repeat(40)], ['invalid', undefined]]) {
+    it(`uses only a valid commit SHA in backend requests (${sha})`, () => {
+      getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), [GIT_COMMIT_SHA]: sha })
+      const plugin = createPlugin('jest_worker')
+
+      assert.strictEqual(plugin.testConfiguration.sha, requestSha)
+      assert.strictEqual(plugin.testEnvironmentMetadata[GIT_COMMIT_SHA], sha)
+    })
+  }
+
+  it('preserves an explicit PR-head SHA and commit message in custom checkout requests', () => {
+    const head = 'b'.repeat(40)
+    getUserProviderGitMetadata.returns({ [GIT_COMMIT_HEAD_SHA]: head })
+    getTestEnvironmentMetadata.returns({
+      ...getTestEnvironmentMetadataPayload(),
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      [GIT_COMMIT_HEAD_SHA]: head,
+      [GIT_COMMIT_HEAD_MESSAGE]: 'outer PR message',
+      [GIT_COMMIT_MESSAGE]: 'explicit commit message',
+    })
+    const plugin = createPlugin('jest_worker')
+
+    assert.strictEqual(plugin.testConfiguration.commitHeadSha, head)
+    assert.strictEqual(plugin.testConfiguration.commitHeadMessage, undefined)
+    assert.strictEqual(plugin.testConfiguration.commitMessage, 'explicit commit message')
+  })
+
   it('clears ITR state when library configuration fails', () => {
     const getLibraryConfiguration = sinon.stub().callsArgWith(1, new Error('settings failed'))
     const addMetadataTags = sinon.stub()
@@ -145,6 +223,30 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
   })
+
+  for (const [method, channel, message] of [
+    ['getLibraryConfiguration', 'library-configuration', 'Library configuration could not be fetched'],
+    ['getSkippableSuites', 'test-suite:skippable', 'Skippable suites could not be fetched'],
+    ['getKnownTests', 'known-tests', 'Known tests could not be fetched'],
+    ['getTestManagementTests', 'test-management-tests', 'Test management tests could not be fetched'],
+  ]) {
+    it(`retains the original cause when ${method} fails`, () => {
+      const error = new Error('Request failed')
+      const plugin = createPlugin('vitest_worker', true)
+      plugin.tracer._exporter[method] = sinon.stub().callsArgWith(1, error)
+      plugin.tracer._exporter.addMetadataTags = sinon.stub()
+      const onDone = sinon.spy()
+
+      try {
+        dc.channel(`ci:vitest:${channel}`).publish({ onDone })
+
+        sinon.assert.calledOnceWithExactly(logError, message, error)
+        sinon.assert.calledOnceWithMatch(onDone, { err: error })
+      } finally {
+        plugin.configure(false)
+      }
+    })
+  }
 
   it('does not consider line coverage for Vitest skippable suites', () => {
     const getSkippableSuites = sinon.stub().callsArgWith(1, null, [])
@@ -332,6 +434,62 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('replaces stale worker Git fields while preserving PR relationships and other tags', () => {
+    const plugin = createPlugin('jest_worker')
+    delete plugin.testEnvironmentMetadata[GIT_TAG]
+    const span = {
+      name: 'vitest.test',
+      span_id: '1',
+      trace_id: '2',
+      parent_id: '3',
+      meta: {
+        [GIT_COMMIT_SHA]: 'provider-sha',
+        [GIT_TAG]: 'provider-tag',
+        'git.commit.author.name': 'provider-author',
+        [GIT_COMMIT_HEAD_SHA]: 'pr-head',
+        'git.pull_request.base_branch': 'main',
+        'test.custom': 'retained',
+        'git.custom': 'retained',
+      },
+    }
+    plugin._prepareWorkerTrace([span])
+    assert.strictEqual(span.meta[GIT_COMMIT_SHA], plugin.testEnvironmentMetadata[GIT_COMMIT_SHA])
+    assert.strictEqual(span.meta[GIT_TAG], undefined)
+    assert.strictEqual(span.meta['git.commit.author.name'], undefined)
+    assert.strictEqual(span.meta['git.pull_request.base_branch'], 'main')
+    assert.strictEqual(span.meta['test.custom'], 'retained')
+    assert.strictEqual(span.meta['git.custom'], 'retained')
+  })
+
+  it('propagates checkout and provider merge context to every worker test level', () => {
+    const expected = {
+      'git.checkout.root': '/workspace/tools',
+      'git.checkout.is_custom': 'true',
+      'ci.workspace_path': '/workspace',
+      'ci.git.merge_commit_sha': 'a'.repeat(40),
+    }
+    getTestEnvironmentMetadata.returns({ ...getTestEnvironmentMetadataPayload(), ...expected })
+    const plugin = createPlugin('jest_worker')
+    for (const level of ['test_session', 'test_module', 'test_suite', 'test']) {
+      const span = {
+        name: `vitest.${level}`,
+        span_id: '1',
+        trace_id: '2',
+        parent_id: '3',
+        meta: Object.fromEntries(Object.keys(expected).map(key => [key, 'stale'])),
+      }
+      plugin._prepareWorkerTrace([span])
+      for (const [key, value] of Object.entries(expected)) assert.strictEqual(span.meta[key], value, `${level}: ${key}`)
+      delete plugin.testEnvironmentMetadata['git.checkout.is_custom']
+      delete plugin.testEnvironmentMetadata['ci.git.merge_commit_sha']
+      const next = { ...span, span_id: '1', trace_id: '2', parent_id: '3' }
+      plugin._prepareWorkerTrace([next])
+      assert.strictEqual(next.meta['git.checkout.is_custom'], undefined)
+      assert.strictEqual(next.meta['ci.git.merge_commit_sha'], undefined)
+      Object.assign(plugin.testEnvironmentMetadata, expected)
+    }
   })
 
   it('exports worker traces normally', () => {
@@ -734,6 +892,7 @@ describe('CiPlugin', () => {
     plugin.activeTestSpan = {
       context: () => ({
         _isFinished: false,
+        getTag: sinon.stub().returns(undefined),
         toTraceId: () => 'trace-id',
         toSpanId: () => 'span-id',
       }),
@@ -759,6 +918,104 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
+  it('exports mismatched DI breakpoint hits when stack filtering is disabled', () => {
+    const plugin = createPlugin('mocha')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/other.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('keeps the DI breakpoint wait and target pending until a matching snapshot arrives', async () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    plugin.filterDiBreakpointHitByStack = true
+    plugin.di = {}
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    const resolved = sinon.spy()
+    const wait = plugin.prepareDiBreakpointHitWait().then(resolved)
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/other.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.notCalled(exportDiLogs)
+    sinon.assert.notCalled(testSpan.setTag)
+    sinon.assert.notCalled(resolved)
+    assert.strictEqual(plugin.diBreakpointHitResolvers.length, 1)
+    assert.deepStrictEqual(plugin.diBreakpointHitSpans, [testSpan])
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    await wait
+    sinon.assert.calledOnce(resolved)
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('attaches DI breakpoint hits to the next live retry span', () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    const finishedSpan = createDiTestSpan(true)
+    plugin.queueDiBreakpointHitSpan(finishedSpan)
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    plugin.activeTestSpan = undefined
+
+    plugin.onDiBreakpointHit({
+      snapshot: createDiSnapshot({
+        file: '/repo/failing.spec.js',
+        line: 23,
+        callerFile: '/repo/helper.js',
+        callerLine: 45,
+      }),
+    })
+
+    sinon.assert.notCalled(finishedSpan.setTag)
+    sinon.assert.calledOnce(exportDiLogs)
+    sinon.assert.calledWith(testSpan.setTag, DI_ERROR_DEBUG_INFO_CAPTURED, 'true')
+  })
+
+  it('links the latest matching DI snapshot when the same call site hits the probe twice', () => {
+    const plugin = createPlugin('vitest_worker')
+    const { exportDiLogs, testSpan } = configureDiBreakpointHitTest(plugin)
+    plugin.filterDiBreakpointHitByStack = true
+    plugin.queueDiBreakpointHitSpan(testSpan)
+    const snapshot = createDiSnapshot({
+      file: '/repo/failing.spec.js',
+      line: 23,
+      callerFile: '/repo/helper.js',
+      callerLine: 45,
+    })
+    const snapshotTag = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'successful-call' } })
+    plugin.onDiBreakpointHit({ snapshot: { ...snapshot, id: 'failing-call' } })
+
+    sinon.assert.calledTwice(exportDiLogs)
+    assert.deepStrictEqual(testSpan.setTag.withArgs(snapshotTag).lastCall.args, [snapshotTag, 'failing-call'])
+  })
+
   function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
@@ -770,6 +1027,56 @@ describe('CiPlugin', () => {
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: exporter },
     })
     return plugin
+  }
+
+  function configureDiBreakpointHitTest (plugin) {
+    const exportDiLogs = sinon.spy()
+    const testSpan = createDiTestSpan()
+
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    plugin.activeTestSpan = testSpan
+    plugin.testErrorStackIndex = 0
+    plugin.testErrorStackFrames = [
+      { file: '/repo/failing.spec.js', line: 23 },
+      { file: '/repo/helper.js', line: 45 },
+    ]
+    plugin._setRepositoryRoot('/repo', [])
+
+    return { exportDiLogs, testSpan }
+  }
+
+  function createDiTestSpan (finished = false) {
+    const tags = new Map()
+    return {
+      context: () => ({
+        _isFinished: finished,
+        getTag: key => tags.get(key),
+        toTraceId: () => 'trace-id',
+        toSpanId: () => 'span-id',
+      }),
+      setTag: sinon.spy((key, value) => tags.set(key, value)),
+    }
+  }
+
+  function createDiSnapshot ({
+    file,
+    line,
+    callerFile,
+    callerLine,
+  }) {
+    return {
+      id: 'snapshot-id',
+      probe: {
+        location: {
+          file,
+          lines: [String(line)],
+        },
+      },
+      stack: [
+        { function: 'test function', fileName: file, lineNumber: line },
+        { function: 'caller', fileName: callerFile, lineNumber: callerLine },
+      ],
+    }
   }
 })
 

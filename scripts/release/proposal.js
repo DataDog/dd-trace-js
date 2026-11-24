@@ -309,11 +309,14 @@ try {
 
   // Create or edit the PR. This will also automatically output a link to the PR.
   try {
-    run(`gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal" -F ${notesFile}`)
+    run(
+      `gh pr create -d -B v${releaseLine}.x -t "v${newVersion} proposal"` +
+      ` -F ${notesFile} --label release-proposal`
+    )
   } catch {
     // PR already exists so update instead.
     // TODO: Keep existing non-release-notes PR description if there is one.
-    run(`gh pr edit -F "${notesFile}"`)
+    run(`gh pr edit -F "${notesFile}" --add-label release-proposal`)
   }
 
   const pullRequest = JSON.parse(capture('gh pr view --json number,url'))

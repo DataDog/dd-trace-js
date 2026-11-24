@@ -791,6 +791,38 @@ describe('encode', () => {
     })
 
     describe('meta_struct', () => {
+      it('preserves booleans in scalar values, objects, and nested mixed arrays', () => {
+        const metaStruct = {
+          enabled: true,
+          disabled: false,
+          flags: [true, false, true, false],
+          nested: {
+            enabled: true,
+            disabled: false,
+            values: ['before', true, 0, false, [false, true], { flags: [true, false] }, 'after'],
+          },
+        }
+        data[0].meta_struct = metaStruct
+
+        encoder.encode(data)
+
+        const [[span]] = msgpack.decode(encoder.makePayload(), { useBigInt64: true })
+        for (const [key, value] of Object.entries(metaStruct)) {
+          assert.deepStrictEqual(msgpack.decode(span.meta_struct[key]), value)
+        }
+      })
+
+      it('continues to omit null and undefined entries while preserving array booleans', () => {
+        data[0].meta_struct = {
+          nested: { optional: null, missing: undefined, flags: [true, null, false, undefined] },
+        }
+
+        encoder.encode(data)
+
+        const [[span]] = msgpack.decode(encoder.makePayload(), { useBigInt64: true })
+        assert.deepStrictEqual(msgpack.decode(span.meta_struct.nested), { flags: [true, false] })
+      })
+
       it('should encode meta_struct with simple key value object', () => {
         const metaStruct = {
           foo: 'bar',

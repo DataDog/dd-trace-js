@@ -91,7 +91,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         return fn({ name: 'span' })
       },
       exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
-      annotate: (_span, options) => callsToLlmobs.push(['annotate', options]),
+      _annotateExperimentSpan: (_span, options) => callsToLlmobs.push(['annotate', options]),
       flush: () => callsToLlmobs.push(['flush']),
     }
 
@@ -109,11 +109,25 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][1].name, 'task')
     assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
     assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
+    assert.equal(callsToLlmobs[1][1].expectedOutput, 'apple')
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
     assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
     assert.equal(callsToLlmobs[1][1].tags.run_iteration, 1)
+    // Passed at span start so every span the task creates inherits the experiment identity,
+    // but not the record id or the record's own tags.
+    const spanTags = callsToLlmobs[1][1].tags
+    assert.deepEqual(callsToLlmobs[0][1]._experimentTags, {
+      experiment_id: 'exp',
+      run_id: spanTags.run_id,
+      run_iteration: 1,
+      project_id: spanTags.project_id,
+      dataset_id: spanTags.dataset_id,
+      dataset_name: spanTags.dataset_name,
+      experiment_name: 'exp-demo',
+      project_name: 'demo-project',
+    })
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
     assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
@@ -1124,6 +1138,33 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(events[1].attributes.metrics[0].tags.includes('run_iteration:2'), true)
     assert.equal(events[0].attributes.metrics[0].tags.includes(`run_id:${result.runs[0].runId}`), true)
     assert.equal(events[1].attributes.metrics[0].tags.includes(`run_id:${result.runs[1].runId}`), true)
+  })
+
+  it('passes each run its own experiment tags for the spans its task creates', async () => {
+    const { client: c } = clientWithMockBackend()
+    const traceOptions = []
+    const llmobs = {
+      enabled: true,
+      trace: (options, fn) => {
+        traceOptions.push(options)
+        return fn({ name: 'span' })
+      },
+      exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
+      annotate: () => {},
+      flush: () => {},
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a'),
+      runs: 2,
+      task: input => input,
+    }, llmobs).run()
+
+    assert.deepEqual(
+      traceOptions.map(({ _experimentTags }) => [_experimentTags.run_iteration, _experimentTags.run_id]),
+      result.runs.map(run => [run.runIteration, run.runId])
+    )
   })
 
   it('uploads each run before starting the next iteration', async () => {

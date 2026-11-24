@@ -105,6 +105,41 @@ const transformers = {
     }
     return tags
   },
+  /**
+   * Resolves an OpenTelemetry exporter list (e.g. `console,otlp`) to the single exporter the
+   * tracer supports. `none` disables export and cannot be combined with any other entry: such a
+   * list is invalid and resolves to unset. Otherwise `otlp` anywhere selects OTLP. Other entries
+   * are ignored with a warning; a list without a supported entry resolves to unset.
+   *
+   * @param {string[]} value
+   * @param {string} optionName
+   * @param {string} source
+   * @param {boolean} [reportInvalid]
+   * @returns {'none' | 'otlp' | undefined}
+   */
+  parseOtelExporterList (value, optionName, source, reportInvalid = true) {
+    const entries = transformers.toLowerCase(value)
+
+    if (entries.includes('none')) {
+      if (entries.every(entry => entry === 'none')) {
+        return 'none'
+      }
+      if (reportInvalid) {
+        warnInvalidValue(entries.join(','), optionName, source, "'none' cannot be combined with other exporters")
+      }
+      return
+    }
+
+    const exporter = entries.includes('otlp') ? 'otlp' : undefined
+
+    const ignored = entries.filter(entry => entry !== 'otlp')
+    if (ignored.length > 0 && reportInvalid) {
+      const outcome = exporter === undefined ? 'picked default' : null
+      warnInvalidValue(ignored.join(','), optionName, source, 'Unsupported exporters ignored', undefined, outcome)
+    }
+
+    return exporter
+  },
   normalizeProfilingEnabled (configValue) {
     if (configValue == null) {
       return
@@ -241,6 +276,31 @@ const transformers = {
     }
     return value
   },
+  /**
+   * Validates like `validatePropagationStyles`, with the OpenTelemetry semantics: an empty list resolves to
+   * unset, and `none` disables propagation even when combined with other propagators, as the OpenTelemetry
+   * JavaScript SDK does. `DD_TRACE_PROPAGATION_STYLE` keeps its own handling of both.
+   *
+   * @param {string[]} value
+   * @param {string} optionName
+   * @param {string} source
+   * @param {boolean} [reportInvalid]
+   * @returns {string[] | undefined}
+   */
+  validateOtelPropagators (value, optionName, source, reportInvalid = true) {
+    if (value.length === 0) return
+    value = transformers.toLowerCase(value)
+    if (value.includes('none')) {
+      if (reportInvalid && value.some(propagator => propagator !== 'none')) {
+        warnInvalidValue(
+          value.join(','), optionName, source, "'none' cannot be combined with other propagators",
+          undefined, 'disabled propagation'
+        )
+      }
+      return ['none']
+    }
+    return transformers.validatePropagationStyles(value, optionName, source, reportInvalid)
+  },
 }
 
 const telemetryTransformers = {
@@ -334,7 +394,15 @@ const parsers = {
       // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
       raw = raw.replaceAll(/\s+/g, ',')
     }
-    tagger.add(entries, raw, valueSeparator)
+    if (valueSeparator === '=' && raw.includes('%')) {
+      try {
+        tagger.add(entries, raw, valueSeparator, true)
+      } catch {
+        return
+      }
+    } else {
+      tagger.add(entries, raw, valueSeparator)
+    }
     return entries
   },
   JSON (raw) {
@@ -429,9 +497,18 @@ const programmaticTypeCoercions = {
       return value
     }
   },
+  /**
+   * Keeps any value as given, for an option that its consumer validates.
+   *
+   * @param {unknown} value
+   */
+  PASSTHROUGH (value) {
+    return value
+  },
 }
 
 module.exports = {
+  VALID_PROPAGATION_STYLES,
   parsers,
   programmaticTypeCoercions,
   transformers,

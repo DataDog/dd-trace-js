@@ -694,7 +694,7 @@ class AgentEncoder {
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' ||
+      if (typeof entryValue === 'string' || typeof entryValue === 'number' || typeof entryValue === 'boolean' ||
         (entryValue !== null && typeof entryValue === 'object')) {
         this._encodeString(bytes, key)
         this.#encodeObjectAsByteArray(bytes, entryValue)
@@ -768,7 +768,7 @@ class AgentEncoder {
 
     let count = 0
     for (const item of value) {
-      if (typeof item === 'string' || typeof item === 'number' ||
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' ||
         (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item))) {
         this.#encodeObject(bytes, item, circularReferencesDetector)
         count++

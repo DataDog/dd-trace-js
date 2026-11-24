@@ -118,7 +118,7 @@ class CypressPlugin extends Plugin {
       payload.registered = true
       // cypressPlugin.init expects the proxy tracer (with ._tracer._exporter),
       // not the unwrapped internal tracer that this.tracer returns.
-      payload.configPromise = Promise.resolve(cypressPlugin.init(this._tracer, config)).then(() => config)
+      payload.configPromise = Promise.resolve(cypressPlugin.init(this._tracer, config))
     })
   }
 }

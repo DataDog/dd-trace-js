@@ -16,16 +16,17 @@ class LogExporter {
 
     for (const span of spans) {
       const spanStr = JSON.stringify(span)
-      if (spanStr.length + TRACE_FORMAT_OVERHEAD > MAX_SIZE) {
+      const spanSize = Buffer.byteLength(spanStr, 'utf8')
+      if (spanSize + TRACE_FORMAT_OVERHEAD > MAX_SIZE) {
         log.debug('Span too large to send to logs, dropping')
         continue
       }
-      if (spanStr.length + size > MAX_SIZE) {
+      if (spanSize + size > MAX_SIZE) {
         this._printSpans(queue)
         queue = []
         size = TRACE_FORMAT_OVERHEAD
       }
-      size += spanStr.length + 1 // includes length of ',' character
+      size += spanSize + 1 // includes length of ',' character
       queue.push(spanStr)
     }
     if (queue.length > 0) {

@@ -27,6 +27,7 @@ const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 const processParamsStartCh = dc.channel('datadog:express:process_params:start')
 const routerParamStartCh = dc.channel('datadog:router:param:start')
 const sequelizeFinish = dc.channel('datadog:sequelize:query:finish')
+const pgQueryFinish = dc.channel('apm:pg:query:finish')
 const graphqlResolveStartChannel = dc.channel('apm:graphql:resolve:start')
 
 describe('IAST Taint tracking plugin', () => {
@@ -428,6 +429,49 @@ describe('IAST Taint tracking plugin', () => {
             '0.children.0.name',
             SQL_ROW_VALUE
           )
+        })
+        it('Should taint the other columns of a row with a binary column', () => {
+          const data = Buffer.from('raw')
+          const result = [{ data, query: 'SELECT 1' }]
+          pgQueryFinish.publish({ result, currentStore: store })
+
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
+            iastContext,
+            'SELECT 1',
+            '0.query',
+            SQL_ROW_VALUE
+          )
+          assert.deepStrictEqual(Object.keys(data), ['0', '1', '2'])
+        })
+
+        it('Should taint values with circular references', () => {
+          const value = { name: 'value' }
+          value.self = value
+          pgQueryFinish.publish({ result: [{ value }], currentStore: store })
+
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
+            iastContext,
+            'value',
+            '0.value.name',
+            SQL_ROW_VALUE
+          )
+        })
+
+        it('Should not taint or copy inherited properties', () => {
+          const value = Object.create({ inherited: 'inherited value' })
+          value.own = 'own value'
+          pgQueryFinish.publish({ result: [{ value }], currentStore: store })
+
+          sinon.assert.calledOnceWithExactly(
+            taintTrackingOperations.newTaintedString,
+            iastContext,
+            'own value',
+            '0.value.own',
+            SQL_ROW_VALUE
+          )
+          assert.deepStrictEqual(Object.keys(value), ['own'])
         })
       })
 

@@ -21,7 +21,8 @@ describe('Plugin', () => {
       const { GoogleGenAI } = require(`../../../../../../versions/@google/genai@${version}`).get()
       client = new GoogleGenAI({
         apiKey: process.env.GOOGLE_API_KEY || '<not-a-real-key>',
-        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai' },
+        // Match the API version used by the VCR cassettes.
+        httpOptions: { baseUrl: 'http://127.0.0.1:9126/vcr/genai', apiVersion: 'v1beta' },
       })
     })
 
@@ -62,22 +63,6 @@ describe('Plugin', () => {
           modelProvider: 'google',
           inputMessages: [{ role: 'user', content: 'Hello, world!' }],
           outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
-          metadata: {
-            temperature: null,
-            top_p: null,
-            top_k: null,
-            candidate_count: null,
-            max_output_tokens: null,
-            stop_sequences: null,
-            response_logprobs: null,
-            logprobs: null,
-            presence_penalty: null,
-            frequency_penalty: null,
-            seed: null,
-            response_mime_type: null,
-            safety_settings: null,
-            automatic_function_calling: null,
-          },
           metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
@@ -119,26 +104,11 @@ describe('Plugin', () => {
           modelProvider: 'google',
           inputMessages: [{ role: 'user', content: 'Hello, world!' }],
           outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
-          metadata: {
-            temperature: null,
-            top_p: null,
-            top_k: null,
-            candidate_count: null,
-            max_output_tokens: null,
-            stop_sequences: null,
-            response_logprobs: null,
-            logprobs: null,
-            presence_penalty: null,
-            frequency_penalty: null,
-            seed: null,
-            response_mime_type: null,
-            safety_settings: null,
-            automatic_function_calling: null,
-          },
           metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: MOCK_NUMBER,
           },
           tags: { ml_app: 'test', integration: 'google_genai' },
         })

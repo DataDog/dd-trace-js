@@ -10,6 +10,8 @@ module.exports = {
   REDACTED_TAG_KEY: 'ai_guard.redacted',
   EVENT_TAG_KEY: 'ai_guard.event',
   META_STRUCT_KEY: 'ai_guard',
+  RESERVED_TAG_KEY: 'ai_guard',
+  RESERVED_TAG_PREFIX: 'ai_guard.',
 
   HTTP_USERAGENT_TAG_KEY: 'ai_guard.http.useragent',
   HTTP_CLIENT_IP_TAG_KEY: 'ai_guard.http.client_ip',

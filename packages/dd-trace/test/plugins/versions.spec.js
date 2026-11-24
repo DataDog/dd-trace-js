@@ -21,6 +21,37 @@ const keys = (name, versions, nonConsecutive) =>
 
 const latestMajorKey = name => String(major(coerce(latests[name])))
 
+describe('getCappedRange', () => {
+  const { getCappedRange } = proxyquire('./versions', {
+    './package.json': { dependencies: { example: '3.0.5' } },
+  })
+
+  for (const [range, expected] of [
+    ['', '3.0.5'],
+    ['latest', '3.0.5'],
+    ['*', '<=3.0.5'],
+    ['1.2.3 <2.3', '1.2.3 <2.3.0-0 <=3.0.5'],
+    ['1.2 - 4.0', '>=1.2.0 <4.1.0-0 <=3.0.5'],
+    ['1.2.3 - 4.0.0', '>=1.2.3 <=4.0.0 <=3.0.5'],
+    ['^2 || >=3', '>=2.0.0 <3.0.0-0 <=3.0.5 || >=3.0.0 <=3.0.5'],
+    ['>=3.0.5', '>=3.0.5 <=3.0.5'],
+  ]) {
+    it(`caps every branch of ${JSON.stringify(range)} at the canonical pin`, () => {
+      assert.equal(getCappedRange('example', range), expected)
+    })
+  }
+
+  for (const version of ['4.0.0', '=4.0.0', 'v4.0.0', '4.0.0-rc.1']) {
+    it(`preserves the explicit version ${version} without requiring a pin`, () => {
+      assert.equal(getCappedRange('unpinned', version), version)
+    })
+  }
+
+  it('rejects an unpinned range', () => {
+    assert.throws(() => getCappedRange('unpinned', '^1'), /Latest version for 'unpinned' needs to be defined/)
+  })
+})
+
 describe('getVersionList', () => {
   it('collapses the wildcard to the latest major', () => {
     assert.deepEqual(keys('mongodb', ['*']), [latestMajorKey('mongodb')])
@@ -324,11 +355,45 @@ describe('brokenVersionReason', () => {
   const broken = { ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no cassette' }] }
 
   it('returns the reason for a version inside a broken range', () => {
-    assert.equal(brokenVersionReason('ai', '4.3.19', broken), 'no cassette')
+    assert.equal(brokenVersionReason('ai', '4.3.19', '26.2.0', broken), 'no cassette')
+  })
+
+  for (const { name, brokenVersion, workingVersion, brokenNode, workingNode } of [
+    { name: 'hapi', brokenVersion: '17.0.0', workingVersion: '16.8.4', brokenNode: '15.0.0', workingNode: '14.21.3' },
+    {
+      name: '@hapi/hapi',
+      brokenVersion: '20.3.0',
+      workingVersion: '21.0.0',
+      brokenNode: '15.0.0',
+      workingNode: '14.21.3',
+    },
+    { name: 'avsc', brokenVersion: '5.0.0', workingVersion: '5.0.1', brokenNode: '25.0.0', workingNode: '24.16.0' },
+    {
+      name: '@grpc/grpc-js',
+      brokenVersion: '1.1.4',
+      workingVersion: '1.3.0',
+      brokenNode: '25.0.0',
+      workingNode: '24.16.0',
+    },
+    { name: 'undici', brokenVersion: '7.11.0', workingVersion: '7.10.0', brokenNode: '18.20.8', workingNode: '20.0.0' },
+  ]) {
+    it(`excludes only the incompatible ${name} and Node.js combination`, () => {
+      for (const suffix of ['', '-nightly20261031012345']) {
+        assert.equal(brokenVersionReason(name, brokenVersion, `${workingNode}${suffix}`), undefined)
+        assert.equal(brokenVersionReason(name, workingVersion, `${brokenNode}${suffix}`), undefined)
+        assert.equal(typeof brokenVersionReason(name, brokenVersion, `${brokenNode}${suffix}`), 'string')
+      }
+    })
+  }
+
+  it('keeps later nightly runtimes subject to their compatibility gates', () => {
+    const nodeVersion = '26.0.0-nightly20261031012345'
+    assert.equal(typeof brokenVersionReason('avsc', '5.0.0', nodeVersion), 'string')
+    assert.equal(typeof brokenVersionReason('@grpc/grpc-js', '1.1.4', nodeVersion), 'string')
   })
 
   it('returns undefined outside every broken range and for unlisted modules', () => {
-    assert.equal(brokenVersionReason('ai', '4.0.0', broken), undefined)
-    assert.equal(brokenVersionReason('mongodb', '4.3.19', broken), undefined)
+    assert.equal(brokenVersionReason('ai', '4.0.0', '26.2.0', broken), undefined)
+    assert.equal(brokenVersionReason('mongodb', '4.3.19', '26.2.0', broken), undefined)
   })
 })

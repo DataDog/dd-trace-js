@@ -29,6 +29,8 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
@@ -94,6 +96,8 @@ class VitestPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
+    this.filterDiBreakpointHitByStack = true
+
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
@@ -118,6 +122,7 @@ class VitestPlugin extends CiPlugin {
         isAttemptToFix,
         isQuarantined,
         isDisabled,
+        annotations,
         mightHitProbe,
         isRetryReasonEfd,
         isRetryReasonAttemptToFix,
@@ -162,6 +167,8 @@ class VitestPlugin extends CiPlugin {
       if (hasDynamicName) {
         extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
       }
+      if (annotations?.mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+      if (annotations?.noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
       }
@@ -199,9 +206,8 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
-      // might be wrongly overwritten.
       if (mightHitProbe) {
+        this.queueDiBreakpointHitSpan(span)
         this.activeTestSpan = span
       }
 
@@ -344,6 +350,7 @@ class VitestPlugin extends CiPlugin {
       isAttemptToFix,
       isDisabled,
       isQuarantined,
+      annotations,
       isRumActive,
       isTestFrameworkWorker,
       requestErrorTags,
@@ -365,6 +372,8 @@ class VitestPlugin extends CiPlugin {
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
       }
+      if (annotations?.mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+      if (annotations?.noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
       if (isAttemptToFix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
       if (isDisabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
       if (isQuarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'

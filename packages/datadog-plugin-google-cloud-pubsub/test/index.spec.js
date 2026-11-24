@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -156,12 +157,91 @@ describe('Plugin', () => {
         })
 
         describe('publish', () => {
+          it('uses the active publisher when message context is incomplete', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            let publisherContext
+            const expected = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === expectedSchema.send.opName)
+              assert.ok(span)
+              assert.strictEqual(span.parent_id.toString(), publisherContext.toSpanId())
+              assert.strictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+            }, { spanResourceMatch: /^publish to Topic /, rejectFirst: true })
+            const publishing = tracer.trace('publisher', span => {
+              publisherContext = span.context()
+              return publish(topic, {
+                data: Buffer.from('hello'),
+                attributes: { 'x-datadog-trace-id': '42' },
+              })
+            })
+            await Promise.all([publishing, expected])
+          })
+
+          describe('with restart extraction', () => {
+            let previousBehavior
+
+            before(() => {
+              previousBehavior = process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+              process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'RESTART'
+            })
+
+            after(() => {
+              if (previousBehavior === undefined) delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+              else process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = previousBehavior
+            })
+
+            it('keeps the extracted and sibling message links on a batch span', async () => {
+              const [topic] = await pubsub.createTopic(topicName)
+              topic.setPublishOptions({ batching: { maxMessages: 3 } })
+              const expected = agent.assertSomeTraces(traces => {
+                const span = traces.flat().find(span => span.name === expectedSchema.send.opName)
+                assert.ok(span)
+                const links = JSON.parse(span.meta['_dd.span_links'])
+                assert.strictEqual(links.length, 3)
+                assert.deepStrictEqual(links.map(link => link.span_id), [
+                  '000000000000002b',
+                  '000000000000002d',
+                  '000000000000002f',
+                ])
+                assert.deepStrictEqual(links.map(link => link.flags), [1, 0, 1])
+                assert.strictEqual(links[0].attributes.reason, 'propagation_behavior_extract')
+                assert.deepStrictEqual(links.map(link => link.trace_id), [
+                  '0000000000000000000000000000002a',
+                  '6af1eb9300000000000000000000002a',
+                  '0000000000000000000000000000002a',
+                ])
+              }, { spanResourceMatch: /^publish to Topic /, rejectFirst: true })
+              const messageAttributes = [
+                {
+                  'x-datadog-trace-id': '42',
+                  'x-datadog-parent-id': '43',
+                  'x-datadog-sampling-priority': '2',
+                },
+                {
+                  'x-datadog-trace-id': '42',
+                  'x-datadog-parent-id': '45',
+                  '_dd.p.tid': '6af1eb9300000000',
+                },
+                {
+                  'x-datadog-trace-id': '42',
+                  'x-datadog-parent-id': '47',
+                  'x-datadog-sampling-priority': '2',
+                },
+              ]
+              const publishing = Promise.all(messageAttributes.map(attributes => publish(topic, {
+                data: Buffer.from('hello'),
+                attributes,
+              })))
+              await Promise.all([publishing, expected])
+            })
+          })
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.send.opName,
               service: expectedSchema.send.serviceName,
               meta: {
                 'pubsub.topic': resource,
+                'gcp.pubsub.topic.name': resource,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
                 component: 'google-cloud-pubsub',
@@ -208,6 +288,8 @@ describe('Plugin', () => {
                 'pubsub.topic': resource,
                 'pubsub.subscription': subscriptionName,
                 'pubsub.subscription_type': 'pull',
+                'gcp.pubsub.topic.name': resource,
+                'gcp.pubsub.subscription.name': `projects/${project}/subscriptions/foo`,
               },
               metrics: {
                 'pubsub.ack': 1,
@@ -217,6 +299,102 @@ describe('Plugin', () => {
             sub.on('message', msg => msg.ack())
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
+          })
+
+          it('should name a subscription and its topic of another project separately', async () => {
+            const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+            const subscriberProject = getProjectId()
+            const subscriber = new lib.PubSub({ projectId: subscriberProject })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await subscriber.createSubscription(resource, 'warehouse-orders')
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              type: 'worker',
+              meta: {
+                'span.kind': 'consumer',
+                'gcloud.project_id': subscriberProject,
+                'pubsub.topic': resource,
+                'pubsub.subscription': `projects/${subscriberProject}/subscriptions/warehouse-orders`,
+                'gcp.pubsub.topic.name': resource,
+                'gcp.pubsub.subscription.name': `projects/${subscriberProject}/subscriptions/warehouse-orders`,
+              },
+            })
+
+            sub.on('message', msg => msg.ack())
+            await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
+          })
+
+          it('should name only the subscription when no topic is known', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [created] = await topic.createSubscription('foo')
+            // A fresh handle has no cached metadata, and a producer without this tracer propagates no topic.
+            const sub = pubsub.subscription(created.name)
+            const requestStart = dc.channel('apm:google-cloud-pubsub:request:start')
+            const requestedApis = []
+            const dropPropagatedTopic = ({ api, request }) => {
+              requestedApis.push(api)
+              if (api !== 'publish') return
+              for (const message of request.messages) delete message.attributes['pubsub.topic']
+            }
+            requestStart.subscribe(dropPropagatedTopic)
+
+            const spanPromise = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+              assert.ok(span)
+              assert.strictEqual(span.meta['gcp.pubsub.subscription.name'], created.name)
+              assert.ok(!('gcp.pubsub.topic.name' in span.meta))
+              assert.ok(!('pubsub.topic' in span.meta))
+              assert.strictEqual(span.resource, 'Message from foo')
+            }, { timeoutMs: TIMEOUT })
+
+            try {
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+              await spanPromise
+            } finally {
+              requestStart.unsubscribe(dropPropagatedTopic)
+              await sub.close()
+            }
+
+            // Naming the resources must not look up the subscription or topic metadata.
+            assert.ok(!requestedApis.includes('getSubscription'), `Requested: ${requestedApis}`)
+            assert.ok(!requestedApis.includes('getTopic'), `Requested: ${requestedApis}`)
+          })
+
+          it('should name the subscription of a client with an auto-detected project', async () => {
+            const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+            const [topic] = await pubsub.createTopic(topicName)
+            await topic.createSubscription('foo')
+
+            const previousProject = process.env.GOOGLE_CLOUD_PROJECT
+            process.env.GOOGLE_CLOUD_PROJECT = project
+            // Before 4.0 the subscription name keeps `{{projectId}}` until the client resolved the project.
+            const sub = new lib.PubSub().subscription('foo')
+            try {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                type: 'worker',
+                meta: {
+                  'span.kind': 'consumer',
+                  'gcp.pubsub.subscription.name': `projects/${project}/subscriptions/foo`,
+                },
+              })
+
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+              await expectedSpanPromise
+            } finally {
+              await sub.close()
+              if (previousProject === undefined) {
+                delete process.env.GOOGLE_CLOUD_PROJECT
+              } else {
+                process.env.GOOGLE_CLOUD_PROJECT = previousProject
+              }
+            }
           })
 
           it('should parent the first batch message to the Pub/Sub request span', async () => {
@@ -256,6 +434,127 @@ describe('Plugin', () => {
             })
             return expectedSpanPromise
           })
+
+          for (const behavior of ['continue', 'restart', 'ignore']) {
+            describe(`with extraction behavior ${behavior}`, () => {
+              let previousBehavior
+
+              before(() => {
+                previousBehavior = process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+                process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior.toUpperCase()
+              })
+
+              after(() => {
+                if (previousBehavior === undefined) delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+                else process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = previousBehavior
+              })
+
+              for (const batchIndex of [0, 1]) {
+                it(`respects extraction behavior for batch message ${batchIndex + 1}`, async () => {
+                  const [topic] = await pubsub.createTopic(topicName)
+                  const [sub] = await topic.createSubscription('foo')
+                  let carrier
+                  try {
+                    tracer.use('google-cloud-pubsub', false)
+                    await publish(topic, {
+                      data: Buffer.from('hello'),
+                      attributes: {
+                        'x-datadog-trace-id': '42',
+                        'x-datadog-parent-id': '43',
+                        'x-datadog-sampling-priority': '2',
+                        'ot-baggage-user': 'alice',
+                        '_dd.pubsub_request.trace_id': '000000000000002a',
+                        '_dd.pubsub_request.span_id': '000000000000002c',
+                        '_dd.batch.index': String(batchIndex),
+                      },
+                    })
+                    tracer.use('google-cloud-pubsub', { dsmEnabled: false })
+                    const expected = new Promise(resolve => {
+                      sub.once('message', message => {
+                        carrier = {}
+                        tracer.inject(tracer.scope().active(), 'text_map', carrier)
+                        resolve(agent.assertSomeTraces(traces => {
+                          const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+                          assert.ok(span)
+                          assert.strictEqual(span.parent_id.toString(), behavior === 'continue'
+                            ? batchIndex === 0 ? '44' : '43'
+                            : '0')
+                          if (behavior === 'continue') {
+                            assert.strictEqual(span.trace_id.toString(), '42')
+                          } else {
+                            assert.notStrictEqual(span.trace_id.toString(), '42')
+                          }
+                          const links = JSON.parse(span.meta['_dd.span_links'])
+                          const batchLink = links.at(-1)
+                          assert.strictEqual(batchLink.trace_id, '0000000000000000000000000000002a')
+                          assert.strictEqual(batchLink.span_id, '000000000000002c')
+                          assert.strictEqual(batchLink.flags, batchIndex === 0 ? 1 : undefined)
+                          if (behavior === 'restart') {
+                            assert.strictEqual(links.length, 2)
+                            assert.strictEqual(links[0].span_id, '000000000000002b')
+                            assert.strictEqual(links[0].flags, 1)
+                            assert.strictEqual(links[0].attributes.reason, 'propagation_behavior_extract')
+                          } else {
+                            assert.strictEqual(links.length, 1)
+                          }
+                        }))
+                        message.ack()
+                      })
+                    })
+                    await expected
+                    assert.strictEqual(carrier['ot-baggage-user'], behavior === 'ignore' ? undefined : 'alice')
+                  } finally {
+                    await sub.close()
+                  }
+                })
+              }
+            })
+          }
+
+          for (const activePublisher of [false, true]) {
+            it(`preserves trace metadata with an active publisher: ${activePublisher}`, async () => {
+              const upper = '6af1eb9300000000'
+              const tags = `_dd.p.tid=${upper},_dd.p.dm=-0,_dd.p.llmobs_parent_id=44,_dd.p.llmobs_sd=0`
+              const attributes = {
+                'x-datadog-trace-id': '42',
+                'x-datadog-parent-id': '43',
+                'x-datadog-sampling-priority': '2',
+                'x-datadog-tags': tags,
+                'ot-baggage-user': 'alice',
+                traceparent: `00-${upper}000000000000002a-000000000000002b-01`,
+                tracestate: 'vendor=value,dd=s:2;t.dm:-0',
+              }
+              const [topic] = await pubsub.createTopic(topicName)
+              const [sub] = await topic.createSubscription('foo')
+              const expectedSpan = expectSpanWithDefaults({
+                service: expectedSchema.receive.serviceName,
+                meta: { 'span.kind': 'consumer' },
+              })
+              let receivedAttributes
+              let carrier
+              sub.once('message', message => {
+                receivedAttributes = message.attributes
+                carrier = {}
+                tracer.inject(tracer.scope().active(), 'text_map', carrier)
+                message.ack()
+              })
+
+              const publishing = activePublisher
+                ? tracer.trace('publisher', { childOf: tracer.extract('text_map', attributes) }, () => {
+                  return publish(topic, { data: Buffer.from('hello') })
+                })
+                : publish(topic, { data: Buffer.from('hello'), attributes })
+              await Promise.all([publishing, expectedSpan])
+
+              assert.strictEqual(receivedAttributes['_dd.pubsub_request.p.tid'], upper)
+              assert.strictEqual(carrier['x-datadog-trace-id'], '42')
+              assert.strictEqual(carrier['x-datadog-sampling-priority'], '2')
+              assert.strictEqual(carrier['ot-baggage-user'], 'alice')
+              assert.ok(carrier.tracestate.split(',').includes('vendor=value'))
+              assert.deepStrictEqual(carrier['x-datadog-tags'].split(',').sort(), tags.split(',').sort())
+              assert.strictEqual(carrier.traceparent.split('-')[1], upper + '000000000000002a')
+            })
+          }
 
           it('should be instrumented w/ error', async () => {
             const error = new Error('bad')

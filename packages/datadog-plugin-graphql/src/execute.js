@@ -960,10 +960,10 @@ function getJitDefaultArguments (rootCtx, descriptor, argumentFactory, mutable) 
   if (mutable) {
     return argumentFactory === undefined
       ? {}
-      : argumentFactory(rootCtx.variableValues, cloneArgumentValue)
+      : argumentFactory(rootCtx.variableValues, cloneArgumentValue, descriptor)
   }
   if (descriptor.hasArgumentVariables) {
-    return argumentFactory(rootCtx.variableValues)
+    return argumentFactory(rootCtx.variableValues, undefined, descriptor)
   }
   return descriptor.staticArguments
 }

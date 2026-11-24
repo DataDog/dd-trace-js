@@ -30,6 +30,8 @@ const pollInterval = 0.1
  * @typedef {object} DebuggerSnapshot
  * @property {{ id: string }} probe
  * @property {number} timestamp
+ * @property {object} [captures]
+ * @property {Array<{ expr: string, message: string }>} [evaluationErrors]
  */
 
 /**
@@ -52,8 +54,9 @@ const pollInterval = 0.1
  */
 
 /**
+ * @template [Body=object|string]
  * @typedef {object} TestResponse
- * @property {object|string} body
+ * @property {Body} body
  * @property {number} status
  */
 
@@ -259,10 +262,10 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     /** @type {DebuggerSnapshot[]} */
     const snapshots = []
     let resolveExpectedSnapshots
-    const expectedSnapshotsReceived = new Promise((resolve) => {
+    const expectedSnapshotsReceived = /** @type {Promise<void>} */ (new Promise((resolve) => {
       resolveExpectedSnapshots = resolve
       if (expectedCount === 0) resolve()
-    })
+    }))
 
     /** @param {{ payload: Array<{ debugger: { snapshot: DebuggerSnapshot } }> }} event */
     function inputReceived ({ payload }) {

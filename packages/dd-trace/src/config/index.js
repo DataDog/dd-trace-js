@@ -21,15 +21,18 @@ const {
   getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
+  IS_AWS_LAMBDA,
   getIsGCPFunction,
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
+  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -378,6 +381,13 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
+    if (this.isCiVisibility) {
+      setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
+      setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', false)
+      setAndTrack(this, 'aiguard.DD_AI_GUARD_ENABLED', false)
+    }
+
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -428,11 +438,18 @@ class Config extends ConfigBase {
         this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
-
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
-      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+    // OTEL_SDK_DISABLED disables every OpenTelemetry signal, so unlike the other OTel settings it
+    // overrides an explicit Datadog opt-in. Tracing is handled at the entry point (src/index.js),
+    // where an explicit DD_TRACE_ENABLED takes precedence. That override keeps tracing only: OTLP
+    // span metrics are part of the metrics signal.
+    if (this.OTEL_SDK_DISABLED) {
+      this.#deactivateForOtelSdkDisabled('DD_METRICS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('DD_LOGS_OTEL_ENABLED')
+      this.#deactivateForOtelSdkDisabled('OTEL_TRACES_SPAN_METRICS_ENABLED')
     }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
@@ -463,10 +480,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', true)
     }
 
-    if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
-      setAndTrack(this, 'spanComputePeerService', true)
-    }
-
     if (!this.apmTracingEnabled) {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
     } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
@@ -491,8 +504,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
+    }
+
+    if (!trackedConfigOrigins.has('lambda.DD_LAMBDA_FIPS_MODE') &&
+        getEnvironmentVariable('AWS_REGION')?.startsWith('us-gov-')) {
+      setAndTrack(this, 'lambda.DD_LAMBDA_FIPS_MODE', true)
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
@@ -515,23 +533,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-
-    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
-    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
-    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
-    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
-    // dd-trace's own sampling policy in that case.
-    if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
-            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
-      setAndTrack(this, 'sampleRate',
-        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
-    }
-
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
       try {
         // TODO: Should we log a warning in case this is defined next to spanSamplingRules?
@@ -541,21 +542,22 @@ class Config extends ConfigBase {
       }
     }
 
-    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
-    this.sampler = {
-      rules: this.samplingRules,
-      rateLimit: this.rateLimit,
-      sampleRate: this.sampleRate,
-      spanSamplingRules: this.spanSamplingRules,
-    }
-
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+    if (!this.isCiVisibility &&
+        !this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
+    }
+
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      // LLMObs payloads use APM structured metadata, which is only supported by protocol v0.4.
+      if (this.protocolVersion !== '0.4') {
+        log.warn('LLM Observability requires protocol version 0.4 - overriding choice of %s', this.protocolVersion)
+      }
+      setAndTrack(this, 'protocolVersion', '0.4')
     }
 
     if (this.OTEL_RESOURCE_ATTRIBUTES) {
@@ -700,13 +702,25 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
-      // Disable rate limiting - server-side sampling will be used
-      setAndTrack(this, 'sampler.rateLimit', -1)
-      // Clear sampling rules - server-side sampling handles this
-      setAndTrack(this, 'sampler.rules', [])
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
+      }
+    }
+
+    if (this.DD_LOGS_OTEL_ENABLED || this.DD_METRICS_OTEL_ENABLED) {
+      try {
+        require('@opentelemetry/api')
+      } catch {
+        this.#deactivate('DD_LOGS_OTEL_ENABLED', 'DD_LOGS_OTEL_ENABLED requires the @opentelemetry/api package.')
+        this.#deactivate('DD_METRICS_OTEL_ENABLED', 'DD_METRICS_OTEL_ENABLED requires the @opentelemetry/api package.')
+      }
+    }
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      try {
+        require('@opentelemetry/api-logs')
+      } catch {
+        this.#deactivate('DD_LOGS_OTEL_ENABLED', 'DD_LOGS_OTEL_ENABLED requires the @opentelemetry/api-logs package.')
       }
     }
 
@@ -716,11 +730,88 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
+    // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
+    // propagation on its own. A set DD_TRACE_PROPAGATION_STYLE takes precedence, even when its value is invalid
+    // and its own default applies. Runs before the fallbacks so the inject and extract styles inherit it.
+    if (trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
+      getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') === undefined) {
+      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', this.OTEL_PROPAGATORS)
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
       }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      let warning
+
+      if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
+        warning = 'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.AGENTLESS) {
+        warning = 'Agentless tracing is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.isCiVisibility) {
+        warning = 'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'Deactivating DD_TRACE_OTEL_SEMANTICS_ENABLED'
+      } else if (this.OTEL_TRACES_EXPORTER === 'none') {
+        warning = 'DD_TRACE_OTEL_SEMANTICS_ENABLED is deactivated due to OTEL_TRACES_EXPORTER set to "none"'
+      }
+
+      if (warning) {
+        log.warn(warning)
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      } else {
+        setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+      }
+    }
+
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+      if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      if (this.spanAttributeSchema !== 'v0') {
+        log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting')
+      }
+      if (this.spanComputePeerService) {
+        log.warn(
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
+        )
+      }
+      setAndTrack(this, 'spanAttributeSchema', 'v0')
+      setAndTrack(this, 'spanComputePeerService', false)
+    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
+      setAndTrack(this, 'spanComputePeerService', true)
+    }
+
+    // An explicit OTel sampler also applies to native trace exporters.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || usesOtlpTraceExporter(this))) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    }
+
+    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
+    this.sampler = {
+      rules: this.samplingRules,
+      rateLimit: this.rateLimit,
+      sampleRate: this.sampleRate,
+      spanSamplingRules: this.spanSamplingRules,
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      // Disable rate limiting - server-side sampling will be used
+      setAndTrack(this, 'sampler.rateLimit', -1)
+      // Clear sampling rules - server-side sampling handles this
+      setAndTrack(this, 'sampler.rules', [])
     }
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
@@ -754,11 +845,10 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
-    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? false)
 
-    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    if (usesOtlpTraceExporter(this) || this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED)
     }
 
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
@@ -778,11 +868,29 @@ class Config extends ConfigBase {
 
     const unsupportedRuntime = getUnsupportedRuntime()
     if (unsupportedRuntime !== undefined) {
-      this.#deactivateOnUnsupportedRuntime(
+      if (unsupportedRuntime === 'Bun') {
+        this.#deactivate(
+          'runtimeMetrics.native',
+          'Native runtime metrics are disabled, because they do not work on Bun.'
+        )
+        this.#deactivate(
+          'DD_PROFILING_HEAP_ENABLED',
+          'Heap profiling is disabled, because it does not work on Bun.'
+        )
+        // An unset heap flag inherits the legacy profiler list, which includes space by default.
+        if (this.DD_PROFILING_HEAP_ENABLED === undefined && this.DD_PROFILING_PROFILERS.includes('space')) {
+          setAndTrack(this, 'DD_PROFILING_HEAP_ENABLED', false)
+        }
+        this.#deactivate(
+          'iast.DD_IAST_ENABLED',
+          'IAST is disabled, because it does not work on Bun.'
+        )
+      }
+      this.#deactivate(
         'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
         `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
       )
-      this.#deactivateOnUnsupportedRuntime(
+      this.#deactivate(
         'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
         'Failed Test Replay is disabled, ' +
           `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
@@ -796,13 +904,20 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
-   * default.
+   * @param {'DD_METRICS_OTEL_ENABLED' | 'DD_LOGS_OTEL_ENABLED' | 'OTEL_TRACES_SPAN_METRICS_ENABLED'} name
+   */
+  #deactivateForOtelSdkDisabled (name) {
+    this.#deactivate(name, `${name} is disabled, because OTEL_SDK_DISABLED=true disables the OpenTelemetry SDK.`)
+  }
+
+  /**
+   * Deactivates an option. Only explains why once, and only when the option was explicitly set: defaults such as
+   * Failed Test Replay need no explanation, and recalculating the config must not repeat it.
    *
    * @param {ConfigPath} name
    * @param {string} reason
    */
-  #deactivateOnUnsupportedRuntime (name, reason) {
+  #deactivate (name, reason) {
     if (!get(this, name)) return
 
     if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
@@ -868,35 +983,38 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  const envs = process.env
+  // Each OpenTelemetry variable lists its Datadog equivalents, then the config path tracking its value when it
+  // differs from the variable name. The first equivalent tags `otel.env.invalid`.
+  for (const [otelEnvVar, ddEnvVars, key = otelEnvVar] of /** @type {Array<[string, string[], string?]>} */ ([
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
+    ['OTEL_LOG_LEVEL', ['DD_TRACE_LOG_LEVEL'], 'logLevel'],
+    ['OTEL_PROPAGATORS', ['DD_TRACE_PROPAGATION_STYLE']],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
-    // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
-    ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
-    ['OTEL_TRACES_SAMPLER_ARG', 'DD_TRACE_SAMPLE_RATE'],
-    ['OTEL_TRACES_EXPORTER', 'DD_TRACE_ENABLED'],
-    ['OTEL_METRICS_EXPORTER', 'DD_RUNTIME_METRICS_ENABLED'],
-    ['OTEL_RESOURCE_ATTRIBUTES', 'DD_TAGS'],
-    ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
-    ['OTEL_LOGS_EXPORTER'],
-  ]) {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    const envs = process.env
+    ['OTEL_SERVICE_NAME', ['DD_SERVICE'], 'service'],
+    ['OTEL_TRACES_SAMPLER', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_SAMPLER_ARG', ['DD_TRACE_SAMPLE_RATE']],
+    ['OTEL_TRACES_EXPORTER', ['DD_TRACE_ENABLED']],
+    ['OTEL_METRICS_EXPORTER', ['DD_RUNTIME_METRICS_ENABLED']],
+    ['OTEL_RESOURCE_ATTRIBUTES', ['DD_TAGS']],
+    // OTEL_SDK_DISABLED maps to DD_TRACE_ENABLED and also gates the DD_TRACE_OTEL_ENABLED provider hook.
+    // DD_TRACE_OTEL_ENABLED comes first to keep the established `otel.env.invalid` tag.
+    ['OTEL_SDK_DISABLED', ['DD_TRACE_OTEL_ENABLED', 'DD_TRACE_ENABLED']],
+    ['OTEL_LOGS_EXPORTER', []],
+  ])) {
+    if (!envs[otelEnvVar]) continue
+
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
-    const otelEnvValue = envs[otelEnvVar]
-    if (otelEnvValue) {
+    for (const ddEnvVar of ddEnvVars) {
       if (envs[ddEnvVar]) {
         log.warn('Conflicting %s and %s environment variables are set for %s', ddEnvVar, otelEnvVar, otelSource)
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
-
-      const invalidOtelValue = !otelSource
-      if (invalidOtelValue) {
-        increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
-      }
+    }
+    // An invalid value is one mistake, however many Datadog equivalents the variable has.
+    if (!otelSource) {
+      increaseCounter('otel.env.invalid', ddEnvVars[0], otelEnvVar)
     }
   }
 }

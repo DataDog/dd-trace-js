@@ -49,6 +49,30 @@ function finishServerRequest (protocol, requestId) {
   serverRequestCh.asyncEnd.publish(ctx)
 }
 
+/**
+ * Plugins can replace the request a handler gets and the result the SDK sends. A failing transform keeps the result.
+ *
+ * @param {{ request: object, transformResult?: (result: unknown) => unknown }} ctx
+ * @param {Function} handler
+ * @param {object} thisArg
+ * @param {unknown[]} args
+ */
+function callRequestHandler (ctx, handler, thisArg, args) {
+  const result = args[0] === ctx.request
+    ? handler.apply(thisArg, args)
+    : handler.call(thisArg, ctx.request, ...Array.prototype.slice.call(args, 1))
+  const { transformResult } = ctx
+  if (!transformResult) return result
+
+  return Promise.resolve(result).then(value => {
+    try {
+      return transformResult(value)
+    } catch {
+      return value
+    }
+  })
+}
+
 function wrapRequestHandler (protocol, handler) {
   if (wrappedRequestHandlers.has(handler)) return handler
 
@@ -58,7 +82,7 @@ function wrapRequestHandler (protocol, handler) {
 
     let result
     try {
-      result = handler.apply(this, arguments)
+      result = callRequestHandler(ctx, handler, this, arguments)
     } catch (err) {
       ctx.error = err
       throw err
@@ -147,7 +171,7 @@ function wrapProtocol (Protocol) {
       }
 
       wrapAbortControllers(this)
-      const ctx = { request, extra }
+      const ctx = { request, extra, server: this }
       serverRequestCh.start.runStores(ctx, () => {
         let pending = pendingContexts.get(this)
         if (!pending) {
@@ -162,6 +186,10 @@ function wrapProtocol (Protocol) {
           ctx.error = err
           finishServerRequest(this, request.id)
           throw err
+        } finally {
+          // runStores restores only the APM store. `end` lets the LLM Obs plugin restore its own store. The handler
+          // keeps the server span because the SDK schedules it before `_onrequest` returns.
+          serverRequestCh.end.publish(ctx)
         }
 
         // The SDK registers an AbortController only when it actually dispatches a handler.
@@ -252,3 +280,5 @@ addHook({
   wrapMcpServer(exports.McpServer)
   return exports
 })
+
+module.exports = { addTraceContextToRequest, callRequestHandler }

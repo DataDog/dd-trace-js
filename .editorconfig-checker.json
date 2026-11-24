@@ -11,6 +11,7 @@
     "^coverage/",
     "^packages/dd-trace/test/appsec/bad-formatted-rules\\.json$",
     "^packages/dd-trace/test/llmobs/cassettes/",
+    "^packages/dd-trace/test/openfeature/ffe-system-test-data/",
     "^vendor/"
   ],
   "AllowedContentTypes": [],

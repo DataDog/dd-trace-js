@@ -3,6 +3,8 @@
 const GIT_COMMIT_SHA = 'git.commit.sha'
 const GIT_BRANCH = 'git.branch'
 const GIT_REPOSITORY_URL = 'git.repository_url'
+const GIT_CHECKOUT_ROOT = 'git.checkout.root'
+const GIT_CHECKOUT_IS_CUSTOM = 'git.checkout.is_custom'
 const GIT_TAG = 'git.tag'
 const GIT_COMMIT_MESSAGE = 'git.commit.message'
 const GIT_COMMIT_COMMITTER_DATE = 'git.commit.committer.date'
@@ -31,6 +33,7 @@ const CI_PIPELINE_NUMBER = 'ci.pipeline.number'
 const CI_PIPELINE_URL = 'ci.pipeline.url'
 const CI_PROVIDER_NAME = 'ci.provider.name'
 const CI_WORKSPACE_PATH = 'ci.workspace_path'
+const CI_GIT_MERGE_COMMIT_SHA = 'ci.git.merge_commit_sha'
 const CI_JOB_URL = 'ci.job.url'
 const CI_JOB_NAME = 'ci.job.name'
 const CI_JOB_ID = 'ci.job.id'
@@ -46,6 +49,8 @@ module.exports = {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   GIT_REPOSITORY_URL,
+  GIT_CHECKOUT_ROOT,
+  GIT_CHECKOUT_IS_CUSTOM,
   GIT_TAG,
   GIT_COMMIT_MESSAGE,
   GIT_COMMIT_COMMITTER_DATE,
@@ -72,6 +77,7 @@ module.exports = {
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_JOB_URL,
   CI_JOB_NAME,
   CI_JOB_ID,

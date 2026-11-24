@@ -84,7 +84,11 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    exporter._writer?.flush()
+    if (typeof exporter.flush === 'function') {
+      exporter.flush()
+    } else {
+      exporter._writer?.flush()
+    }
     return this.#activeProcessor.forceFlush()
   }
 

@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { on } = require('node:events')
+const { writeFile } = require('node:fs/promises')
+const { join } = require('node:path')
 
 const { spawn } = require('child_process')
 const {
@@ -16,60 +19,171 @@ const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', version => {
-    let agent
-    let proc
-
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
     ],
     false,
-    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/local.settings.json',
+      './packages/datadog-plugin-azure-functions/test/fixtures/package.json',
       './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
 
-    before(async function () {
-      this.timeout(60000)
-      agent = await new FakeAgent().start()
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+    describe('with Datadog semantics', () => {
+      let agent
+      let proc
+
+      before(async function () {
+        this.timeout(60000)
+        agent = await new FakeAgent().start()
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        })
       })
+
+      after(async () => {
+        await stopProc(proc, { signal: 'SIGINT' })
+        await agent.stop()
+      })
+
+      // TODO(bengl): The `varySandbox` helper function isn't well set-up for dealing
+      // with Azure Functions and the way the `func` command expects to find files. I
+      // have manually tested that all the usual import variants work, but really we ought
+      // to figure out a way of automating this.
+      it('is instrumented', async () => {
+        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.strictEqual(payload.length, 1)
+          assert.strictEqual(payload[0].length, 1)
+
+          assertObjectContains(payload, [[{
+            name: 'azure.functions.invoke',
+            meta: {
+              '_dd.integration': 'azure-functions',
+              component: 'azure-functions',
+              'http.route': '/api/httptest',
+            },
+            resource: 'GET /api/httptest',
+          }]])
+        })
+      }).timeout(60_000)
+
+      it('propagates context to child http requests', async () => {
+        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2/42', ({ payload }) => {
+          assert.strictEqual(payload.length, 2)
+          assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
+        })
+      }).timeout(50000)
     })
 
-    after(async () => {
-      await stopProc(proc, { signal: 'SIGINT' })
-      await agent.stop()
-    })
+    for (const [label, configuredPrefix, envPrefix, prefix] of [
+      ['default', undefined, undefined, 'api'],
+      ['custom', 'v2/functions', undefined, 'v2/functions'],
+      ['empty', '', undefined, ''],
+      ['environment', 'ignored', 'override', 'override'],
+      ['empty environment', 'ignored', '', ''],
+    ]) {
+      const routeRoot = prefix ? `/${prefix}` : ''
+      describe(`with OTel semantics and ${label} route prefix`, () => {
+        let agent
+        let proc
 
-    // TODO(bengl): The `varySandbox` helper function isn't well set-up for dealing
-    // with Azure Functions and the way the `func` command expects to find files. I
-    // have manually tested that all the usual import variants work, but really we ought
-    // to figure out a way of automating this.
-    it('is instrumented', async () => {
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.strictEqual(payload.length, 1)
-        assert.strictEqual(payload[0].length, 1)
+        before(async function () {
+          this.timeout(60000)
+          await writeFile(join(sandboxCwd(), 'host.json'), JSON.stringify({
+            version: '2.0',
+            extensions: { http: { routePrefix: configuredPrefix } },
+          }))
+          agent = await new FakeAgent().start()
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+            DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+            DD_TRACE_SAMPLING_RULES: JSON.stringify([
+              { resource: `GET ${routeRoot}/httptest2/{id}`, sample_rate: 0.5 },
+            ]),
+            AzureFunctionsJobHost__extensions__http__routePrefix: envPrefix,
+            OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
+            PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+          })
+        })
 
-        assertObjectContains(payload, [[{
-          name: 'azure.functions.invoke',
-          meta: {
-            '_dd.integration': 'azure-functions',
-            component: 'azure-functions',
-            'http.route': '/api/httptest',
-          },
-          resource: 'GET /api/httptest',
-        }]])
+        after(async () => {
+          await stopProc(proc, { signal: 'SIGINT' })
+          await agent.stop()
+        })
+
+        it('uses the route for sampling before outbound propagation', async () => {
+          const [span, response] = await Promise.all([
+            waitForOtlpSpan(agent, `GET ${routeRoot}/httptest2/{id}`, 50_000),
+            fetch(`http://127.0.0.1:7071${routeRoot}/httptest2/42?page=2&token=fake-token`, {
+              headers: {
+                'x-datadog-parent-id': '2',
+                'x-datadog-trace-id': '1',
+              },
+            }),
+          ])
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(response.headers.get('x-sampling-priority'), '2')
+          await response.text()
+
+          const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+          assertObjectContains(attributes, {
+            '_dd.p.ksr': { stringValue: '0.5' },
+            'http.route': { stringValue: `${routeRoot}/httptest2/{id}` },
+            'url.scheme': { stringValue: 'http' },
+            'url.path': { stringValue: `${routeRoot}/httptest2/42` },
+            'url.query': { stringValue: 'page=2&<redacted>' },
+            _sampling_priority_v1: { intValue: 2 },
+          })
+        }).timeout(60_000)
+
+        it('omits queries containing Azure function keys', async () => {
+          const [span, response] = await Promise.all([
+            waitForOtlpSpan(agent, `GET ${routeRoot}/httptest`, 50_000),
+            fetch(`http://127.0.0.1:7071${routeRoot}/httptest?page=2&code=fake-function-key`),
+          ])
+          assert.strictEqual(response.status, 200)
+          await response.text()
+
+          const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+          assertObjectContains(attributes, {
+            'http.route': { stringValue: `${routeRoot}/httptest` },
+            'url.path': { stringValue: `${routeRoot}/httptest` },
+          })
+          assert.strictEqual(attributes['url.query'], undefined)
+        }).timeout(60_000)
       })
-    }).timeout(60_000)
-
-    it('propagates context to child http requests', async () => {
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
-      })
-    }).timeout(50000)
+    }
   })
 })
+
+/**
+ * @typedef {object} OtlpSpan
+ * @property {string} name
+ * @property {Array<{key: string, value: Record<string, string | number>}>} attributes
+ */
+
+/**
+ * @typedef {object} OtlpTracePayload
+ * @property {Array<{scopeSpans: Array<{spans: OtlpSpan[]}>}>} resourceSpans
+ */
+
+/**
+ * @param {FakeAgent} agent
+ * @param {string} name
+ * @param {number} timeout
+ * @returns {Promise<OtlpSpan>}
+ */
+async function waitForOtlpSpan (agent, name, timeout) {
+  for await (const [message] of on(agent, 'otlp-traces', { signal: AbortSignal.timeout(timeout) })) {
+    const { payload } = /** @type {{ payload: OtlpTracePayload }} */ (message)
+    for (const { scopeSpans } of payload.resourceSpans) {
+      for (const { spans } of scopeSpans) {
+        for (const span of spans) {
+          if (span.name === name) return span
+        }
+      }
+    }
+  }
+}
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   const env = {

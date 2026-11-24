@@ -23,7 +23,7 @@ const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   describe('grpc/client', () => {
-    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0' || '*', (version, pkg, resolvedVersion) => {
+    withVersions('grpc', pkgs, (version, pkg, resolvedVersion) => {
       let grpc
       let port = 0
       let server

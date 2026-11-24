@@ -8,6 +8,7 @@ const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
 const { DEPENDENT_FLAG_VARIANT_KEY_V1, getEvaluatorCapabilities } = require('./evaluator-capabilities')
+const { reportIgnoredFlagSelection } = require('./flag-selection')
 
 const MAX_ATTEMPTS = 3
 const FIRST_RETRY_MIN_MS = 2000
@@ -21,10 +22,12 @@ const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuratio
 /**
  * @typedef {object} AgentlessSourceConfig
  * @property {URL} endpoint
+ * @property {boolean} [flagSelectionSent]
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
  * @property {string | undefined} apiKey
  * @property {string | undefined} env
+ * @property {string | undefined} service
  */
 
 /**
@@ -167,6 +170,8 @@ class AgentlessConfigurationSource {
       endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
     }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
+    // The CDN uses this header to attribute the usage of this request to the service.
+    if (this.#config.service) headers['DD-Service'] = this.#config.service
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
     /**
@@ -253,6 +258,8 @@ class AgentlessConfigurationSource {
       this.#logPollFailure('configuration could not be applied')
       return
     }
+
+    if (this.#config.flagSelectionSent) reportIgnoredFlagSelection(response.headers)
 
     const etag = response.headers?.etag
     const value = Array.isArray(etag) ? etag[0] : etag

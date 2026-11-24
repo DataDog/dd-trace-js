@@ -12,16 +12,15 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
+  withVersions('grpc', '@grpc/grpc-js', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
-      './packages/datadog-plugin-grpc/test/integration-test/*',
-      './packages/datadog-plugin-grpc/test/*'])
+      './packages/datadog-plugin-grpc/test/integration-test/server.mjs',
+      './packages/datadog-plugin-grpc/test/test.proto'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

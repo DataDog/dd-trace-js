@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const { describe, it, afterEach, before, after } = require('mocha')
+const { describe, it, afterEach, before, after, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
@@ -34,10 +34,18 @@ describe('RASP - fastify blocking', () => {
   })
 
   withVersions('fastify', 'fastify', '>=2', (version) => {
-    let app, hooks, httpRequest, pool
+    let app, hooks, httpRequest, pool, target, targetRequests
 
     before(async () => {
-      await agent.load(['http', 'fastify'], { client: false })
+      // The fetch plugin is loaded so SSRF through fetch is analyzed inside the fetch client span, as in production.
+      await agent.load(['http', 'fastify', 'fetch'], { client: false })
+
+      // The first fetch of the process loads the fetch plugin, and RASP would count the files read then as LFI
+      // evaluations of the test request. Its span is drained here so it can't land in a test's assertion window.
+      await Promise.all([
+        fetch('not-a-real-protocol://preload').catch(() => {}),
+        agent.assertSomeTraces(() => {}).catch(() => {}),
+      ])
 
       appsec.enable(getConfigFresh({
         appsec: {
@@ -90,6 +98,23 @@ describe('RASP - fastify blocking', () => {
         return fs.readFileSync(request.query.payload)
       })
 
+      // Libraries such as sequelize throw their own error and keep the original one in a property other than `cause`.
+      app.get('/lfi-wrapped', async (request, reply) => {
+        try {
+          return fs.readFileSync(request.query.payload)
+        } catch (error) {
+          throw Object.assign(new Error('Library error'), { parent: error })
+        }
+      })
+
+      app.get('/lfi-replaced', async (request, reply) => {
+        try {
+          return fs.readFileSync(request.query.payload)
+        } catch {
+          throw new Error('Application error')
+        }
+      })
+
       app.get('/sqli', async (request, reply) => {
         return pool.query(`SELECT * FROM users WHERE id='${request.query.payload}'`)
       })
@@ -102,6 +127,17 @@ describe('RASP - fastify blocking', () => {
         })
       })
 
+      app.get('/ssrf-fetch', async (request, reply) => {
+        const response = await fetch(`http://${request.query.payload}/`)
+        return response.text()
+      })
+
+      target = http.createServer((req, res) => {
+        targetRequests++
+        res.end('target')
+      })
+      await new Promise(resolve => target.listen(0, '127.0.0.1', resolve))
+
       await app.listen({ host: '127.0.0.1', port: 0 })
 
       httpRequest = HttpRequest.create({
@@ -111,14 +147,22 @@ describe('RASP - fastify blocking', () => {
       })
     })
 
+    beforeEach(() => {
+      targetRequests = 0
+    })
+
     afterEach(() => {
       sinon.resetHistory()
     })
 
     after(async () => {
+      // The blocked loopback request can leave an accepted socket open on Node 26.
+      app.server.closeAllConnections()
+      await app.close()
+      target.closeAllConnections()
+      await new Promise(resolve => target.close(resolve))
       // The pg.Pool keeps connections and a reaper timer alive; leaking one per fastify version starves the
       // event loop until later `before` hooks (server startup) time out.
-      await app.close()
       await pool?.end()
       appsec.disable()
       await agent.close()
@@ -180,6 +224,26 @@ describe('RASP - fastify blocking', () => {
       await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
     })
 
+    it('should block with LFI when a property of the error holds the abort error', async () => {
+      const res = await httpRequest('/lfi-wrapped?payload=/etc/passwd')
+
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, blockedJson)
+      const span = await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
+      assert.strictEqual(span.meta['appsec.blocked'], 'true')
+    })
+
+    it('should not block with LFI when the application replaces the abort error', async () => {
+      const res = await httpRequest('/lfi-replaced?payload=/etc/passwd')
+
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 500)
+      assert(res.data.includes('Application error'), `Got: ${inspect(res.data)}`)
+      const span = await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
+      assert.ok(!('appsec.blocked' in span.meta))
+    })
+
     it('should block with SQLI', async () => {
       const res = await httpRequest('/sqli?payload=\' OR 1 = 1 --')
 
@@ -192,7 +256,9 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with SSRF', async () => {
-      const res = await httpRequest('/ssrf?payload=169.254.169.254')
+      // Use a reachable private target so a host routing error cannot race the RASP abort error.
+      const target = `127.0.0.1:${app.server.address().port}`
+      const res = await httpRequest(`/ssrf?payload=${target}`)
 
       // some hooks won't be called because SSRF is blocked out of band
       sinon.assert.notCalled(hooks.onSend)
@@ -200,6 +266,18 @@ describe('RASP - fastify blocking', () => {
       sinon.assert.notCalled(hooks.onError)
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, blockedJson)
+      await checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
+    })
+
+    it('should block with SSRF through fetch', async () => {
+      const res = await httpRequest(`/ssrf-fetch?payload=127.0.0.1:${target.address().port}`)
+
+      sinon.assert.calledOnce(hooks.onSend)
+      sinon.assert.calledOnce(hooks.onResponse)
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, blockedJson)
+      assert.strictEqual(targetRequests, 0)
       await checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
     })
   })

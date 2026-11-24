@@ -16,6 +16,7 @@ const {
   getDynamicAtrRetryCount,
 } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
+const { getTestAnnotations, copyTestAnnotations } = require('../../dd-trace/src/ci-visibility/test-annotations')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -283,6 +284,7 @@ class MochaPlugin extends CiPlugin {
   static id = 'mocha'
 
   #pendingWebdriverioVideos = new Set()
+  #webdriverioJasmineAnnotations = new Map()
   #webdriverioCapture
   #webdriverioVideoFlushTimer
 
@@ -402,6 +404,7 @@ class MochaPlugin extends CiPlugin {
           suiteFiles: new Map(),
           suiteStatuses: new Map(),
           tests: new Map(),
+          testAnnotations: this.#webdriverioJasmineAnnotations,
         }
       }
     })
@@ -412,6 +415,29 @@ class MochaPlugin extends CiPlugin {
 
       const activeSpan = storage('legacy').getStore()?.span
       setWebdriverioRumTestCorrelation(ctx, activeSpan)
+    })
+
+    this.addSub('tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_init:start', () => {
+      // Declarations run during adapter initialization, before coordinator settings arrive.
+      this.#webdriverioJasmineAnnotations = new Map()
+    })
+
+    this.addSub('tracing:orchestrion:@wdio/utils:runSpec:end', (ctx) => {
+      if (!ctx.result?.id) return
+      const annotations = getTestAnnotations(ctx.arguments?.[1])
+      if (annotations.mustFail || annotations.noAutoRetry) {
+        if (ctx.result.type === 'test') {
+          if (ctx.result.fn) {
+            // Mocha's runnable holds WebdriverIO's wrapper rather than the annotated callback.
+            copyTestAnnotations(ctx.arguments[1], ctx.result.fn)
+          } else {
+            // Mocha discards callbacks inherited from a pending suite.
+            ctx.result._ddDeclaredAnnotations = annotations
+          }
+        } else {
+          this.#webdriverioJasmineAnnotations.set(ctx.result.id, annotations)
+        }
+      }
     })
 
     this.addBind(jasmineTestFunctionStartCh, (ctx) => {
@@ -853,7 +879,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
-      if (!store) {
+      if (!ctx.currentStore) {
         const span = this.startTestSpan(ctx)
 
         ctx.parentStore = store
@@ -1139,9 +1165,14 @@ class MochaPlugin extends CiPlugin {
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const properties = this.libraryConfig?.testManagementTests?.mocha
       ?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
-    const isAttemptToFix = this.libraryConfig?.isTestManagementTestsEnabled && properties.attempt_to_fix
-    const isDisabled = this.libraryConfig?.isTestManagementTestsEnabled && properties.disabled
-    const isQuarantined = this.libraryConfig?.isTestManagementTestsEnabled && properties.quarantined
+    const testAnnotations = state.testAnnotations.get(result.id) || getTestAnnotations()
+    const assignedProperties = this.libraryConfig?.isTestManagementTestsEnabled ? properties : undefined
+    const isAttemptToFix = this.libraryConfig?.isTestManagementTestsEnabled &&
+      !testAnnotations.noAutoRetry && properties.attempt_to_fix
+    const isDisabled = this.libraryConfig?.isTestManagementTestsEnabled &&
+      !testAnnotations.mustFail && properties.disabled
+    const isQuarantined = this.libraryConfig?.isTestManagementTestsEnabled &&
+      !testAnnotations.mustFail && properties.quarantined
     const isModified = this.libraryConfig?.isImpactedTestsEnabled && isModifiedTest(
       getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot || this.sourceRoot),
       null,
@@ -1152,10 +1183,10 @@ class MochaPlugin extends CiPlugin {
     const knownTests = this.libraryConfig?.knownTests?.mocha
     const isNew = this.libraryConfig?.isKnownTestsEnabled && knownTests &&
       !(knownTests[testSuite] || []).includes(testName)
-    const isEarlyFlakeDetection = this.libraryConfig?.isEarlyFlakeDetectionEnabled &&
+    const isEarlyFlakeDetection = !testAnnotations.noAutoRetry && this.libraryConfig?.isEarlyFlakeDetectionEnabled &&
       hasEfdRetries(this.libraryConfig.earlyFlakeDetectionRetryPolicy) &&
       !isAttemptToFix && !isDisabled && (isNew || isModified)
-    const isAtr = this.libraryConfig?.isFlakyTestRetriesEnabled &&
+    const isAtr = !testAnnotations.noAutoRetry && this.libraryConfig?.isFlakyTestRetriesEnabled &&
       !isAttemptToFix && !isEarlyFlakeDetection
     let retryCount = 0
     if (isAttemptToFix) {
@@ -1177,6 +1208,8 @@ class MochaPlugin extends CiPlugin {
     }
 
     const test = {
+      assignedProperties,
+      testAnnotations,
       attempt: 0,
       attemptStart: undefined,
       currentStore: undefined,
@@ -1242,6 +1275,8 @@ class MochaPlugin extends CiPlugin {
     test.attemptStart = performance.now()
     test.hasFinalHookFailure = false
     const span = this.startTestSpan({
+      assignedProperties: test.assignedProperties,
+      testAnnotations: test.testAnnotations,
       hasDynamicName: test.hasDynamicName,
       isAttemptToFix: test.isAttemptToFix,
       isDisabled: test.isDisabled,
@@ -1923,6 +1958,12 @@ class MochaPlugin extends CiPlugin {
     } = testInfo
 
     const extraTags = {}
+    const { testAnnotations, assignedProperties } = testInfo
+    if (testAnnotations?.mustFail) extraTags['test.test_management.prevent_failure_suppression'] = 'true'
+    if (testAnnotations?.noAutoRetry) extraTags['test.test_management.no_auto_retry'] = 'true'
+    if (assignedProperties?.attempt_to_fix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    if (assignedProperties?.disabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    if (assignedProperties?.quarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString

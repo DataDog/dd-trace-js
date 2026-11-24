@@ -5,6 +5,8 @@ const fs = require('node:fs')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../../setup/core')
 
@@ -99,6 +101,15 @@ describe('get-known-tests', () => {
     getKnownTests(DEFAULT_PARAMS, (err, knownTests) => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(knownTests, KNOWN_TESTS_RESPONSE.data.attributes.tests)
+      done()
+    })
+  })
+
+  it('does not fetch known tests without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getKnownTests(DEFAULT_PARAMS, (error) => {
+      assert.strictEqual(error.message, 'Known tests were not fetched because Datadog API key is not defined.')
       done()
     })
   })
@@ -366,5 +377,152 @@ describe('parseKnownTestsResponse', () => {
       ),
       /Invalid known tests response: suite tests must be arrays/
     )
+  })
+})
+
+describe('known-tests pagination telemetry', () => {
+  let clock
+  let fetchKnownTests
+  let request
+  let distributionMetric
+  let writeToCache
+
+  const metricNames = [
+    'known_tests.pages_fetched',
+    'known_tests.total_fetch_ms',
+    'known_tests.total_request_ms',
+  ]
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({ toFake: ['performance'] })
+    request = sinon.stub()
+    distributionMetric = sinon.spy()
+    writeToCache = sinon.spy()
+    fetchKnownTests = proxyquire('../../../src/ci-visibility/early-flake-detection/get-known-tests', {
+      'node:perf_hooks': { performance: { now: () => clock.now } },
+      '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
+      '../../ci-visibility/telemetry': { distributionMetric },
+      '../../plugins/util/test': {
+        getNumFromKnownTests: () => {
+          clock.tick(11)
+          return 1
+        },
+      },
+      '../requests/request': request,
+      '../requests/fs-cache': {
+        withCache: (key, fetch, done) => fetch(key, done),
+        writeToCache,
+      },
+    }).getKnownTests
+    const parse = JSON.parse
+    sinon.stub(JSON, 'parse').callsFake((...args) => {
+      clock.tick(7)
+      return parse(...args)
+    })
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  function reply (pageInfo) {
+    return (data, options, callback) => {
+      clock.tick(5)
+      callback(null, JSON.stringify({
+        data: { attributes: { tests: { jest: { suite: ['test'] } }, page_info: pageInfo } },
+      }), 200)
+    }
+  }
+
+  function summary () {
+    return distributionMetric.getCalls()
+      .filter(call => metricNames.includes(call.args[0]))
+      .map(call => call.args)
+  }
+
+  it('reports one completed page with request time excluding local processing', (done) => {
+    request.callsFake(reply())
+    fetchKnownTests(DEFAULT_PARAMS, (err) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(summary(), [
+        ['known_tests.pages_fetched', {}, 1],
+        ['known_tests.total_fetch_ms', {}, 23],
+        ['known_tests.total_request_ms', {}, 5],
+      ])
+      sinon.assert.calledOnce(writeToCache)
+      done()
+    })
+  })
+
+  it('sums completed pages and forwards the continuation cursor', (done) => {
+    request.onFirstCall().callsFake(reply({ has_next: true, cursor: 'second' }))
+    request.onSecondCall().callsFake(reply({ has_next: false }))
+    fetchKnownTests(DEFAULT_PARAMS, (err, tests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(tests, { jest: { suite: ['test', 'test'] } })
+      const secondRequest = JSON.parse(request.secondCall.args[0])
+      assert.deepStrictEqual(secondRequest.data.attributes.page_info, { page_state: 'second' })
+      assert.deepStrictEqual(summary(), [
+        ['known_tests.pages_fetched', {}, 2],
+        ['known_tests.total_fetch_ms', {}, 35],
+        ['known_tests.total_request_ms', {}, 10],
+      ])
+      done()
+    })
+  })
+
+  for (const [failure, failedPage] of [
+    ['transport', 0], ['invalid JSON', 0], ['missing cursor', 0],
+    ['transport', 1], ['invalid JSON', 1], ['missing cursor', 1],
+  ]) {
+    it(`omits completion metrics and cached partial results on page ${failedPage + 1} ${failure}`, (done) => {
+      request.onFirstCall().callsFake(reply({ has_next: true, cursor: 'second' }))
+      request.onCall(failedPage).callsFake((data, options, callback) => {
+        clock.tick(5)
+        if (failure === 'transport') return callback(new Error('connection reset'))
+        if (failure === 'invalid JSON') return callback(null, '{invalid', 200)
+        const replyWithoutCursor = reply({ has_next: true })
+        replyWithoutCursor(data, options, callback)
+      })
+      fetchKnownTests(DEFAULT_PARAMS, (err) => {
+        assert.ok(err)
+        assert.deepStrictEqual(summary(), [])
+        sinon.assert.notCalled(writeToCache)
+        done()
+      })
+    })
+  }
+
+  it('counts a successful empty response as one fetched page', (done) => {
+    request.callsFake((data, options, callback) => {
+      clock.tick(5)
+      callback(null, JSON.stringify({ data: { attributes: { tests: null } } }), 200)
+    })
+    fetchKnownTests(DEFAULT_PARAMS, (err, tests) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(tests, null)
+      assert.deepStrictEqual(summary(), [
+        ['known_tests.pages_fetched', {}, 1],
+        ['known_tests.total_fetch_ms', {}, 23],
+        ['known_tests.total_request_ms', {}, 5],
+      ])
+      done()
+    })
+  })
+
+  it('does not report a fetched page for a cache hit', (done) => {
+    const cachedTests = { jest: { suite: ['cached'] } }
+    const cachedFetch = proxyquire('../../../src/ci-visibility/early-flake-detection/get-known-tests', {
+      '../../ci-visibility/telemetry': { distributionMetric },
+      '../requests/request': request,
+      '../requests/fs-cache': { withCache: (key, fetch, callback) => callback(null, cachedTests) },
+    }).getKnownTests
+    cachedFetch(DEFAULT_PARAMS, (err, tests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(tests, cachedTests)
+      sinon.assert.notCalled(request)
+      assert.deepStrictEqual(summary(), [])
+      done()
+    })
   })
 })

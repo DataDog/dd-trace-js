@@ -2,6 +2,7 @@
 
 const { readFileSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const dns = require('node:dns')
 const { once } = require('node:events')
 const path = require('node:path')
@@ -22,6 +23,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
@@ -141,6 +143,18 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    it('enables tRPC tracing by default', () => {
+      assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
+    })
+
+    for (const value of ['false', '0', 'true', '1']) {
+      it(`reads DD_TRACE_TRPC_ENABLED=${value}`, () => {
+        process.env.DD_TRACE_TRPC_ENABLED = value
+
+        assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, value === 'true' || value === '1')
+      })
+    }
+
     it('should throw when accessing unknown configuration', () => {
       assert.throws(
         () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
@@ -362,6 +376,51 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_MCP_CAPTURE_INTENT', () => {
+    it('defaults to false', () => {
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, false)
+    })
+
+    it('can be enabled with the environment variable', () => {
+      process.env.DD_MCP_CAPTURE_INTENT = 'true'
+
+      assert.strictEqual(getConfig().mcp.DD_MCP_CAPTURE_INTENT, true)
+    })
+  })
+
+  describe('DD_TRACE_REACT_ROUTER_ENABLED', () => {
+    it('defaults to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_REACT_ROUTER_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_REACT_ROUTER_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+  })
+
+  describe('DD_DATA_STREAMS_HTTP_ENABLED', () => {
+    it('defaults to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_DATA_STREAMS_HTTP_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_DATA_STREAMS_HTTP_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+
+    it('can be disabled from the environment', () => {
+      process.env.DD_DATA_STREAMS_HTTP_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_DATA_STREAMS_HTTP_ENABLED, false)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_DATA_STREAMS_HTTP_ENABLED', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
     // Shape mirrors winston: log methods, transports with a parent back-reference,
     // and stream-state self-references (Transform's _readableState.pipes).
@@ -469,6 +528,148 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
+  describe('AWS Lambda configuration', () => {
+    it('owns the datadog-lambda-js defaults in the Config singleton', () => {
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        DD_API_KEY_SECRET_ARN: undefined,
+        DD_CAPTURE_LAMBDA_PAYLOAD: false,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 10,
+        DD_COLD_START_TRACE_SKIP_LIB: './opentracing/tracer',
+        DD_COLD_START_TRACING: true,
+        DD_DECODE_AUTHORIZER_CONTEXT: true,
+        DD_ENCODE_AUTHORIZER_CONTEXT: true,
+        DD_ENHANCED_METRICS: true,
+        DD_FLUSH_TO_LOG: false,
+        DD_KMS_API_KEY: undefined,
+        DD_LAMBDA_FIPS_MODE: false,
+        DD_MERGE_XRAY_TRACES: false,
+        DD_MIN_COLD_START_DURATION: 3,
+        DD_TRACE_AWS_LAMBDA_ENABLED: true,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: true,
+        DD_TRACE_MANAGED_SERVICES: true,
+      })
+    })
+
+    it('parses Lambda environment variables into one namespace and tracks their origins', () => {
+      Object.assign(process.env, {
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: 'true',
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: '4',
+        DD_COLD_START_TRACING: 'false',
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_DECODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENCODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENHANCED_METRICS: 'false',
+        DD_FLUSH_TO_LOG: 'true',
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: 'true',
+        DD_MERGE_XRAY_TRACES: 'true',
+        DD_MIN_COLD_START_DURATION: '7',
+        DD_TRACE_AWS_LAMBDA_ENABLED: 'false',
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
+        DD_TRACE_MANAGED_SERVICES: 'false',
+      })
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: true,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 4,
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_COLD_START_TRACING: false,
+        DD_DECODE_AUTHORIZER_CONTEXT: false,
+        DD_ENCODE_AUTHORIZER_CONTEXT: false,
+        DD_ENHANCED_METRICS: false,
+        DD_FLUSH_TO_LOG: true,
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: true,
+        DD_MERGE_XRAY_TRACES: true,
+        DD_MIN_COLD_START_DURATION: 7,
+        DD_TRACE_AWS_LAMBDA_ENABLED: false,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: false,
+        DD_TRACE_MANAGED_SERVICES: false,
+      })
+      assert.strictEqual(config.getOrigin('lambda.DD_API_KEY_SECRET_ARN'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
+    })
+
+    for (const ddMajor of [5, 6, 7]) {
+      it(`ignores programmatic Lambda configuration on v${ddMajor}`, () => {
+        process.env.DD_ENHANCED_METRICS = 'false'
+        const expected = getConfig(undefined, { ddMajor }).lambda
+        const config = getConfig({
+          lambda: {
+            apiKeyKms: 'programmatic-kms',
+            apiKeySecretArn: 'programmatic-secret',
+            captureLambdaPayload: true,
+            captureLambdaPayloadMaxDepth: 1,
+            coldStartTraceSkipLib: 'programmatic-module',
+            coldStartTracing: false,
+            createInferredSpan: false,
+            decodeAuthorizerContext: false,
+            encodeAuthorizerContext: false,
+            enhancedMetrics: true,
+            fipsMode: true,
+            logForwarding: true,
+            mergeXrayTraces: true,
+            minColdStartTraceDurationMs: 1,
+            serviceRepresentationEnabled: false,
+            DD_ENHANCED_METRICS: true,
+          },
+        }, { ddMajor })
+
+        assert.deepStrictEqual(config.lambda, expected)
+        assert.strictEqual(config.lambda.DD_ENHANCED_METRICS, false)
+        assert.strictEqual(config.getOrigin('lambda.DD_ENHANCED_METRICS'), 'env_var')
+        assert.ok(!updateConfig.lastCall.args[0].some(entry =>
+          entry.origin === 'code' && (entry.name.startsWith('lambda.') || entry.name === 'DD_ENHANCED_METRICS')
+        ))
+      })
+    }
+
+    for (const ddMajor of [5, 6, 7]) {
+      for (const value of ['true', '1']) {
+        it(`ignores retired localTesting options on v${ddMajor} with DD_LOCAL_TESTING=${value}`, () => {
+          process.env.DD_LOCAL_TESTING = value
+          const config = getConfig({ lambda: { localTesting: true } }, { ddMajor })
+
+          assert.ok(!Object.hasOwn(config.lambda, 'localTesting'))
+          assert.ok(!updateConfig.firstCall.args[0].some(entry =>
+            entry.name === 'DD_LOCAL_TESTING' || entry.name === 'lambda.localTesting'
+          ))
+          // An existing shim may still read this flag; dd-trace must leave it alone.
+          assert.strictEqual(process.env.DD_LOCAL_TESTING, value)
+        })
+      }
+    }
+
+    it('calculates FIPS mode for GovCloud unless the user explicitly overrides it', () => {
+      process.env.AWS_REGION = 'us-gov-west-1'
+      let config = getConfig()
+
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, true)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'calculated')
+
+      process.env.DD_LAMBDA_FIPS_MODE = 'false'
+      config = getConfig()
+
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, false)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
+    })
+
+    it('reuses the global log-injection setting instead of creating a Lambda alias', () => {
+      process.env.DD_LOGS_INJECTION = 'false'
+      const config = getConfig()
+
+      assert.strictEqual(config.logInjection, false)
+      assert.ok(!Object.hasOwn(config.lambda, 'injectLogContext'))
+    })
+  })
+
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.OTEL_LOG_LEVEL = 'debug'
@@ -505,6 +706,84 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
+  it('should keep the real proxy when OTEL_TRACES_EXPORTER combines none with another exporter', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none,console'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  it('should keep the no-op proxy when OTel semantics and OTEL_TRACES_EXPORTER=none are set', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const proxy = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, proxy)
+  })
+
+  for (const semanticsEnabled of ['true', 'false']) {
+    for (const enabled of [undefined, 'true', 'false']) {
+      it(`should honor Electron trace disablement with semantics=${semanticsEnabled} and enabled=${enabled}`, () => {
+        const env = {
+          DD_INJECT_FORCE: 'true',
+          DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: semanticsEnabled,
+          OTEL_TRACES_EXPORTER: 'none',
+        }
+        if (enabled !== undefined) env.DD_TRACE_ENABLED = enabled
+        const expectedProxy = enabled === 'true' ? '../../src/proxy' : '../../src/noop/proxy'
+        execFileSync(process.execPath, ['-e', `
+          const assert = require('node:assert/strict')
+          const tracer = require(${JSON.stringify(require.resolve('../../../..'))})
+          assert.ok(tracer.constructor === require(${JSON.stringify(require.resolve(expectedProxy))}))
+        `], { env, timeout: 10000, stdio: 'pipe' })
+      })
+    }
+  }
+
+  it('should keep the no-op proxy when Lambda disables OTel semantics without an explicit OTLP endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the no-op proxy when Lambda OTel semantics has only empty OTLP endpoints', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = ''
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = ''
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the no-op proxy when Lambda OTel semantics has an explicit OTLP endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env[key] = 'http://collector:4318'
+      delete require.cache[require.resolve('../../src/index')]
+      const indexFile = require('../../src/index')
+      const proxy = require('../../src/noop/proxy')
+      assert.strictEqual(indexFile, proxy, key)
+      delete process.env[key]
+    }
+  })
+
   it('should keep the real proxy when agentless mode disables the OTel trace exporter', () => {
     process.env.DD_AGENTLESS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
@@ -534,6 +813,266 @@ describe('Config', () => {
     const indexFile = require('../../src/index')
     const noop = require('../../src/noop/proxy')
     assert.strictEqual(indexFile, noop)
+  })
+
+  describe('OTEL_SDK_DISABLED', () => {
+    function loadEntryPoint () {
+      delete require.cache[require.resolve('../../src/index')]
+      return require('../../src/index')
+    }
+
+    for (const value of ['true', 'TRUE', '1']) {
+      it(`should select the no-op proxy with OTEL_SDK_DISABLED=${value}`, () => {
+        process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    for (const value of [undefined, '', 'false', '0', 'foo']) {
+      it(`should select the real proxy with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+      })
+    }
+
+    it('should let an explicit DD_TRACE_ENABLED take precedence', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/proxy'))
+    })
+
+    it('should take precedence over OTEL_TRACES_EXPORTER=otlp', () => {
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    it('should still honor OTEL_TRACES_EXPORTER=none when set to false', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.OTEL_TRACES_EXPORTER = 'none'
+
+      assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should select the no-op proxy when ${name} is set`, () => {
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env[name] = 'true'
+
+        assert.strictEqual(loadEntryPoint(), require('../../src/noop/proxy'))
+      })
+    }
+
+    it('should be unset by default', () => {
+      assert.strictEqual(getConfig().OTEL_SDK_DISABLED, undefined)
+    })
+
+    /**
+     * @param {string} name
+     */
+    function sdkDisabledDiagnostic (name) {
+      return `DATADOG TRACER DIAGNOSTIC - ${name} is disabled, because OTEL_SDK_DISABLED=true disables the ` +
+        'OpenTelemetry SDK.'
+    }
+
+    for (const ddTraceEnabled of [undefined, 'true']) {
+      it(`should disable explicitly enabled OTel metrics and logs with DD_TRACE_ENABLED=${ddTraceEnabled}`, () => {
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
+        process.env.OTEL_SDK_DISABLED = 'true'
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        if (ddTraceEnabled !== undefined) process.env.DD_TRACE_ENABLED = ddTraceEnabled
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+        assert.strictEqual(config.getOrigin('DD_METRICS_OTEL_ENABLED'), 'calculated')
+        assert.strictEqual(config.getOrigin('DD_LOGS_OTEL_ENABLED'), 'calculated')
+        // Disabled OTel logs no longer displace Datadog log injection.
+        assert.strictEqual(config.logInjection, true)
+        sinon.assert.calledTwice(logWriter.warn)
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_METRICS_OTEL_ENABLED'))
+        sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
+      })
+    }
+
+    it('should not explain anything when OTel metrics and logs are not enabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should explain only once why OTel logs are disabled', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+      // Recalculates the config, starting from the environment variable again
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
+    })
+
+    it('should not explain why OTel logs are disabled without startup logs', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should disable explicitly enabled OTLP span metrics while DD_TRACE_ENABLED=true keeps tracing', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+      assert.strictEqual(config.getOrigin('OTEL_TRACES_SPAN_METRICS_ENABLED'), 'calculated')
+      // Span metrics no longer force stats computation for OTLP traces.
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, sdkDisabledDiagnostic('OTEL_TRACES_SPAN_METRICS_ENABLED'))
+    })
+
+    for (const value of [undefined, '', 'false']) {
+      it(`should keep explicitly enabled OTel metrics and logs with OTEL_SDK_DISABLED=${JSON.stringify(value)}`, () => {
+        if (value !== undefined) process.env.OTEL_SDK_DISABLED = value
+        process.env.DD_METRICS_OTEL_ENABLED = 'true'
+        process.env.DD_LOGS_OTEL_ENABLED = 'true'
+        process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+        assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      })
+    }
+  })
+
+  describe('OpenTelemetry environment telemetry', () => {
+    const CONFLICT_MESSAGE = 'Conflicting %s and %s environment variables are set for %s'
+    const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+    /**
+     * Series keep their creation order across tests, so sort them to keep assertions independent of test order.
+     *
+     * @param {string} metric
+     */
+    function series (metric) {
+      return (tracerMetrics.toJSON().metrics?.series ?? [])
+        .filter(entry => entry.metric === metric)
+        .map(({ tags, points }) => ({ tags, value: points[0][1] }))
+        .sort((a, b) => a.tags.join().localeCompare(b.tags.join()))
+    }
+
+    beforeEach(() => {
+      tracerMetrics.reset()
+    })
+
+    it('should report a conflict with each Datadog equivalent that is set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+      sinon.assert.calledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_ENABLED', 'OTEL_SDK_DISABLED', 'env_var')
+    })
+
+    it('should only report a conflict with the Datadog equivalents that are set', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_trace_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      sinon.assert.neverCalledWith(log.warn, CONFLICT_MESSAGE, 'DD_TRACE_OTEL_ENABLED')
+    })
+
+    it('should report an invalid value once, tagged with the first Datadog equivalent', () => {
+      process.env.OTEL_SDK_DISABLED = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_datadog:dd_trace_otel_enabled', 'config_opentelemetry:otel_sdk_disabled'], value: 1 },
+      ])
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+    })
+
+    it('should report an invalid value without a Datadog equivalent', () => {
+      process.env.OTEL_LOGS_EXPORTER = 'foo'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.invalid'), [
+        { tags: ['config_opentelemetry:otel_logs_exporter'], value: 1 },
+      ])
+    })
+
+    it('should report an invalid OTEL_PROPAGATORS hidden by DD_TRACE_PROPAGATION_STYLE', () => {
+      process.env.OTEL_PROPAGATORS = 'not-a-propagator'
+      process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
+
+      getConfig()
+
+      const tags = ['config_datadog:dd_trace_propagation_style', 'config_opentelemetry:otel_propagators']
+      assert.deepStrictEqual(series('otel.env.hiding'), [{ tags, value: 1 }])
+      assert.deepStrictEqual(series('otel.env.invalid'), [{ tags, value: 1 }])
+    })
+
+    it('should report a conflict with a single Datadog equivalent', () => {
+      process.env.OTEL_SERVICE_NAME = 'otel-service'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [
+        { tags: ['config_datadog:dd_service', 'config_opentelemetry:otel_service_name'], value: 1 },
+      ])
+    })
+
+    it('should not report anything without OpenTelemetry variables', () => {
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_SERVICE = 'dd-service'
+
+      getConfig()
+
+      assert.deepStrictEqual(series('otel.env.hiding'), [])
+      assert.deepStrictEqual(series('otel.env.invalid'), [])
+    })
   })
 
   it('should keep the real proxy when dynamic instrumentation is enabled with DD_APM_TRACING_ENABLED=false', () => {
@@ -600,6 +1139,80 @@ describe('Config', () => {
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
   })
 
+  it('should treat an empty OTEL_PROPAGATORS as unset', () => {
+    process.env.OTEL_PROPAGATORS = ''
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'default')
+    assert.strictEqual(config.getOrigin('tracePropagationStyle.extract'), 'default')
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should disable propagation with OTEL_PROPAGATORS=none', () => {
+    process.env.OTEL_PROPAGATORS = 'none'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should disable propagation and warn when OTEL_PROPAGATORS combines none with other propagators', () => {
+    process.env.OTEL_PROPAGATORS = 'tracecontext,None'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    sinon.assert.calledWith(log.warn,
+      "'none' cannot be combined with other propagators: 'tracecontext,none' for OTEL_PROPAGATORS " +
+      '(source: env_var), disabled propagation'
+    )
+  })
+
+  it('should keep other propagators when DD_TRACE_PROPAGATION_STYLE combines none with them', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'none,tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none', 'tracecontext'])
+  })
+
+  it('should prefer an invalid DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = 'not-a-propagator'
+    process.env.OTEL_PROPAGATORS = 'tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.getOrigin('DD_TRACE_PROPAGATION_STYLE'), 'default')
+  })
+
+  it('should disable propagation with an empty DD_TRACE_PROPAGATION_STYLE', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = ''
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
+  })
+
+  it('should prefer an empty DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE = ''
+    process.env.OTEL_PROPAGATORS = 'tracecontext'
+
+    const config = getConfig()
+
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
+  })
+
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
     process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-test=value'
@@ -618,12 +1231,90 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
+  })
+
+  it('should percent-decode OTLP exporter header keys and values', () => {
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Basic%20dXNlcjpwYXNz%3D%3D,x%2Dtenant=a%2Cb'
+
+    const config = getConfig()
+
+    assertObjectContains(config, {
+      OTEL_EXPORTER_OTLP_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+    })
+  })
+
+  for (const name of [
+    'OTEL_EXPORTER_OTLP_HEADERS',
+    'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+    'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+    'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+  ]) {
+    it(`should preserve decoded entry order in ${name}`, () => {
+      process.env[name] = 'x-tenant=first,x%2Dtenant=second,x-tenant=last,x-percent=100%25,x-plus=a+b'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config[name], { 'x-tenant': 'last', 'x-percent': '100%', 'x-plus': 'a+b' })
+    })
+
+    for (const invalid of ['x-invalid=%ZZ,x-invalid=ok', 'x%ZZ=invalid']) {
+      it(`should reject the whole ${name} for ${invalid}`, () => {
+        process.env[name] = `Authorization=Bearer%20secret,${invalid}`
+
+        const config = getConfig()
+
+        assert.strictEqual(config[name], undefined)
+        assert.ok(log.warn.calledWith(
+          `Invalid MAP input: '<redacted>' for ${name} (source: env_var), picked default`
+        ))
+        assert.ok(log.warn.getCalls().every(call => !call.args[0].includes('secret')))
+      })
+    }
+  }
+
+  for (const signal of ['LOGS', 'METRICS', 'TRACES']) {
+    it(`should use generic OTLP headers when ${signal} headers fail to percent-decode`, () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Bearer%20global'
+      process.env[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`] = 'Authorization=Bearer%20signal,x-invalid=%'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { Authorization: 'Bearer global' })
+      assert.ok(log.warn.calledWith(
+        `Invalid MAP input: '<redacted>' for OTEL_EXPORTER_OTLP_${signal}_HEADERS (source: env_var), picked default`
+      ))
+    })
+  }
+
+  it('should retain agentless API-key injection when OTLP headers fail to percent-decode', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'test-api-key'
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Bearer%20secret,x-invalid=%'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
+    for (const signal of ['LOGS', 'METRICS', 'TRACES']) {
+      assert.deepStrictEqual(config[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { 'dd-api-key': 'test-api-key' })
+    }
+  })
+
+  it('should discard OTLP exporter headers that fail to percent-decode', () => {
+    process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'x-valid=ok,x-invalid=%E0%A4%A'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS, undefined)
   })
 
   it('should reject malformed and unsupported OTLP HTTP endpoints', () => {
@@ -667,6 +1358,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
     sinon.assert.notCalled(log.warn)
@@ -775,6 +1467,49 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_AI_GUARD_DISABLED_INTEGRATIONS', () => {
+    it('defaults to no disabled integrations and reports default telemetry', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, undefined)
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value: null, origin: 'default' },
+      ])
+    })
+
+    for (const [value, expected] of [
+      ['', []],
+      [' , , ', []],
+      ['anthropic', ['anthropic']],
+      ['anthropic,openai', ['anthropic', 'openai']],
+      [' anthropic, , openai, ai, ', ['anthropic', 'openai', 'ai']],
+      ['openai,openai,unknown,OpenAI', ['openai', 'openai', 'unknown', 'OpenAI']],
+    ]) {
+      it(`parses ${JSON.stringify(value)} and reports environment telemetry`, () => {
+        process.env.DD_AI_GUARD_DISABLED_INTEGRATIONS = value
+
+        const config = getConfig()
+
+        assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, expected)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_AI_GUARD_DISABLED_INTEGRATIONS', value, origin: 'env_var' },
+        ])
+      })
+    }
+
+    for (const enabled of [false, true]) {
+      it(`preserves the global AI Guard setting (${enabled})`, () => {
+        process.env.DD_AI_GUARD_ENABLED = String(enabled)
+        process.env.DD_AI_GUARD_DISABLED_INTEGRATIONS = 'anthropic,openai,ai'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, enabled)
+        assert.deepStrictEqual(config.aiguard.DD_AI_GUARD_DISABLED_INTEGRATIONS, ['anthropic', 'openai', 'ai'])
+      })
+    }
+  })
+
   describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
     // RFC-1113: reported verbatim in configuration telemetry, always emitted
     // (empty value with origin=default when unset). No effect on tracer behavior.
@@ -808,6 +1543,30 @@ describe('Config', () => {
         { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'false', origin: 'env_var' },
       ])
     })
+  })
+
+  describe('DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', () => {
+    it('defaults to enabled independently of Realtime tracing', () => {
+      const config = getConfig()
+      assert.strictEqual(defaults['openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED'], true)
+      assert.strictEqual(config.openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED, true)
+      assert.strictEqual(config.openai.DD_OPENAI_REALTIME_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+
+    for (const enabled of [false, true]) {
+      it('accepts ' + enabled + ' from the environment without disabling Realtime tracing', () => {
+        process.env.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.openai.DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED, enabled)
+        assert.strictEqual(config.openai.DD_OPENAI_REALTIME_ENABLED, true)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: enabled, origin: 'env_var' },
+        ])
+      })
+    }
   })
 
   describe('DD_BUNDLER_INJECT_GIT_METADATA', () => {
@@ -911,6 +1670,48 @@ describe('Config', () => {
       assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
     })
 
+    it('percent-decodes resource attribute keys and values', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.name=my%20service,team%2Ename=a%3Db%2Cc,emoji=%F0%9F%9A%80'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        service: 'my service',
+        tags: {
+          'team.name': 'a=b,c',
+          emoji: '\u{1F680}',
+        },
+      })
+    })
+
+    it('preserves decoded resource attribute order', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'team.name=first,team%2Ename=second,team.name=last,value=a%252Cb'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags['team.name'], 'last')
+      assert.strictEqual(config.tags.value, 'a%2Cb')
+    })
+
+    it('rejects resource attributes when a malformed entry is overwritten', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.name=otel-service,team=%ZZ,team=valid'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags.team, undefined)
+      assert.notStrictEqual(config.service, 'otel-service')
+      assert.ok(log.warn.calledWithMatch('Invalid MAP input:'))
+    })
+
+    it('keeps percent-encoded Datadog tags literal', () => {
+      process.env.DD_TAGS = 'team:100%,value:a%2Cb'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags.team, '100%')
+      assert.strictEqual(config.tags.value, 'a%2Cb')
+    })
+
     it('keeps DD_ENV precedence over deployment environment resource attributes', () => {
       process.env.DD_ENV = 'datadog'
       process.env.OTEL_RESOURCE_ATTRIBUTES =
@@ -939,6 +1740,20 @@ describe('Config', () => {
     const config = getConfig()
     // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
     // so telemetry reports the full URL users will hit.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
+  })
+
+  it('should treat an empty generic OTLP endpoint as unset', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = ''
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+    delete process.env.DD_AGENT_HOST
+
+    const config = getConfig()
+
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
@@ -1041,6 +1856,31 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0)
   })
 
+  for (const [name, options] of [
+    ['electron', { experimental: { exporter: 'electron' } }],
+    ['agentless', { experimental: { exporter: 'agentless' } }],
+    ['Test Optimization', { isCiVisibility: true }],
+  ]) {
+    it(`should not infer OTel sampling or span metrics for ${name}`, () => {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      const config = getConfig(options)
+
+      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    })
+
+    it(`should preserve explicit OTel sampling and span metrics for ${name}`, () => {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SAMPLER = 'always_off'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+      const config = getConfig(options)
+
+      assert.strictEqual(config.sampleRate, 0)
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    })
+  }
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
@@ -1051,6 +1891,189 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
+
+  describe('OTEL_TRACES_EXPORTER list', () => {
+    it('should select otlp when it is listed next to an unsupported exporter', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'console,otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "Unsupported exporters ignored: 'console' for OTEL_TRACES_EXPORTER (source: env_var)"
+      )
+    })
+
+    it('should pick the default when none is combined with otlp', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'none,otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "'none' cannot be combined with other exporters: 'none,otlp' for OTEL_TRACES_EXPORTER (source: env_var), " +
+          'picked default'
+      )
+    })
+
+    it('should pick the default when none is combined with an unsupported exporter', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'none,console'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "'none' cannot be combined with other exporters: 'none,console' for OTEL_TRACES_EXPORTER (source: env_var), " +
+          'picked default'
+      )
+    })
+
+    it('should select none when it is the only listed exporter', () => {
+      process.env.OTEL_TRACES_EXPORTER = ' NONE , ,none'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should trim entries, ignore case and skip blank entries', () => {
+      process.env.OTEL_TRACES_EXPORTER = ' OTLP , ,'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      sinon.assert.notCalled(log.warn)
+    })
+
+    it('should pick the default when no supported exporter is listed', () => {
+      process.env.OTEL_TRACES_EXPORTER = 'console,zipkin'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
+      sinon.assert.calledWithExactly(
+        log.warn,
+        "Unsupported exporters ignored: 'console,zipkin' for OTEL_TRACES_EXPORTER (source: env_var), picked default"
+      )
+    })
+  })
+
+  it('should disable OTel semantics when the trace exporter is explicitly none', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'DD_TRACE_OTEL_SEMANTICS_ENABLED is deactivated due to OTEL_TRACES_EXPORTER set to "none"'
+    )
+  })
+
+  for (const exporter of [undefined, 'otlp']) {
+    it(`should respect the Datadog agent protocol with OTel semantics and exporter=${exporter}`, () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      if (exporter) process.env.OTEL_TRACES_EXPORTER = exporter
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    })
+  }
+
+  for (const [key, value] of [
+    ['DD_AGENTLESS_ENABLED', 'true'],
+    ['_DD_APM_TRACING_AGENTLESS_ENABLED', 'true'],
+    ['DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless'],
+  ]) {
+    it(`should disable OTel semantics when ${key} selects Datadog intake`, () => {
+      process.env[key] = value
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'none'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      sinon.assert.calledWith(log.warn,
+        'Agentless tracing is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated')
+    })
+  }
+
+  it('should disable OTel semantics without overriding Test Optimization settings', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+    const config = getConfig({
+      isCiVisibility: true,
+      experimental: { exporter: 'jest_worker' },
+    })
+
+    assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'jest_worker')
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.spanAttributeSchema, 'v1')
+    assert.strictEqual(config.spanComputePeerService, true)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+      'Deactivating DD_TRACE_OTEL_SEMANTICS_ENABLED'
+    )
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
+    ])
+  })
+
+  it('should disable OTel semantics without overriding Electron exporter settings', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'electron')
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.spanAttributeSchema, 'v1')
+    assert.strictEqual(config.spanComputePeerService, true)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+      'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+    )
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
+    ])
+  })
+
+  for (const endpoint of [undefined, '', 'http://collector:4318']) {
+    it(`should use OTLP in Lambda with endpoint=${endpoint}`, () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      if (endpoint !== undefined) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = endpoint
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        `${endpoint || 'http://127.0.0.1:4318'}/v1/traces`)
+    })
+  }
 
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
@@ -1073,21 +2096,27 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
-    const config = getConfig()
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-  })
-
-  it('should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL casing without warning', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'HTTP/JSON'
+  it('should fall back to http/protobuf when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/xml'
     const config = getConfig()
     const warnCall = log.warn.getCalls().find(
-      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+      (call) => call.args[0]?.includes?.("'http/xml' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
     )
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    assert.strictEqual(warnCall, undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/protobuf')
+    assert.ok(warnCall)
   })
+
+  for (const protocol of ['grpc', 'http/json', 'http/protobuf']) {
+    it(`should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ${protocol} casing without warning`, () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = protocol.toUpperCase()
+      const config = getConfig()
+      const warnCall = log.warn.getCalls().find(
+        (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+      )
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, protocol)
+      assert.strictEqual(warnCall, undefined)
+    })
+  }
 
   it('should use DD_TRACE_SAMPLE_RATE over the parentbased_always_on default when OTEL_TRACES_EXPORTER is otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
@@ -1096,31 +2125,68 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.5)
   })
 
-  it('auto-enables OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED', () => {
+  it('should leave span metrics disabled when OTLP traces and OTel metrics are enabled', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER is not otlp', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'env_var')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'env_var',
+    })
   })
 
   it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when DD_METRICS_OTEL_ENABLED is false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
   })
 
-  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED over auto-enable', () => {
+  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED=false', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
     process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
     const config = getConfig()
     assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: false,
+      origin: 'calculated',
+    })
+  })
+
+  it('should enable stats computation when OTLP span metrics are explicitly enabled', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'false'
+    process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'false'
+    process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
+    assert.strictEqual(config.getOrigin('stats.DD_TRACE_STATS_COMPUTATION_ENABLED'), 'calculated')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_STATS_COMPUTATION_ENABLED'), {
+      value: true,
+      origin: 'calculated',
+    })
   })
 
   describe('HTTP server error statuses', () => {
@@ -1160,10 +2226,13 @@ describe('Config', () => {
   })
 
   describe('HTTP client error statuses', () => {
-    it('should default to 400-499', () => {
+    it('should leave the default to the HTTP status validator', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, undefined)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: null, origin: 'default' },
+      ])
     })
 
     it('should initialize from DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', () => {
@@ -1436,12 +2505,13 @@ describe('Config', () => {
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_OPENAI_LOGS_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_REALTIME_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: '', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
-      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },
@@ -1767,7 +2837,7 @@ describe('Config', () => {
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
       middlewareTracingEnabled: false,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
       remoteConfig: {
         DD_REMOTE_CONFIGURATION_ENABLED: false,
@@ -2357,7 +3427,7 @@ describe('Config', () => {
       },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       rateLimit: 1000,
       remoteConfig: {
         pollInterval: 42,
@@ -2458,7 +3528,7 @@ describe('Config', () => {
       peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -2611,7 +3681,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: 'd:dd', origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'DD_TRACE_AGENT_PORT', value: 6218, origin: 'code' },
-      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.5', origin: 'code' },
+      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'code' },
       { name: 'DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS', value: 42, origin: 'code' },
       { name: 'DD_TRACE_REPORT_HOSTNAME', value: true, origin: 'code' },
       { name: 'DD_RUNTIME_METRICS_ENABLED', value: true, origin: 'code' },
@@ -2720,6 +3790,41 @@ describe('Config', () => {
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
+  })
+
+  it('should reject an empty API key', () => {
+    process.env.DD_API_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_API_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should reject an empty app key', () => {
+    process.env.DD_APP_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_APP_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_APP_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid API key', () => {
+    process.env.DD_API_KEY = 'api-key\n'
+
+    const config = getConfig()
+    const message = log.warn.firstCall.args[0]
+
+    assert.doesNotMatch(message, /api-key/)
+    assert.strictEqual(message, "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default")
+    assert.strictEqual(config.DD_API_KEY, undefined)
   })
 
   it('should accept valid port boundaries', () => {
@@ -2837,6 +3942,23 @@ describe('Config', () => {
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
       assert.strictEqual(config.spanComputePeerService, true)
+    })
+
+    it('should disable peer service when OTel HTTP semantics are enabled', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.spanAttributeSchema, 'v0')
+      assert.strictEqual(config.spanComputePeerService, false)
+      assert(log.warn.calledWith(
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting'
+      ))
+      assert(log.warn.calledWith(
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
+      ))
     })
   })
 
@@ -3027,7 +4149,7 @@ describe('Config', () => {
         d: 'dd',
       },
       port: 7777,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -3132,7 +4254,7 @@ describe('Config', () => {
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -3483,6 +4605,14 @@ describe('Config', () => {
     assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
+  it('should preserve AI Guard outside Test Optimization', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, true)
+  })
+
   it('should set telemetry default values', () => {
     const config = getConfig()
 
@@ -3506,6 +4636,48 @@ describe('Config', () => {
     exporters.PLAYWRIGHT_WORKER,
     exporters.VITEST_WORKER,
   ]) {
+    it(`should disable security and LLMObs products for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_AI_GUARD_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, false)
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.aiguard.DD_AI_GUARD_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_RESOURCE_RENAMING_ENABLED, false)
+    })
+
+    for (const profiling of ['true', 'auto']) {
+      it(`should preserve profiling=${profiling} and DSM for the ${exporter} Test Optimization exporter`, () => {
+        process.env.DD_PROFILING_ENABLED = profiling
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
+
+        const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
+
+        assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, profiling)
+        assert.strictEqual(config.dsmEnabled, true)
+      })
+    }
+
+    it(`should prevent implicit LLMObs enablement for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_LLMOBS_ML_APP = 'test-app'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+    })
+
     it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
       process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
 
@@ -5825,6 +6997,76 @@ rules:
       assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
     })
 
+    it('should preserve the exporter configuration without enabling global agentless mode', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'api-key'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+      assert.strictEqual(config.protocolVersion, '0.4')
+    })
+
+    it('should preserve the default exporter configuration when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should retain the agentless exporter selected by ${name} with LLMObs enabled`, () => {
+        process.env[name] = 'true'
+        process.env.DD_LLMOBS_ENABLED = 'true'
+        process.env.DD_API_KEY = 'api-key'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      })
+    }
+
+    for (const exporter of ['agent', 'agentless', 'electron', 'log']) {
+      it(`should preserve an explicitly configured ${exporter} exporter when LLMObs is enabled`, () => {
+        process.env.DD_LLMOBS_ENABLED = 'true'
+
+        const config = getConfig({ experimental: { exporter } })
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
+      })
+    }
+
+    it('should preserve the OTLP trace exporter when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'llmobs')
+    })
+
+    it('should not enable agentless APM when LLMObs is explicitly disabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+    })
+
+    it('should use protocol v0.4 for LLMObs meta_struct delivery', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.4')
+    })
+
     it('should configure all supported features for agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.DD_API_KEY = 'api-key'
@@ -5885,14 +7127,14 @@ rules:
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should infer an OTel sample rate from the OTLP trace exporter in agentless mode', () => {
+    it('should retain native sampling when agentless overrides the OTLP trace exporter', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      assert.strictEqual(config.sampleRate, 1)
+      assert.strictEqual(config.sampleRate, undefined)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -6111,6 +7353,37 @@ rules:
         versionsStub.restore()
       })
 
+      if (runtime === 'Deno') {
+        for (const value of [undefined, 'true', 'false']) {
+          it(`should preserve metrics, heap and IAST configuration with enabled=${value}`, () => {
+            if (value !== undefined) {
+              process.env.DD_RUNTIME_METRICS_NATIVE = value
+              process.env.DD_PROFILING_HEAP_ENABLED = value
+              process.env.DD_IAST_ENABLED = value
+            }
+
+            const config = getConfig()
+            const origin = value === undefined ? 'default' : 'env_var'
+
+            for (const [name, configPath] of [
+              ['DD_RUNTIME_METRICS_NATIVE', 'runtimeMetrics.native'],
+              ['DD_PROFILING_HEAP_ENABLED', 'DD_PROFILING_HEAP_ENABLED'],
+              ['DD_IAST_ENABLED', 'iast.DD_IAST_ENABLED'],
+            ]) {
+              assert.strictEqual(config.getOrigin(configPath), origin)
+              assertObjectContains(getLatestConfigUpdate(name), {
+                value: value === undefined ? defaults[configPath] ?? null : value === 'true',
+                origin,
+              })
+            }
+            assert.strictEqual(config.runtimeMetrics.native, value === undefined || value === 'true')
+            assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, value === undefined ? undefined : value === 'true')
+            assert.strictEqual(config.iast.DD_IAST_ENABLED, value === 'true')
+            sinon.assert.notCalled(logWriter.warn)
+          })
+        }
+      }
+
       it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
         process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
@@ -6213,6 +7486,151 @@ rules:
       })
     })
   }
+
+  context('Bun', () => {
+    const diagnostic = 'DATADOG TRACER DIAGNOSTIC - IAST is disabled, because it does not work on Bun.'
+    let versionsStub
+
+    beforeEach(() => {
+      versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, bun: '1.4.4' })
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    })
+
+    afterEach(() => {
+      versionsStub.restore()
+    })
+
+    for (const value of [undefined, 'true', 'false', '', 'invalid']) {
+      it(`should disable native runtime metrics with DD_RUNTIME_METRICS_NATIVE=${value}`, () => {
+        if (value !== undefined) process.env.DD_RUNTIME_METRICS_NATIVE = value
+
+        const config = getConfig()
+
+        assert.strictEqual(config.runtimeMetrics.native, false)
+        assertObjectContains(getLatestConfigUpdate('DD_RUNTIME_METRICS_NATIVE'), {
+          value: false,
+          origin: value === 'false' ? 'env_var' : 'calculated',
+        })
+      })
+    }
+
+    it('should disable native runtime metrics enabled programmatically and explain why', () => {
+      const config = getConfig({ runtimeMetrics: { native: true } })
+
+      assert.strictEqual(config.runtimeMetrics.native, false)
+      assert.strictEqual(config.getOrigin('runtimeMetrics.native'), 'calculated')
+      sinon.assert.calledOnceWithExactly(logWriter.warn,
+        'DATADOG TRACER DIAGNOSTIC - Native runtime metrics are disabled, because they do not work on Bun.')
+    })
+
+    for (const heapEnv of [
+      {},
+      { DD_PROFILING_HEAP_ENABLED: 'true' },
+      { DD_PROFILING_HEAP_ENABLED: 'false' },
+      { DD_PROFILING_HEAP_ENABLED: '' },
+      { DD_PROFILING_HEAP_ENABLED: 'invalid' },
+      { DD_PROFILING_PROFILERS: 'space,wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_PROFILERS: 'space,wall' },
+      { DD_PROFILING_HEAP_ENABLED: 'false', DD_PROFILING_PROFILERS: 'space,wall' },
+    ]) {
+      it(`should report heap profiling disabled with ${JSON.stringify(heapEnv)}`, () => {
+        Object.assign(process.env, heapEnv)
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, false)
+        assertObjectContains(getLatestConfigUpdate('DD_PROFILING_HEAP_ENABLED'), {
+          value: false,
+          origin: heapEnv.DD_PROFILING_HEAP_ENABLED === 'false' ? 'env_var' : 'calculated',
+        })
+        if (heapEnv.DD_PROFILING_HEAP_ENABLED === 'true') {
+          sinon.assert.calledOnceWithExactly(logWriter.warn,
+            'DATADOG TRACER DIAGNOSTIC - Heap profiling is disabled, because it does not work on Bun.')
+        }
+      })
+    }
+
+    it('should retain the default heap origin when no space profiler is selected', () => {
+      process.env.DD_PROFILING_PROFILERS = 'wall'
+      const config = getConfig()
+
+      for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remoteConfig)
+
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, undefined)
+        assert.strictEqual(config.getOrigin('DD_PROFILING_HEAP_ENABLED'), 'default')
+        assertObjectContains(getLatestConfigUpdate('DD_PROFILING_HEAP_ENABLED'), {
+          value: null,
+          origin: 'default',
+        })
+      }
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should retain the effective metrics and heap configuration across updates and explain only once', () => {
+      process.env.DD_RUNTIME_METRICS_NATIVE = 'true'
+      process.env.DD_PROFILING_HEAP_ENABLED = 'true'
+      const config = getConfig()
+
+      for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remoteConfig)
+
+        assert.strictEqual(config.runtimeMetrics.native, false)
+        assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, false)
+        for (const name of ['DD_RUNTIME_METRICS_NATIVE', 'DD_PROFILING_HEAP_ENABLED']) {
+          assertObjectContains(getLatestConfigUpdate(name), { value: false, origin: 'calculated' })
+        }
+      }
+      sinon.assert.calledTwice(logWriter.warn)
+    })
+
+    it('should disable IAST enabled by an environment variable and report the effective configuration', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      assert.strictEqual(config.getOrigin('iast.DD_IAST_ENABLED'), 'calculated')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_IAST_ENABLED', value: false, origin: 'calculated' },
+      ])
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST enabled programmatically', () => {
+      const config = getConfig({ iast: { enabled: true } })
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should keep IAST disabled and explain only once across configuration updates', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+      sinon.assert.calledOnceWithExactly(logWriter.warn, diagnostic)
+    })
+
+    it('should disable IAST without a diagnostic when startup logs are disabled', () => {
+      process.env.DD_IAST_ENABLED = 'true'
+      process.env.DD_TRACE_STARTUP_LOGS = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should not warn when IAST is disabled', () => {
+      process.env.DD_IAST_ENABLED = 'false'
+
+      assert.strictEqual(getConfig().iast.DD_IAST_ENABLED, false)
+      sinon.assert.notCalled(logWriter.warn)
+    })
+  })
 
   context('Feature Flagging configuration source', () => {
     it('enables Datadog exposure logging by default', () => {
@@ -6472,6 +7890,73 @@ rules:
 
       assert.strictEqual(config.featureFlags[name], false)
       assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+    })
+
+    describe('flag selection', () => {
+      const SENTINEL = /SENTINEL_FLAG_SELECTION/
+
+      function assertNotReported () {
+        const entries = updateConfig.getCall(0).args[0]
+        assert.ok(
+          !entries.some(entry => entry.name === 'featureFlags.flagSelection'),
+          'Expected featureFlags.flagSelection to be omitted from telemetry'
+        )
+        assert.doesNotMatch(inspect(entries, { depth: null }), SENTINEL)
+        for (const method of [log.info, log.warn, log.error]) {
+          assert.doesNotMatch(inspect(method.args, { depth: null }), SENTINEL)
+        }
+      }
+
+      it('has no flag selection by default', () => {
+        assert.strictEqual(getConfig().featureFlags.flagSelection, undefined)
+      })
+
+      for (const [name, flagSelection] of Object.entries({
+        'a valid selection': { tags: ['SENTINEL_FLAG_SELECTION'], keyPatterns: ['SENTINEL_FLAG_SELECTION.*'] },
+        'a wrong-shape selection': [{ tags: ['SENTINEL_FLAG_SELECTION'] }],
+        'a string selection': 'SENTINEL_FLAG_SELECTION',
+      })) {
+        it(`passes ${name} through unchanged and keeps it out of logs and telemetry`, () => {
+          const config = getConfig({ featureFlags: { flagSelection } })
+
+          assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+          assert.strictEqual(config.getOrigin('featureFlags.flagSelection'), 'code')
+          assertNotReported()
+        })
+      }
+
+      it('keeps the selection when the legacy provider switch selects Remote Config delivery', () => {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+        const sourceLog = { debug: sinon.spy(), error: sinon.spy(), warn: sinon.spy() }
+        const configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+          '../log': sourceLog,
+          './flag-selection': proxyquire('../../src/openfeature/flag-selection', { '../log': sourceLog }),
+        })
+
+        const config = getConfig({ featureFlags: { flagSelection: { tags: ['mobile'] } } })
+        const source = configurationSource.create(config, sinon.spy())
+
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+        assert.strictEqual(source, undefined)
+        sinon.assert.calledOnceWithExactly(
+          sourceLog.warn,
+          'featureFlags.flagSelection is not supported when flags are delivered through Remote Config. ' +
+          'Loading the full flag configuration.'
+        )
+        sinon.assert.notCalled(sourceLog.error)
+      })
+
+      it('accepts the selection next to other Feature Flags options', () => {
+        const flagSelection = { tags: ['mobile'] }
+
+        const config = getConfig({
+          featureFlags: { enableEvaluationTelemetryOptOutParameter: true, flagSelection },
+        })
+
+        assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED, true)
+        sinon.assert.notCalled(log.warn)
+      })
     })
 
     it('reads the configuration source environment variable', () => {

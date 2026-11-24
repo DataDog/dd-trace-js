@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -8,6 +9,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { storage } = require('../../datadog-core')
+const { isACFActive } = require('../../datadog-core/src/storage')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
@@ -62,13 +64,14 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
-        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
-          agent.assertSomeTraces(traces => {
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', async () => {
+          const tracesReceived = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            // OpenTelemetry attribute names are present...
+            assert.strictEqual(span.type, undefined)
+            assert.strictEqual(Object.hasOwn(span.meta, 'operation.name'), false)
+            assert.strictEqual(Object.hasOwn(span.meta, 'span.type'), false)
             assertObjectContains(span, {
-              name: 'web.request',
-              type: 'web',
+              name: 'GET',
               resource: 'GET',
               meta: {
                 'span.kind': 'server',
@@ -82,16 +85,18 @@ describe('Plugin', () => {
                 'http.response.status_code': 200,
               },
             })
-            // ...and the Datadog ones are absent.
             assert.ok(!Object.hasOwn(span.meta, 'http.method'))
             assert.ok(!Object.hasOwn(span.meta, 'http.url'))
             assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
             assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
-          }).then(done).catch(done)
+          })
 
-          httpRequest.get(`http://localhost:${otelPort}/user`, {
-            headers: { 'User-Agent': 'dd-trace-test' },
-          }).catch(done)
+          await Promise.all([
+            tracesReceived,
+            httpRequest.get(`http://localhost:${otelPort}/user`, {
+              headers: { 'User-Agent': 'dd-trace-test' },
+            }),
+          ])
         })
       })
 
@@ -229,6 +234,30 @@ describe('Plugin', () => {
           httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
+        it('should keep the request on the store of a raw request body callback', function (done) {
+          // Without AsyncContextFrame, body callbacks run in the connection's async resource with the store the request
+          // left there on exit. With it, they run in the resource's creation context, which has no store at all.
+          if (isACFActive) return this.skip()
+
+          const subscriber = () => {}
+          incomingHttpRequestStart.subscribe(subscriber)
+
+          app = (req) => {
+            req.on('end', () => {
+              incomingHttpRequestStart.unsubscribe(subscriber)
+              try {
+                assert.strictEqual(getRequest(storage('legacy').getStore()), req)
+                done()
+              } catch (error) {
+                done(error)
+              }
+            })
+            req.resume()
+          }
+
+          httpRequest.post(`http://localhost:${appListener.address().port}/user`, 'body').catch(done)
+        })
+
         it('should run the request\'s close event in the correct context', done => {
           app = (req, res) => {
             req.on('close', () => {
@@ -317,6 +346,76 @@ describe('Plugin', () => {
           ])
         })
       })
+
+      for (const { description, statuses, validateStatus, errorStatuses, otelSemantics } of [
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: false },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: false,
+        },
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: true },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: true,
+        },
+        { description: 'custom', statuses: '200', errorStatuses: [200], otelSemantics: true },
+        {
+          description: 'custom validation',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+          otelSemantics: true,
+        },
+      ]) {
+        describe(`with ${description} server statuses and OTel semantics ${otelSemantics}`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = String(otelSemantics)
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = statuses
+            }
+            await agent.load('http', { client: false, server: validateStatus ? { validateStatus } : {} })
+            http = require(pluginToBeLoaded)
+            appListener = new http.Server((req, res) => {
+              res.writeHead(responseStatus)
+              res.end()
+            })
+            appListener.listen(0, 'localhost')
+            await once(appListener, 'listening')
+            port = appListener.address().port
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 499, 500, 599, 600]) {
+            it(`classifies status ${status} using the configured range`, async () => {
+              responseStatus = status
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.error, expectedError)
+                  if (otelSemantics) {
+                    assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                    assert.strictEqual(span.metrics['http.response.status_code'], status)
+                  } else {
+                    assert.strictEqual(span.meta['http.status_code'], String(status))
+                  }
+                }),
+                httpRequest.request(`http://localhost:${port}/user`, { validateStatus: () => true }),
+              ])
+            })
+          }
+        })
+      }
 
       describe('with a `server` configuration', () => {
         beforeEach(() => {

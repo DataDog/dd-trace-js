@@ -5,6 +5,7 @@ const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -14,6 +15,9 @@ require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
 const processTags = require('../../src/process-tags')
+const logCollector = require('../../src/telemetry/logs/log-collector')
+const telemetryLogs = require('../../src/telemetry/logs')
+const { ddBasePath } = require('../../src/util')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 const DEFAULT_EXTENDED_HEARTBEAT_INTERVAL = 86400000
@@ -35,11 +39,17 @@ describe('telemetry (proxy)', () => {
       updateIntegrations () {},
       updateConfig () {},
       appClosing () {},
+      flush () {},
     })
 
     proxy = proxyquire('../../src/telemetry', {
       './telemetry': telemetry,
     })
+  })
+
+  it('does not flush before telemetry is started', () => {
+    proxy.flush()
+    sinon.assert.notCalled(telemetry.flush)
   })
 
   it('should proxy when enabled', () => {
@@ -49,11 +59,13 @@ describe('telemetry (proxy)', () => {
     proxy.updateIntegrations()
     proxy.updateConfig([], config)
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.calledWith(telemetry.start, config)
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.called(telemetry.updateConfig)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 
   it('should proxy when enabled from updateConfig', () => {
@@ -62,10 +74,12 @@ describe('telemetry (proxy)', () => {
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.calledWith(telemetry.updateConfig, [], config)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 })
 
@@ -92,6 +106,7 @@ describe('telemetry', () => {
       }).listen(0, done)
     })
 
+    logCollector.reset()
     traceAgent.reqs = []
     traceAgentSeqBase = undefined
 
@@ -124,6 +139,7 @@ describe('telemetry', () => {
     telemetry.start({
       telemetry: {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
         DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
@@ -149,10 +165,14 @@ describe('telemetry', () => {
       DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',
     }, {
       _pluginsByName: pluginsByName,
+    }, {
+      tags: 'component:example',
     })
   })
 
   after(() => {
+    telemetryLogs.stop()
+    logCollector.reset()
     traceAgent.close()
   })
 
@@ -252,6 +272,38 @@ describe('telemetry', () => {
     })
   })
 
+  it('should flush logs with startup metadata after app-closing', async () => {
+    telemetry.appClosing()
+    logCollector.reset()
+    dc.channel('datadog:telemetry:log').publish(Object.freeze({
+      message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic',
+    }))
+    const cause = new TypeError('customer-secret')
+    cause.stack = `TypeError: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+    dc.channel('datadog:log:error:record').publish({
+      message: 'Shared request failed', cause, sendViaTelemetry: true,
+    })
+
+    telemetry.flush()
+
+    let request
+    while (!request) {
+      request = traceAgent.reqs.find(({ body }) => body.request_type === 'logs' &&
+        body.payload.logs.some(entry => entry.message === 'Shared request failed'))
+      if (!request) await once(traceAgent, 'handled-req')
+    }
+    assert.deepStrictEqual(request.body.payload.logs, [
+      { message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic,component:example' },
+      {
+        message: 'Shared request failed',
+        level: 'ERROR',
+        count: 1,
+        stack_trace: 'TypeError: redacted\n    at request (request.js:1:2)',
+        tags: 'component:example',
+      },
+    ])
+  })
+
   it('should do nothing when not enabled', (done) => {
     const server = http.createServer(() => {
       assert.fail('server should not be called')
@@ -274,7 +326,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should not send app-closing if telemetry is not enabled', () => {
+  it('should not send app-closing or flush if telemetry is not enabled', () => {
     const sendDataStub = sinon.stub()
     const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
@@ -294,6 +346,7 @@ describe('telemetry', () => {
       _pluginsByName: pluginsByName,
     })
     notEnabledTelemetry.appClosing()
+    notEnabledTelemetry.flush()
     assert.strictEqual(sendDataStub.called, false)
   })
 })

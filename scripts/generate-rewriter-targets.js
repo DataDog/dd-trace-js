@@ -10,20 +10,35 @@ const {
 const CHECK_FLAG = '--check'
 const OUTPUT_PATH_IN_REPOSITORY = 'packages/datadog-instrumentations/src/helpers/rewriter/targets.json'
 const OUTPUT_PATH = path.join(__dirname, '..', OUTPUT_PATH_IN_REPOSITORY)
+const PATTERN_OUTPUT_PATH_IN_REPOSITORY = 'packages/datadog-instrumentations/src/helpers/rewriter/target-patterns.json'
+const PATTERN_OUTPUT_PATH = path.join(__dirname, '..', PATTERN_OUTPUT_PATH_IN_REPOSITORY)
 
 function generateRewriterTargets () {
   /** @type {Record<string, string>} */
   const targets = {}
 
   for (const { module: { name, filePath } } of instrumentations) {
-    targets[`${name}/${filePath}`] = name
+    if (typeof filePath === 'string') targets[`${name}/${filePath}`] = name
   }
 
   return `${JSON.stringify(targets, Object.keys(targets).sort(), 2)}\n`
 }
 
+function generateRewriterTargetPatterns () {
+  const patterns = new Map()
+  for (const { module: { name, filePath, sourceMatch } } of instrumentations) {
+    if (!(filePath instanceof RegExp)) continue
+    if (filePath.flags || !filePath.source.startsWith('^') || !filePath.source.endsWith('$')) {
+      throw new Error(`Rewrite target ${name} has an unanchored or stateful file pattern`)
+    }
+    patterns.set(`${name}|${filePath}`, { name, source: filePath.source, flags: filePath.flags, sourceMatch })
+  }
+  return `${JSON.stringify([...patterns.values()], null, 2)}\n`
+}
+
 function checkRewriterTargets () {
-  if (readFileSync(OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n') === generateRewriterTargets()) {
+  if (readFileSync(OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n') === generateRewriterTargets() &&
+    readFileSync(PATTERN_OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n') === generateRewriterTargetPatterns()) {
     return true
   }
 
@@ -38,8 +53,9 @@ A stale file can silently disable rewriting or plugin activation.
 To regenerate it locally, run:
   npm run generate:rewriter:targets
 
-Then commit the updated file:
+Then commit the updated files:
   ${OUTPUT_PATH_IN_REPOSITORY}
+  ${PATTERN_OUTPUT_PATH_IN_REPOSITORY}
 `)
   return false
 }
@@ -49,10 +65,13 @@ if (require.main === module) {
     process.exitCode = checkRewriterTargets() ? 0 : 1
   } else {
     writeFileSync(OUTPUT_PATH, generateRewriterTargets())
+    writeFileSync(PATTERN_OUTPUT_PATH, generateRewriterTargetPatterns())
   }
 }
 
 module.exports = {
   generateRewriterTargets,
+  generateRewriterTargetPatterns,
   OUTPUT_PATH,
+  PATTERN_OUTPUT_PATH,
 }
