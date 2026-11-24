@@ -9,7 +9,8 @@
 // ended the window) keeps recording lines without queueing itself again.
 //
 // Readers report initialiser lines as negative numbers. Those never belong to a window: they go to
-// the per-file initialiser set, which the API adds to every test that ran other code of the file.
+// the per-file initialiser set, which the API adds to every test that ran other code of the file,
+// and to the initialiser part of Shared.
 
 const GLOBAL_KEY = Symbol.for('dd-trace.line-coverage')
 
@@ -81,6 +82,9 @@ class LineCoverageCollector {
   /** initialiser lines executed so far, wherever they ran */
   init = new LineSet()
 
+  /** initialiser lines executed since Shared was last taken */
+  sharedInit = new LineSet()
+
   /** @type {string[]} */
   #filenames = []
 
@@ -143,6 +147,7 @@ class LineCoverageCollector {
     const previous = this.#previous
     const scratch = this.#scratch
     const init = this.init
+    const sharedInit = this.sharedInit
     const generation = ++this.#generation
     let readerCalls = 0
     let lineCount = 0
@@ -160,6 +165,7 @@ class LineCoverageCollector {
             target.add(file, line)
           } else {
             init.add(file, -line)
+            sharedInit.add(file, -line)
           }
         }
         lineCount += count - 1
