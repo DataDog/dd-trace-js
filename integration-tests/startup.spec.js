@@ -94,6 +94,19 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
         })
       })
 
+      if (!optional) {
+        it('sends integration traces with LLM Observability and no optional dependencies', async () => {
+          proc = await spawnProc(startupTestFile, {
+            cwd,
+            execArgv,
+            env: { AGENT_PORT: agent.port, DD_LLMOBS_ENABLED: 'true', DD_LLMOBS_AGENTLESS_ENABLED: 'false' },
+          })
+          await curlAndAssertMessage(agent, proc, ({ payload }) => {
+            assert.strictEqual(payload[0][0].name, 'web.request')
+          })
+        })
+      }
+
       // This feature requires libdatadog which is an optional dependency.
       {
         const libdatadogTest = optional ? it : it.skip
