@@ -7,7 +7,7 @@ const { takeCoverage } = require('node:v8')
 
 const next = require('next')
 
-const tracer = require('../../..')
+const tracer = require('./datadog')
 
 const { PORT, HOSTNAME } = process.env
 
