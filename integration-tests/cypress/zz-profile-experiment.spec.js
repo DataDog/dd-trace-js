@@ -6,6 +6,7 @@ const { exec } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
 const path = require('node:path')
+const { stripVTControlCharacters } = require('node:util')
 
 const {
   sandboxCwd,
@@ -21,6 +22,7 @@ const version = process.env.CYPRESS_VERSION || '14.5.4'
 const profileRoot = process.env.CYPRESS_PROFILE_DIR || path.join(process.cwd(), 'cypress-profiles')
 const repetitions = Number(process.env.CYPRESS_PROFILE_REPETITIONS || 5)
 const spec = 'cypress/e2e/profile-plain.js'
+const profilePreload = path.join(__dirname, 'zz-cpu-profile-preload.js')
 
 /**
  * @param {number[]} values
@@ -77,7 +79,7 @@ function summarizeProfile (file) {
     }
   }
   const urls = profile.nodes.map(node => node.callFrame.url)
-  const role = urls.some(url => url.includes('datadog-plugin-cypress/src/cypress-plugin'))
+  const role = urls.some(url => url.includes('run_require_async_child') || url.includes('run_plugins'))
     ? 'config process'
     : urls.some(url => url.includes('cypress/lib/cli') || url.includes('cypress/lib/exec'))
       ? 'cypress CLI'
@@ -136,7 +138,11 @@ describe(`cypress@${version} profile experiment on node ${process.version}`, fun
     }
     delete env.CYPRESS_VERSION
     if (!traced) env.NODE_OPTIONS = ''
-    if (profileDir) env.NODE_OPTIONS = `${env.NODE_OPTIONS} --cpu-prof --cpu-prof-dir=${profileDir}`.trim()
+    if (profileDir) {
+      // Load the profiler first so it also covers dd-trace's own startup.
+      env.NODE_OPTIONS = `-r ${profilePreload} ${env.NODE_OPTIONS}`.trim()
+      env.CYPRESS_PROFILE_OUTPUT = profileDir
+    }
     const start = performance.now()
     const marks = {}
     const child = exec('./node_modules/.bin/cypress run --config supportFile=false', { cwd, env })
@@ -144,8 +150,10 @@ describe(`cypress@${version} profile experiment on node ${process.version}`, fun
     const onData = chunk => {
       output += chunk
       const now = performance.now() - start
-      if (marks.banner === undefined && /Cypress:\s+\d/.test(output)) marks.banner = now
-      if (marks.firstResult === undefined && /✓|passing/.test(output)) marks.firstResult = now
+      // Cypress colors its output on GitHub Actions even without a TTY.
+      const plain = stripVTControlCharacters(output)
+      if (marks.banner === undefined && /Cypress:\s+\d/.test(plain)) marks.banner = now
+      if (marks.firstResult === undefined && /✓|passing/.test(plain)) marks.firstResult = now
     }
     child.stdout.on('data', onData)
     child.stderr.on('data', onData)
