@@ -23,6 +23,7 @@ class AgentlessExporter {
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
    * @param {object} config.tags - Tags including runtime-id
+   * @param {import('../../config/generated-config-types').GeneratedConfig['tracing']} [config.tracing]
    */
   constructor (config) {
     this.#config = config
@@ -50,6 +51,7 @@ class AgentlessExporter {
       url: this._url,
       site,
       metadata,
+      generatedObfuscation: config.tracing?.DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED,
     })
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]

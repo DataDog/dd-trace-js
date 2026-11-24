@@ -801,6 +801,8 @@ class AgentEncoder {
       // non-string would throw downstream in `Buffer.byteLength`. Drop the
       // bad event silently so the rest of the trace still encodes.
       if (event === null || typeof event !== 'object' || typeof event.name !== 'string') continue
+      const timestamp = eventTimeNano(event)
+      if (!(timestamp >= 0 && timestamp < 2 ** 64)) continue
 
       const eventHeaderOffset = bytes.length
       bytes.reserve(1)
@@ -809,7 +811,7 @@ class AgentEncoder {
       bytes.set(KEY_NAME)
       this._encodeString(bytes, event.name)
       bytes.set(KEY_EVENT_TIME)
-      bytes.writeFloat(eventTimeNano(event))
+      bytes.writeUnsigned(timestamp)
 
       const attributes = event.attributes
       if (attributes !== null && typeof attributes === 'object') {

@@ -94,14 +94,14 @@ function prepareRequestOptions (options, contentLength) {
 
   const directAgent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
   connectionOptions.agent = hasApiKey && isSecure
-    ? getHttpsProxyAgent(connectionOptions, directAgent)
+    ? getHttpsProxyAgent(connectionOptions, directAgent === false ? undefined : directAgent) ?? directAgent
     : directAgent
 
   return connectionOptions
 }
 
 /**
- * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {Uint8Array|string|Readable|Array<Uint8Array|string>} data
  * @param {RequestOptions} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
@@ -266,7 +266,13 @@ function request (data, options, callback) {
         }
       }
 
-      const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
+      let req
+      try {
+        req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
+      } catch (error) {
+        finalize()
+        throw error
+      }
 
       req.once('close', finalize)
       if (!connectionOptions.deferTimeoutAbort) req.once('timeout', finalize)

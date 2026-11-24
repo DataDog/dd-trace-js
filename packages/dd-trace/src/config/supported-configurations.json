@@ -3093,6 +3093,14 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "tracing",
+        "default": "false"
+      }
+    ],
     "DD_TRACE_EXPERIMENTAL_B3_ENABLED": [
       {
         "implementation": "A",
