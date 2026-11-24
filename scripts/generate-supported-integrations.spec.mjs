@@ -291,8 +291,9 @@ describe('generate supported integrations', () => {
     assert.strictEqual(rows[0].versions[0].supportedRange, '>=4.0.0')
   })
 
-  it('does not advertise Couchbase on runtimes absent from either test workflow', async () => {
+  it('reports Couchbase versions only on the Node.js lines that test them', async () => {
     const nodeVersions = [
+      '18.20.8',
       '22.22.3',
       '24.16.0',
       '26.2.0',
@@ -301,10 +302,23 @@ describe('generate supported integrations', () => {
       nodeVersions,
       plugins: new Map([['couchbase', 'couchbase']]),
       instrumentations: testInstrumentations(nodeVersions, { couchbase: [{ versions: ['>=4.2.0'] }] }),
-      getPackageVersions: () => Promise.resolve(['4.2.0', '4.6.0']),
+      getPackageVersions: () => Promise.resolve(['4.2.0', '4.7.2', '4.8.0']),
     })
 
-    assert.deepStrictEqual(rows, [])
+    assert.deepStrictEqual(rows, [{
+      libraryName: 'couchbase',
+      integrationName: 'couchbase',
+      autoInstrumented: true,
+      versions: [{
+        testedRuntimes: { node: ['24.16.0'] },
+        supportedRange: '>=4.2.0',
+        tested: ['4.8.0'],
+      }, {
+        testedRuntimes: { node: ['18.20.8'] },
+        supportedRange: '>=4.2.0',
+        tested: ['4.2.0', '4.7.2'],
+      }],
+    }])
   })
 
   it('uses include-only matrices and resolves composite action inputs', async () => {
