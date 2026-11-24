@@ -3,6 +3,7 @@
 // Ported from datadog-lambda-js at da9fc3c0; propagation itself stays core-owned.
 const log = require('../../../dd-trace/src/log')
 const guards = require('../event-type-guards')
+const { addMetadata, addStepFunctionContext } = require('../xray')
 const {
   getSNSHeaders,
   getSNSSQSHeaders,
@@ -13,7 +14,7 @@ const {
   extractDurableExecution,
 } = require('./events')
 const { extractHTTP } = require('./http')
-const { fromTraceContext } = require('./span-context')
+const { fromTraceContext, AUTO_KEEP } = require('./span-context')
 const { getStepFunctionContext, extractStepFunctionContext } = require('./step-functions')
 const { extractDatadogContext, extractXrayContext, getAWSTraceHeader } = require('./xray')
 
@@ -64,7 +65,10 @@ class TraceContextExtractor {
     try {
       const custom = await this.#config.traceExtractor(event, context)
       const spanContext = fromTraceContext(custom)
-      if (spanContext !== null) return { spanContext, source: custom.source }
+      if (spanContext !== null) {
+        this.#addTraceContextToXray(spanContext)
+        return { spanContext, source: custom.source }
+      }
     } catch (error) {
       log.error('Unable to extract trace context. Custom extractor function failed: %s', error)
     }
@@ -78,7 +82,11 @@ class TraceContextExtractor {
    */
   #extractFallback (event, context) {
     let spanContext = this.#extractEvent(event)
-    if (spanContext === null) spanContext = this.#extractStepFunction(event)
+    let stepFunctionContext
+    if (spanContext === null) {
+      spanContext = this.#extractStepFunction(event)
+      stepFunctionContext = this.#stepFunction?.context
+    }
     if (spanContext === null && context && typeof context === 'object') {
       const custom = context.clientContext?.custom
       if (custom && typeof custom === 'object') {
@@ -86,9 +94,34 @@ class TraceContextExtractor {
       }
     }
     if (spanContext !== null) {
+      this.#addTraceContextToXray(spanContext, stepFunctionContext)
       return { spanContext, source: 'event', stepFunctionContext: this.#stepFunction?.context }
     }
     return { spanContext: extractXrayContext(), source: 'xray', stepFunctionContext: this.#stepFunction?.context }
+  }
+
+  /**
+   * Only the outer Step Functions fallback selects root_span_metadata. A message extractor can
+   * populate the same first-use context without selecting that branch in the source extractor.
+   * @param {import('../../../dd-trace/src/opentracing/span_context')} spanContext Extracted parent.
+   * @param {import('./step-functions').StepFunctionContext} [stepFunctionContext] Outer fallback's context.
+   */
+  #addTraceContextToXray (spanContext, stepFunctionContext) {
+    try {
+      if (stepFunctionContext === undefined) {
+        const priority = spanContext._sampling?.priority ?? AUTO_KEEP
+        addMetadata({
+          'trace-id': spanContext.toTraceId(),
+          'parent-id': spanContext.toSpanId(),
+          // Source Step Functions message contexts serialize this field as a string. Keep core sampling numeric.
+          'sampling-priority': this.#stepFunction?.context ? String(priority) : priority,
+        })
+      } else {
+        addStepFunctionContext(stepFunctionContext)
+      }
+    } catch (error) {
+      log.debug('Unable to add Lambda trace context to X-Ray metadata: %s', error)
+    }
   }
 
   /**
