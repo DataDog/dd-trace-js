@@ -530,6 +530,7 @@ export interface GeneratedConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
+  OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
@@ -1226,7 +1227,7 @@ export interface GeneratedEnvVarConfig {
   OTEL_METRIC_EXPORT_INTERVAL: number;
   OTEL_METRIC_EXPORT_TIMEOUT: number;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
-  OTEL_PROPAGATORS: string[];
+  OTEL_PROPAGATORS: string[] | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;
   OTEL_SDK_DISABLED: boolean | undefined;
   OTEL_SERVICE_NAME: string | undefined;

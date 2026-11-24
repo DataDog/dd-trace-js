@@ -1051,6 +1051,29 @@ aiguard.evaluate([
   { role: 'user', content: 'What is 2 + 2' },
 ], { block: false, tags: { 'app.flow': 'checkout', 'app.attempt': 2, 'app.retry': false } })
 
+const mcpServers: ddTrace.aiguard.McpServer[] = [{
+  id: 'mcp_0f2f11f8cafdbcc5',
+  managed_by: 'client',
+  transport: 'stdio',
+  name: 'local-docs',
+  command: 'uvx',
+  args: ['mcp-example'],
+  tools: { local_search: 'search' },
+}]
+
+aiguard.evaluate([
+  {
+    role: 'assistant',
+    tool_calls: [
+      {
+        id: 'call_2',
+        function: { name: 'local_search', arguments: '{"query":"APPSEC"}' },
+        mcp: { server_id: 'mcp_0f2f11f8cafdbcc5' },
+      },
+    ],
+  }
+], { mcpServers })
+
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {

@@ -27,7 +27,7 @@ function extractModuleRootAndHandler (fullHandler) {
  * @throws {Error} When the handler is not of the form `<module>.<path>`.
  */
 function extractModuleNameAndHandlerPath (handler) {
-  const match = handler.match(/^([^.]*)\.(.*)$/)
+  const match = /^([^.]*)\.(.*)$/.exec(handler)
   if (!match || match.length !== 3) {
     throw new Error(`Malformed handler name: ${handler}`)
   }

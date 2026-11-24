@@ -96,19 +96,61 @@ describe('FlaggingProvider Initialization Timeout', () => {
     assert.strictEqual(provider.initController.isInitializing(), false)
   })
 
-  it('does not keep the process alive while waiting for configuration', async () => {
-    const provider = new FlaggingProvider(mockTracer, mockConfig)
+  // initialization-process.spec.js checks in a real process that this hold keeps it alive.
+  describe('process hold while waiting for configuration', () => {
+    for (const { outcome, settle } of [
+      { outcome: 'configuration arrives', settle: provider => provider.setConfiguration({ flags: {} }) },
+      { outcome: 'initialization fails', settle: provider => provider.setError(new Error('failed')) },
+      { outcome: 'initialization times out', settle: () => clock.tickAsync(30_000) },
+    ]) {
+      it(`is released once ${outcome}`, async () => {
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+        const promise = provider.initialize()
+        promise.catch(() => {})
 
-    const initPromise = provider.initialize()
+        // The upstream initialization timeout and the hold.
+        assert.strictEqual(clock.countTimers(), 2)
 
-    initPromise.catch(() => {
-      // Expected to reject on timeout
+        await settle(provider)
+        await promise.catch(() => {})
+
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
+    it('is released when the provider closes during initialization', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.initialize().catch(() => {})
+
+      provider.onClose()
+
+      // Only the upstream initialization timeout remains, and it settles the initialization later.
+      assert.strictEqual(clock.countTimers(), 1)
     })
 
-    assert.strictEqual(provider.initController.timeoutId.hasRef(), false)
+    it('is replaced by a repeated initialization', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.initialize().catch(() => {})
+      const promise = provider.initialize()
 
-    await clock.tickAsync(30000)
-    await initPromise.catch(() => {})
+      // Each upstream initialization starts its own timeout, but only one hold remains.
+      assert.strictEqual(clock.countTimers(), 3)
+
+      provider.setConfiguration({ flags: {} })
+      await promise
+
+      // The first upstream timeout is not cleared by upstream once its initialization is replaced.
+      assert.strictEqual(clock.countTimers(), 1)
+    })
+
+    it('is not taken when configuration arrived before initialization', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.setConfiguration({ flags: {} })
+
+      await provider.initialize()
+
+      assert.strictEqual(clock.countTimers(), 0)
+    })
   })
 
   it('preserves the upstream initialization rejection', async () => {

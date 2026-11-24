@@ -593,6 +593,7 @@ addHook({ name: 'router', file: 'lib/layer.js', versions: ['>=1 <2'] }, Layer =>
 })
 
 const queryParserReadCh = channel('datadog:query:read:finish')
+const routeCreateCh = channel('datadog:router:route:create')
 
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
   const wrapRouterMethod = createWrapRouterMethod('router', getCompileToRegexp())
@@ -620,10 +621,25 @@ addHook({ name: 'router', versions: ['>=2'] }, Router => {
   })
 
   shimmer.wrap(WrappedRouter.prototype, 'use', wrapRouterMethod)
-  shimmer.wrap(WrappedRouter.prototype, 'route', wrapRouterMethod)
+  shimmer.wrap(WrappedRouter.prototype, 'route', original => wrapRouterMethod(publishRouteCreate(original)))
 
   return WrappedRouter
 })
+
+/**
+ * Publish the matching options of the Router that owns each new Route (a Router does not inherit
+ * the app's settings), once at registration.
+ * @param {(this: { caseSensitive?: boolean, strict?: boolean }, path: string) => object} original
+ */
+function publishRouteCreate (original) {
+  return function (...args) {
+    const route = original.apply(this, args)
+    if (routeCreateCh.hasSubscribers) {
+      routeCreateCh.publish({ route, sensitive: this.caseSensitive === true, strict: this.strict === true })
+    }
+    return route
+  }
+}
 
 const routerParamStartCh = channel('datadog:router:param:start')
 const visitedParams = new WeakSet()

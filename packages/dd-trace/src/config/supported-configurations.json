@@ -4102,10 +4102,7 @@
         "implementation": "D",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
-        "transform": "validatePropagationStyles",
-        "aliases": [
-          "OTEL_PROPAGATORS"
-        ]
+        "transform": "validatePropagationStyles"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
@@ -4609,9 +4606,9 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "string",
-        "default": "http/json",
+        "default": "http/protobuf",
         "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
@@ -4771,6 +4768,14 @@
         "type": "int",
         "allowed": "[1-9]\\d*",
         "default": "7500"
+      }
+    ],
+    "OTEL_PROPAGATORS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": "",
+        "transform": "validateOtelPropagators"
       }
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [

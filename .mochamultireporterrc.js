@@ -15,8 +15,10 @@ if (isCI) reporterEnabled.push('./scripts/junit-reporter.js')
 // still correct, lets `--xpath-tag` (see scripts/upload-junit.mjs) remap them onto the real
 // ci.pipeline.*/ci.job.* tags per test instead.
 const {
-  GITHUB_JOB, GITHUB_RUN_ID, GITHUB_WORKFLOW, GITHUB_RUN_NUMBER, GITHUB_SERVER_URL, GITHUB_REPOSITORY,
+  GITHUB_JOB, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, GITHUB_WORKFLOW, GITHUB_RUN_NUMBER, GITHUB_SERVER_URL,
+  GITHUB_REPOSITORY,
 } = env
+const pipelineUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
 
 module.exports = {
   reporterEnabled,
@@ -28,8 +30,10 @@ module.exports = {
         'ci.pipeline.name': GITHUB_WORKFLOW,
         'ci.pipeline.id': GITHUB_RUN_ID,
         'ci.pipeline.number': GITHUB_RUN_NUMBER,
-        'ci.pipeline.url': `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`,
+        'ci.pipeline.url': GITHUB_RUN_ATTEMPT ? `${pipelineUrl}/attempts/${GITHUB_RUN_ATTEMPT}` : pipelineUrl,
         'ci.job.name': GITHUB_JOB,
+        // Groups the report by run attempt at upload time, see scripts/upload-junit.mjs.
+        ...(GITHUB_RUN_ATTEMPT && { GITHUB_RUN_ATTEMPT }),
       }),
     },
   },
