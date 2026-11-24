@@ -50,6 +50,8 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
+const lineCoverage = require('../../dd-trace/src/ci-visibility/line-coverage')
+const { getInlineSourceMap } = require('../../dd-trace/src/ci-visibility/line-coverage/inline-source-map')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
@@ -67,6 +69,15 @@ const { DD_MAJOR } = require('../../../version')
 // so that they do not overlap with the following test
 // This is because there's some loss of resolution.
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
+
+/**
+ * @param {object} task a Vitest test
+ * @yields {object} the suites enclosing the test, from the innermost to its file
+ */
+function * enclosingSuites (task) {
+  for (let suite = task.suite; suite; suite = suite.suite) yield suite
+  if (task.file) yield task.file
+}
 
 function setBrowserTags (tags, browserEnvironment, includeParameters) {
   if (!browserEnvironment.isBrowserMode) return
@@ -93,10 +104,15 @@ function setBrowserTags (tags, browserEnvironment, includeParameters) {
 class VitestPlugin extends CiPlugin {
   static id = 'vitest'
 
+  /** @type {WeakMap<object, object>} line coverage of running tests, by span */
+  #lineCoverageTests = new WeakMap()
+
   constructor (...args) {
     super(...args)
 
     this.filterDiBreakpointHitByStack = true
+
+    if (lineCoverage.isEnabled()) this.#subscribeToLineCoverage()
 
     this.taskToFinishTime = new WeakMap()
 
@@ -205,6 +221,8 @@ class VitestPlugin extends CiPlugin {
 
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
+
+      if (lineCoverage.isActive()) this.#lineCoverageTests.set(span, lineCoverage.startTest())
 
       if (mightHitProbe) {
         this.queueDiBreakpointHitSpan(span)
@@ -536,6 +554,7 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
+        if (lineCoverage.isActive()) this.#exportSharedLineCoverage(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -553,7 +572,9 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:worker-report:coverage', data => {
       const formattedCoverages = JSON.parse(data).map(coverage => ({
         sessionId: id(coverage.sessionId),
-        suiteId: id(coverage.suiteId),
+        suiteId: coverage.suiteId && id(coverage.suiteId),
+        testId: coverage.testId && id(coverage.testId),
+        shared: coverage.shared,
         files: coverage.files,
       }))
       for (const formattedCoverage of formattedCoverages) {
@@ -655,6 +676,54 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
       this.handleCoverageReport(rootDir, onDone)
     })
+  }
+
+  #subscribeToLineCoverage () {
+    this.addSub('ci:vitest:line-coverage:instrument', (ctx) => {
+      if (!lineCoverage.isActive()) lineCoverage.enable({ root: ctx.repositoryRoot })
+      if (ctx.realm) lineCoverage.installGlobal(ctx.realm)
+      if (!lineCoverage.shouldInstrument(ctx.filename)) return
+      // Without the map, lines of the transformed module cannot be mapped to lines of the file.
+      const sourceMap = ctx.sourceMap ?? getInlineSourceMap(ctx.code)
+      if (sourceMap === undefined) return
+      ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, { isModule: true, reuse: true, sourceMap })
+    })
+
+    this.addSub('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
+      if (lineCoverage.isActive()) lineCoverage.startSuiteSetup(suite)
+    })
+
+    this.addSub('ci:vitest:line-coverage:suite-setup:finish', () => {
+      if (lineCoverage.isActive()) lineCoverage.finishSuiteSetup()
+    })
+
+    // Fires after the afterEach hooks, once per attempt.
+    this.addSub('ci:vitest:line-coverage:test:finish', ({ span, task }) => {
+      const test = this.#lineCoverageTests.get(span)
+      if (test === undefined) return
+      this.#lineCoverageTests.delete(span)
+      const files = lineCoverage.finishTest(test, enclosingSuites(task))
+      if (files.length === 0) return
+      const context = span.context()
+      this.tracer._exporter.exportCoverage({
+        sessionId: context._traceId,
+        suiteId: context._parentId,
+        testId: context._spanId,
+        files,
+      })
+    })
+  }
+
+  /**
+   * Exports what ran in this process outside every test window since the previous test file.
+   *
+   * @param {import('../../dd-trace/src/opentracing/span')} testSuiteSpan
+   */
+  #exportSharedLineCoverage (testSuiteSpan) {
+    const sessionId = testSuiteSpan.context()._traceId
+    for (const { shared, files } of lineCoverage.takeShared()) {
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+    }
   }
 
   /**
