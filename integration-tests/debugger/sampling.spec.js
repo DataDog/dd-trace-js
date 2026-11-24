@@ -7,7 +7,7 @@ const { setup } = require('./utils')
 
 /**
  * @param {ReturnType<typeof setup>} t
- * @param {Array<{ config: { id: string, config: { id: string } }, url: string }>} probes
+ * @param {Array<{ config: { product: string, id: string, config: { id: string } }, url: string }>} probes
  * @returns {Promise<Map<string, number[]>>}
  */
 async function captureSamplingIntervals (t, probes) {
@@ -20,6 +20,7 @@ async function captureSamplingIntervals (t, probes) {
   }
   await probesInstalled
 
+  /** @type {Map<string, number[]>} */
   const timestampsByProbeId = new Map(probeIds.map(probeId => [probeId, []]))
   let captureError
   let rejectSamples
@@ -74,8 +75,9 @@ async function captureSamplingIntervals (t, probes) {
   }
 }
 
-/** @param {number[]} timestamps */
+/** @param {number[] | undefined} timestamps */
 function assertSamplingInterval (timestamps) {
+  assert.ok(timestamps, 'should capture snapshots for the probe')
   assert.strictEqual(timestamps.length, 2)
 
   // Snapshot timestamps use wall-clock time while sampling uses monotonic time, so allow 75ms for drift.

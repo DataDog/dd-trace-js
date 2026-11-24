@@ -28,15 +28,26 @@ class AIGuard extends NoopAIGuard {
   }
 
   evaluate (messages, opts) {
-    const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE, childOf } = opts ?? {}
+    const {
+      block = true,
+      source = TAGS.SOURCE_SDK,
+      integration = TAGS.INTEGRATION_NONE,
+      childOf,
+      tags: customTags,
+      mcpServers: requestedMcpServers,
+    } = opts ?? {}
     // Only pass `childOf` when truthy so `tracer.trace`'s default (`scope().active()`)
     // still applies for SDK callers that don't supply an explicit parent.
     const traceOpts = childOf ? { childOf } : {}
+    // Only a non-empty list is sent; its entries are sent as given, like the messages.
+    const mcpServers = Array.isArray(requestedMcpServers) && requestedMcpServers.length > 0
+      ? requestedMcpServers
+      : undefined
     return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
-      const report = this.#reporter.start(span, messages, { source, integration })
+      const report = this.#reporter.start(span, messages, { source, integration, tags: customTags, mcpServers })
       let evaluation
       try {
-        evaluation = await this.#client.evaluate(report.messages, this.#meta)
+        evaluation = await this.#client.evaluate(report.messages, this.#meta, mcpServers)
       } catch (error) {
         this.#reporter.fail(report, error.telemetryType ?? TAGS.ERROR_TYPE_CLIENT)
         throw error

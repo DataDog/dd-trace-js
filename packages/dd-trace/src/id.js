@@ -48,7 +48,7 @@ class Identifier {
   }
 
   toBigInt () {
-    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
+    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(this.#buffer.length - 8)
     return this.#bigInt
   }
 

@@ -71,7 +71,7 @@ fastify.get('/:name', function (request) {
   }
   const circular = {}
   circular.circular = circular
-  const wideCircular = { circular: undefined, a: 1, b: 2, c: 3, d: 4, e: 5 }
+  const wideCircular = { circular: /** @type {object | undefined} */ (undefined), a: 1, b: 2, c: 3, d: 4, e: 5 }
   wideCircular.circular = wideCircular
   const ins = new CustomClass()
   const p = Promise.resolve(42)

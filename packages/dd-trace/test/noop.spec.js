@@ -16,8 +16,9 @@ describe('NoopTracer', () => {
     ['a Jest worker', 'globalThis.jest = {}'],
     ['DD_TRACE_ENABLED=false', "process.env.DD_TRACE_ENABLED = 'false'"],
     ['OTEL_TRACES_EXPORTER=none', "process.env.OTEL_TRACES_EXPORTER = 'none'"],
+    ['OTEL_SDK_DISABLED=true', "process.env.OTEL_SDK_DISABLED = 'true'"],
   ]) {
-    it(`should not subscribe to identity updates with ${name}`, () => {
+    it(`should not initialize shared tracing state with ${name}`, () => {
       const script = `
         const assert = require('node:assert/strict')
         const { channel } = require('dc-polyfill')
@@ -25,16 +26,20 @@ describe('NoopTracer', () => {
         delete process.env.DD_AGENTLESS_ENABLED
         delete process.env._DD_APM_TRACING_AGENTLESS_ENABLED
         delete process.env.OTEL_TRACES_EXPORTER
+        delete process.env.OTEL_SDK_DISABLED
         ${setup}
+        const storagePath = ${JSON.stringify(require.resolve('../../datadog-core/src/storage'))}
         const identity = channel('datadog:identity:update')
         assert.strictEqual(identity.hasSubscribers, false)
         const tracer = require(${JSON.stringify(require.resolve('../../..'))})
+        assert.strictEqual(Object.hasOwn(require.cache, storagePath), false, 'import loaded async storage')
         assert.strictEqual(identity.hasSubscribers, false)
         tracer.init()
         tracer.trace('test', span => {
           assert.match(span.context().toTraceId(), /^\\d+$/)
           span.finish()
         })
+        assert.strictEqual(Object.hasOwn(require.cache, storagePath), false, 'no-op trace loaded async storage')
         assert.strictEqual(identity.hasSubscribers, false)
       `
       const result = spawnSync(process.execPath, ['--eval', script], {

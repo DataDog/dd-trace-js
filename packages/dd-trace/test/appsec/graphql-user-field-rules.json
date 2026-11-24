@@ -1,0 +1,43 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "test-rule-user-field-name",
+      "name": "test-rule-user-field-name",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "usr.id"
+              }
+            ],
+            "list": ["blocked-user"]
+          },
+          "operator": "exact_match"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "graphql.server.resolver",
+                "transformers": ["keys_only"]
+              }
+            ],
+            "list": ["author"]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "on_match": ["block"]
+    }
+  ]
+}

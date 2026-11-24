@@ -21,7 +21,8 @@
     "useUnknownInCatchVariables": false,
 
     "target": "ES2022",
-    "lib": ["ES2022"],
+    // `Atomics.waitAsync` is available in every supported Node.js version, unlike the rest of ES2024.
+    "lib": ["ES2022", "ES2024.SharedMemory"],
     "module": "Node16",
     "moduleResolution": "node16",
     "moduleDetection": "force",

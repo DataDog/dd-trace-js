@@ -666,7 +666,7 @@ async function buildRows (plugins, nodeVersions, instrumentations, getPackageVer
       )
 
       rows.push({
-        dependencyName: normalizeDependency(dependency),
+        libraryName: normalizeDependency(dependency),
         integrationName: integration,
         autoInstrumented: true,
         versions,
@@ -676,7 +676,7 @@ async function buildRows (plugins, nodeVersions, instrumentations, getPackageVer
 
   return rows.sort((left, right) =>
     left.integrationName.localeCompare(right.integrationName) ||
-    left.dependencyName.localeCompare(right.dependencyName)
+    left.libraryName.localeCompare(right.libraryName)
   )
 }
 

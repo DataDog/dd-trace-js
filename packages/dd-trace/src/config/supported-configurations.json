@@ -32,6 +32,138 @@
         "description": "Override the automatic log submission intake URL."
       }
     ],
+    "DD_API_KEY_SECRET_ARN": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "lambda",
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "namespace": "lambda",
+        "default": "10",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_COLD_START_TRACE_SKIP_LIB": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "namespace": "lambda",
+        "default": "./opentracing/tracer"
+      }
+    ],
+    "DD_COLD_START_TRACING": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_DECODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_ENCODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_ENHANCED_METRICS": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_FLUSH_TO_LOG": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_KMS_API_KEY": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "lambda",
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_LAMBDA_FIPS_MODE": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_MERGE_XRAY_TRACES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "false"
+      }
+    ],
+    "DD_MIN_COLD_START_DURATION": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "namespace": "lambda",
+        "default": "3",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_TRACE_AWS_LAMBDA_ENABLED": [
+      {
+        "implementation": "B",
+        "namespace": "lambda",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_MANAGED_SERVICES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "lambda",
+        "default": "true"
+      }
+    ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
@@ -51,6 +183,15 @@
         "aliases": [
           "DD_TRACE_AGENT_HOSTNAME"
         ]
+      }
+    ],
+    "DD_AI_GUARD_DISABLED_INTEGRATIONS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "namespace": "aiguard",
+        "default": null,
+        "description": "Comma-separated integration names for which AI Guard automatic evaluation is disabled."
       }
     ],
     "DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED": [
@@ -760,6 +901,13 @@
         "configurationNames": [
           "dsmEnabled"
         ]
+      }
+    ],
+    "DD_DATA_STREAMS_HTTP_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
       }
     ],
     "DD_DBM_INJECT_SQL_BASEHASH": [
@@ -1614,6 +1762,14 @@
         ]
       }
     ],
+    "DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
+      }
+    ],
     "DD_OPENAI_REALTIME_ENABLED": [
       {
         "implementation": "A",
@@ -1646,9 +1802,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -2322,6 +2478,13 @@
       }
     ],
     "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_ASYNC_MUTEX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -3939,10 +4102,7 @@
         "implementation": "D",
         "type": "array",
         "default": "datadog,tracecontext,baggage",
-        "transform": "validatePropagationStyles",
-        "aliases": [
-          "OTEL_PROPAGATORS"
-        ]
+        "transform": "validatePropagationStyles"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
@@ -4238,6 +4398,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_TRPC_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
@@ -4439,10 +4606,10 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "string",
-        "default": "http/json",
-        "allowed": "http/json",
+        "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
@@ -4603,6 +4770,14 @@
         "default": "7500"
       }
     ],
+    "OTEL_PROPAGATORS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": "",
+        "transform": "validateOtelPropagators"
+      }
+    ],
     "OTEL_RESOURCE_ATTRIBUTES": [
       {
         "implementation": "A",
@@ -4613,18 +4788,17 @@
     ],
     "OTEL_SDK_DISABLED": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": null
       }
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "H",
-        "type": "string",
+        "implementation": "J",
+        "type": "array",
         "default": null,
-        "allowed": "none|otlp",
-        "transform": "toLowerCase"
+        "transform": "parseOtelExporterList"
       }
     ],
     "OTEL_TRACES_SAMPLER": [

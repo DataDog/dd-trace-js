@@ -2,17 +2,34 @@
 
 /**
  * @typedef {{ type: 'static', text: string, group: number }
- *   | { type: 'param', name?: string, group: number }
- *   | { type: 'wildcard', name?: string, group: number }} RouteToken
- *
- * 'group' is the enclosing optional group, with 0 always present.
- * Every nonzero group must have an entry in groupParent.
- *
+ *   | { type: 'param' | 'wildcard', name?: string, group: number }} RouteToken
  * @typedef {{ group: number, tokens: RouteToken[] }} RouteSegment
- *
- * @typedef {{ segments: RouteSegment[], groupParent: Map<number, number>,
- *   trailingSlash: boolean }} RouteTemplate
+ * @typedef {{ segments: RouteSegment[], groupParent: Map<number, number> }} RouteTemplate
  */
+
+/**
+ * Build URL segments from either framework's flat tokens, preserving optional slash groups.
+ * @param {(RouteToken | { type: 'slash', group: number })[]} flat
+ * @param {Map<number, number>} groupParent
+ * @returns {RouteTemplate}
+ */
+function segmentsFromTokens (flat, groupParent) {
+  /** @type {RouteSegment[]} */
+  const segments = []
+  /** @type {RouteSegment | undefined} */
+  let current
+  for (const token of flat) {
+    if (token.type === 'slash') {
+      if (current) segments.push(current)
+      current = { group: token.group, tokens: [] }
+    } else {
+      current ??= { group: 0, tokens: [] }
+      current.tokens.push(token)
+    }
+  }
+  if (current) segments.push(current)
+  return { segments, groupParent }
+}
 
 /**
  * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
@@ -29,12 +46,13 @@ function groupActive (g, groupParent, present) {
 }
 
 /**
- * URL-encode chars outside the RFC-1103 static alphabet [A-Za-z0-9.-~_]. The 'u' flag iterates whole
+ * URL-encode chars outside the static alphabet [A-Za-z0-9.-~_], keeping valid %XX escapes. The 'u' flag iterates whole
  * codepoints so surrogate pairs encode as correct multi-byte UTF-8.
  * @param {string} str
  */
 function encodeStaticSegment (str) {
-  return str.replaceAll(/[^A-Za-z0-9.\-~_]/gu, c => {
+  return str.replaceAll(/%[0-9A-Fa-f]{2}|[^A-Za-z0-9.\-~_]/gu, c => {
+    if (c.length === 3) return c.toUpperCase()
     const code = c.charCodeAt(0)
     if (code < 0x80) return '%' + code.toString(16).toUpperCase().padStart(2, '0')
     try {
@@ -43,14 +61,6 @@ function encodeStaticSegment (str) {
       return '%EF%BF%BD'
     }
   })
-}
-
-/**
- * URL-encode the 6 characters not allowed in a normalized param name (/?#+{}).
- * @param {string} name
- */
-function encodeParamName (name) {
-  return name.replaceAll(/[/?#+{}]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
 }
 
 /**
@@ -70,32 +80,28 @@ function renderRoute (compiled, present) {
     }
   }
 
-  // Pass 2: a token keeps its (encoded) name iff it is the last present occurrence of that name;
-  // unnamed parameters and earlier duplicates become paramN (skipping surviving names).
-  const encodedNames = new Array(dyn.length)
+  // Valid supplied names keep their last occurrence, whose value the framework exposes.
+  // Reserve them before assigning names to sanitized, duplicate and unnamed parameters.
+  const sanitized = dyn.map(t => t.name?.replaceAll(/[^A-Za-z0-9_]/gu, '_'))
   const lastIndexByName = new Map()
   for (let idx = 0; idx < dyn.length; idx++) {
-    const name = dyn[idx].name
-    if (name !== undefined) {
-      encodedNames[idx] = encodeParamName(name)
-      lastIndexByName.set(encodedNames[idx], idx)
-    }
+    if (sanitized[idx] && sanitized[idx] === dyn[idx].name) lastIndexByName.set(dyn[idx].name, idx)
   }
-  const used = new Set()
-  for (let idx = 0; idx < dyn.length; idx++) {
-    if (encodedNames[idx] !== undefined && lastIndexByName.get(encodedNames[idx]) === idx) used.add(encodedNames[idx])
-  }
+  const used = new Set(lastIndexByName.keys())
   const resolvedNames = new Array(dyn.length)
   let counter = 1
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (encodedNames[idx] !== undefined && lastIndexByName.get(encodedNames[idx]) === idx) {
-      resolvedNames[idx] = encodedNames[idx]
-    } else {
+    let name = dyn[idx].name
+    if (!sanitized[idx]) {
       while (used.has(`param${counter}`)) counter++
-      resolvedNames[idx] = `param${counter}`
-      used.add(`param${counter}`)
-      counter++
+      name = `param${counter++}`
+      used.add(name)
+    } else if (lastIndexByName.get(name) !== idx) {
+      name = sanitized[idx]
+      for (let n = 2; used.has(name); n++) name = `${sanitized[idx]}_${n}`
+      used.add(name)
     }
+    resolvedNames[idx] = name
   }
 
   // Pass 3: build the output elements. Each present leading slash starts a new element; a segment
@@ -103,34 +109,36 @@ function renderRoute (compiled, present) {
   // '.json' in '/x{/:id}.json' survives when :id is absent) rather than being dropped with the slash.
   const out = []
   let dynPtr = 0
-  let staticText = ''
-  let paramNames = []
-
-  const flush = () => {
-    if (paramNames.length > 0) {
-      out.push(`{${paramNames.join('+')}}`)
-    } else if (staticText !== '') {
-      out.push(encodeStaticSegment(staticText))
-    }
-    staticText = ''
-    paramNames = []
-  }
+  let current = ''
+  let trailingSlash = false
 
   for (const seg of segments) {
-    if (groupActive(seg.group, groupParent, present)) flush()
+    if (groupActive(seg.group, groupParent, present)) {
+      out.push(current)
+      current = ''
+      trailingSlash = true
+    }
     for (const t of seg.tokens) {
       if (!groupActive(t.group, groupParent, present)) continue
-      if (t.type === 'static') {
-        staticText += t.text
-      } else {
-        paramNames.push(resolvedNames[dynPtr++])
-      }
+      current += t.type === 'static' ? encodeStaticSegment(t.text) : `{${resolvedNames[dynPtr++]}}`
+      trailingSlash = false
     }
   }
-  flush()
+  out.push(current)
 
-  const normalized = '/' + out.join('/')
-  return compiled.trailingSlash && normalized !== '/' ? normalized + '/' : normalized
+  const normalized = '/' + out.filter(Boolean).join('/')
+  return trailingSlash && normalized !== '/' ? normalized + '/' : normalized
 }
 
-module.exports = { renderRoute }
+/**
+ * True when a param value is missing or empty; a catch-all that captured only slashes is empty.
+ * @param {unknown} value - raw string (match) or decoded value (req.params)
+ * @param {boolean} wildcard
+ */
+function isEmptyValue (value, wildcard) {
+  if (value === undefined || value === '') return true
+  if (!wildcard) return false
+  return Array.isArray(value) ? value.every(part => part === '') : /^\/*$/.test(String(value))
+}
+
+module.exports = { renderRoute, isEmptyValue, segmentsFromTokens }

@@ -62,6 +62,11 @@ ruleTester.run('eslint-config-names-sync', rule, {
       code: '',
       options: [getFixtureOptions('iast-canonical-still-checked', ['index.d.ts', 'index.d.v5.ts'])],
     },
+    {
+      filename: path.join(fixturesDirectory, 'programmatic-only-flag-selection', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('programmatic-only-flag-selection')],
+    },
   ],
   invalid: [
     {
@@ -104,6 +109,25 @@ ruleTester.run('eslint-config-names-sync', rule, {
           configurationName: 'llmobs.agentlessEnabledasd',
         },
       }],
+    },
+    {
+      filename: path.join(fixturesDirectory, 'programmatic-only-near-miss', 'lint-anchor.js'),
+      code: '',
+      options: [getFixtureOptions('programmatic-only-near-miss')],
+      errors: [
+        {
+          messageId: 'configurationMissingInSupportedConfigurations',
+          data: {
+            configurationName: 'featureFlags.flagSelections.keyPatterns',
+          },
+        },
+        {
+          messageId: 'configurationMissingInSupportedConfigurations',
+          data: {
+            configurationName: 'featureFlags.flagSelections.tags',
+          },
+        },
+      ],
     },
   ],
 })

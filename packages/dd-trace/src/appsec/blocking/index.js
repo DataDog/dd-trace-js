@@ -40,6 +40,14 @@ const responseBlockedSet = new WeakSet()
 
 const blockDelegations = new WeakMap()
 
+// Abort reason for instrumentations that must reject an operation the application awaits.
+class BlockedRequestError extends Error {
+  constructor () {
+    super('Request blocked by Datadog App and API Protection')
+    this.name = 'BlockedRequestError'
+  }
+}
+
 const specificBlockingTypes = {
   GRAPHQL: 'graphqlJson',
 }
@@ -128,6 +136,14 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
       throw new Error('Headers have already been sent')
     }
 
+    // A destroyed response accepts the writes without sending anything to the client.
+    if (res.destroyed) {
+      log.warn('[ASM] Cannot send blocking response when the response has been destroyed')
+      abortController?.abort(new BlockedRequestError())
+
+      throw new Error('Response has been destroyed')
+    }
+
     const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
 
     for (const headerName of res.getHeaderNames()) {
@@ -142,7 +158,11 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan.setTag('appsec.blocked', 'true')
 
     responseBlockedSet.add(res)
-    abortController?.abort()
+
+    // The blocking response is final, but frameworks may keep running and rewrite the status (Next.js restores it).
+    Object.defineProperty(res, 'statusCode', { configurable: true, enumerable: true, get: () => statusCode, set () {} })
+
+    abortController?.abort(new BlockedRequestError())
 
     return true
   } catch (err) {

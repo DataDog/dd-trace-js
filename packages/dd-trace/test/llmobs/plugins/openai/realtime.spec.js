@@ -412,6 +412,76 @@ describe('integrations', () => {
             })
           })
 
+          for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+            for (const value of [-1, true, '3', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+              it('omits invalid aggregate ' + field + ' (' + JSON.stringify(value) + ')', async () => {
+                sessionCreated()
+                const usage = {
+                  input_tokens: 5,
+                  output_tokens: 7,
+                  total_tokens: 12,
+                  input_token_details: { audio_tokens: 2 },
+                  [field]: value,
+                }
+                spokenTurn({ usage })
+                const { llmobsSpans } = await getEvents(4)
+                const expected = { input_tokens: 5, output_tokens: 7, total_tokens: 12, input_audio_tokens: 2 }
+                delete expected[field]
+                assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, expected)
+              })
+            }
+          }
+
+          for (const { name, usage, expected } of [
+            {
+              name: 'explicit inclusive zero counts',
+              usage: {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                input_token_details: { audio_tokens: 0, cached_tokens: 0 },
+              },
+              expected: {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                input_audio_tokens: 0,
+                cache_read_input_tokens: 0,
+              },
+            },
+            {
+              name: 'explicit total independent of its breakdown',
+              usage: { input_tokens: 5000, output_tokens: 1300, total_tokens: 7000 },
+              expected: { input_tokens: 5000, output_tokens: 1300, total_tokens: 7000 },
+            },
+            { name: 'output-only usage', usage: { output_tokens: 7 }, expected: { output_tokens: 7 } },
+            {
+              name: 'absent total at the last safe sum',
+              usage: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 0 },
+              expected: {
+                input_tokens: Number.MAX_SAFE_INTEGER,
+                output_tokens: 0,
+                total_tokens: Number.MAX_SAFE_INTEGER,
+              },
+            },
+            {
+              name: 'absent total at the first unsafe sum',
+              usage: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+              expected: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+            },
+            { name: 'missing usage', usage: null, expected: {} },
+            { name: 'non-token billing fields', usage: { seconds: 60, characters: 1000, credits: 2 }, expected: {} },
+          ]) {
+            it('reports only supplied valid token counts with ' + name, async () => {
+              sessionCreated()
+              spokenTurn({ usage })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, expected)
+              assert.ok(llmobsSpans.filter(span => span.name !== LLM)
+                .every(span => Object.keys(span.metrics).length === 0))
+            })
+          }
+
           it('models a spoken turn as a workflow root with user speech, llm and agent speech', async () => {
             sessionCreated()
             spokenTurn()

@@ -5,7 +5,13 @@ const { isNativeError } = require('node:util').types
 const shimmer = require('../../datadog-shimmer')
 const nomenclature = require('../../dd-trace/src/service-naming')
 const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
+const {
+  HTTP_STATUS_ERROR,
+  otelHttpResourceName,
+  setInstrumentationHttpResource,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { RESOURCE_NAME } = require('../../../ext/tags')
+const satisfies = require('../../../vendor/dist/semifies')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:next:request:start')
@@ -13,6 +19,7 @@ const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
+const responseJsonChannel = channel('apm:next:response:json')
 const queryParsedChannel = channel('apm:next:query-parsed')
 const backgroundRevalidationChannel = channel('apm:next:request:background-revalidation')
 
@@ -37,6 +44,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
  * @property {boolean} [responseFinished]
  * @property {unknown} [error]
  * @property {NextRequest} [nextRequest]
+ * @property {(error: object) => void} ignoreError
  *
  * @typedef {object} ResponseGeneratorContext
  * @property {boolean} [hasResolved]
@@ -50,6 +58,7 @@ const backgroundRevalidationChannel = channel('apm:next:request:background-reval
  */
 
 const requests = new WeakSet()
+const responseConstructors = new WeakSet()
 const nodeNextRequestsToNextRequests = new WeakMap()
 const noFallbackErrorPrototypes = new WeakSet()
 // Next.js <= 14.2.6
@@ -60,6 +69,19 @@ const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
+const abortReasons = new WeakSet()
+const incomingRequests = new WeakSet()
+const blockableApiModules = new WeakMap()
+
+/**
+ * Keeps an error a subscriber raised to stop the request, such as a blocked request, out of the request errors.
+ *
+ * @param {object} error
+ */
+function ignoreError (error) {
+  abortReasons.add(error)
+}
+
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
 
@@ -67,18 +89,26 @@ const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
 // own OTel spans and renames the root request span to `${method} ${route}` at finish, which the
 // bridge routes into the DD operation name and leaves the resource as the bare method — the reverse
 // of Datadog's contract. Correct it via the bridge's pre-finish hook. See span-ending-hook.js.
-spanEndingHook.hook = (ddSpan) => {
+spanEndingHook.hook = (ddSpan, otelSemanticsEnabled) => {
   const tags = ddSpan.context().getTags()
   if (tags['next.span_type'] !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
 
   const method = tags['http.method']
   const route = tags['next.route'] ?? tags['http.route']
-  // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
-  // mirror Next's own naming, and only construct the resource when it is absent.
-  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
-
   ddSpan.setOperationName(nomenclature.opName('web', 'server', 'next'))
-  ddSpan.setTag(RESOURCE_NAME, resource)
+  if (otelSemanticsEnabled) {
+    setInstrumentationHttpResource(ddSpan, otelHttpResourceName(method, route))
+    const status = tags['http.status_code']
+    if (status >= 500) {
+      ddSpan.setTag(HTTP_STATUS_ERROR, String(status))
+      return true
+    }
+  } else {
+    // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
+    // mirror Next's own naming, and only construct the resource when it is absent.
+    const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+    ddSpan.setTag(RESOURCE_NAME, resource)
+  }
 }
 
 function wrapHandleRequest (handleRequest) {
@@ -191,7 +221,7 @@ function getRequestMeta (req, key) {
  * @param {(ctx: NextRequestContext) => Promise<T>} handler
  * @param {unknown} [error]
  * @param {boolean} [finishOnResponse]
- * @returns {Promise<T>}
+ * @returns {Promise<T | undefined>}
  */
 function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
@@ -201,7 +231,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
   const isMiddleware = req.headers[MIDDLEWARE_HEADER] || getRequestMeta(req, META_IS_MIDDLEWARE)
   if ((isMiddleware && !encounteredMiddleware.has(req)) || requests.has(req)) {
     encounteredMiddleware.add(req)
-    if (error) {
+    if (error && !isIgnoredError(error)) {
       errorChannel.publish({ error })
     }
     return handler()
@@ -209,7 +239,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
 
   requests.add(req)
 
-  const ctx = finishOnResponse ? { req, res, finishOnResponse } : { req, res }
+  const ctx = finishOnResponse ? { req, res, finishOnResponse, ignoreError } : { req, res, ignoreError }
   if (finishOnResponse) {
     const onResponseFinish = () => {
       res.removeListener('finish', onResponseFinish)
@@ -224,14 +254,20 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
     const queryIndex = req.url.indexOf('?')
     if (queryIndex !== -1) {
       const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
-      const query = {}
-      for (const key of searchParams.keys()) {
-        if (!query[key]) {
-          query[key] = searchParams.getAll(key)
+      /** @type {Record<string, string[]>} */
+      const query = Object.create(null)
+      for (const [key, value] of searchParams) {
+        const values = query[key]
+        if (values === undefined) {
+          query[key] = [value]
+        } else {
+          values.push(value)
         }
       }
 
-      queryParsedChannel.publish({ query })
+      const abortController = new AbortController()
+      queryParsedChannel.publish({ req, res, query, abortController })
+      if (abortController.signal.aborted) return /** @type {Promise<undefined>} */ (Promise.resolve())
     }
   }
 
@@ -281,7 +317,7 @@ function publishFinish (ctx, error) {
 function finish (ctx, result, error) {
   if (ctx.finishOnResponse) {
     ctx.handlerFinished = true
-    if (error && !isNoFallbackError(error)) ctx.error = error
+    if (error && !isIgnoredError(error)) ctx.error = error
     if (!ctx.responseFinished) return
   }
 
@@ -294,12 +330,26 @@ function isNoFallbackError (error) {
 }
 
 /**
+ * An error that keeps an abort reason as its own `cause`, whether it is a native error or not, comes from the same
+ * stop. Reading the own data property runs no getter of the application.
+ *
+ * @param {unknown} error
+ */
+function isIgnoredError (error) {
+  if (typeof error !== 'object' || error === null) return false
+
+  return abortReasons.has(error) ||
+    abortReasons.has(Object.getOwnPropertyDescriptor(error, 'cause')?.value) ||
+    isNoFallbackError(error)
+}
+
+/**
  * @param {NextNodeRequest} req
  * @param {NextRequestContext | undefined} ctx
  * @param {unknown} error
  */
 function publishError (req, ctx, error) {
-  if (!error || isNoFallbackError(error)) return
+  if (!error || isIgnoredError(error)) return
 
   if (ctx) {
     ctx.error = error
@@ -322,6 +372,7 @@ addHook({
     return function (nodeNextRequest) {
       const nextRequest = fromNodeNextRequest.apply(this, arguments)
       nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
+      if (bodyParsedChannel.hasSubscribers) incomingRequests.add(nextRequest)
       return nextRequest
     }
   })
@@ -389,6 +440,7 @@ function wrapAppRouteHandle (handle) {
         nodeNextRequestsToNextRequests.set(nodeRequest, req)
       }
     }
+    if (bodyParsedChannel.hasSubscribers) incomingRequests.add(req)
 
     return handle.apply(this, arguments)
   }
@@ -533,9 +585,13 @@ function wrapPagesApiRender (render) {
   }
 }
 
-function instrumentPagesApiRuntime (runtime) {
+// Pages API routes run through the compiled runtime from Next.js 13.5, which inlines the body parser and apiResolver.
+function instrumentPagesApiRuntime (runtime, version) {
   const PagesAPIRouteModule = runtime.PagesAPIRouteModule || runtime.default
-  instrumentRouteModule(PagesAPIRouteModule, [['render', wrapPagesApiRender]], false)
+  const wrappers = [['render', wrapPagesApiRenderBody]]
+  // Keep wrapPagesApiRender on its previous >=15.4.1 range; the hook is widened only for the body wrapper.
+  if (satisfies(version, '>=15.4.1')) wrappers.push(['render', wrapPagesApiRender])
+  instrumentRouteModule(PagesAPIRouteModule, wrappers, false)
   return runtime
 }
 
@@ -548,16 +604,94 @@ function instrumentAppPageRuntime (runtime) {
   return runtime
 }
 
-for (const [runtime, instrumentRuntime] of [
-  ['app-route', instrumentAppRouteRuntime],
-  ['pages-api', instrumentPagesApiRuntime],
-  ['app-page', instrumentAppPageRuntime],
-]) {
+for (const [runtime, instrumentRuntime, versions] of /** @type {const} */ ([
+  ['app-route', instrumentAppRouteRuntime, '>=15.4.1'],
+  ['pages-api', instrumentPagesApiRuntime, '>=13.5'],
+  ['app-page', instrumentAppPageRuntime, '>=15.4.1'],
+])) {
   addHook({
     name: 'next',
-    versions: ['>=15.4.1'],
+    versions: [versions],
     filePattern: String.raw`${COMPILED_RUNTIME_PATH}${runtime}[\w-]*\.runtime\.(?:dev|prod)\.js$`,
   }, instrumentRuntime)
+}
+
+/**
+ * @param {Function} handler
+ */
+function wrapApiHandler (handler) {
+  return function (req, res) {
+    const { body } = req
+    if (bodyParsedChannel.hasSubscribers && body !== undefined && body !== '') {
+      const abortController = new AbortController()
+      bodyParsedChannel.publish({ req, res, body, abortController })
+      if (abortController.signal.aborted) return
+    }
+
+    return handler.apply(this, arguments)
+  }
+}
+
+/**
+ * Pages API modules expose the handler through a webpack export getter that can't be wrapped in place, so the
+ * module is replaced by one that inherits from it with a wrapped handler.
+ *
+ * @param {{ default?: unknown } | Function} apiModule
+ * @returns {{ default?: unknown } | Function}
+ */
+function getBlockableApiModule (apiModule) {
+  let blockableModule = blockableApiModules.get(apiModule)
+  if (blockableModule) return blockableModule
+
+  const handler = apiModule?.default || apiModule
+  if (typeof handler !== 'function') return apiModule
+
+  blockableModule = Object.create(apiModule, { default: { value: wrapApiHandler(handler) } })
+  blockableApiModules.set(apiModule, blockableModule)
+  // wrapPagesApiRenderBody stores the replacement as `userland`, so later renders pass it back here: resolve it to
+  // itself instead of nesting another handler wrapper.
+  blockableApiModules.set(blockableModule, blockableModule)
+  return blockableModule
+}
+
+/**
+ * @param {Function} render
+ */
+function wrapPagesApiRenderBody (render) {
+  /** @this {{ userland: { default?: unknown } }} */
+  return function () {
+    if (bodyParsedChannel.hasSubscribers) {
+      const blockableModule = getBlockableApiModule(this.userland)
+      if (blockableModule !== this.userland) {
+        // Next.js 16 exposes `userland` through a prototype getter, so shadow it instead of assigning it.
+        Object.defineProperty(this, 'userland', { value: blockableModule, configurable: true, writable: true })
+      }
+    }
+
+    return render.apply(this, arguments)
+  }
+}
+
+/**
+ * @param {Function} apiResolver
+ */
+function wrapApiResolver (apiResolver) {
+  return function (...args) {
+    if (bodyParsedChannel.hasSubscribers) {
+      args[3] = getBlockableApiModule(args[3])
+    }
+
+    return Reflect.apply(apiResolver, this, args)
+  }
+}
+
+for (const file of ['dist/server/api-utils.js', 'dist/server/api-utils/node.js']) {
+  addHook({ name: 'next', versions: ['>=11.1 <13.5'], file }, apiUtils => {
+    const apiUtilsExports = /** @type {{ apiResolver?: Function }} */ (apiUtils)
+    if (typeof apiUtilsExports.apiResolver !== 'function') return apiUtils
+
+    return shimmer.wrap(apiUtilsExports, 'apiResolver', wrapApiResolver, { replaceGetter: true })
+  })
 }
 
 addHook({
@@ -625,6 +759,23 @@ addHook({
   return nextServer
 })
 
+/**
+ * @param {Request} request
+ * @param {unknown} body
+ */
+function publishBodyParsed (request, body) {
+  if (!bodyParsedChannel.hasSubscribers) return
+
+  const abortController = incomingRequests.has(request) ? new AbortController() : undefined
+  bodyParsedChannel.publish({ body, abortController })
+
+  if (abortController?.signal.aborted) {
+    const { reason } = abortController.signal
+    abortReasons.add(reason)
+    throw reason
+  }
+}
+
 addHook({
   name: 'next',
   versions: ['>=13'],
@@ -632,11 +783,25 @@ addHook({
 }, request => {
   const requestProto = Object.getPrototypeOf(request.NextRequest.prototype)
 
+  // Next bundles copies of NextResponse, but each delegates JSON serialization to the runtime's native/polyfill
+  // Response constructor. That constructor is selected at runtime and has no Next.js source function to rewrite.
+  const Response = globalThis.Response
+  if (typeof Response?.json === 'function' && !responseConstructors.has(Response)) {
+    responseConstructors.add(Response)
+    shimmer.wrap(Response, 'json', json => function (body) {
+      const response = json.apply(this, arguments)
+      if (responseJsonChannel.hasSubscribers) {
+        responseJsonChannel.publish({ body, stream: response.body })
+      }
+      return response
+    })
+  }
+
   shimmer.massWrap(requestProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
-      bodyParsedChannel.publish({ body })
+      publishBodyParsed(this, body)
 
       return body
     }
@@ -650,9 +815,21 @@ addHook({
       if (typeof body.entries === 'function') {
         normalizedBody = Object.fromEntries(body.entries())
       }
-      bodyParsedChannel.publish({ body: normalizedBody })
+      publishBodyParsed(this, normalizedBody)
 
       return body
+    }
+  })
+
+  shimmer.wrap(requestProto, 'clone', function (originalClone) {
+    return function wrappedClone () {
+      const clone = originalClone.apply(this, arguments)
+
+      if (bodyParsedChannel.hasSubscribers && incomingRequests.has(this)) {
+        incomingRequests.add(clone)
+      }
+
+      return clone
     }
   })
 

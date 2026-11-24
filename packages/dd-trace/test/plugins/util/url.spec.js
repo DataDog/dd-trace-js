@@ -183,13 +183,13 @@ describe('plugins/util/url', () => {
     const strippedUrl = 'http://perdu.com/path'
 
     it('returns the stripped url when there is no query', () => {
-      const config = { queryStringObfuscation: 'secret' }
+      const config = { queryStringObfuscation: /secret/gi }
 
       assert.strictEqual(url.buildClientHttpUrl(config, base, '/path', strippedUrl), strippedUrl)
     })
 
     it('includes the query with sensitive values obfuscated', () => {
-      const config = { queryStringObfuscation: 'secret' }
+      const config = { queryStringObfuscation: /secret/gi }
 
       assert.strictEqual(
         url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
@@ -410,6 +410,22 @@ describe('plugins/util/url', () => {
   })
 
   describe('filterSensitiveInfoFromRepository', () => {
+    for (const [input, expected] of [
+      ['deploy@host:org/repo.git', 'host:org/repo.git'],
+      ['host:org/repo.git', 'host:org/repo.git'],
+      ['git@host:org/repo.git', 'git@host:org/repo.git'],
+      ['deploy@host:/srv/repo.git', 'host:/srv/repo.git'],
+      ['deploy@host:~owner/repo.git', 'host:~owner/repo.git'],
+      ['deploy@[2001:db8::1]:org/repo.git', '[2001:db8::1]:org/repo.git'],
+      ['[2001:db8::1]:org/repo.git', '[2001:db8::1]:org/repo.git'],
+      ['deploy@host:org/repo@branch.git', 'host:org/repo@branch.git'],
+    ]) {
+      it(`sanitizes the SCP-style repository URL ${input}`, () => {
+        assert.strictEqual(url.filterSensitiveInfoFromRepository(input), expected)
+        assert.strictEqual(url.filterSensitiveInfoFromRepository(expected), expected)
+      })
+    }
+
     it('returns the same url if no sensitive info is present', () => {
       const urls = [
         'http://example.com/repository.git',

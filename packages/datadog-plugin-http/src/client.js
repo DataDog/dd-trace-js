@@ -8,9 +8,15 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
-const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
+const { isAwsSdkRequest, setHttpClientCheckpoint } = require('../../dd-trace/src/datastreams')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -40,21 +46,36 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    let otelUrl = uri
+    if (otelSemantics) {
+      const otelHostname = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
+      const otelHost = options.port ? `${otelHostname}:${options.port}` : otelHostname
+      const auth = typeof options.auth === 'string' && options.auth ? 'REDACTED:REDACTED@' : ''
+      const otelBase = `${protocol}//${auth}${otelHost}`
+      otelUrl = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
+    }
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
+    const meta = {
+      [COMPONENT]: this.component,
+      'span.kind': 'client',
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': otelUrl,
+      'out.host': hostname,
+    }
+    if (otelSemantics) {
+      const resource = otelHttpResourceName(method)
+      meta['resource.name'] = resource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.component,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
-      meta: {
-        [COMPONENT]: this.component,
-        'span.kind': 'client',
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
-        'out.host': hostname,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(options.port, 10),
       },
@@ -65,6 +86,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
+    let dataStreamsContext
     if (this.shouldInjectTraceHeaders(options, uri)) {
       // Clone the headers object in case an upstream lib has a reference to the original headers
       // Implemented due to aws-sdk issue where request signing is broken if we mutate the headers
@@ -72,11 +94,21 @@ class HttpClientPlugin extends ClientPlugin {
       // https://github.com/open-telemetry/opentelemetry-js-contrib/issues/1609#issuecomment-1826167348
       options.headers = { ...options.headers }
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
+
+      if (
+        this.config.dsmEnabled &&
+        this.config.DD_DATA_STREAMS_HTTP_ENABLED &&
+        allowed &&
+        !isAwsSdkRequest(store?.span, options.headers['amz-sdk-invocation-id'])
+      ) {
+        dataStreamsContext = setHttpClientCheckpoint(this.tracer, span, store?.dataStreamsContext, options.headers)
+      }
     }
 
     message.span = span
     message.parentStore = store
     message.currentStore = { ...store, span }
+    if (dataStreamsContext) message.currentStore.dataStreamsContext = dataStreamsContext
 
     return message.currentStore
   }
@@ -99,6 +131,9 @@ class HttpClientPlugin extends ClientPlugin {
 
       if (!this.config.validateStatus(status)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(HTTP_STATUS_ERROR, String(status))
+        }
       }
 
       addResponseHeaders(res, span, this.config)
@@ -175,6 +210,7 @@ function normalizeClientConfig (config) {
 
   return {
     ...config,
+    queryStringObfuscation: config.DD_TRACE_OTEL_SEMANTICS_ENABLED && getQsObfuscator(config),
     validateStatus,
     filter,
     propagationFilter,

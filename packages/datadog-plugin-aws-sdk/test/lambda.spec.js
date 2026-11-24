@@ -18,8 +18,9 @@ const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('
 
 /**
  * `@aws-sdk/core` 3.977.0 rewrote the clock-skew helper and dropped the guard that ignored an
- * unparsable server `Date`. Resolution reaches that copy through the hoisted tree even from clients
- * that predate `@aws-sdk/core`, so only the declared dependency separates the two.
+ * unparsable server `Date`, and 3.980.2 restored it. Resolution reaches that copy through the
+ * hoisted tree even from clients that predate `@aws-sdk/core`, so only the declared dependency
+ * separates the two.
  *
  * @param {string} version Suffix of the `versions/@aws-sdk/client-lambda@<version>` entry.
  */
@@ -28,7 +29,7 @@ function hasUnguardedClockSkewCorrection (version) {
   const { dependencies } = require(versionEntry.pkgJsonPath())
 
   return dependencies?.['@aws-sdk/core'] !== undefined &&
-    semifies(require(versionEntry.pkgJsonPath('@aws-sdk/core')).version, '>=3.977.0')
+    semifies(require(versionEntry.pkgJsonPath('@aws-sdk/core')).version, '>=3.977.0 <3.980.2')
 }
 
 describe('Plugin', () => {
@@ -82,7 +83,7 @@ describe('Plugin', () => {
           AWS = require(`../../../versions/${lambdaClientName}@${version}`).get()
 
           // The pinned legacy LocalStack answers with two `Date` headers, which `@aws-sdk/core`
-          // >= 3.977.0 parses to `NaN` and keeps as the skew offset, breaking every later signature.
+          // >= 3.977.0 <3.980.2 parses to `NaN` and keeps as the skew offset, breaking every later signature.
           lambda = new AWS.Lambda({
             endpoint: 'http://127.0.0.1:4567',
             region: 'us-east-1',

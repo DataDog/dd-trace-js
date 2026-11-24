@@ -132,7 +132,7 @@ jobs:
             echo "image-tag=$IMAGE_TAG"
           } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -185,8 +185,10 @@ jobs:
       TEST_OPTIMIZATION_NODE_SHARD: ${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -199,7 +201,7 @@ jobs:
       - run: npm run test:integration:playwright:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
           SPEC: ${{ matrix.spec }}
       - uses: ./.github/actions/coverage
         with:
@@ -224,8 +226,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -236,7 +240,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}-${{ matrix.spec }}
@@ -247,7 +251,7 @@ jobs:
       fail-fast: false
       matrix:
         # Keep the regular, failure video, and Test Optimization suites in separate lanes; together they exceed the
-        # CI time budget. The oldest Test Optimization suite also runs each adapter in its own lane.
+        # CI time budget. Both Test Optimization versions also run each adapter in its own lane.
         # The shared "latest" resolves to Node 26.2.0; WebdriverIO 10.2 requires >=26.12.1 on Node 26.
         # Use its supported Node 22 runtime here to avoid changing Node versions for unrelated jobs.
         include:
@@ -274,6 +278,11 @@ jobs:
           - node-version: '22.23.4'
             webdriverio-version: latest
             spec: webdriverio.test-optimization
+            adapter: mocha
+          - node-version: '22.23.4'
+            webdriverio-version: latest
+            spec: webdriverio.test-optimization
+            adapter: jasmine
     name: >-
       integration-webdriverio (${{ matrix.webdriverio-version }},
       node-${{ matrix.node-version }}, ${{ matrix.spec }}${{ matrix.adapter && format(', {0}', matrix.adapter) || '' }})
@@ -355,8 +364,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -371,7 +382,7 @@ jobs:
           JEST_VERSION: ${{ matrix.jest-version }}
           JEST_TEST_PATTERN: ${{ matrix.test-pattern }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
@@ -402,8 +413,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -414,7 +427,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}-${{ matrix.spec }}
@@ -436,7 +449,7 @@ jobs:
           IMAGE="ghcr.io/datadog/dd-trace-js/browser-tools:${DOCKER_HASH}"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -472,8 +485,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -486,7 +501,7 @@ jobs:
       - run: npm run test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-selenium-${{ matrix.version }}
@@ -540,8 +555,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -561,7 +578,6 @@ jobs:
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
-      - run: yarn config set ignore-engines true
       - run: npm run test:integration:cypress:coverage
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
@@ -569,7 +585,7 @@ jobs:
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
@@ -619,8 +635,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -634,7 +652,7 @@ jobs:
             ${{ (matrix.spec == 'vitest.core' || matrix.spec == 'vitest.retries') && matrix.vitest-version == 'all'
             && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
@@ -672,8 +690,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -691,7 +711,7 @@ jobs:
       - run: npm run test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
           SPEC: vitest.browser
           VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
           VITEST_BROWSER_BINARY: ${{ matrix.browser-binary }}

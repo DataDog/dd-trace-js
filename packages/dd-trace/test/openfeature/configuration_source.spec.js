@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { beforeEach, describe, it } = require('mocha')
+const http = require('node:http')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -75,20 +76,14 @@ describe('OpenFeature configuration source', () => {
     )
   })
 
-  it('rejects an invalid managed site without logging its value', () => {
-    const sensitiveSite = 'sensitive\\invalid.example'
-    config.site = sensitiveSite
+  it('rejects an invalid managed site without including its value', () => {
+    config.site = 'sensitive\\invalid.example'
 
-    const source = configurationSource.create(config, sinon.spy())
-
-    assert.strictEqual(source, undefined)
-    sinon.assert.notCalled(AgentlessConfigurationSource)
-    sinon.assert.calledOnceWithMatch(
-      log.error,
-      'Unable to configure Feature Flagging configuration source',
-      sinon.match.instanceOf(Error)
+    assert.throws(
+      () => configurationSource.create(config, sinon.spy()),
+      { message: 'Invalid DD_SITE for Feature Flagging agentless configuration' }
     )
-    assert.ok(!log.error.firstCall.args[1].message.includes(sensitiveSite))
+    sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
   it('caps the polling interval at one hour', () => {
@@ -222,32 +217,26 @@ describe('OpenFeature configuration source', () => {
   it('rejects non-HTTP endpoints', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'file:///tmp/ufc.json'
 
-    const source = configurationSource.create(config, sinon.spy())
-
-    assert.strictEqual(source, undefined)
-    sinon.assert.calledOnceWithMatch(
-      log.error,
-      'Unable to configure Feature Flagging configuration source',
-      sinon.match.instanceOf(Error)
+    assert.throws(
+      () => configurationSource.create(config, sinon.spy()),
+      { message: 'Feature Flagging agentless URL must use HTTP or HTTPS' }
     )
     sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
-  it('rejects malformed endpoints without logging their sensitive value', () => {
+  it('rejects malformed endpoints without including their sensitive value', () => {
     const sentinel = 'sensitive-value'
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = `https://${sentinel} value`
 
-    const source = configurationSource.create(config, sinon.spy())
-
-    sinon.assert.calledOnceWithMatch(
-      log.error,
-      'Unable to configure Feature Flagging configuration source',
-      sinon.match.instanceOf(Error)
+    assert.throws(
+      () => configurationSource.create(config, sinon.spy()),
+      error => {
+        assert.strictEqual(error.message, 'Invalid Feature Flagging agentless URL')
+        assert.strictEqual(error.cause, undefined)
+        return true
+      }
     )
-    assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)
-    assert.doesNotMatch(log.error.firstCall.args[1].message, new RegExp(sentinel))
-    assert.strictEqual(log.error.firstCall.args[1].cause, undefined)
   })
 
   it('creates a source for a custom API without a Datadog API key', () => {
@@ -262,18 +251,165 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(log.error)
   })
 
-  it('requires a Datadog API key for the default Datadog Feature Flagging endpoint', () => {
+  it('passes the tracer service so the CDN can attribute usage to it', () => {
+    config.service = 'checkout'
+
+    assert.strictEqual(createSourceConfig().service, 'checkout')
+  })
+
+  it('passes the service to a custom endpoint, unlike the API key', () => {
+    config.service = 'checkout'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc'
+
+    const resolved = createSourceConfig()
+
+    assert.strictEqual(resolved.service, 'checkout')
+    assert.strictEqual(resolved.apiKey, undefined)
+  })
+
+  // The tests of normalizeService cover its rules. These rows check only that the source passes the normalized name,
+  // and passes none when nothing is left of it. normalizeService changes each non-ASCII character to `_`.
+  const NORMALIZED_SERVICES = [
+    ['checkout', 'checkout'],
+    ['My Service', 'my_service'],
+    ['Default Web Site/Shop', 'default_web_site/shop'],
+    ['caf\u00E9-api', 'caf_-api'],
+    ['\u652F\u4ED8-api', 'api'],
+    ['\u652F\u4ED8', undefined],
+    ['___', undefined],
+    ['   ', undefined],
+  ]
+
+  it('passes the normalized service, or none when nothing is left of it', () => {
+    for (const [service, sent] of NORMALIZED_SERVICES) {
+      AgentlessConfigurationSource.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, sent, JSON.stringify(service))
+    }
+  })
+
+  it('derives only the service it sends, not the tracer service', () => {
+    config.service = 'My Service'
+
+    assert.strictEqual(createSourceConfig().service, 'my_service')
+    assert.strictEqual(config.service, 'My Service')
+  })
+
+  it('logs a service that has no normalized name', () => {
+    for (const service of ['支付', '___']) {
+      AgentlessConfigurationSource.resetHistory()
+      log.debug.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, undefined, service)
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Feature Flags: service %s has no normalized name; DD-Service header not sent',
+        service
+      )
+    }
+  })
+
+  it('does not pass an empty service', () => {
+    config.service = ''
+
+    assert.strictEqual(createSourceConfig().service, undefined)
+    sinon.assert.calledOnce(log.debug)
+  })
+
+  describe('with the agentless source polling', () => {
+    let clock
+    let requests
+    let source
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+      requests = []
+      const RealAgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+        '../exporters/common/request': (data, options) => { requests.push(options) },
+        '../log': log,
+      })
+      configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+        '../log': log,
+        './agentless_configuration_source': RealAgentlessConfigurationSource,
+      })
+    })
+
+    afterEach(() => {
+      source?.stop()
+      clock.restore()
+    })
+
+    async function firstRequestHeaders () {
+      source = configurationSource.create(config, sinon.spy())
+      source.start()
+      for (let i = 0; i < 10; i++) await clock.tickAsync(0)
+      assert.strictEqual(requests.length, 1)
+      return requests[0].headers
+    }
+
+    it('sends the normalized service in DD-Service', async () => {
+      config.service = 'My Service'
+
+      assert.strictEqual((await firstRequestHeaders())['DD-Service'], 'my_service')
+    })
+
+    it('sends a non-ASCII service as its normalized name, which Node.js accepts in a header', async () => {
+      config.service = 'caf\u00E9-api'
+
+      const headers = await firstRequestHeaders()
+
+      assert.strictEqual(headers['DD-Service'], 'caf_-api')
+      // Node.js throws here on a value that it refuses in a header.
+      http.validateHeaderValue('DD-Service', headers['DD-Service'])
+    })
+
+    it('still polls, without DD-Service, when the service has no normalized name', async () => {
+      for (const service of ['支付', '___']) {
+        source?.stop()
+        requests = []
+        config.service = service
+
+        assert.strictEqual(Object.hasOwn(await firstRequestHeaders(), 'DD-Service'), false, service)
+      }
+    })
+  })
+
+  for (const apiKey of [undefined, '', '   ']) {
+    it(`requires a Datadog API key for the default endpoint (DD_API_KEY=${JSON.stringify(apiKey)})`, () => {
+      config.DD_API_KEY = apiKey
+
+      assert.throws(
+        () => configurationSource.create(config, sinon.spy()),
+        {
+          message: 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
+            'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
+            'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent',
+        }
+      )
+      sinon.assert.notCalled(AgentlessConfigurationSource)
+      sinon.assert.notCalled(log.debug)
+    })
+  }
+
+  it('requires a Datadog API key when the custom endpoint is blank', () => {
     delete config.DD_API_KEY
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = '   '
 
-    const source = configurationSource.create(config, sinon.spy())
-
-    sinon.assert.calledOnceWithMatch(
-      log.error,
-      'Unable to configure Feature Flagging configuration source',
-      sinon.match.has('message', 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint')
-    )
-    assert.strictEqual(source, undefined)
+    assert.throws(() => configurationSource.create(config, sinon.spy()), { message: /^DD_API_KEY is required/ })
     sinon.assert.notCalled(AgentlessConfigurationSource)
+  })
+
+  it('does not require a Datadog API key for Remote Config delivery', () => {
+    delete config.DD_API_KEY
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+    config.remoteConfig = { DD_REMOTE_CONFIGURATION_ENABLED: true }
+
+    assert.strictEqual(configurationSource.create(config, sinon.spy()), undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
+    sinon.assert.notCalled(log.error)
   })
 
   it('does not create an agentless source for Remote Config delivery', () => {

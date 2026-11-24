@@ -74,6 +74,48 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
+        it('applies query obfuscation after configuration reloads and repeated requests', async () => {
+          appListener = server(stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }, () => {})
+          await once(appListener, 'listening')
+          const origin = `${protocol}://localhost:${appListener.address().port}`
+          const client = http2.connect(origin)
+          try {
+            await once(client, 'connect')
+            for (const [queryStringObfuscation, query] of [
+              [undefined, 'active=true&<redacted>'],
+              [false, 'active=true&password=secret'],
+              ['', 'active=true&password=secret'],
+              [true, undefined],
+              ['.*', undefined],
+              ['[', undefined],
+              ['password=[^&]*', 'active=true&<redacted>'],
+              ['active=[^&]*', '<redacted>&password=secret'],
+            ]) {
+              const config = { server: false }
+              if (queryStringObfuscation !== undefined) config.queryStringObfuscation = queryStringObfuscation
+              agent.reload('http2', config)
+              for (let attempt = 0; attempt < 2; attempt++) {
+                const traceReceived = agent.assertFirstTraceSpan(span => {
+                  const base = `${origin}/user`
+                  assert.strictEqual(span.meta['url.full'], query === undefined ? base : `${base}?${query}`)
+                })
+                const request = client.request({ ':path': '/user?active=true&password=secret' })
+                const responseReceived = once(request, 'response')
+                const requestClosed = once(request, 'close')
+                request.resume()
+                request.end()
+                const [, [headers]] = await Promise.all([traceReceived, responseReceived, requestClosed])
+                assert.strictEqual(headers[':status'], 200)
+              }
+            }
+          } finally {
+            client.close()
+          }
+        })
+
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = (stream, headers) => {
             stream.respond({ ':status': 200 })
@@ -83,9 +125,11 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
                 },
@@ -101,10 +145,60 @@ describe('Plugin', () => {
             }).then(done).catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            const req = client.request({ ':path': '/user', ':method': 'GET' })
+            const req = client.request({ ':path': '/user', ':method': 'PROPFIND' })
             req.on('error', done)
             req.end()
           })
+        })
+
+        it('sets error.type to the status code on a 5xx response', done => {
+          const app = (stream, headers) => {
+            stream.respond({ ':status': 503 })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                error: 1,
+                meta: { 'error.type': '503' },
+                metrics: { 'http.response.status_code': 503 },
+              })
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
+            const req = client.request({ ':path': '/broken' })
+            req.on('error', done)
+            req.end()
+          })
+        })
+        it('redacts credentials in url.full', async () => {
+          const app = stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+          appListener = server(app, () => {})
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          const client = http2.connect(`${protocol}://username:password@localhost:${port}`)
+          try {
+            await once(client, 'connect')
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            })
+            const request = client.request({ ':path': '/user' })
+            const responseReceived = once(request, 'response')
+            const requestClosed = once(request, 'close')
+            request.resume()
+            request.end()
+            const [, [headers]] = await Promise.all([traceReceived, responseReceived, requestClosed])
+            assert.strictEqual(headers[':status'], 200)
+          } finally {
+            client.close()
+          }
         })
       })
 

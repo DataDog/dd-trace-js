@@ -25,5 +25,5 @@ gitlab_check_enable: true
 gitlab_jobs_retry_enable: true
 # Let the full pipeline finish so automatic job retries can recover transient failures.
 gitlab_fail_fast: false
-# Avoid status-label events that can retrigger required checks and block the pull request.
-skip_labels: true
+# Expose merge queue status labels for GitHub-side automation and controls.
+skip_labels: false

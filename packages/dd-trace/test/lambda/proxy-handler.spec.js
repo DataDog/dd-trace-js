@@ -46,7 +46,8 @@ describe('Lambda Proxy handler registration', () => {
       const script = `
         const assert = require('node:assert/strict')
         const { isProxy } = require('node:util').types
-        require(${JSON.stringify(lambdaPath)})
+        const initializeLambda = require(${JSON.stringify(lambdaPath)})
+        initializeLambda()
         const app = require(${JSON.stringify(path.join(taskRoot, 'handler.js'))})
         assert.strictEqual(isProxy(app.handler), false)
         const descriptor = Object.getOwnPropertyDescriptor(app, 'handler')
@@ -89,7 +90,8 @@ describe('Lambda Proxy handler registration', () => {
       `)
       const script = `
         const assert = require('node:assert/strict')
-        require(${JSON.stringify(lambdaPath)})
+        const initializeLambda = require(${JSON.stringify(lambdaPath)})
+        initializeLambda()
         const app = require(${JSON.stringify(path.join(taskRoot, 'handler.js'))})
         assert.strictEqual(app.handler._ddWrapped, ${marker})
       `
@@ -110,7 +112,8 @@ describe('Lambda Proxy handler registration', () => {
   it('preserves application failures and invokes a Proxy when monitoring is unavailable', () => {
     const script = `
       const assert = require('node:assert/strict')
-      require(${JSON.stringify(lambdaPath)})
+      const initializeLambda = require(${JSON.stringify(lambdaPath)})
+      initializeLambda()
       const app = require(${JSON.stringify(path.join(taskRoot, 'handler.js'))})
       const error = new Error('application failure')
       assert.throws(() => app.handler({ error }), candidate => candidate === error)
@@ -137,7 +140,8 @@ describe('Lambda Proxy handler registration', () => {
     const script = `
       const assert = require('node:assert/strict')
       const { isProxy } = require('node:util').types
-      require(${JSON.stringify(lambdaPath)})
+      const initializeLambda = require(${JSON.stringify(lambdaPath)})
+      initializeLambda()
       const app = require(${JSON.stringify(path.join(taskRoot, 'handler.js'))})
       assert.strictEqual(isProxy(app.handler), true)
       assert.deepStrictEqual(app.calls, [])

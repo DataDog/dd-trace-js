@@ -3,6 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
+const { getSubscriptionName, getTopicName } = require('./resource-names')
 
 // WeakMap to track push receive spans by request
 const pushReceiveSpans = new WeakMap()
@@ -68,9 +69,11 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     const originalContext = this.#extractContext(messageData)
-    const pubsubRequestContext = reconstructPubSubRequestContext(messageData.attrs) || originalContext
+    const pubsubRequestContext = reconstructPubSubRequestContext(
+      messageData.attrs, originalContext, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+    ) || originalContext
     const isSameTrace = pubsubRequestContext &&
-      originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
+      originalContext?.toTraceId(true) === pubsubRequestContext.toTraceId(true)
 
     /**
      * Create receive span, choosing parent context:
@@ -135,6 +138,12 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     if (!span) {
       return null
     }
+
+    // The topic is only known from the name the producer propagated, never from the placeholder.
+    const topicFullName = getTopicName(attrs['pubsub.topic'])
+    if (topicFullName) span.setTag('gcp.pubsub.topic.name', topicFullName)
+    const subscriptionFullName = getSubscriptionName(subscription)
+    if (subscriptionFullName) span.setTag('gcp.pubsub.subscription.name', subscriptionFullName)
 
     span._integrationName = 'google-cloud-pubsub'
     // Calculate delivery latency (queue time from publish to delivery)

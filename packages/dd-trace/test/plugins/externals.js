@@ -3,6 +3,7 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
       name: '@aws/durable-execution-sdk-js-testing',
@@ -10,6 +11,7 @@ module.exports = {
       forced: true,
     },
   ],
+  '@openai/agents-realtime': [{ name: 'zod', dep: true }],
   aerospike: [
     {
       name: 'aerospike',
@@ -233,7 +235,7 @@ module.exports = {
     },
     {
       name: 'fastify',
-      versions: ['2.15.0', '3.0.0', '3.9.2'],
+      versions: ['2.15.0', '3.0.0', '3.9.2', '4.0.0'],
     },
     {
       name: 'middie',
@@ -268,6 +270,35 @@ module.exports = {
     {
       name: 'google-gax',
       versions: ['5.0.7'],
+    },
+  ],
+  // Match Google GAX's gRPC range so credential instanceof checks see one class. Keep while tests load gRPC directly.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      from: 'google-gax',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // Tests load the HTTP handler from each client workspace. Keep its range aligned with the client
+  // so older SDKs do not load a newer handler with an incompatible @smithy/core.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      // Keep while the HTTP handler is loaded directly by the tests.
+      name: '@smithy/node-http-handler',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The GoogleAuth prototype stub must resolve to the same module instance as the SDK.
+  '@google-cloud/vertexai': [
+    {
+      // Keep while tests stub GoogleAuth through the workspace rather than through the SDK's public auth options.
+      name: 'google-auth-library',
+      version: '^9.0.0',
+      dep: true,
+      forced: true,
     },
   ],
   genai: [
@@ -361,8 +392,8 @@ module.exports = {
   ],
   '@apollo/server': [
     {
-      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
-      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
+      // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
       name: 'graphql',
       dep: true,
@@ -386,6 +417,12 @@ module.exports = {
       versions: ['1.15.0'],
     },
   ],
+  http: [
+    {
+      name: 'axios',
+      versions: ['>=1.0.0'],
+    },
+  ],
   knex: [
     {
       name: 'mysql',
@@ -402,9 +439,7 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
     },
@@ -455,6 +490,13 @@ module.exports = {
       name: '@langchain/core',
       versions: ['>=0.1'],
       dep: true,
+    },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape. Remove when they cover newer request formats.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
     },
   ],
   langgraph: [
@@ -544,6 +586,18 @@ module.exports = {
       versions: ['>=1.27.1'],
     },
   ],
+  'modelcontextprotocol-sdk': [
+    {
+      name: '@modelcontextprotocol/server',
+      versions: ['>=2'],
+      node: '>=20',
+    },
+    {
+      name: '@modelcontextprotocol/client',
+      versions: ['>=2'],
+      node: '>=20',
+    },
+  ],
   moleculer: [
     {
       name: 'bluebird',
@@ -591,6 +645,11 @@ module.exports = {
     },
   ],
   openai: [
+    {
+      name: '@openai/agents-realtime',
+      versions: ['>=0.20.0'],
+      node: '>=22',
+    },
     {
       // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
       // it is not installed into the version folders by default and `require('ws')` inside
@@ -658,6 +717,8 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      // libpq builds the native addon; keep while pg-native delegates its build to this transitive package.
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',
@@ -676,7 +737,7 @@ module.exports = {
     {
       name: 'pino-pretty',
       dep: true,
-      versions: ['8.0.0'],
+      versions: ['13.2.0'],
     },
   ],
   postgres: [
@@ -750,7 +811,7 @@ module.exports = {
   redis: [
     {
       name: 'redis',
-      versions: ['^4'],
+      versions: ['>=4'],
     },
   ],
   rhea: [
@@ -809,6 +870,16 @@ module.exports = {
       versions: ['>=2.112.2'],
       // This package is the Supabase test target even though it differs from the integration key above.
       honourEnvRange: true,
+    },
+  ],
+  trpc: [
+    {
+      name: '@trpc/server',
+      versions: ['>=10.45.2 <11', '>=11 <11.4', '>=11.4'],
+    },
+    {
+      name: 'express',
+      versions: ['^5'],
     },
   ],
 }

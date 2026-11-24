@@ -60,9 +60,11 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   getTestLineStart,
   getFileAndLineNumberFromError,
+  getNonDependencyStackFramesFromError,
 } = require('../../../src/plugins/util/test')
 
 const {
+  CI_GIT_MERGE_COMMIT_SHA,
   CI_JOB_NAME,
   CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_URL,
@@ -1729,8 +1731,17 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      assert.strictEqual(JSON.stringify(removeInvalidMetadata(invalidMetadata)), JSON.stringify({}))
+      // A malformed commit SHA is reported as provided; an empty one is removed.
+      const { [GIT_COMMIT_SHA]: sha } = invalidMetadata
+      assert.deepStrictEqual(removeInvalidMetadata(invalidMetadata), sha ? { [GIT_COMMIT_SHA]: sha } : {})
     })
+  })
+
+  it('removes a malformed merge commit SHA', () => {
+    assert.deepStrictEqual(removeInvalidMetadata({
+      [GIT_COMMIT_SHA]: 'invalid',
+      [CI_GIT_MERGE_COMMIT_SHA]: 'invalid',
+    }), { [GIT_COMMIT_SHA]: 'invalid' })
   })
 
   it('should keep valid metadata', () => {
@@ -2008,6 +2019,7 @@ describe('getPullRequestBaseBranch', () => {
         './git': {
           getGitRemoteName: () => 'origin',
           getSourceBranch: () => 'feature-branch',
+          hasLocalGitObject: () => true,
           getMergeBase: getMergeBaseStub,
           checkAndFetchBranch: checkAndFetchBranchStub,
           getLocalBranches: getLocalBranchesStub,
@@ -2106,7 +2118,7 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'repository_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'repository_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
+      { type: 'repository_discrepancy', expectedProvider: 'git_client', discrepantProvider: 'ci_provider' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
@@ -2148,7 +2160,7 @@ describe('checkShaDiscrepancies', () => {
     const expectedCalls = [
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'git_client' },
       { type: 'commit_discrepancy', expectedProvider: 'user_supplied', discrepantProvider: 'ci_provider' },
-      { type: 'commit_discrepancy', expectedProvider: 'ci_provider', discrepantProvider: 'git_client' },
+      { type: 'commit_discrepancy', expectedProvider: 'git_client', discrepantProvider: 'ci_provider' },
     ]
 
     expectedCalls.forEach(({ type, expectedProvider, discrepantProvider }) => {
@@ -2323,5 +2335,27 @@ describe('getFileAndLineNumberFromError', () => {
   it('stays linear on an attacker-shaped newline-free frame', () => {
     const error = { stack: `at (${'a'.repeat(200_000)} /repo/src/x.js:5:1)` }
     assert.strictEqual(getFileAndLineNumberFromError(error, '/repo')[1], 5)
+  })
+})
+
+describe('getNonDependencyStackFramesFromError', () => {
+  it('returns non-dependency frames under the repo root', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at dep (/repo/node_modules/x/index.js:9:9)',
+        '    at handler (/repo/src/server.js:128:20)',
+        '    at test (/repo/test/server.spec.js:7:5)',
+      ].join('\n'),
+    }
+
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError(error, '/repo'), [
+      { file: '/repo/src/server.js', line: 128 },
+      { file: '/repo/test/server.spec.js', line: 7 },
+    ])
+  })
+
+  it('returns an empty list when the error has no stack', () => {
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError({}, '/repo'), [])
   })
 })

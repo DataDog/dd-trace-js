@@ -18,6 +18,7 @@ const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, PROCESS_ID, SAMPLING_PRIORITY_KEY } = require('../constants')
+const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
 const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -69,6 +70,7 @@ const ALLOW = 'ALLOW'
 /**
  * @typedef {object} EvaluationMetaStruct
  * @property {Message[]} [messages]
+ * @property {import('../../../../index').aiguard.McpServer[]} [mcp_servers]
  * @property {Array<unknown>} [attack_categories]
  * @property {Array<unknown>} [sds]
  * @property {Record<string, unknown>} [tag_probs]
@@ -81,6 +83,8 @@ const ALLOW = 'ALLOW'
  * @property {EvaluationMetaStruct} metaStruct
  * @property {{ source: string, integration: string }} telemetryTags
  */
+
+/** @typedef {{ [key: string]: string | number | boolean }} CustomTags */
 
 /**
  * Returns whether a value is a non-array object.
@@ -122,6 +126,62 @@ function normalizeExtraEntries (field, entries) {
     }
   }
   return normalized.length === 0 ? NO_EXTRA_ENTRIES : normalized
+}
+
+/**
+ * Returns whether a custom tag entry can be set on the AI Guard span.
+ *
+ * Only primitive values are accepted because the span flattens nested objects into dotted keys,
+ * which could otherwise smuggle reserved ai_guard.* keys in through a non-reserved parent key.
+ * Entries above the agent meta limits are dropped rather than truncated. The limits are checked in
+ * characters (UTF-16 code units), so the agent may still truncate values with multi-byte characters.
+ * A non-string service.name is dropped because the span formatter calls string methods on it when
+ * the trace is exported, after this function can catch the error.
+ *
+ * @param {string} key
+ * @param {unknown} value
+ */
+function isValidCustomTag (key, value) {
+  if (
+    key.length === 0 ||
+    key.length > MAX_META_KEY_LENGTH ||
+    key === TAGS.RESERVED_TAG_KEY ||
+    key.startsWith(TAGS.RESERVED_TAG_PREFIX)
+  ) {
+    return false
+  }
+
+  if (typeof value === 'string') {
+    return value.length <= MAX_META_VALUE_LENGTH
+  }
+
+  if (key === SERVICE_NAME) return false
+
+  return typeof value === 'boolean' || Number.isFinite(value)
+}
+
+/**
+ * Sets caller-provided tags on the AI Guard span, dropping invalid or reserved entries.
+ *
+ * Must run after the service entry tags are copied: when the AI Guard span is the trace root, a
+ * custom usr.id or http.client_ip would otherwise be copied into the reserved ai_guard.* keys.
+ * Must also run before the verdict tags set in finish(): some of them are only set conditionally,
+ * and filtering reserved keys here is what keeps a caller value from misreporting the verdict.
+ *
+ * @param {Span} span
+ * @param {unknown} tags
+ */
+function setCustomTags (span, tags) {
+  if (!isRecord(tags)) return
+
+  for (const key of Object.keys(tags)) {
+    const value = tags[key]
+    if (isValidCustomTag(key, value)) {
+      span.setTag(key, value)
+    } else {
+      log.debug('AIGuard: dropping invalid custom tag %s', key)
+    }
+  }
 }
 
 /**
@@ -253,7 +313,7 @@ function isReservedExtraTag (key) {
   return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
 }
 
-const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
+const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'mcp_servers', 'attack_categories', 'sds', 'tag_probs'])
 
 /**
  * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct,
@@ -309,7 +369,8 @@ class EvaluationReporter {
    *
    * @param {Span} span
    * @param {Message[]} messages
-   * @param {{ source: string, integration: string }} options
+   * @param {{ source: string, integration: string, tags?: CustomTags,
+   *   mcpServers?: import('../../../../index').aiguard.McpServer[] }} options
    * @returns {EvaluationReport}
    */
   start (span, messages, options) {
@@ -325,7 +386,10 @@ class EvaluationReporter {
       }
     }
 
+    /** @type {EvaluationMetaStruct} */
     const metaStruct = {}
+    // A copy of the list that the request sends, so a failed evaluation reports it too.
+    if (options.mcpServers?.length) metaStruct.mcp_servers = clone(options.mcpServers)
     span.meta_struct = {
       [TAGS.META_STRUCT_KEY]: metaStruct,
     }
@@ -338,6 +402,8 @@ class EvaluationReporter {
       keepTrace(rootSpan, AI_GUARD)
       rootSpan.setTag(TAGS.EVENT_TAG_KEY, 'true')
     }
+
+    if (options.tags !== undefined) setCustomTags(span, options.tags)
 
     return {
       span,

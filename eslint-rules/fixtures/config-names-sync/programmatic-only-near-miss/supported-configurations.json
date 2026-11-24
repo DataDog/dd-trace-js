@@ -1,0 +1,12 @@
+{
+  "supportedConfigurations": {
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED": [
+      {
+        "namespace": "featureFlags",
+        "configurationNames": [
+          "featureFlags.enableEvaluationTelemetryOptOutParameter"
+        ]
+      }
+    ]
+  }
+}

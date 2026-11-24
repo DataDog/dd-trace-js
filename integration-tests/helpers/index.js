@@ -23,7 +23,7 @@ const {
 } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
-const { BUN, withBun } = require('./bun')
+const { BUN, BUN_CONFIG, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -562,6 +562,10 @@ function error (...args) {
   DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
 }
 
+/**
+ * @param {string} command
+ * @param {import('child_process').ExecSyncOptions} [options]
+ */
 function execHelper (command, options) {
   try {
     log('Exec START: ', command)
@@ -569,50 +573,22 @@ function execHelper (command, options) {
     log('Exec SUCCESS: ', command)
   } catch (execError) {
     error('Exec ERROR: ', command, execError)
-    if (command.startsWith(BUN)) {
-      try {
-        log('Exec RETRY BACKOFF: 60 seconds')
-        execSync('sleep 60')
-        log('Exec RETRY START: ', command)
-        execSync(command, options)
-        log('Exec RETRY SUCCESS: ', command)
-      } catch (retryError) {
-        error('Exec RETRY ERROR', command, retryError)
-        throw retryError
-      }
-    } else {
-      throw execError
-    }
+    throw execError
   }
 }
 
 /**
- * Async sibling of {@link execHelper}. Runs in parallel with other awaited operations and
- * preserves the bun-only 60s retry semantics.
- *
- * @param {string} command - Command to run.
- * @param {import('child_process').ExecOptions} [options] - Exec options.
- * @returns {Promise<void>}
+ * @param {string} command
+ * @param {import('child_process').ExecOptions} [options]
  */
 async function execHelperAsync (command, options) {
   try {
     log('Exec START: ', command)
     await execAsync(command, options)
     log('Exec SUCCESS: ', command)
-    return
   } catch (execError) {
     error('Exec ERROR: ', command, execError)
-    if (!command.startsWith(BUN)) throw execError
-  }
-  log('Exec RETRY BACKOFF: 60 seconds')
-  await new Promise(resolve => setTimeout(resolve, 60_000))
-  try {
-    log('Exec RETRY START: ', command)
-    await execAsync(command, options)
-    log('Exec RETRY SUCCESS: ', command)
-  } catch (retryError) {
-    error('Exec RETRY ERROR', command, retryError)
-    throw retryError
+    throw execError
   }
 }
 
@@ -733,11 +709,11 @@ async function createSandbox (
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
-    // yarn-linked into dd-trace and want to run the integration tests against them.
+    // linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    execHelper('yarn link')
-    execHelper('yarn link dd-trace')
+    execHelper(`${BUN} link --ignore-scripts`, { env: restOfEnv })
+    execHelper(`${BUN} link --ignore-scripts --no-save dd-trace`, { env: restOfEnv })
     // ... run the tests in the current directory.
     return {
       coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
@@ -753,7 +729,7 @@ async function createSandbox (
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
-  const addFlags = ['--linker=hoisted', '--trust']
+  const addFlags = [`--config=${JSON.stringify(BUN_CONFIG)}`, '--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
@@ -771,7 +747,7 @@ async function createSandbox (
   }
 
   if (DEBUG !== 'true') {
-    addFlags.push('--silent')
+    addFlags.push('--no-progress')
   }
 
   if (cappedDependencies.length > 0) {
@@ -1059,6 +1035,9 @@ function getCiVisAgentlessConfig (port) {
     ...rest,
     DATADOG_API_KEY: undefined,
     DD_API_KEY: '1',
+    // Local Git now wins over CI metadata, and filesystem origins are omitted from repository URL tags.
+    // Give this sandbox an explicit backend identity while keeping its filesystem remote for Git operations.
+    DD_GIT_REPOSITORY_URL: 'https://example.com/dd-trace-js-integration-tests.git',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
@@ -1080,6 +1059,7 @@ function getCiVisEvpProxyConfig (port) {
     ...rest,
     DATADOG_API_KEY: undefined,
     DD_API_KEY: undefined,
+    DD_GIT_REPOSITORY_URL: 'https://example.com/dd-trace-js-integration-tests.git',
     DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',

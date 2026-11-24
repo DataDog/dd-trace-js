@@ -10,6 +10,8 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../plugins/util/user-provided-git')
+const { filterSensitiveInfoFromRepository } = require('../../../plugins/util/url')
 const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
@@ -18,6 +20,7 @@ const {
   getCommitsRevList,
   isShallowRepository,
   unshallowRepository,
+  fetchHeadCommitSha,
   isGitAvailable,
 } = require('../../../plugins/util/git')
 
@@ -35,7 +38,7 @@ const {
 } = require('../../../ci-visibility/telemetry')
 
 /** @typedef {{ isEvpProxy: boolean, evpProxyPrefix: string }} EvpProxyConfiguration */
-/** @typedef {EvpProxyConfiguration & { url: URL, repositoryUrl: string }} GitUploadTarget */
+/** @typedef {EvpProxyConfiguration & { url: URL, repositoryUrl: string, gitRoot?: string }} GitUploadTarget */
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
@@ -71,7 +74,7 @@ function getCommonRequestOptions (url) {
  * @param {GitUploadTarget & { latestCommits: string[] }} options
  * @param {(error: Error | null, commitsToUpload?: string[]) => void} callback
  */
-function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
+function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix, gitRoot }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -123,7 +126,11 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
       return callback(null, [])
     }
 
-    const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
+    let commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude, false, gitRoot)
+    // Partial clones may need promised trees; only hydrate them when recovery is enabled, with a bounded retry.
+    if (commitsToUpload === null && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
+      commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude, true, gitRoot)
+    }
 
     if (commitsToUpload === null) {
       return callback(new Error('git rev-list failed'))
@@ -207,10 +214,11 @@ function generateAndUploadPackFiles ({
   commitsToUpload,
   repositoryUrl,
   headCommit,
+  gitRoot,
 }, callback) {
   log.debug('There are %s commits to upload', commitsToUpload.length)
 
-  const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+  const packFilesToUpload = generatePackFilesForCommits(commitsToUpload, gitRoot)
 
   log.debug('Uploading %s packfiles.', packFilesToUpload.length)
 
@@ -261,23 +269,40 @@ function generateAndUploadPackFiles ({
  * @param {EvpProxyConfiguration} evpProxyConfiguration
  * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
  * @param {(error?: Error | null) => void} callback
+ * @param {string=} configCommitSha
+ * @param {string=} gitRoot
  */
-function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback,
+  configCommitSha, gitRoot = process.cwd()) {
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
-    repositoryUrl = getRepositoryUrl()
+    repositoryUrl = getRepositoryUrl(gitRoot)
   }
 
+  repositoryUrl = filterSensitiveInfoFromRepository(repositoryUrl)
   log.debug('Uploading git history for repository', repositoryUrl)
 
-  if (!repositoryUrl) {
+  if (!repositoryUrl || !validateGitRepositoryUrl(repositoryUrl)) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  let latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits(configCommitSha, gitRoot)
+  let recoveredSelectedCommit = false
+  if (!latestCommits.length && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED &&
+    validateGitCommitSha(configCommitSha)) {
+    if (isShallowRepository(true, gitRoot)) unshallowRepository(false, configCommitSha, gitRoot)
+    else fetchHeadCommitSha(configCommitSha, false, gitRoot)
+    latestCommits = getLatestCommits(configCommitSha, gitRoot)
+    recoveredSelectedCommit = true
+  }
+  if (!latestCommits.length) {
+    return callback(Object.assign(new Error('Selected Git commit is unavailable'), {
+      code: 'ERR_GIT_COMMIT_UNAVAILABLE',
+    }))
+  }
   log.debug('There were %s commits since last month.', latestCommits.length)
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
@@ -291,8 +316,8 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
 
     // If it has already unshallowed or the clone is not shallow, we move on
-    if (hasCheckedShallow || !isShallowRepository()) {
-      const [headCommit] = latestCommits
+    if (hasCheckedShallow || !isShallowRepository(false, gitRoot)) {
+      const headCommit = configCommitSha || latestCommits[0]
       return generateAndUploadPackFiles({
         url,
         isEvpProxy,
@@ -300,22 +325,24 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
         commitsToUpload,
         repositoryUrl,
         headCommit,
+        gitRoot,
       }, callback)
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     if (getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
-      unshallowRepository(false)
+      unshallowRepository(false, configCommitSha, gitRoot)
     }
 
     // The latest commits change after unshallowing
-    latestCommits = getLatestCommits()
+    latestCommits = getLatestCommits(configCommitSha, gitRoot)
     getCommitsToUpload({
       url,
       repositoryUrl,
       latestCommits,
       isEvpProxy,
       evpProxyPrefix,
+      gitRoot,
     }, getOnFinishGetCommitsToUpload(true))
   }
 
@@ -325,7 +352,8 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     latestCommits,
     isEvpProxy,
     evpProxyPrefix,
-  }, getOnFinishGetCommitsToUpload(false))
+    gitRoot,
+  }, getOnFinishGetCommitsToUpload(recoveredSelectedCommit))
 }
 
 module.exports = {

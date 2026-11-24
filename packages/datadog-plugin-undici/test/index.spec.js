@@ -87,17 +87,52 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
+        it('applies query obfuscation after configuration reloads and repeated requests', async () => {
+          appListener = server((req, res) => res.end())
+          await once(appListener, 'listening')
+          const base = `http://localhost:${appListener.address().port}/user`
+
+          for (const [queryStringObfuscation, query] of [
+            [undefined, 'active=true&<redacted>'],
+            [false, 'active=true&password=secret'],
+            ['', 'active=true&password=secret'],
+            [true, undefined],
+            ['.*', undefined],
+            ['[', undefined],
+            ['password=[^&]*', 'active=true&<redacted>'],
+            ['active=[^&]*', '<redacted>&password=secret'],
+          ]) {
+            const config = { server: false }
+            if (queryStringObfuscation !== undefined) config.queryStringObfuscation = queryStringObfuscation
+            agent.reload('undici', config)
+            for (let attempt = 0; attempt < 2; attempt++) {
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.meta['url.full'], query === undefined ? base : `${base}?${query}`)
+                }),
+                (async () => {
+                  const response = await fetch.fetch(`${base}?active=true&password=secret`)
+                  await response.arrayBuffer()
+                  assert.strictEqual(response.status, 200)
+                })(),
+              ])
+            }
+          }
+        })
+
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `http://localhost:${port}/user`,
                   'server.address': 'localhost',
                 },
@@ -112,7 +147,26 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'out.host'))
             }).then(done).catch(done)
 
-            fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
+            fetch.fetch(`http://localhost:${port}/user`, { method: 'PROPFIND' })
+          })
+        })
+
+        it('sets error.type to the status code on a 5xx response', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                error: 1,
+                meta: { 'error.type': '503' },
+                metrics: { 'http.response.status_code': 503 },
+              })
+            }).then(done).catch(done)
+
+            fetch.fetch(`http://localhost:${port}/broken`)
           })
         })
       })

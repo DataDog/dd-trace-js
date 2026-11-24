@@ -1704,6 +1704,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            // The sandbox remote is a local path; replay links need an explicit source URL.
+            DD_GIT_REPOSITORY_URL: 'https://github.com/DataDog/dd-trace-js',
             TESTS_TO_RUN: 'dynamic-instrumentation/test-(hit-breakpoint|not-hit-breakpoint)\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: 'true',

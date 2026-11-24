@@ -15,8 +15,11 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {number} [timeout]
    */
   constructor (url, protocol, resourceAttributes, headers, timeout = 10_000) {
-    super(url, headers, timeout, protocol, 'span-stats')
+    super(url, headers, timeout, protocol, 'span-stats', resourceAttributes)
     this.#transformer = new OtlpStatsTransformer(resourceAttributes, protocol)
+    // Expose the protocol actually used after transformer fallback (e.g. grpc -> http/protobuf)
+    // so startup reporting describes the exporter rather than the requested protocol.
+    this.protocol = this.#transformer.protocol
   }
 
   /**

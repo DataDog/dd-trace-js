@@ -64,7 +64,7 @@ function parseJsonResponse (rawJson) {
 function parseKnownTestsResponse (rawJson, options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateKnownTestsResponse(parsedResponse, options)
+    validateKnownTestsResponse(parsedResponse)
   }
   const { data: { attributes: { tests } } } = parsedResponse
   return tests

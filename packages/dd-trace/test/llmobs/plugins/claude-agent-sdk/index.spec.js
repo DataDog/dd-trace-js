@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { createRequire } = require('node:module')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
 const {
@@ -30,14 +31,12 @@ describe('Plugin', () => {
     let pathToClaudeCodeExecutable
 
     before(() => {
-      const path = require('node:path')
       const sdkModule = require(`../../../../../../versions/@anthropic-ai/claude-agent-sdk@${version}`)
       client = sdkModule.get()
       zod = sdkModule.get('zod')
       // Force the glibc linux binary path — the SDK's musl/glibc auto-detection fails on some CI runners.
-      const anthropicDir = path.dirname(path.dirname(sdkModule.getPath()))
-      pathToClaudeCodeExecutable = path.join(
-        anthropicDir, `claude-agent-sdk-${process.platform}-${process.arch}`, 'claude'
+      pathToClaudeCodeExecutable = createRequire(sdkModule.getPath()).resolve(
+        `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`
       )
     })
 

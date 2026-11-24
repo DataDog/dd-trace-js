@@ -12,6 +12,7 @@ const msgpack = require('@msgpack/msgpack')
 const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { decodeOtlpTraceRequest } = require('../../../../integration-tests/helpers/otlp')
 const { storage } = require('../../../datadog-core')
 const { httpAgent } = require('../../src/exporters/common/agents')
 const { usesOtlpTraceExporter } = require('../../src/exporter')
@@ -59,6 +60,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
   'AWS_LAMBDA_INITIALIZATION_TYPE',
+  'AzureFunctionsJobHost__extensions__http__routePrefix',
+  'AzureWebJobsScriptRoot',
   'FUNCTION_NAME',
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
@@ -73,6 +76,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
+  'AWS_REGION',
   'LAMBDA_TASK_ROOT',
   // MicroVM clone-resume identity reseed hook registration
   'AWS_LAMBDA_MICROVM_IMAGE_ARN',
@@ -386,8 +390,11 @@ function decodeOtlpTraces (payload) {
  * @param {express.Response} res
  */
 function handleTraceRequest (req, res) {
-  const otlp = req.is('application/json')
-  const trace = otlp ? decodeOtlpTraces(JSON.parse(req.body)) : req.body
+  const protobuf = req.is('application/x-protobuf')
+  const otlp = protobuf || req.is('application/json')
+  const trace = otlp
+    ? decodeOtlpTraces(protobuf ? decodeOtlpTraceRequest(req.body) : JSON.parse(req.body))
+    : req.body
   res.status(200).send(otlp ? {} : { rate_by_service: { 'service:,env:': 1 } })
   for (const { handler, spanResourceMatch } of traceHandlers) {
     const spans = trace.flatMap(span => span)
@@ -754,12 +761,17 @@ module.exports = {
       })
     })
 
-    agent.put('/v0.5/traces', (req, res) => {
+    // v0.5 is not implemented here: answer 404 so a writer probing it falls back
+    // to v0.4, as it would against an Agent that does not advertise the endpoint.
+    agent.all('/v0.5/traces', (req, res) => {
       res.status(404).end()
     })
 
+    // Both methods the Agent accepts for trace intake: the legacy writer sends
+    // PUT, and a writer built on libdatadog sends POST.
     agent.put('/v0.4/traces', handleTraceRequest)
-    agent.post('/v1/traces', handleTraceRequest)
+    agent.post('/v0.4/traces', handleTraceRequest)
+    agent.post('/v1/traces', bodyParser.raw({ limit: Infinity, type: 'application/x-protobuf' }), handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 

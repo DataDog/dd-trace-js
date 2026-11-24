@@ -9,6 +9,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
@@ -17,7 +18,7 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 
 const HttpRequest = require('../setup/helpers/http-client')
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const { blockedTemplateJson: json, getWebSpan, setTestBlockingTemplates } = require('./utils')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -295,6 +296,98 @@ withVersions('express', 'express', version => {
         assert.deepEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
       }
+    })
+  })
+
+  describe('Response blocking', () => {
+    let server, httpRequest
+
+    before(() => {
+      return agent.load(['express', 'http'], { client: false })
+    })
+
+    before((done) => {
+      const express = require(`../../../../versions/express@${version}`).get()
+
+      const app = express()
+
+      app.get('/not-found', (req, res) => {
+        res.status(404).send('Not found')
+      })
+
+      app.get('/header', (req, res) => {
+        res.set('x-response-rule', req.query.value)
+        res.send('DONE')
+      })
+
+      server = app.listen(0, () => {
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}`, validateStatus: null })
+        done()
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close()
+    })
+
+    beforeEach(() => {
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'response-status-and-header-rules.json'),
+        },
+      }))
+      setTestBlockingTemplates()
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    /**
+     * @param {string} url
+     */
+    async function assertResponseBlocked (url) {
+      const [res] = await Promise.all([
+        httpRequest.get(url),
+        agent.assertSomeTraces(traces => {
+          assertObjectContains(getWebSpan(traces).meta, {
+            'appsec.blocked': 'true',
+            'http.status_code': '403',
+          })
+        }),
+      ])
+
+      assert.equal(res.status, 403)
+      assert.deepEqual(res.data, JSON.parse(json))
+    }
+
+    it('should block a response whose status matches a blocking rule', () => {
+      return assertResponseBlocked('/not-found')
+    })
+
+    it('should block the 404 response of an unknown route', () => {
+      return assertResponseBlocked('/unknown-route')
+    })
+
+    it('should block a response whose headers match a blocking rule', () => {
+      return assertResponseBlocked('/header?value=blockresponse')
+    })
+
+    it('should not block a response that matches no blocking rule', async () => {
+      const [res] = await Promise.all([
+        httpRequest.get('/header?value=safe'),
+        agent.assertSomeTraces(traces => {
+          const span = getWebSpan(traces)
+          assert.equal(span.meta['appsec.blocked'], undefined)
+          assert.equal(span.meta['http.status_code'], '200')
+        }),
+      ])
+
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
     })
   })
 

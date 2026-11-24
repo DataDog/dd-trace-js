@@ -14,6 +14,7 @@ const addresses = require('./addresses')
 const {
   startGraphqlResolver,
   graphqlMiddlewareChannel,
+  wafRunFinished,
   apolloHttpServerChannel,
   apolloChannel,
   apolloServerCoreChannel,
@@ -21,6 +22,15 @@ const {
 const { updateBlockFailureMetric } = require('./telemetry')
 
 const graphqlRequestData = new WeakMap()
+
+/**
+ * Per request, the blocking action of every field checked with empty arguments or inclusion directives,
+ * including variable directives represented by `if: undefined`. Identical payloads return the same action while
+ * the request's WAF context keeps the same persistent inputs. List queries resolve the same fields once per item.
+ *
+ * @type {WeakMap<object, Map<string, object | undefined>>}
+ */
+const fieldsWithoutArgumentsActions = new WeakMap()
 
 function enable () {
   enableApollo()
@@ -40,18 +50,88 @@ function onGraphqlStartResolver (data) {
 
   if (!req) return
 
+  const knownActions = fieldsWithoutArgumentsActions.get(req)
+  if (knownActions === undefined &&
+    !waf.wafManager.getWAFContext(req)?.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const cacheKey = getFieldCacheKey(resolverInfo)
+  if (cacheKey !== undefined && knownActions?.has(cacheKey)) {
+    applyBlockingAction(req, data, knownActions.get(cacheKey))
+    return
+  }
+
+  const result = waf.runSubContext({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo })
   const blockingAction = getBlockingAction(result?.actions)
-  if (blockingAction) {
-    const requestData = graphqlRequestData.get(req)
-    if (requestData?.isInGraphqlRequest) {
-      requestData.blocked = true
-      requestData.wafAction = blockingAction
-      data.abortController?.abort()
+
+  // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
+  // occurrence run again instead of reading it back as "allowed".
+  if (cacheKey !== undefined && result !== undefined && !result.timeout && !(result.errorCode < 0)) {
+    if (knownActions === undefined) {
+      const blockingActions = new Map()
+      blockingActions.set(cacheKey, blockingAction)
+      fieldsWithoutArgumentsActions.set(req, blockingActions)
+    } else {
+      knownActions.set(cacheKey, blockingAction)
     }
+  }
+
+  applyBlockingAction(req, data, blockingAction)
+}
+
+/**
+ * Inputs stay in the request's WAF context, so they can change the action of a field checked before
+ * they arrived. Invalidate cached answers after evaluations on the request context.
+ * Resolver evaluations use subcontexts, so they never invalidate their own answers.
+ *
+ * @param {{ req?: object, payload?: object, isSubcontext?: boolean }} data
+ */
+function onWafRunFinished ({ req, payload, isSubcontext }) {
+  if (!req || !payload || isSubcontext) return
+
+  fieldsWithoutArgumentsActions.delete(req)
+}
+
+/**
+ * Resolver materializers return exactly one field.
+ *
+ * @param {Record<string, Record<string, unknown>>} resolverInfo
+ */
+function getFieldCacheKey (resolverInfo) {
+  const fieldName = Object.keys(resolverInfo)[0]
+  const fieldArguments = resolverInfo[fieldName]
+  const names = Object.keys(fieldArguments)
+  if (names.length === 0) return fieldName
+
+  let cacheKey = fieldName
+  for (const name of names) {
+    const directive = fieldArguments[name]
+    if ((name !== 'include' && name !== 'skip') ||
+      !directive || typeof directive !== 'object') return
+    const argumentNames = Object.keys(directive)
+    if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
+    const value = directive.if
+    if (value !== undefined && typeof value !== 'boolean') return
+    cacheKey += `:${name}:${value}`
+  }
+  return cacheKey
+}
+
+/**
+ * @param {object} req
+ * @param {{ abortController?: AbortController }} data
+ * @param {object | undefined} blockingAction
+ */
+function applyBlockingAction (req, data, blockingAction) {
+  if (!blockingAction) return
+
+  const requestData = graphqlRequestData.get(req)
+  if (requestData?.isInGraphqlRequest) {
+    requestData.blocked = true
+    requestData.wafAction = blockingAction
+    data.abortController?.abort()
   }
 }
 
@@ -161,10 +241,12 @@ function disableApollo () {
 
 function enableGraphql () {
   startGraphqlResolver.subscribe(onGraphqlStartResolver)
+  wafRunFinished.subscribe(onWafRunFinished)
 }
 
 function disableGraphql () {
   if (startGraphqlResolver.hasSubscribers) startGraphqlResolver.unsubscribe(onGraphqlStartResolver)
+  if (wafRunFinished.hasSubscribers) wafRunFinished.unsubscribe(onWafRunFinished)
 }
 
 module.exports = {

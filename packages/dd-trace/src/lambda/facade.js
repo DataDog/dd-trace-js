@@ -1,0 +1,75 @@
+'use strict'
+
+// Internal bridge for datadog-lambda-js. Applications should use that package's wrapper API.
+
+const tracer = require('../../../..')
+const { AUTO_KEEP } = require('../../../../ext/priority')
+const { writeDatadogTraceId, writeDatadogParentId, writeDatadogSamplingPriority } = require('../carrier')
+const { wrapLambdaHandler } = require('./wrap')
+
+/**
+ * Returns Datadog propagation headers for the active Lambda invocation span.
+ *
+ * @returns {Record<string, string>} Trace propagation headers, or an empty object outside an invocation.
+ */
+function getTraceHeaders () {
+  const span = tracer.scope().active()
+  if (!span) return {}
+
+  // Ported from datadog-lambda-js's TraceContextService.currentTraceHeaders and
+  // SpanContextWrapper.sampleMode. This fixed Datadog carrier must not depend on the configured
+  // injection styles or force a sampling decision as tracer.inject() does.
+  const context = span.context()
+  const headers = {}
+  writeDatadogTraceId(headers, context.toTraceId())
+  writeDatadogParentId(headers, context.toSpanId())
+  writeDatadogSamplingPriority(headers, String(context._sampling?.priority ?? AUTO_KEEP))
+  return headers
+}
+
+/**
+ * Submits a custom Lambda distribution metric.
+ */
+function sendDistributionMetric () {
+  throw new Error(notImplemented('sendDistributionMetric'))
+}
+
+/**
+ * Submits a timestamped custom Lambda distribution metric.
+ */
+function sendDistributionMetricWithDate () {
+  throw new Error(notImplemented('sendDistributionMetricWithDate'))
+}
+
+/**
+ * Renders a handler-load failure (error span + error metric) for a failure the plugin lifecycle
+ * cannot observe: the customer module failed during evaluation, so there is no invocation.
+ *
+ * @param {{ error: Error, functionName: string, startTime: number }} failure Init failure details.
+ */
+function reportInitFailure (failure) {
+  throw new Error(notImplemented('reportInitFailure'))
+}
+
+/**
+ * Builds the message for a facade entry point whose implementation has not landed yet.
+ *
+ * The shim requires the same internal contract on each supported tracer line. Throwing keeps the gap loud:
+ * a silent no-op here would drop customer metrics with no error anywhere.
+ * The shim's integration lands only after these are implemented, so the throw never ships to a
+ * shim user.
+ *
+ * @param {string} name Facade entry point.
+ */
+function notImplemented (name) {
+  return `Internal Lambda ${name}() is not implemented yet. ` +
+    'Keep using datadog-lambda-js for custom metrics until the metrics pipeline is ported.'
+}
+
+module.exports = {
+  getTraceHeaders,
+  reportInitFailure,
+  sendDistributionMetric,
+  sendDistributionMetricWithDate,
+  wrap: wrapLambdaHandler,
+}

@@ -218,10 +218,10 @@ describe('input message http requests', function () {
     const options = getRequestOptions(request)
     assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
     assert.match(options.path, /runtime_id%3Atest-runtime-id/)
-    assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(/** @type {URL} */ (options.url).href, 'https://debugger-intake.us3.datadoghq.com/')
     assert.strictEqual(Object.hasOwn(options.headers, 'DD-API-KEY'), false)
     assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
-    assert.strictEqual(options.agent, undefined)
+    assert.strictEqual(Object.hasOwn(options, 'agent'), false)
   })
 
   it('should fallback to /debugger/v1/diagnostics on 404 from v2 endpoint', function (done) {

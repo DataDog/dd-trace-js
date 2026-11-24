@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -64,20 +65,23 @@ describe('Plugin', () => {
 
           const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
 
-          const phash = propagationHash.getHash()
+          const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+          const containerTagsHash = propagationHash.getContainerTagsHash()
           expectedProducerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
             ENTRY_PARENT_HASH,
-            phash
+            processTagsForHash,
+            containerTagsHash
           )
           expectedConsumerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
             expectedProducerHash,
-            phash
+            processTagsForHash,
+            containerTagsHash
           )
         })
 

@@ -31,7 +31,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -44,7 +44,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -73,9 +73,40 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
+        it('applies query obfuscation after configuration reloads and repeated requests', async () => {
+          appListener = server((req, res) => res.end(), () => {})
+          await once(appListener, 'listening')
+          const base = `${protocol}://localhost:${appListener.address().port}/user`
+
+          for (const [queryStringObfuscation, query] of [
+            [undefined, 'active=true&<redacted>'],
+            [false, 'active=true&password=secret'],
+            ['', 'active=true&password=secret'],
+            [true, undefined],
+            ['.*', undefined],
+            ['[', undefined],
+            ['password=[^&]*', 'active=true&<redacted>'],
+            ['active=[^&]*', '<redacted>&password=secret'],
+          ]) {
+            const config = { server: false }
+            if (queryStringObfuscation !== undefined) config.queryStringObfuscation = queryStringObfuscation
+            agent.reload('http', config)
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const traceReceived = agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], query === undefined ? base : `${base}?${query}`)
+              })
+              const request = http.get(`${base}?active=true&password=secret`, response => {
+                assert.strictEqual(response.statusCode, 200)
+                response.resume()
+              })
+              await Promise.all([traceReceived, once(request, 'close')])
+            }
+          }
+        })
+
         it('emits OpenTelemetry client attributes and omits the Datadog ones', async () => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
 
@@ -85,10 +116,11 @@ describe('Plugin', () => {
           const traceReceived = agent.assertFirstTraceSpan(span => {
             // OpenTelemetry attribute names are present...
             assertObjectContains(span, {
-              resource: 'GET',
+              resource: 'HTTP',
               meta: {
                 'span.kind': 'client',
-                'http.request.method': 'GET',
+                'http.request.method': '_OTHER',
+                'http.request.method_original': 'PROPFIND',
                 'url.full': `${protocol}://localhost:${port}/user`,
                 'server.address': 'localhost',
               },
@@ -106,9 +138,74 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'operation.name'))
             assert.ok(!Object.hasOwn(span.meta, 'span.type'))
           })
-          const request = http.get(`${protocol}://localhost:${port}/user`, response => response.resume())
+          const request = http.request(`${protocol}://localhost:${port}/user`, { method: 'PROPFIND' }, response => response.resume())
+          request.end()
           await Promise.all([traceReceived, once(request, 'close')])
         })
+
+        for (const scenario of [
+          { name: 'brackets an IPv6 literal in url.full', hostname: '::1' },
+          { name: 'brackets an IPv6 literal with an implicit default port', hostname: '::1', defaultPort: true },
+          {
+            name: 'brackets an IPv6 literal with an explicit default port',
+            hostname: '::1',
+            defaultPort: true,
+            explicitPort: true,
+          },
+          { name: 'redacts credentials in url.full', auth: 'username:password' },
+          { name: 'uses both OTel placeholders for a colonless auth option', auth: 'username', options: true },
+        ]) {
+          it(scenario.name, async () => {
+            const hostname = scenario.hostname ?? 'localhost'
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+            appListener = server(app, () => {}, hostname)
+            await once(appListener, 'listening')
+
+            const port = appListener.address().port
+            const defaultPort = protocol === 'https' ? 443 : 80
+            const localAgent = scenario.defaultPort ? new http.Agent() : undefined
+            if (localAgent) localAgent.defaultPort = port
+
+            const urlHost = hostname === '::1' ? '[::1]' : hostname
+            const urlPort = scenario.defaultPort ? '' : `:${port}`
+            const redactedAuth = scenario.auth ? 'REDACTED:REDACTED@' : ''
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://${redactedAuth}${urlHost}${urlPort}/user`)
+              assert.strictEqual(span.meta['server.address'], hostname)
+              assert.strictEqual(span.metrics['server.port'], scenario.defaultPort ? defaultPort : port)
+            })
+
+            const auth = scenario.auth ? `${scenario.auth}@` : ''
+            const targetPort = scenario.explicitPort ? `:${defaultPort}` : urlPort
+            const target = scenario.options
+              ? { protocol: `${protocol}:`, hostname, port, path: '/user', auth: scenario.auth }
+              : `${protocol}://${auth}${urlHost}${targetPort}/user`
+            const request = http.request(target, { agent: localAgent }, res => res.resume())
+            const requestClosed = once(request, 'close')
+            request.end()
+            try {
+              await Promise.all([traceReceived, requestClosed])
+            } finally {
+              localAgent?.destroy()
+            }
+          })
+        }
+
+        for (const method of ['GET', 'PROPFIND']) {
+          it(`exports the ${method} client resource and URL`, async () => {
+            appListener = server((req, res) => res.end(), () => {})
+            await once(appListener, 'listening')
+            const { port } = appListener.address()
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.resource, method === 'GET' ? 'GET' : 'HTTP')
+              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
+            })
+            const request = http.request(`${protocol}://localhost:${port}/user`, { method }, response => response.resume())
+            request.end()
+            await Promise.all([traceReceived, once(request, 'close')])
+          })
+        }
 
         it('sets error.type to the status code on a 4xx client response', done => {
           const app = express()
@@ -121,10 +218,33 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 meta: { 'error.type': '400' },
                 metrics: { 'http.response.status_code': 400 },
+                error: 1,
               })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('marks a 5xx client response as an error, unlike the Datadog default', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '503' },
+                metrics: { 'http.response.status_code': 503 },
+                error: 1,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()

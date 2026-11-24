@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.19.0"
+    "rules_version": "1.20.0"
   },
   "rules": [
     {
@@ -6013,6 +6013,39 @@
       ]
     },
     {
+      "id": "dog-920-210",
+      "name": "Java4Shell - Attempts to exploit Java's base64 misdecoding (CVE-2026-114938)",
+      "tags": {
+        "type": "exploit_detection",
+        "category": "attack_attempt",
+        "cwe": "416",
+        "capec": "1000/152/242",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "regex": "^(?i:basic\\s+)?(?:(?:[A-Za-z0-9+/]{64})+|(?:[A-Za-z0-9_-]{64})+)(?:[A-Za-z0-9+/_-]?={1,2}|[A-Za-z0-9+/_-]{2}=)$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 65
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-931-001",
       "name": "RFI: URL Payload to well known RFI target",
       "tags": {
@@ -6233,9 +6266,9 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "{[{%]-?(?:(?:\\s*\\d+\\s*[*+-]\\s*\\d+\\s*)|(?:[\\s\\S]*__(?:init|class|globals|builtins|import|mro|bases?|subclasses|dict|getitem|getattribute)__[\\s\\S]*)|(?:[\\s\\S]*\\|\\s*(?:reverse|join|format|attr)\\b[\\s\\S]*))-?[}%]}",
+            "regex": "{[{%]-?(?:(?:\\s*\\d+\\s*[*+-]\\s*\\d+\\s*)|(?:[\\s\\S]*__(?:init|class|globals|builtins|import|mro|bases?|subclasses|dict|getitem|getattribute)__[\\s\\S]*)|(?:(?:{}|[^}])*\\|\\s*(?:reverse|join|format|attr)\\b[\\s\\S]*))-?[}%]}",
             "options": {
-              "case_sensitive": false,
+              "case_sensitive": true,
               "min_length": 7
             }
           },
@@ -10088,6 +10121,40 @@
             "options": {
               "case_sensitive": false,
               "min_length": 8
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-71x",
+      "name": "Artex",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Artex",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bartex(?:[\\W_]|$)",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 5
             }
           },
           "operator": "match_regex"

@@ -14,6 +14,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
 const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
@@ -88,13 +89,15 @@ describe('Kinesis', function () {
 
         streamNameDSM = `MyStreamDSM-${id()}`
 
-        const phash = propagationHash.getHash()
+        const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+        const containerTagsHash = propagationHash.getContainerTagsHash()
         const producerHash = computePathwayHash(
           'test',
           'tester',
           ['direction:out', 'topic:' + streamNameDSM, 'type:kinesis'],
           ENTRY_PARENT_HASH,
-          phash
+          processTagsForHash,
+          containerTagsHash
         )
 
         expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
@@ -103,7 +106,8 @@ describe('Kinesis', function () {
           'tester',
           ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
           producerHash,
-          phash
+          processTagsForHash,
+          containerTagsHash
         ).readBigUInt64LE(0).toString()
 
         createResources(streamNameDSM, done)
@@ -190,6 +194,60 @@ describe('Kinesis', function () {
           })()
 
           await Promise.all([tracePromise, actions])
+        })
+      }
+
+      if (helpers.sendsStreamArn(kinesisClientName, version)) {
+        describe('when the consumer addresses the stream by ARN', () => {
+          let streamArn
+          let record
+
+          beforeEach(async () => {
+            const { StreamDescription } = await callViaPromise(kinesis, 'describeStream', { StreamName: streamNameDSM })
+            streamArn = StreamDescription.StreamARN
+            record = await callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamName: streamNameDSM,
+            })
+          })
+
+          function expectConsumerPathwayHash () {
+            return agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === 'aws.response')
+              assert.ok(span)
+              assert.strictEqual(span.meta['pathway.hash'], expectedConsumerHash)
+            }, { timeoutMs: 10000 })
+          }
+
+          it('sets the DSM topic of promise-based getRecords polls', async () => {
+            const tracePromise = expectConsumerPathwayHash()
+
+            const { ShardIterator } = await callViaPromise(kinesis, 'getShardIterator', {
+              ShardId: record.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: record.SequenceNumber,
+              StreamARN: streamArn,
+            })
+            await Promise.all([
+              tracePromise,
+              callViaPromise(kinesis, 'getRecords', { ShardIterator, Limit: 1 }),
+            ])
+          })
+
+          it('sets the DSM topic of callback-based getRecords polls', done => {
+            expectConsumerPathwayHash().then(done, done)
+
+            kinesis.getShardIterator({
+              ShardId: record.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: record.SequenceNumber,
+              StreamARN: streamArn,
+            }, (err, data) => {
+              if (err) return done(err)
+              kinesis.getRecords({ ShardIterator: data.ShardIterator, Limit: 1 }, () => {})
+            })
+          })
         })
       }
 
