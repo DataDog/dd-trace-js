@@ -30,7 +30,7 @@ describe('OTLP consistent probability sampling', () => {
     config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'continue'
     config.sampler = { sampleRate: 0.1 }
 
-    const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {}, false)
+    const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {}, false)
     // @ts-expect-error - Stub the protected transport boundary; sampling, formatting and serialization remain real.
     sendPayload = sinon.stub(exporter, 'sendPayload')
     Tracer = proxyquire('../../src/opentracing/tracer', {

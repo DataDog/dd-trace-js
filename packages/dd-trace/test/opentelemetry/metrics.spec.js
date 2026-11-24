@@ -15,6 +15,7 @@ const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_l
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
+const OtlpHttpMetricExporter = require('../../src/opentelemetry/metrics/otlp_http_metric_exporter')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
@@ -959,6 +960,41 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.addBatchObservableCallback(cb, [observable])
       meter.removeBatchObservableCallback(cb, [observable])
     })
+  })
+
+  describe('int64 range', () => {
+    for (const protocol of ['http/json', 'http/protobuf']) {
+      it(`exports data point values outside the int64 range as doubles with ${protocol}`, () => {
+        // Doubles adjacent to the signed 64-bit bounds: the last accepted values and the first rejected ones.
+        const int64Values = { min: -(2 ** 63), max: 2 ** 63 - 1024 }
+        const values = { ...int64Values, below_min: -(2 ** 63) - 2048, above_max: 2 ** 63, huge: 1e20 }
+        let exported
+        const verify = mockOtlpExport((decoded) => {
+          exported = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        })
+        const exporter = new OtlpHttpMetricExporter('http://localhost:4318/v1/metrics', {}, 1000, protocol, {})
+        const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+        const meter = new MeterProvider({ reader }).getMeter('test')
+
+        try {
+          for (const [name, value] of Object.entries(values)) {
+            meter.createGauge(name).record(value)
+          }
+          reader.forceFlush()
+        } finally {
+          reader.shutdown()
+        }
+
+        verify()
+        const dataPoints = exported.map(({ name, gauge }) => {
+          const { asInt, asDouble } = gauge.dataPoints[0]
+          return [name, asInt === undefined ? { asDouble } : { asInt }]
+        })
+        assert.deepStrictEqual(Object.fromEntries(dataPoints), Object.fromEntries(Object.entries(values).map(
+          ([name, value]) => [name, name in int64Values ? { asInt: value } : { asDouble: value }]
+        )))
+      })
+    }
   })
 
   describe('Protocol Configuration', () => {

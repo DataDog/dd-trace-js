@@ -1,6 +1,7 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { isInt64 } = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { METRIC_TYPES, TEMPORALITY } = require('./constants')
 
@@ -239,7 +240,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * @param {number} value - The value to assign
    */
   #assignNumberValue (dataPoint, value) {
-    if (Number.isInteger(value)) {
+    if (isInt64(value)) {
       dataPoint.asInt = value
     } else {
       dataPoint.asDouble = value

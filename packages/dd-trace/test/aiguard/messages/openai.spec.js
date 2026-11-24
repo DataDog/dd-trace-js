@@ -55,6 +55,18 @@ describe('aiguard/messages/openai', () => {
         content: '{"result":"ok"}',
       }])
     })
+
+    it('should drop the content of a function message whose toJSON throws a value that is not an Error', () => {
+      // eslint-disable-next-line no-throw-literal
+      const content = { toJSON () { throw null } }
+      const messages = [{ role: 'function', name: 'lookup', content }]
+
+      assert.deepStrictEqual(normalizeOpenAIChatMessages(messages), [{
+        role: 'tool',
+        tool_call_id: 'lookup',
+        content: '',
+      }])
+    })
   })
 
   describe('convertOpenAIResponseItemsToMessages', () => {

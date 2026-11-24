@@ -43,11 +43,13 @@ const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
   normalizeProfilingHeapLimitExtensionSize: "number | 'auto'",
   normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
+  parseOtelExporterList: '"none" | "otlp"',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
   setGRPCRange: 'number[]',
   splitJSONPathRules: 'string[]',
   toURL: 'URL',
+  validateOtelPropagators: 'string[] | undefined',
 }
 
 function createTreeNode () {

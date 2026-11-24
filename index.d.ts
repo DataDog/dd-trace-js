@@ -948,7 +948,8 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails. It fails at once when the agentless
-         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY. A pending initialization
+         * keeps the process alive until it succeeds or fails.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
@@ -1845,6 +1846,58 @@ declare namespace tracer {
          */
         arguments: string;
       };
+      /**
+       * Set when the tool call runs an MCP tool: references an entry of the `mcpServers` evaluate option.
+       */
+      mcp?: {
+        /**
+         * The `id` of the MCP server entry of the tool.
+         */
+        server_id: string;
+      };
+    }
+
+    /**
+     * An MCP server referenced by the `mcp.server_id` of tool calls, sent in the `mcpServers` evaluate option.
+     * The SDK sends these values to AI Guard and stores them on the AI Guard span as given, without redaction:
+     * remove any credential before passing them.
+     */
+    export interface McpServer {
+      /**
+       * Server ID that the tool calls reference with `mcp.server_id`.
+       */
+      id: string;
+      /**
+       * Who runs the MCP client: `client` when the application runs it, `provider` when the model provider runs it.
+       */
+      managed_by: 'client' | 'provider';
+      /**
+       * Transport of the server.
+       */
+      transport: 'streamable_http' | 'sse' | 'stdio' | 'in_process' | 'unknown';
+      /**
+       * Configured name of the server.
+       */
+      name?: string;
+      /**
+       * Origin of the server URL: scheme, host and port only. Remove userinfo, path, query and fragment before
+       * passing it: many MCP providers put the API key there.
+       */
+      url?: string;
+      /**
+       * Program name of a stdio server command. Pass the program name, not the full path, which can contain the
+       * user name.
+       */
+      command?: string;
+      /**
+       * Package or module that a stdio server runs. Leave out other arguments, which can contain paths, tokens or
+       * secrets.
+       */
+      args?: string[];
+      /**
+       * Original MCP tool name of each function name that the model uses.
+       */
+      tools: { [functionName: string]: string };
     }
 
     /**
@@ -2050,6 +2103,9 @@ declare namespace tracer {
        *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
        *             empty key, a key longer than 200 characters, a string value longer than 25000
        *             characters, or a value that is not a string, finite number or boolean are dropped.
+       *   - `mcpServers`: The MCP servers that the `mcp.server_id` of the tool calls reference. Sent with the
+       *                   messages and reported on the AI Guard span; omitted when empty. The entries are sent
+       *                   and stored as given and are not redacted: remove any credential from them first.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
@@ -2059,6 +2115,7 @@ declare namespace tracer {
         opts?: {
           block?: boolean,
           tags?: { [key: string]: string | number | boolean },
+          mcpServers?: McpServer[],
         }
       ): Promise<Evaluation>;
     }

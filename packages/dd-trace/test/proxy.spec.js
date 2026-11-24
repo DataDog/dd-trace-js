@@ -13,6 +13,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { storage } = require('../../datadog-core')
+const { cpuProfilingAvailable } = require('../src/profiling/runtime-capabilities')
 const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
@@ -220,6 +221,7 @@ describe('TracerProxy', () => {
 
     profiler = {
       isStarted: sinon.stub().returns(true),
+      getRunningProfileTypes: sinon.stub().returns([]),
       start: sinon.stub().returns(true),
       stop: sinon.spy(),
       setCustomLabelKeys: sinon.spy(),
@@ -639,19 +641,77 @@ describe('TracerProxy', () => {
         sinon.assert.calledTwice(pluginManager.configure)
       })
 
-      it('traces integrations when the IAST native addon is not installed', () => {
+      const optionalDependencyCases = [
+        {
+          name: 'IAST',
+          dependency: '@datadog/native-iast-taint-tracking',
+          env: { DD_IAST_ENABLED: 'true' },
+          error: /\[IAST\] Unable to start IAST, it stays disabled/,
+        },
+        {
+          name: 'LLM Observability with the Agent',
+          dependency: '@datadog/libdatadog',
+          env: { DD_LLMOBS_ENABLED: 'true', DD_LLMOBS_AGENTLESS_ENABLED: 'false' },
+        },
+        {
+          name: 'agentless APM',
+          dependency: '@datadog/libdatadog',
+          env: { DD_AGENTLESS_ENABLED: 'true', DD_API_KEY: 'test', DD_TRACE_FLUSH_INTERVAL: '0' },
+          error: /Failed to send .* to the agentless intake/,
+        },
+        {
+          name: 'agentless Remote Configuration',
+          dependency: '@datadog/libdatadog',
+          env: { DD_AGENTLESS_ENABLED: 'true', DD_API_KEY: 'test', DD_REMOTE_CONFIGURATION_ENABLED: 'true' },
+          error: /\[RC\] Could not initialize agentless Remote Config; Remote Config is disabled/,
+        },
+        {
+          name: 'OpenTelemetry logs',
+          dependency: '@opentelemetry/api-logs',
+          env: { DD_LOGS_OTEL_ENABLED: 'true' },
+        },
+        {
+          name: 'OpenTelemetry logs and runtime metrics',
+          dependency: '@opentelemetry/api',
+          env: { DD_LOGS_OTEL_ENABLED: 'true', DD_METRICS_OTEL_ENABLED: 'true', DD_RUNTIME_METRICS_ENABLED: 'true' },
+        },
+      ]
+
+      for (const { name, dependency, env, error } of optionalDependencyCases) {
+        it(`traces integrations when ${name} cannot load ${dependency}`, () => {
+          assertIntegrationWithoutDependency(dependency, env, error)
+        })
+      }
+
+      /**
+       * @param {string} dependency
+       * @param {Record<string, string>} env
+       * @param {RegExp} [error]
+       */
+      function assertIntegrationWithoutDependency (dependency, env, error) {
         const entry = require.resolve('..')
         const script = `
           const Module = require('node:module')
           const resolveFilename = Module._resolveFilename
+          const dependency = ${JSON.stringify(dependency)}
+          let dependencyRequests = 0
           Module._resolveFilename = function (request, ...args) {
-            if (request === '@datadog/native-iast-taint-tracking') {
+            if (request === dependency || request.startsWith(dependency + '/')) {
+              dependencyRequests++
               throw Object.assign(new Error('Cannot find module ' + request), { code: 'MODULE_NOT_FOUND' })
             }
             return resolveFilename.call(this, request, ...args)
           }
 
           const tracer = require(${JSON.stringify(entry)}).init()
+          if (${env.DD_TRACE_FLUSH_INTERVAL === '0'}) {
+            const assert = require('node:assert/strict')
+            tracer.trace('first batch', () => {})
+            const firstBatchRequests = dependencyRequests
+            assert.ok(firstBatchRequests > 0)
+            tracer.trace('second batch', () => {})
+            assert.strictEqual(dependencyRequests, firstBatchRequests)
+          }
           const http = require('node:http')
           const server = http.createServer((req, res) => {
             res.end(String(tracer.scope().active() !== null))
@@ -669,20 +729,23 @@ describe('TracerProxy', () => {
           timeout: 10_000,
           env: {
             ...process.env,
-            DD_IAST_ENABLED: 'true',
             DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
             DD_REMOTE_CONFIGURATION_ENABLED: 'false',
             DD_TRACE_DEBUG: 'true',
             DD_TRACE_LOG_LEVEL: 'error',
             DD_TRACE_STARTUP_LOGS: 'false',
+            ...env,
           },
         })
 
         assert.strictEqual(result.status, 0, result.stderr)
-        assert.strictEqual(result.stdout, 'true')
-        assert.match(result.stderr, /\[IAST\] Unable to start IAST, it stays disabled/)
-        assert.match(result.stderr, /Cannot find module @datadog\/native-iast-taint-tracking/)
-      })
+        assert.strictEqual(result.stdout, 'true', result.stderr)
+        assert.doesNotMatch(result.stderr, /Error initializing tracer/)
+        if (error) {
+          assert.strictEqual(result.stderr.match(new RegExp(error, 'g'))?.length, 1, result.stderr)
+          assert.ok(result.stderr.includes(`Cannot find module ${dependency}`), result.stderr)
+        }
+      }
 
       it('should not initialize twice', () => {
         proxy.init()
@@ -755,6 +818,39 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(runtimeMetrics.start)
+      })
+
+      it('should subscribe to the profiling remote config product even when profiling is disabled', () => {
+        proxy.init()
+
+        sinon.assert.calledWith(rc.subscribeProducts, 'APM_PROFILING')
+        const handleProfiling = handlers.get('APM_PROFILING')
+        handleProfiling({
+          toApply: [{
+            product: 'APM_PROFILING',
+            id: 'profiling-config',
+            path: 'datadog/2/APM_PROFILING/profiling-config/config',
+            file: { profilers: { heapSize: true } },
+          }],
+          toModify: [],
+          toUnapply: [],
+          ack: sinon.spy(),
+          error: sinon.spy(),
+        })
+
+        // Nothing runs locally, so only the requested profile type is turned on. CPU time isn't mapped
+        // where CPU profiling is unavailable, and allocations are turned off too where allocation
+        // profiling is available; the profiling remote config spec covers both.
+        sinon.assert.calledOnce(profiler.getRunningProfileTypes)
+        sinon.assert.calledWith(
+          config.setRemoteConfig,
+          sinon.match({
+            DD_PROFILING_WALLTIME_ENABLED: 'false',
+            DD_PROFILING_CPU_ENABLED: cpuProfilingAvailable ? 'false' : undefined,
+            DD_PROFILING_HEAP_ENABLED: 'true',
+            DD_PROFILING_ENABLED: 'true',
+          })
+        )
       })
 
       it('should support applying remote config', () => {

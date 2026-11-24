@@ -1,5 +1,7 @@
 'use strict'
 
+// v4–6 publish separate CommonJS (.js) and ESM (.mjs) builds. v7 is ESM-only and uses
+// dist/index.js for both import and require, so that file must still be rewritten for setup to run.
 module.exports = [
   // getTracer - for patching tracer
   {

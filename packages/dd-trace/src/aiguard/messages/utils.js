@@ -15,7 +15,7 @@ function stringifyIfNeeded (value) {
   try {
     return JSON.stringify(value)
   } catch (error) {
-    log.debug('AIGuard: dropping an unserializable message field: %s', error.message)
+    log.debug('AIGuard: dropping an unserializable message field: %s', error?.message)
   }
 }
 
@@ -40,7 +40,7 @@ function decode (attempt, fallback, logMessage) {
   try {
     return attempt()
   } catch (error) {
-    log.error(logMessage, error.message)
+    log.error(logMessage, error?.message)
     return fallback
   }
 }

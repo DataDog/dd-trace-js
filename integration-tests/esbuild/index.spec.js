@@ -6,6 +6,7 @@
 
 const assert = require('node:assert/strict')
 const chproc = require('node:child_process')
+const os = require('node:os')
 const pathModule = require('node:path')
 const fs = require('node:fs')
 
@@ -72,6 +73,58 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('initializes OpenTelemetry logs and metrics with bundled APIs', async () => {
+      delete require.cache[require.resolve('esbuild')]
+      const esbuild = require('esbuild')
+      const external = Object.keys(require('../../package.json').optionalDependencies)
+        .filter(name => name !== '@opentelemetry/api' && name !== '@opentelemetry/api-logs')
+      const directory = fs.mkdtempSync(pathModule.join(os.tmpdir(), 'dd-trace-otel-bundle-'))
+      const outfile = pathModule.join(directory, 'otel.cjs')
+
+      try {
+        const schemas = pathModule.resolve(TEST_DIR, '../../packages/dd-trace/src/opentelemetry/otlp')
+        for (const file of fs.readdirSync(schemas)) {
+          if (file.endsWith('.proto')) {
+            fs.copyFileSync(pathModule.join(schemas, file), pathModule.join(directory, file))
+          }
+        }
+        await esbuild.build({
+          stdin: {
+            contents: `
+              const assert = require('node:assert/strict')
+              const { metrics } = require('@opentelemetry/api')
+              const { logs } = require('@opentelemetry/api-logs')
+              require('../../').init({ plugins: false })
+              assert.strictEqual(logs.getLoggerProvider().constructor.name, 'LoggerProvider')
+              assert.strictEqual(metrics.getMeterProvider().constructor.name, 'MeterProvider')
+            `,
+            resolveDir: TEST_DIR,
+          },
+          bundle: true,
+          external,
+          outfile,
+          platform: 'node',
+        })
+        chproc.execFileSync(process.execPath, [outfile], {
+          env: {
+            ...process.env,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_LOGS_OTEL_ENABLED: 'true',
+            DD_METRICS_OTEL_ENABLED: 'true',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+            DD_RUNTIME_METRICS_ENABLED: 'false',
+            DD_TRACE_STARTUP_LOGS: 'false',
+            NODE_PATH: '',
+            OTEL_LOGS_EXPORTER: 'otlp',
+            OTEL_METRICS_EXPORTER: 'otlp',
+          },
+          timeout,
+        })
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+
     it('handles typescript apps that import without file extensions', () => {
       execSync('node ./build-and-test-typescript.mjs', {
         timeout,
@@ -116,6 +169,13 @@ esbuildVersions.forEach((version) => {
         execSync(`node ./build-and-test-orchestrion.js ${format}`, { timeout })
       })
     }
+
+    it('activates the bundled AI SDK before its first streaming call', function () {
+      const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/ai/package.json'))
+      if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
+      execSync('node ./build-and-test-ai.js', { timeout })
+    })
 
     describe('ESM', () => {
       afterEach(() => {
