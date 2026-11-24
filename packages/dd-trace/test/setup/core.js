@@ -79,7 +79,7 @@ const originalAdd = temporaryWarningExceptions.add.bind(temporaryWarningExceptio
 /**
  * Add a warning to the temporary warning exceptions. It will be removed after 1ms if it is not emitted.
  *
- * @param {string} warning
+ * @param {string} warning Warning message or code.
  */
 temporaryWarningExceptions.add = (warning) => {
   setTimeout(() => {
@@ -106,8 +106,7 @@ process.on('warning', (warning) => {
   if (warning.name === 'MaxListenersExceededWarning') {
     throw warning
   }
-  if (temporaryWarningExceptions.has(warning.message)) {
-    temporaryWarningExceptions.delete(warning.message)
+  if (temporaryWarningExceptions.delete(warning.code) || temporaryWarningExceptions.delete(warning.message)) {
     return
   }
   if (warning.name === 'DeprecationWarning' && (
