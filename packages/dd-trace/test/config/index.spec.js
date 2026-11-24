@@ -1998,6 +1998,12 @@ describe('Config', () => {
     })
   }
 
+  it('only enables generated agentless obfuscation on explicit opt-in', () => {
+    assert.strictEqual(getConfig().tracing.DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED, false)
+    process.env.DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED = 'true'
+    assert.strictEqual(getConfig().tracing.DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED, true)
+  })
+
   it('should disable OTel semantics without overriding Test Optimization settings', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'

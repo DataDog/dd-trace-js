@@ -1,0 +1,12 @@
+Datadog libdatadog
+Copyright 2021-2022 Datadog, Inc.
+
+This product includes software developed at Datadog (<https://www.datadoghq.com/>).
+
+--
+
+This product bundles a copy of the libbpf/usdt single-header USDT
+library in `libdd-profiling-heap-sampler/vendor/usdt.h`. That file is licensed
+under the BSD 2-Clause License, Copyright (c) 2024 Meta Platforms, Inc.
+and affiliates. The SPDX identifier and copyright notice are retained
+verbatim in the file header. Upstream: <https://github.com/libbpf/usdt>.

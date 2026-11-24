@@ -95,6 +95,14 @@ jobs:
         run: |
           ./node_modules/.bin/bun run --bun test:core
           ./node_modules/.bin/bun run --bun test:shimmer
+      - name: Verify generated agentless headers on Bun
+        env:
+          MOCHA_JUNIT_REPORT_SUFFIX: bun-agentless
+        run: >-
+          ./node_modules/.bin/bun ./node_modules/mocha/bin/mocha.js
+          packages/dd-trace/test/exporters/agentless/pipeline.spec.js
+          --grep 'preserves container metadata on the prepared request'
+          --fail-zero --forbid-pending
       - uses: ./.github/actions/upload-junit-artifacts
         if: always()
         with:

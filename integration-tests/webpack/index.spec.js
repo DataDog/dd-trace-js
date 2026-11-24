@@ -59,6 +59,10 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-skip-external.js', { timeout })
     })
 
+    it('delivers agentless traces with the bundled policy', () => {
+      execSync('node --unhandled-rejections=strict ./build-and-test-agentless.js', { timeout })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', { timeout })
     })

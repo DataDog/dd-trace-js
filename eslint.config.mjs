@@ -1061,12 +1061,46 @@ export default [
     files: TEST_FILES,
   },
   {
+    name: 'dd-trace/generated-agentless-policy-host',
+    files: [
+      'packages/dd-trace/src/exporters/agentless/generated/agentless-policy.cjs',
+    ],
+    rules: {
+      '@stylistic/quotes': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/agentless-writer',
+    files: ['packages/dd-trace/src/exporters/agentless/writer.js'],
+    rules: {
+      'n/no-unsupported-features/node-builtins': ['error', {
+        ignores: ['zlib.zstdCompressSync', 'zlib.constants.ZSTD_c_compressionLevel'],
+      }],
+    },
+  },
+  {
+    name: 'dd-trace/generated-agentless-policy-bytes',
+    files: ['packages/dd-trace/src/exporters/agentless/generated/agentless-policy-bytes.cjs'],
+    rules: { '@stylistic/max-len': 'off' },
+  },
+  {
     name: 'dd-trace/benchmarks',
     files: [
       'benchmark/**/*',
     ],
     rules: {
       'n/no-missing-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/benchmarks/agentless-exporter',
+    files: [
+      'benchmark/agentless-exporter.cjs',
+    ],
+    settings: {
+      node: {
+        version: '^22.15.0 || >=23.8.0',
+      },
     },
   },
   {

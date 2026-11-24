@@ -1,33 +1,52 @@
 'use strict'
 
-const { createAgentlessExporter } = require('@datadog/libdatadog')
-
 const { storage } = require('../../../../datadog-core')
 const getConfig = require('../../config')
+const { AgentEncoder } = require('../../encode/0.4')
 const log = require('../../log')
+const { MAX_SIZE } = require('../../msgpack')
 const tracerVersion = require('../../../../../package.json').version
 
 const { canSendApiKey } = require('../common/url')
 const { getHttpsProxyAgent } = require('../common/proxy')
 const BaseWriter = require('../common/writer')
-const { AgentEncoder } = require('../../encode/0.4')
 const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 
 const legacyStorage = storage('legacy')
+const languageInterpreter = process.versions.bun ? 'JavaScriptCore' : 'v8'
+const PINNED_EXPORTER_USER_AGENT = 'Tracer/11.0.0'
+let compress
+let createPolicy
+
+function createCompressor () {
+  const zlib = require('node:zlib')
+  if (typeof zlib.zstdCompressSync === 'function') {
+    const { zstdCompressSync, constants } = zlib
+    const options = { params: { [constants.ZSTD_c_compressionLevel]: 1 } }
+    /** @param {Buffer} payload */
+    return payload => zstdCompressSync(payload, options)
+  }
+  const { zstd_compress: zstdCompress } = require('@datadog/libdatadog')
+  /** @param {Buffer} payload */
+  return payload => zstdCompress(payload, 1)
+}
 
 /**
  * Writer for agentless APM trace intake.
- * Encodes traces as v0.4 MessagePack and delegates transformation and delivery
- * to the APM data pipeline.
+ * Encodes traces as v0.4 MessagePack. The configured policy prepares the
+ * payload before delivery to the intake.
  */
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
   #apiKeyUnsafeReceiver = false
+  #directTransport
   #exporter
   #exporterApiKey
   #exporterEnv
   #exporterRuntimeId
+  #generatedObfuscation
   #metadata
+  #policy
   #urlMissing = false
 
   /**
@@ -35,10 +54,12 @@ class AgentlessWriter extends BaseWriter {
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
    * @param {object} [options.metadata] - Metadata to pass to the data pipeline
+   * @param {boolean} [options.generatedObfuscation]
    */
-  constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
+  constructor ({ url, site = 'datadoghq.com', metadata = {}, generatedObfuscation = false }) {
     super({ url })
     this.#metadata = metadata
+    this.#generatedObfuscation = generatedObfuscation
     this._encoder = new AgentEncoder(this)
 
     if (!url) {
@@ -72,7 +93,7 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * @param {Buffer} data - v0.4 MessagePack payload.
+   * @param {Buffer} data - Encoded v0.4 batch.
    * @param {number} count - Number of traces in the payload.
    * @param {() => void} done - Callback invoked after delivery completes or fails.
    */
@@ -99,22 +120,90 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyMissing = false
 
-    // The WASM transport performs its HTTP request in JavaScript. Keep that
-    // internal request out of the instrumented application's traces.
+    if (!canSendApiKey(this._url.protocol, this._url.hostname)) {
+      if (!this.#apiKeyUnsafeReceiver) {
+        this.#apiKeyUnsafeReceiver = true
+        log.warn('DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.')
+      }
+      done()
+      return
+    }
+    this.#apiKeyUnsafeReceiver = false
+
     try {
-      legacyStorage.run({ noop: true }, () => {
-        const exporter = this.#applyConfiguration(DD_API_KEY)
-        if (exporter) {
-          exporter.sendV04(data, done, log)
-        } else {
-          done()
+      const sending = legacyStorage.run({ noop: true }, () => {
+        this.#refreshConfiguration(DD_API_KEY)
+        if (!this.#generatedObfuscation) {
+          this.#getLegacyExporter(DD_API_KEY).sendV04(data, done, log)
+          return true
         }
+
+        const json = this.#preparePayload(data)
+        if (json === undefined || json.byteLength > MAX_SIZE) {
+          log.error('Agentless policy declined %d trace(s); dropping the batch', count)
+          return false
+        }
+
+        if (!this.#directTransport) {
+          const DirectTransport = require('./direct-transport')
+          this.#directTransport = new DirectTransport()
+        }
+        /** @type {Record<string, string>} */
+        const headers = {
+          'content-type': 'application/json',
+          'content-encoding': 'zstd',
+          'dd-api-key': DD_API_KEY,
+          'datadog-meta-lang': 'nodejs',
+          'datadog-meta-lang-version': process.version,
+          'datadog-meta-lang-interpreter': languageInterpreter,
+          'datadog-meta-tracer-version': tracerVersion,
+          'user-agent': PINNED_EXPORTER_USER_AGENT,
+          'x-datadog-trace-count': String(count),
+        }
+        if (this.#metadata.containerId) {
+          headers['datadog-container-id'] = this.#metadata.containerId
+        }
+        compress ??= createCompressor()
+        this.#directTransport.send(compress(json), {
+          url: this._url,
+          path: INTAKE_PATH,
+          method: 'POST',
+          headers,
+        }, failure => {
+          if (typeof failure === 'number') {
+            log.errorWithoutTelemetry('Failed to send %d trace(s) to the agentless intake: HTTP %d', count, failure)
+          } else if (failure) {
+            log.error('Failed to send %d trace(s) to the agentless intake: %s', count, failure.message)
+          }
+          done()
+        })
+        return true
       })
+      if (sending) return
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
-      done()
     }
+    done()
+  }
+
+  /** @param {Buffer} data */
+  #preparePayload (data) {
+    if (!this.#policy) {
+      if (!createPolicy) {
+        const loadPolicy = require('./generated/agentless-policy.cjs')
+        createPolicy = loadPolicy()
+      }
+      this.#policy = createPolicy({}, {
+        hostname: this.#metadata.hostname ?? '',
+        env: this.#exporterEnv ?? '',
+        language: 'nodejs',
+        languageVersion: process.version,
+        tracerVersion,
+        runtimeID: this.#exporterRuntimeId ?? require('node:crypto').randomUUID(),
+      })
+    }
+    return this.#policy.prepare(data)
   }
 
   #endpoint () {
@@ -125,53 +214,51 @@ class AgentlessWriter extends BaseWriter {
     return endpoint.href
   }
 
-  /**
-   * @param {string} apiKey - Datadog API key.
-   * @returns {import('@datadog/libdatadog').AgentlessExporter|undefined}
-   */
-  #applyConfiguration (apiKey) {
-    if (!canSendApiKey(this._url.protocol, this._url.hostname)) {
-      if (!this.#apiKeyUnsafeReceiver) {
-        this.#apiKeyUnsafeReceiver = true
-        log.warn('DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.')
-      }
-      return
-    }
-    this.#apiKeyUnsafeReceiver = false
-
+  /** @param {string} apiKey */
+  #refreshConfiguration (apiKey) {
     const { env, runtimeID } = this.#metadata
     if (
-      this.#exporter &&
       this.#exporterApiKey === apiKey &&
       this.#exporterEnv === env &&
       this.#exporterRuntimeId === runtimeID
     ) {
-      return this.#exporter
+      return
     }
 
     this.#closeExporter()
+    this.#exporterApiKey = apiKey
+    this.#exporterEnv = env
+    this.#exporterRuntimeId = runtimeID
+  }
+
+  /** @param {string} apiKey */
+  #getLegacyExporter (apiKey) {
+    if (this.#exporter) {
+      return this.#exporter
+    }
+    const { createAgentlessExporter } = require('@datadog/libdatadog')
     const config = getConfig()
     const agent = this._url.protocol === 'https:' ? getHttpsProxyAgent(this._url) : undefined
     this.#exporter = createAgentlessExporter({
       endpoint: this.#endpoint(),
       apiKey,
       hostname: this.#metadata.hostname,
-      env,
+      env: this.#exporterEnv,
       service: config.service,
       version: config.version,
-      runtimeId: runtimeID,
+      runtimeId: this.#exporterRuntimeId,
       containerId: this.#metadata.containerId,
       tracerVersion,
       languageVersion: process.version,
-      languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
+      languageInterpreter,
     }, { agent })
-    this.#exporterApiKey = apiKey
-    this.#exporterEnv = env
-    this.#exporterRuntimeId = runtimeID
     return this.#exporter
   }
 
   #closeExporter () {
+    this.#policy = undefined
+    this.#directTransport?.close()
+    this.#directTransport = undefined
     this.#exporter?.close()
     this.#exporter = undefined
     this.#exporterApiKey = undefined

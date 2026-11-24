@@ -1077,7 +1077,7 @@ describe('encode', () => {
         { name: 'Something went so wrong', time_unix_nano: 1000000 },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
           attributes: {
             emotion: { type: 0, string_value: 'happy' },
             idol: { type: 1, bool_value: false },
@@ -1128,16 +1128,37 @@ describe('encode', () => {
       const formattedTopLevelEvent = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
         },
         {
           name: 'I can sing!!!',
-          time_unix_nano: 1633023102000000,
+          time_unix_nano: 1633023102000000n,
           attributes: { array: { type: 4, array_value: { values: [{ type: 0, string_value: 'valid_value' }] } } },
         },
       ]
 
       assert.deepStrictEqual(trace[0].span_events, formattedTopLevelEvent)
+    })
+
+    it('keeps events with representable unsigned timestamps', () => {
+      const limit = 2 ** 64
+      const last = limit - 4096
+      data[0].span_events = [
+        { name: 'negative', startTime: -0.000001 },
+        { name: 'epoch', startTime: 0 },
+        { name: 'last', startTime: last / 1e6 },
+        { name: 'overflow', startTime: limit / 1e6 },
+        { name: 'infinite', startTime: Infinity },
+        { name: 'invalid', startTime: NaN },
+      ]
+
+      encoder.encode(data)
+
+      const [[span]] = msgpack.decode(encoder.makePayload(), { useBigInt64: true })
+      assert.deepStrictEqual(span.span_events, [
+        { name: 'epoch', time_unix_nano: 0 },
+        { name: 'last', time_unix_nano: BigInt(last) },
+      ])
     })
 
     it('should call log.debug only once for the same unsupported key', () => {

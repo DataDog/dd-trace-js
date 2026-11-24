@@ -1142,6 +1142,19 @@ describe('request', function () {
     requests[2].emit('close')
   })
 
+  it('releases the request budget when Node rejects a header', () => {
+    const body = Buffer.alloc(64 * 1024 * 1024)
+    const options = {
+      url: new URL('http://127.0.0.1:1/'),
+      method: 'POST',
+      agent: false,
+      headers: { 'dd-api-key': 'invalid\nheader' },
+    }
+
+    assert.throws(() => request(body, options, assert.fail), { code: 'ERR_INVALID_CHAR' })
+    assert.strictEqual(request.writable, true)
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)

@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
+const https = require('node:https')
 const { URL } = require('node:url')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -10,18 +12,23 @@ const proxyquire = require('proxyquire').noCallThru()
 require('../../setup/core')
 
 const { storage } = require('../../../../datadog-core')
+const request = require('../../../src/exporters/common/request')
+const id = require('../../../src/id')
 
 describe('AgentlessWriter', () => {
   let AgentlessWriter
   let apiKey
+  let bindingCompress
   let createAgentlessExporter
   let encoder
   let encoderArgs
   let exporter
   let getHttpsProxyAgent
   let log
+  let prepare
   let proxyAgent
   let writer
+  let zlib
 
   beforeEach(() => {
     apiKey = 'test-api-key'
@@ -36,6 +43,12 @@ describe('AgentlessWriter', () => {
       sendV04: sinon.stub().callsArg(1),
     }
     createAgentlessExporter = sinon.stub().returns(exporter)
+    prepare = sinon.stub().returns(Buffer.from('{}'))
+    bindingCompress = sinon.stub().returns(Buffer.from('binding zstd'))
+    zlib = {
+      constants: { ZSTD_c_compressionLevel: 100 },
+      zstdCompressSync: sinon.stub().returns(Buffer.from('host zstd')),
+    }
     proxyAgent = {}
     getHttpsProxyAgent = sinon.stub().returns(proxyAgent)
     log = {
@@ -49,7 +62,8 @@ describe('AgentlessWriter', () => {
     }
 
     AgentlessWriter = proxyquire('../../../src/exporters/agentless/writer', {
-      '@datadog/libdatadog': { createAgentlessExporter },
+      '@datadog/libdatadog': { createAgentlessExporter, zstd_compress: bindingCompress },
+      'node:zlib': zlib,
       '../../../../../package.json': { version: 'tracer-version' },
       '../../config': () => ({
         DD_API_KEY: apiKey,
@@ -59,6 +73,7 @@ describe('AgentlessWriter', () => {
       }),
       '../../encode/0.4': { AgentEncoder },
       '../../log': log,
+      './generated/agentless-policy.cjs': () => () => ({ prepare }),
       '../common/proxy': { getHttpsProxyAgent },
     })
   })
@@ -67,11 +82,152 @@ describe('AgentlessWriter', () => {
     sinon.restore()
   })
 
+  function queueDirectTrace () {
+    writer = new AgentlessWriter({
+      url: new URL('http://127.0.0.1:1'),
+      metadata: { hostname: 'test-host', runtimeID: 'runtime-id' },
+      generatedObfuscation: true,
+    })
+    assert.strictEqual(writer.append([{
+      duration: 1,
+      error: 0,
+      meta: {},
+      metrics: {},
+      name: 'request',
+      parent_id: id('0'),
+      resource: 'GET /test',
+      service: 'test-service',
+      span_id: id('1'),
+      start: 1,
+      trace_id: id('1'),
+      type: 'web',
+    }]), true)
+  }
+
+  for (const [name, setFailure, expected] of [
+    ['Node rejects the API key header', () => { apiKey = 'invalid\nheader' }, /dd-api-key/],
+    ['a custom HTTP client throws a string',
+      () => sinon.stub(http, 'request').throws(() => 'custom request failure'), /custom request failure/],
+  ]) {
+    it(`completes a direct flush when ${name}`, () => {
+      setFailure()
+      const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        queueDirectTrace()
+        const done = sinon.spy()
+        writer.flush(done)
+        sinon.assert.calledOnce(done)
+        sinon.assert.calledOnceWithExactly(log.error, 'Failed to send %d trace(s) to the agentless intake: %s', 1,
+          sinon.match(expected))
+        sinon.assert.notCalled(createAgentlessExporter)
+        assert.strictEqual(clock.countTimers(), 0)
+      } finally {
+        writer.setUrl(undefined)
+        clock.restore()
+      }
+    })
+  }
+
+  it('does not repeat direct completion when an over-budget flush callback throws', async () => {
+    queueDirectTrace()
+    const controller = new AbortController()
+    const chunk = Buffer.alloc(1024 * 1024)
+    const body = Array(64).fill(chunk)
+    body[0] = chunk.subarray(1)
+    const pressure = new Promise(resolve => {
+      request(body, {
+        url: new URL('http://127.0.0.1:1'),
+        method: 'POST',
+        retry: false,
+        signal: controller.signal,
+      }, resolve)
+    })
+
+    try {
+      assert.strictEqual(request.writable, true)
+      const done = sinon.stub().throws(new Error('completion failed'))
+      writer.flush(done)
+      sinon.assert.calledOnce(done)
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(createAgentlessExporter)
+    } finally {
+      writer.setUrl(undefined)
+      controller.abort()
+      await pressure
+    }
+    assert.strictEqual(request.writable, true)
+  })
+
   it('uses the v0.4 encoder so dd-trace preprocessing is preserved', () => {
     writer = new AgentlessWriter({ metadata: { hostname: 'test-host' } })
 
     assert.strictEqual(encoderArgs[0], writer)
   })
+
+  for (const rejected of ['batch', 'guest']) {
+    it(`does not send a batch when the generated policy rejects the ${rejected}`, async () => {
+      const payload = Buffer.from('encoded v0.4 batch')
+      encoder.makePayload.returns(payload)
+      const send = sinon.spy(http, 'request')
+      if (rejected === 'guest') {
+        prepare.throws(new Error('policy trap'))
+      } else {
+        prepare.returns(undefined)
+      }
+      queueDirectTrace()
+
+      await new Promise(resolve => writer.flush(resolve))
+      await new Promise(resolve => writer.flush(resolve))
+
+      sinon.assert.notCalled(send)
+      sinon.assert.notCalled(createAgentlessExporter)
+      assert.equal(prepare.callCount, 2)
+      assert.strictEqual(prepare.firstCall.args[0], payload)
+    })
+  }
+
+  it('uses the configured HTTPS proxy for a prepared payload', async () => {
+    const proxyUrl = 'http://127.0.0.1:8514/'
+    sinon.stub(process, 'env').value({ ...process.env, https_proxy: proxyUrl, no_proxy: '127.0.0.1' })
+    const send = sinon.stub(https, 'request').throws(new Error('test request failure'))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example'), generatedObfuscation: true })
+
+    await new Promise(resolve => writer.flush(resolve))
+    await new Promise(resolve => writer.flush(resolve))
+    process.env.no_proxy = 'intake.example'
+    await new Promise(resolve => writer.flush(resolve))
+
+    sinon.assert.notCalled(getHttpsProxyAgent)
+    sinon.assert.calledThrice(send)
+    const proxy = send.firstCall.args[0].agent
+    assert.strictEqual(proxy.proxy.href, proxyUrl)
+    assert.strictEqual(proxy.keepAlive, https.globalAgent.keepAlive)
+    assert.strictEqual(proxy.maxSockets, https.globalAgent.maxSockets)
+    assert.strictEqual(send.secondCall.args[0].agent, proxy)
+    assert.strictEqual(send.thirdCall.args[0].agent, false)
+    sinon.assert.notCalled(createAgentlessExporter)
+  })
+
+  for (const hostZstd of [true, false]) {
+    it(`compresses with ${hostZstd ? 'Node zstd' : 'the binding when host zstd is absent'}`, async () => {
+      const { zstdCompressSync } = zlib
+      if (!hostZstd) zlib.zstdCompressSync = undefined
+      const send = sinon.stub(http, 'request').throws(new Error('test request failure'))
+      queueDirectTrace()
+
+      await new Promise(resolve => writer.flush(resolve))
+
+      sinon.assert.calledOnce(send)
+      sinon.assert.notCalled(createAgentlessExporter)
+      if (hostZstd) {
+        sinon.assert.notCalled(bindingCompress)
+        sinon.assert.calledOnceWithExactly(zstdCompressSync, Buffer.from('{}'), { params: { 100: 1 } })
+      } else {
+        sinon.assert.notCalled(zstdCompressSync)
+        sinon.assert.calledOnceWithExactly(bindingCompress, Buffer.from('{}'), 1)
+      }
+    })
+  }
 
   it('sends the v0.4 payload through the data pipeline', async () => {
     writer = new AgentlessWriter({

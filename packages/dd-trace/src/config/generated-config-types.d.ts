@@ -625,6 +625,7 @@ export interface GeneratedConfig {
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;
   tracing: {
+    DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED: boolean;
     DD_TRACE_EXPERIMENTAL_EXPORTER: string;
   };
   url: string | URL;
@@ -1004,6 +1005,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_ELECTRON_ENABLED: boolean;
   DD_TRACE_ENABLED: boolean;
   DD_TRACE_ENCODING_DEBUG: boolean;
+  DD_TRACE_EXPERIMENTAL_AGENTLESS_GENERATED_OBFUSCATION_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_B3_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_EXPORTER: string;
   DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
