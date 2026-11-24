@@ -1,5 +1,4 @@
 'use strict'
-const { JSONEncoder } = require('../../encode/json-encoder')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
 const {
@@ -12,18 +11,21 @@ function getVitestWorkerPort () {
   return typeof port?.postMessage === 'function' ? port : undefined
 }
 
+/** @template T */
 class Writer {
-  #encoder
+  /** @type {T[]} */
+  #payloads = []
+  #encodePayload
   #pendingFlushes = 0
   #flushCallbacks = []
   #flushError
 
   /**
    * @param {number | null} interprocessCode
-   * @param {JSONEncoder | import('../../encode/trace-object-encoder')} [encoder]
+   * @param {(payload: T) => object} [encodePayload]
    */
-  constructor (interprocessCode, encoder = new JSONEncoder()) {
-    this.#encoder = encoder
+  constructor (interprocessCode, encodePayload) {
+    this.#encodePayload = encodePayload
     // Code used to identify the type of payload being sent to the main process
     this._interprocessCode = interprocessCode
     this._isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -35,11 +37,12 @@ class Writer {
    * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
-    const count = this.#encoder.count()
     if (onDone) this.#flushCallbacks.push(onDone)
 
-    if (count > 0) {
-      const payload = this.#encoder.makePayload()
+    if (this.#payloads.length > 0) {
+      const payloads = this.#payloads
+      this.#payloads = []
+      const payload = this.#encodePayload ? payloads.map(this.#encodePayload) : payloads
 
       this.#pendingFlushes++
       this._sendPayload(payload, error => {
@@ -62,8 +65,9 @@ class Writer {
     for (const callback of callbacks) callback(error)
   }
 
+  /** @param {T} payload */
   append (payload) {
-    this.#encoder.encode(payload)
+    this.#payloads.push(payload)
   }
 
   _sendPayload (data, onDone = () => {}) {

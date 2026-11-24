@@ -86,16 +86,19 @@ describe('CI Visibility Test Worker Exporter', () => {
       ])
     })
 
-    it('can export coverages', () => {
-      const coverage = { sessionId: '1', suiteId: '1', files: ['test.js'] }
-      const coverageSecond = { sessionId: '2', suiteId: '2', files: ['test2.js'] }
+    it('batches coverage objects with exact string identifiers', () => {
+      const coverage = {
+        sessionId: '1234567890abcdeffedcba9876543210', suiteId: 'abcdef0123456789', files: ['test.js'],
+      }
+      const coverageSecond = { ...coverage, suiteId: 'fedcba9876543210', files: ['test2.js'] }
       const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
-      jestWorkerExporter.exportCoverage(coverage)
-      jestWorkerExporter.exportCoverage(coverageSecond)
+      for (const { sessionId, suiteId, files } of [coverage, coverageSecond]) {
+        jestWorkerExporter.exportCoverage({ sessionId: id(sessionId), suiteId: id(suiteId), files })
+      }
+      sinon.assert.notCalled(send)
       jestWorkerExporter.flush()
-      sinon.assert.calledWith(send,
-        [JEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
-      )
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], [JEST_WORKER_COVERAGE_PAYLOAD_CODE, [coverage, coverageSecond]])
     })
 
     it('signals completion after all queued payloads flush', () => {
@@ -194,7 +197,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       cucumberWorkerExporter.flush()
       sinon.assert.calledWith(
         send,
-        [CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
+        [CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE, [telemetry]]
       )
     })
 
@@ -254,22 +257,20 @@ describe('CI Visibility Test Worker Exporter', () => {
       const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
       mochaWorkerExporter.exportTelemetry(telemetry)
       mochaWorkerExporter.flush()
-      sinon.assert.calledWith(send, [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
+      sinon.assert.calledWith(send, [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, [telemetry]])
     })
 
     it('can export DI logs', () => {
       process.env.MOCHA_WORKER_ID = 'webdriverio'
       const testEnvironmentMetadata = { testFramework: 'webdriverio' }
-      const logMessage = { message: 'test log' }
+      const logMessage = { message: 'test log', debugger: { snapshot: { id: 'snapshot-1' } } }
       const mochaWorkerExporter = new TestWorkerCiVisibilityExporter()
 
       mochaWorkerExporter.exportDiLogs(testEnvironmentMetadata, logMessage)
       mochaWorkerExporter.flush()
 
-      sinon.assert.calledWith(send, [
-        MOCHA_WORKER_LOGS_PAYLOAD_CODE,
-        JSON.stringify([{ testEnvironmentMetadata, logMessage }]),
-      ])
+      sinon.assert.calledOnce(send)
+      assert.deepStrictEqual(send.firstCall.args[0], [MOCHA_WORKER_LOGS_PAYLOAD_CODE, [logMessage]])
     })
 
     it('does not break if process.send is undefined', () => {
@@ -337,7 +338,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
       playwrightWorkerExporter.exportTelemetry(telemetry)
       playwrightWorkerExporter.flush()
-      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])])
+      sinon.assert.calledWith(send, [PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE, [telemetry]])
     })
 
     it('does not break if process.send is undefined', () => {
@@ -529,7 +530,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.exportCoverage(coverageSecond)
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(send,
-        [VITEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
+        [VITEST_WORKER_COVERAGE_PAYLOAD_CODE, [coverage, coverageSecond]]
       )
     })
 
@@ -541,7 +542,7 @@ describe('CI Visibility Test Worker Exporter', () => {
       vitestWorkerExporter.flush()
       sinon.assert.calledWith(
         send,
-        [VITEST_WORKER_TELEMETRY_PAYLOAD_CODE, JSON.stringify([telemetry])]
+        [VITEST_WORKER_TELEMETRY_PAYLOAD_CODE, [telemetry]]
       )
     })
 

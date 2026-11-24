@@ -19,7 +19,7 @@ const {
 } = require('../../../plugins/util/test')
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
-const TraceObjectEncoder = require('../../encode/trace-object-encoder')
+const encodeTrace = require('../../encode/trace-object-encoder')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
@@ -99,8 +99,8 @@ class TestWorkerCiVisibilityExporter {
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
     this.#flushTracesImmediately = interprocessTraceCode === VITEST_WORKER_TRACE_PAYLOAD_CODE
-    const traceEncoder = new TraceObjectEncoder(!getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED)
-    this._writer = new Writer(interprocessTraceCode, traceEncoder)
+    const includeAgentFields = !getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
+    this._writer = new Writer(interprocessTraceCode, encodeTrace.bind(null, includeAgentFields))
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
     if (interprocessTelemetryCode) {
@@ -117,12 +117,12 @@ class TestWorkerCiVisibilityExporter {
     if (this.#flushTracesImmediately) this._writer.flush()
   }
 
-  exportCoverage (formattedCoverage) {
-    this._coverageWriter.append(formattedCoverage)
+  exportCoverage ({ sessionId, suiteId, files }) {
+    this._coverageWriter.append({ sessionId: sessionId.toString(), suiteId: suiteId?.toString(), files })
   }
 
-  exportDiLogs (testEnvironmentMetadata, logMessage) {
-    this._logsWriter.append({ testEnvironmentMetadata, logMessage })
+  exportDiLogs (_testEnvironmentMetadata, logMessage) {
+    this._logsWriter.append(logMessage)
   }
 
   /**

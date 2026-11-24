@@ -58,34 +58,13 @@ function encodeSpan (span, includeAgentFields) {
   return payload
 }
 
-/** Buffers traces and projects them to plain objects for the worker's IPC transport. */
-class TraceObjectEncoder {
-  #traces = []
-  #includeAgentFields
-
-  /**
-   * @param {boolean} includeAgentFields
-   */
-  constructor (includeAgentFields) {
-    this.#includeAgentFields = includeAgentFields
-  }
-
-  /**
-   * @param {import('../../span_format').FormattedSpan[]} trace
-   */
-  encode (trace) {
-    this.#traces.push(trace)
-  }
-
-  count () {
-    return this.#traces.length
-  }
-
-  makePayload () {
-    const traces = this.#traces
-    this.#traces = []
-    return traces.map(trace => trace.map(span => encodeSpan(span, this.#includeAgentFields)))
-  }
+/**
+ * Projects a trace to plain objects for the worker's IPC transport.
+ * @param {boolean} includeAgentFields - Whether the parent may send spans to the APM trace intake.
+ * @param {import('../../span_format').FormattedSpan[]} trace
+ */
+function encodeTrace (includeAgentFields, trace) {
+  return trace.map(span => encodeSpan(span, includeAgentFields))
 }
 
-module.exports = TraceObjectEncoder
+module.exports = encodeTrace

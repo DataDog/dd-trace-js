@@ -5619,15 +5619,17 @@ describe('webdriverio instrumentation', () => {
         name: 'workerEvent',
         args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, secondTrace],
       })
+      const firstLogs = [{ message: 'first log' }]
+      const firstTelemetry = [{ type: 'count', name: 'event_finished', value: 2 }]
       firstWorker.emit('message', {
         origin: 'datadog',
         name: 'workerEvent',
-        args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, 'first-logs'],
+        args: [MOCHA_WORKER_LOGS_PAYLOAD_CODE, firstLogs],
       })
       firstWorker.emit('message', {
         origin: 'datadog',
         name: 'workerEvent',
-        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, 'first-telemetry'],
+        args: [MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE, firstTelemetry],
       })
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
@@ -5711,8 +5713,8 @@ describe('webdriverio instrumentation', () => {
           [TEST_SUITE_EXECUTION_ID]: suiteStarts[1].testSuiteExecutionId,
         },
       ])
-      assert.deepStrictEqual(workerLogPayloads, ['first-logs'])
-      assert.deepStrictEqual(workerTelemetryPayloads, ['first-telemetry'])
+      assert.deepStrictEqual(workerLogPayloads, [firstLogs])
+      assert.deepStrictEqual(workerTelemetryPayloads, [firstTelemetry])
       assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
       assert.strictEqual(consoleWarn.callCount, 1)
       assert.match(consoleWarn.firstCall.args[0], /Attempt to fix failed/)

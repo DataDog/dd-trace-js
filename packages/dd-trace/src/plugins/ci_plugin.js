@@ -516,14 +516,17 @@ module.exports = class CiPlugin extends Plugin {
       }
     })
 
-    this.addSub(`ci:${this.constructor.id}:worker-report:logs`, (logsPayloads) => {
-      for (const { logMessage } of JSON.parse(logsPayloads)) {
+    this.addSub(`ci:${this.constructor.id}:worker-report:logs`, logMessages => {
+      if (!Array.isArray(logMessages)) return
+
+      for (const logMessage of logMessages) {
         this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
       }
     })
 
-    this.addSub(`ci:${this.constructor.id}:worker-report:telemetry`, data => {
-      const telemetryEvents = JSON.parse(data)
+    this.addSub(`ci:${this.constructor.id}:worker-report:telemetry`, telemetryEvents => {
+      if (!Array.isArray(telemetryEvents)) return
+
       for (const event of telemetryEvents) {
         if (event.type === 'ciVisEvent') {
           this.telemetry.ciVisEvent(event.name, event.testLevel, {
