@@ -97,7 +97,7 @@ class SpanProcessor {
     span.context()[partialFlushOnFinishKey] = true
   }
 
-  process (span) {
+  process (span, flushPartial = false) {
     const spanContext = span.context()
     const active = []
     const formatted = []
@@ -110,11 +110,7 @@ class SpanProcessor {
       this._erase(trace, active)
       return
     }
-    if (
-      started.length === finished.length ||
-      finished.length >= flushMinSpans ||
-      (partialFlushOnFinishKey !== undefined && spanContext[partialFlushOnFinishKey] === true)
-    ) {
+    if (started.length === finished.length || finished.length >= flushMinSpans || flushPartial) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
@@ -164,6 +160,12 @@ class SpanProcessor {
       }
 
       this._erase(trace, active)
+    } else if (partialFlushOnFinishKey !== undefined && spanContext[partialFlushOnFinishKey] === true) {
+      queueMicrotask(() => {
+        if (trace.finished === finished) {
+          this.process(span, true)
+        }
+      })
     }
 
     if (this._killAll) {

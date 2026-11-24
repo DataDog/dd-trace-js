@@ -1125,6 +1125,40 @@ describe('Plugin', () => {
               })
             })
           }
+
+          for (const complete of [false, true]) {
+            const outcome = complete ? 'a success' : 'an error'
+            it(`records ${outcome} when a ${complete ? 'complete' : 'partial'} response is destroyed`, async () => {
+              const url = await listen((req, res) => {
+                if (complete) {
+                  res.end()
+                } else {
+                  res.write('first chunk')
+                }
+              })
+              const req = http.get(url)
+              const [res] = await once(req, 'response')
+              if (!complete) {
+                const timeout = once(req, 'timeout')
+                req.setTimeout(idleTimeout)
+                await timeout
+              }
+              assert.strictEqual(res.complete, complete)
+              assert.deepStrictEqual(finishedResponses, [])
+
+              const traceReceived = agent.assertFirstTraceSpan(span => {
+                assertObjectContains(span, { error: complete ? 0 : 1, meta: { 'http.status_code': '200' } })
+                assert.ok(!(ERROR_MESSAGE in span.meta))
+                assert.ok(!(ERROR_TYPE in span.meta))
+              })
+              const requestClosed = once(req, 'close')
+              res.destroy()
+              await Promise.all([requestClosed, traceReceived])
+
+              assert.strictEqual(res.errored, null)
+              assert.deepStrictEqual(finishedResponses, [false])
+            })
+          }
         })
 
         it('should only record a request once', done => {

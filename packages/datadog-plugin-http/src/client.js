@@ -137,6 +137,8 @@ class HttpClientPlugin extends ClientPlugin {
         if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
           span.setTag(HTTP_STATUS_ERROR, String(status))
         }
+      } else if (res.destroyed && res.complete === false) {
+        span.setTag('error', 1)
       }
 
       addResponseHeaders(res, span, this.config)

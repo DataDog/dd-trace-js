@@ -23,7 +23,7 @@ describe('HTTP Response Blocking', () => {
   let tracer
 
   before(async () => {
-    tracer = await agent.load('http')
+    tracer = await agent.load('http', undefined, { inferredProxyServicesEnabled: true })
 
     const http = require('http')
 
@@ -57,6 +57,7 @@ describe('HTTP Response Blocking', () => {
     })
 
     appsec.enable(getConfigFresh({
+      inferredProxyServicesEnabled: true,
       appsec: {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),
@@ -98,7 +99,7 @@ describe('HTTP Response Blocking', () => {
     assertBlocked(res)
   })
 
-  it('should export the AppSec finding before an open child span finishes', async () => {
+  it('should export the AppSec finding with the inferred proxy before an open child span finishes', async () => {
     /** @type {{ child?: import('../../src/opentracing/span') }} */
     const spans = {}
     let serverSpanId
@@ -114,12 +115,25 @@ describe('HTTP Response Blocking', () => {
     let findingTraceId
     try {
       const [res] = await Promise.all([
-        httpRequest.get('/'),
+        httpRequest.get('/', {
+          headers: {
+            'x-dd-proxy': 'aws-apigateway',
+            'x-dd-proxy-request-time-ms': '1729780025473',
+            'x-dd-proxy-path': '/',
+            'x-dd-proxy-httpmethod': 'GET',
+            'x-dd-proxy-domain-name': 'example.com',
+            'x-dd-proxy-stage': 'test',
+          },
+        }),
         agent.assertSomeTraces(traces => {
           const trace = traces.find(spans => spans.some(span => span.span_id.toString() === serverSpanId))
           assert.ok(trace)
-          const [serverSpan] = trace
-          assert.equal(trace.length, 1)
+          assert.equal(trace.length, 2)
+          const [proxySpan, serverSpan] = trace
+          assert.equal(proxySpan.name, 'aws.apigateway')
+          assert.equal(serverSpan.span_id.toString(), serverSpanId)
+          assert.equal(serverSpan.parent_id, proxySpan.span_id)
+          assert.ok(proxySpan.meta['_dd.appsec.json'])
           assert.ok(serverSpan.meta['_dd.appsec.json'])
           findingTraceId = serverSpan.trace_id.toString()
         }),
