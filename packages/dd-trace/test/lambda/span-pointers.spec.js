@@ -184,6 +184,11 @@ describe('Lambda span pointer lifecycle', () => {
     })
   }
 
+  it('keeps an explicit null pointer option disabled, as the source shim does', async () => {
+    await invoke(fixture('s3'), { addSpanPointers: null })
+    assertPointers([], 'aws.s3')
+  })
+
   it('does no hashing while disabled', async () => {
     const hash = sinon.spy(aws, 'generatePointerHash')
     await invoke(fixture('s3'), { addSpanPointers: false })

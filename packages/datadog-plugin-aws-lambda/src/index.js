@@ -110,7 +110,9 @@ class AwsLambdaPlugin extends TracingPlugin {
         ...context.triggerTags,
       }
       context.durableFunctionContext = extractDurableFunctionContext(context.event)
-      if (context.config?.addSpanPointers ?? this.config.addSpanPointers) {
+      const addSpanPointers = context.config?.addSpanPointers
+      // The shim falls back only for undefined; an explicit null stays disabled.
+      if (addSpanPointers === undefined ? this.config.addSpanPointers : addSpanPointers) {
         context.spanPointers = getSpanPointerAttributes(eventSource, context.event)
       }
     } catch (error) {

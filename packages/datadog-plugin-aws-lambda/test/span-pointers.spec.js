@@ -144,11 +144,14 @@ describe('Lambda span pointer boundaries and shared producer hashing', () => {
   }
 
   for (const eTag of ['etag', '"etag"', '"etag', 'etag"', '""', 'multi-part-5']) {
-    for (const placement of ['ETag', 'CopyObjectResult', 'data', 'data.CopyObjectResult']) {
-      it(`matches actual S3 producer output for ${placement} ${JSON.stringify(eTag)}`, () => {
+    for (const [operation, placement] of [
+      ['putObject', 'ETag'], ['copyObject', 'CopyObjectResult'],
+      ['completeMultipartUpload', 'data'], ['copyObject', 'data.CopyObjectResult'],
+    ]) {
+      it(`matches actual S3 producer output for ${operation} ${placement} ${JSON.stringify(eTag)}`, () => {
         const producer = new S3({}, {})
         const span = { addSpanPointer: sinon.spy() }
-        const response = { request: { operation: 'putObject', params: { Bucket: 'bucket', Key: 'raw+key%20你好' } } }
+        const response = { request: { operation, params: { Bucket: 'bucket', Key: 'raw+key%20你好' } } }
         if (placement === 'ETag') response.ETag = eTag
         else if (placement === 'CopyObjectResult') response.CopyObjectResult = { ETag: eTag }
         else if (placement === 'data') response.data = { ETag: eTag }
