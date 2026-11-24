@@ -37,6 +37,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   metrics?: Record<string, number | MockValue> | MockValue,
  *   metadata?: Record<string, unknown> | MockValue,
  *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   intent?: string,
  *   agentAttribution?: { pagent_name?: string, pagent_span_id?: string },
  *   modelName?: string,
  *   modelProvider?: string,
@@ -152,6 +153,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     outputValue,
     outputDocuments,
     toolDefinitions,
+    intent,
   } = expected
 
   if (inputMessages && inputDocuments && inputValue) {
@@ -284,6 +286,7 @@ function assertLlmObsSpanEvent (actual, expected) {
   }
 
   if (toolDefinitions) expectedMeta.tool_definitions = toolDefinitions
+  if (intent) expectedMeta.intent = intent
 
   const expectedSpanEvent = {
     span_id: fromBuffer(span.span_id),

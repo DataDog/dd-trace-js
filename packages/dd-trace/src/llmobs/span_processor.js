@@ -23,6 +23,7 @@ const {
   AGENT_VERSION,
   AGENT_VERSION_TAG_KEY,
   TOOL_DEFINITIONS,
+  INTENT,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
@@ -249,6 +250,8 @@ class LLMObsSpanProcessor {
       meta.tool_definitions = []
       this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions)
     }
+
+    if (mlObsTags[INTENT]) meta.intent = mlObsTags[INTENT]
 
     // Surface the agent attribution resolved at registration, but only on spans that actually
     // have an agent ancestor. The id is always present in that case; the name may be missing when

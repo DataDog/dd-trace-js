@@ -3,6 +3,7 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 
 const shimmer = require('../../datadog-shimmer')
+const { callRequestHandler } = require('./modelcontextprotocol-sdk')
 
 const wrapHandlerCh = tracingChannel('orchestrion:@modelcontextprotocol/server:Server__wrapHandler')
 const registerToolCh = tracingChannel('orchestrion:@modelcontextprotocol/server:McpServer_registerTool')
@@ -21,7 +22,8 @@ wrapHandlerCh.end.subscribe(ctx => {
   ctx.result = shimmer.wrapFunction(handler, handler => function tracedRequestHandler (request, extra) {
     if (!serverRequestCh.hasSubscribers) return handler.apply(this, arguments)
 
-    return serverRequestCh.tracePromise(handler, { request, extra, server }, this, ...arguments)
+    const requestCtx = { request, extra, server }
+    return serverRequestCh.tracePromise(callRequestHandler, requestCtx, undefined, requestCtx, handler, this, arguments)
   })
 })
 
