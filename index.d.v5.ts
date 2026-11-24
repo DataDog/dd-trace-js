@@ -1970,6 +1970,8 @@ declare namespace tracer {
 
     /**
      * An MCP server referenced by the `mcp.server_id` of tool calls, sent in the `mcpServers` evaluate option.
+     * The SDK sends these values to AI Guard and stores them on the AI Guard span as given, without redaction:
+     * remove any credential before passing them.
      */
     export interface McpServer {
       /**
@@ -1989,15 +1991,18 @@ declare namespace tracer {
        */
       name?: string;
       /**
-       * Origin of the server URL: scheme, host and port only, never userinfo, path, query or fragment.
+       * Origin of the server URL: scheme, host and port only. Remove userinfo, path, query and fragment before
+       * passing it: many MCP providers put the API key there.
        */
       url?: string;
       /**
-       * Program name of a stdio server command, never its full path.
+       * Program name of a stdio server command. Pass the program name, not the full path, which can contain the
+       * user name.
        */
       command?: string;
       /**
-       * Package or module that a stdio server runs, never arbitrary arguments.
+       * Package or module that a stdio server runs. Leave out other arguments, which can contain paths, tokens or
+       * secrets.
        */
       args?: string[];
       /**
@@ -2210,7 +2215,8 @@ declare namespace tracer {
        *             empty key, a key longer than 200 characters, a string value longer than 25000
        *             characters, or a value that is not a string, finite number or boolean are dropped.
        *   - `mcpServers`: The MCP servers that the `mcp.server_id` of the tool calls reference. Sent with the
-       *                   messages and reported on the AI Guard span; omitted when empty.
+       *                   messages and reported on the AI Guard span; omitted when empty. The entries are sent
+       *                   and stored as given and are not redacted: remove any credential from them first.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.

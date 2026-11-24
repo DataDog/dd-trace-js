@@ -1729,13 +1729,16 @@ describe('AIGuard SDK', () => {
       assertRequest(toolCall)
     })
 
-    it('reports a copy of mcp_servers that later changes of the caller do not alter', async () => {
-      mockRequest(allow)
+    it('reports the sent mcp_servers when the caller changes them while evaluation is pending', async () => {
       const servers = structuredClone(mcpServers)
+      const resolveRequest = mockDeferredRequest()
 
-      await aiguard.evaluate(mcpToolCall, { mcpServers: servers })
+      const evaluation = aiguard.evaluate(mcpToolCall, { mcpServers: servers })
       servers[0].tools.search = 'changed'
+      resolveRequest(allow)
+      await evaluation
 
+      assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]).data.attributes.mcp_servers, mcpServers)
       await assertAIGuardSpan({ 'ai_guard.action': 'ALLOW' }, { messages: mcpToolCall, mcp_servers: mcpServers })
     })
   })
