@@ -1088,6 +1088,10 @@ moduleTypes.forEach(({
   const describeSupported = isSupported ? describe : describe.skip
   const protection = 'test.test_management.prevent_failure_suppression'
   const exclusion = 'test.test_management.no_auto_retry'
+  // Untraced control launches only check that a fixture's expectations still
+  // match native Cypress, which helps tell Cypress changes from SDK regressions
+  // locally. CI skips them since the traced run asserts the same values.
+  const runNativeControls = !process.env.CI
   const suite = 'cypress/e2e/test-exclusions.js'
 
   describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation exclusions`, function () {
@@ -1283,22 +1287,24 @@ moduleTypes.forEach(({
           'explicit local excluded': 2,
           ...(lateMode.includes('-reuse') && { 'support reuse smoke': 1 }),
         }
-        childProcess = exec(command, {
-          cwd,
-          env: {
-            ...cypressEnvironment(),
-            NODE_OPTIONS: '',
-            DD_TRACE_ENABLED: 'false',
-            CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
-          },
-        })
-        let output = ''
-        childProcess.stdout.on('data', chunk => { output += chunk })
-        childProcess.stderr.on('data', chunk => { output += chunk })
-        const [nativeExit] = await once(childProcess, 'exit')
-        assert.strictEqual(nativeExit, 0, output)
-        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
-        rmSync(ledger)
+        if (runNativeControls) {
+          childProcess = exec(command, {
+            cwd,
+            env: {
+              ...cypressEnvironment(),
+              NODE_OPTIONS: '',
+              DD_TRACE_ENABLED: 'false',
+              CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
+            },
+          })
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+          const [nativeExit] = await once(childProcess, 'exit')
+          assert.strictEqual(nativeExit, 0, output)
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+          rmSync(ledger)
+        }
         receiver.setSettings({ flaky_test_retries_enabled: true })
         await run('late-native', 0, tests => {
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
@@ -1344,28 +1350,32 @@ moduleTypes.forEach(({
         }
         const env = experimentalMode ? { CYPRESS_EXPERIMENTAL_RETRIES: 'true' } : {}
         const command = `./node_modules/.bin/cypress run --spec ${boundarySuite}`
-        childProcess = exec(`${command} --config supportFile=false`, {
-          cwd,
-          env: {
-            ...cypressEnvironment(),
-            NODE_OPTIONS: '',
-            DD_TRACE_ENABLED: 'false',
-            SPEC_PATTERN: boundarySuite,
-            CYPRESS_EXCLUSIONS_MODE: mode,
-            CYPRESS_MATCHED_NATIVE_HOOKS: fieldAccessor ? 'true' : undefined,
-            ...env,
-          },
-        })
-        let output = ''
-        childProcess.stdout.on('data', chunk => { output += chunk })
-        childProcess.stderr.on('data', chunk => { output += chunk })
-        const [nativeExit] = await once(childProcess, 'exit')
-        const accessorReads = fieldAccessor
-          ? JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
-          : undefined
-        assert.strictEqual(nativeExit, legacySavedLocal || experimentalMode ? 4 : 2, output)
-        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
-        rmSync(ledger)
+        let accessorReads
+        // Field accessors compare the traced read count against this untraced baseline.
+        if (fieldAccessor || runNativeControls) {
+          childProcess = exec(`${command} --config supportFile=false`, {
+            cwd,
+            env: {
+              ...cypressEnvironment(),
+              NODE_OPTIONS: '',
+              DD_TRACE_ENABLED: 'false',
+              SPEC_PATTERN: boundarySuite,
+              CYPRESS_EXCLUSIONS_MODE: mode,
+              CYPRESS_MATCHED_NATIVE_HOOKS: fieldAccessor ? 'true' : undefined,
+              ...env,
+            },
+          })
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+          const [nativeExit] = await once(childProcess, 'exit')
+          accessorReads = fieldAccessor
+            ? JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
+            : undefined
+          assert.strictEqual(nativeExit, legacySavedLocal || experimentalMode ? 4 : 2, output)
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+          rmSync(ledger)
+        }
         receiver.setSettings({ flaky_test_retries_enabled: true })
         if (legacySavedLocal) expected['ordinary control'] = 3
         await run(mode, legacySavedLocal ? 3 : experimentalMode ? 4 : 2, tests => {
@@ -1492,31 +1502,37 @@ moduleTypes.forEach(({
         try {
           const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
           const webkit = process.env.CYPRESS_TEST_BROWSER === 'webkit'
-          const nativeConfig = webkit ? 'supportFile=false,experimentalWebKitSupport=true' : 'supportFile=false'
           const tracingConfig = webkit ? ' --config experimentalWebKitSupport=true' : ''
-          const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
-          ` --config ${nativeConfig}${browserOption}`
-          childProcess = exec(nativeCommand, {
-            cwd,
-            env: {
-              ...cypressEnvironment(),
-              NODE_OPTIONS: '',
-              DD_TRACE_ENABLED: 'false',
-              SPEC_PATTERN: pendingSuite,
-              CYPRESS_EXCLUSIONS_MODE: 'pending-suite',
-              CYPRESS_PENDING_LEDGER_URL: ledgerUrl,
-            },
-          })
-          let output = ''
-          childProcess.stdout.on('data', chunk => { output += chunk })
-          childProcess.stderr.on('data', chunk => { output += chunk })
-          const [exitCode] = await once(childProcess, 'exit')
-          assert.strictEqual(exitCode, 0, output)
-          assert.match(output, /6 passing/)
-          assert.match(output, /35 pending/)
-          assert.doesNotMatch(output, /skipped callback executed/)
-          assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), { skipped: 0, executed: 1 })
-          rmSync(pendingLedger)
+          if (runNativeControls) {
+            const nativeConfig = webkit
+              ? 'supportFile=false,experimentalWebKitSupport=true'
+              : 'supportFile=false'
+            const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
+            ` --config ${nativeConfig}${browserOption}`
+            childProcess = exec(nativeCommand, {
+              cwd,
+              env: {
+                ...cypressEnvironment(),
+                NODE_OPTIONS: '',
+                DD_TRACE_ENABLED: 'false',
+                SPEC_PATTERN: pendingSuite,
+                CYPRESS_EXCLUSIONS_MODE: 'pending-suite',
+                CYPRESS_PENDING_LEDGER_URL: ledgerUrl,
+              },
+            })
+            let output = ''
+            childProcess.stdout.on('data', chunk => { output += chunk })
+            childProcess.stderr.on('data', chunk => { output += chunk })
+            const [exitCode] = await once(childProcess, 'exit')
+            assert.strictEqual(exitCode, 0, output)
+            assert.match(output, /6 passing/)
+            assert.match(output, /35 pending/)
+            assert.doesNotMatch(output, /skipped callback executed/)
+            assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), {
+              skipped: 0, executed: 1,
+            })
+            rmSync(pendingLedger)
+          }
 
           await run('pending-suite', 0, tests => {
             assert.strictEqual(tests.length, 41)
@@ -1599,23 +1615,25 @@ moduleTypes.forEach(({
       const ledger = join(cwd, 'late-native-retry-executions.json')
       const reads = join(cwd, 'returned-retry-json-reads.json')
       const expected = { 'late native excluded': 5, 'late native control': 5, 'explicit local excluded': 2 }
-      childProcess = exec(command, {
-        cwd,
-        env: {
-          ...cypressEnvironment(),
-          NODE_OPTIONS: '',
-          DD_TRACE_ENABLED: 'false',
-          CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json',
-        },
-      })
-      let output = ''
-      childProcess.stdout.on('data', chunk => { output += chunk })
-      childProcess.stderr.on('data', chunk => { output += chunk })
-      const [exitCode] = await once(childProcess, 'exit')
-      assert.strictEqual(exitCode, 3, output)
-      assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
-      assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
-      rmSync(ledger)
+      if (runNativeControls) {
+        childProcess = exec(command, {
+          cwd,
+          env: {
+            ...cypressEnvironment(),
+            NODE_OPTIONS: '',
+            DD_TRACE_ENABLED: 'false',
+            CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json',
+          },
+        })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [exitCode] = await once(childProcess, 'exit')
+        assert.strictEqual(exitCode, 3, output)
+        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+        assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
+        rmSync(ledger)
+      }
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await run('returned-json', 3, tests => {
         assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
