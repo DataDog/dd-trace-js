@@ -14,6 +14,7 @@ const { patchConsole, unpatchConsole } = require('./console-patcher')
 const { extractDurableFunctionContext, extractDurableExecutionStatus } = require('./context/durable-function')
 const { getInvocationTags } = require('./invocation-metadata')
 const { tagObject } = require('./payload')
+const { addLambdaTriggerTags } = require('./xray')
 const { parseEventSource, extractTriggerTags, extractHTTPStatusCodeTag } = require('./trigger')
 
 const legacyStorage = storage('legacy')
@@ -171,6 +172,7 @@ class AwsLambdaPlugin extends TracingPlugin {
       // it fired is left untouched here.
       // The shim's tracer.wrap finishes the invocation before onCompleteInvocation finishes its parent.
       context.lambdaSpan?.finish()
+      if (context.triggerTags) addLambdaTriggerTags(context.triggerTags)
       const inferred = context.inferredSpan
       let finishTime
       try {
