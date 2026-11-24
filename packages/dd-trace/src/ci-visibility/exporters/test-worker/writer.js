@@ -12,6 +12,33 @@ function getVitestWorkerPort () {
   return typeof port?.postMessage === 'function' ? port : undefined
 }
 
+/**
+ * @param {unknown} value
+ */
+function isNormalizedByJson (value) {
+  return typeof value === 'number' && (!Number.isFinite(value) || Object.is(value, -0))
+}
+
+/**
+ * @param {import('../../../span_format').FormattedSpan} span
+ */
+function encodeTraceSpan (span) {
+  // Structured clone skips JSON's toJSON hooks and preserves non-finite numbers.
+  // Use the old conversion for spans with nested data or numbers that JSON changes.
+  if (span.meta_struct !== undefined || span.span_events !== undefined ||
+      Object.values(span.metrics).some(isNormalizedByJson)) {
+    // eslint-disable-next-line unicorn/prefer-structured-clone
+    return JSON.parse(JSON.stringify(span))
+  }
+
+  return {
+    ...span,
+    trace_id: span.trace_id.toString(),
+    span_id: span.span_id.toString(),
+    parent_id: span.parent_id.toString(),
+  }
+}
+
 class Writer {
   #pendingFlushes = 0
   #flushCallbacks = []
@@ -36,15 +63,29 @@ class Writer {
     if (count > 0) {
       const payload = this._encoder.makePayload()
 
-      this.#pendingFlushes++
-      this._sendPayload(payload, error => {
-        this.#flushError ||= error
-        this.#pendingFlushes--
-        this.#finishFlush()
-      })
+      this.#send(payload)
     } else {
       this.#finishFlush()
     }
+  }
+
+  /**
+   * @param {import('../../../span_format').FormattedSpan[]} trace
+   */
+  sendTrace (trace) {
+    this.#send([trace.map(encodeTraceSpan)])
+  }
+
+  /**
+   * @param {string | object[][]} payload
+   */
+  #send (payload) {
+    this.#pendingFlushes++
+    this._sendPayload(payload, error => {
+      this.#flushError ||= error
+      this.#pendingFlushes--
+      this.#finishFlush()
+    })
   }
 
   #finishFlush () {

@@ -507,7 +507,7 @@ module.exports = class CiPlugin extends Plugin {
       const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = typeof payload === 'string'
         ? { traces: payload }
         : payload
-      const formattedTraces = JSON.parse(traces)
+      const formattedTraces = typeof traces === 'string' ? JSON.parse(traces) : traces
 
       for (const trace of formattedTraces) {
         if (testSuiteExecutionId) {

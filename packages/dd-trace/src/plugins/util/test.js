@@ -2437,10 +2437,10 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
 }
 
 /**
- * Scans serialized worker trace payloads and populates Test Optimization summary data.
+ * Scans worker trace payloads and populates Test Optimization summary data.
  * Silently ignores parse errors.
  *
- * @param {string} data - JSON-serialized traces from a worker
+ * @param {string | object[][]} data - Worker traces, optionally serialized as JSON
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
  *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
@@ -2457,7 +2457,7 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
   } = summaries
 
   try {
-    const traces = JSON.parse(data)
+    const traces = typeof data === 'string' ? JSON.parse(data) : data
     for (const trace of traces) {
       for (const span of trace) {
         if (testAnnotations && span.type === 'test' &&
