@@ -6,7 +6,7 @@ const { once } = require('node:events')
 const http = require('node:http')
 
 const msgpack = require('@msgpack/msgpack')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { httpAgent } = require('../../src/exporters/common/agents')
@@ -16,6 +16,20 @@ const agent = require('./agent')
 const instrumentationsSymbol = Symbol.for('_ddtrace_instrumentations')
 
 describe('test agent helper', () => {
+  let environment
+
+  before(() => {
+    environment = process.env
+    process.env = {
+      ...environment,
+      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+    }
+  })
+
+  after(() => {
+    process.env = environment
+  })
+
   describe('agent.load contract', () => {
     afterEach(() => agent.close())
 
@@ -144,9 +158,7 @@ describe('test agent helper', () => {
     })
 
     it('finishes closing with active and queued exporter requests', async () => {
-      const remoteConfigurationEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
       const telemetryEnabled = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
-      process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
       try {
@@ -180,11 +192,6 @@ describe('test agent helper', () => {
         assert.strictEqual(origin in httpAgent.freeSockets, false)
         assert.strictEqual(origin in httpAgent.requests, false)
       } finally {
-        if (remoteConfigurationEnabled === undefined) {
-          delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
-        } else {
-          process.env.DD_REMOTE_CONFIGURATION_ENABLED = remoteConfigurationEnabled
-        }
         if (telemetryEnabled === undefined) {
           delete process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
         } else {
@@ -380,15 +387,7 @@ describe('test agent helper', () => {
     let clock
 
     beforeEach(async () => {
-      const environment = sinon.stub(process, 'env').value({
-        ...process.env,
-        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-      })
-      try {
-        await agent.load([])
-      } finally {
-        environment.restore()
-      }
+      await agent.load([])
       clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     })
 
