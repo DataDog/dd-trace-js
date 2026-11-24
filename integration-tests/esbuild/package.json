@@ -22,7 +22,7 @@
   "dependencies": {
     "@apollo/server": "5.5.2",
     "@koa/router": "15.7.1",
-    "@langchain/core": "1.4.2",
+    "@langchain/core": "1.5.0",
     "@langchain/langgraph": "1.7.5",
     "@smithy/smithy-client": "4.15.2",
     "aws-sdk": "2.1693.0",
@@ -31,7 +31,7 @@
     "express": "4.22.3",
     "knex": "3.3.0",
     "koa": "3.3.0",
-    "openai": "7.61.0",
+    "openai": "7.62.0",
     "zod": "4.6.7"
   }
 }
