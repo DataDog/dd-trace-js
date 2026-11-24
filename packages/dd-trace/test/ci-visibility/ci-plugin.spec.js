@@ -492,15 +492,20 @@ describe('CiPlugin', () => {
     }
   })
 
-  it('exports worker traces normally', () => {
-    const plugin = createPlugin('vitest_worker')
+  it('exports worker trace arrays received on the reporting channel', () => {
+    const plugin = createPlugin('vitest_worker', true)
     const exportTrace = sinon.spy()
-    const trace = [{ type: 'test_suite_end', meta: {} }]
+    const span = { type: 'test_suite_end', span_id: '1', trace_id: '2', parent_id: '3', meta: {} }
+    const trace = [span]
     plugin.tracer._exporter = { export: exportTrace }
 
-    plugin._exportWorkerTraceOrBuffer(trace)
+    dc.channel('ci:vitest:worker-report:trace').publish({ traces: [trace] })
+    plugin.configure(false)
 
     sinon.assert.calledOnceWithExactly(exportTrace, trace)
+    assert.strictEqual(span.span_id.toBigInt(), 1n)
+    assert.strictEqual(span.trace_id.toBigInt(), 2n)
+    assert.strictEqual(span.parent_id.toBigInt(), 3n)
   })
 
   it('uploads regular coverage reports from canonical paths', () => {

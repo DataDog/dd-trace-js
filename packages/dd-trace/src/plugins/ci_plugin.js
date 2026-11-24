@@ -504,12 +504,10 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:worker-report:trace`, payload => {
-      const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = typeof payload === 'string'
-        ? { traces: payload }
-        : payload
-      const formattedTraces = typeof traces === 'string' ? JSON.parse(traces) : traces
+      const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = payload
+      if (!Array.isArray(traces)) return
 
-      for (const trace of formattedTraces) {
+      for (const trace of traces) {
         if (testSuiteExecutionId) {
           this._workerTraceExecutionIds.set(trace, testSuiteExecutionId)
         }
