@@ -2414,7 +2414,7 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
 }
 
 /**
- * Records a Test Management execution from a serialized worker trace span.
+ * Records a Test Management execution from a worker trace span.
  *
  * @param {{ meta?: Record<string, string> }} span
  * @param {TestManagementExecutions} executions
@@ -2436,11 +2436,12 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
   }, executions)
 }
 
+/** @typedef {{ type?: string, meta?: Record<string, string> }[][]} WorkerTraces */
+
 /**
- * Scans worker trace payloads and populates Test Optimization summary data.
- * Silently ignores parse errors.
+ * Scans worker traces and populates Test Optimization summary data.
  *
- * @param {string | object[][]} data - Worker traces, optionally serialized as JSON
+ * @param {WorkerTraces} traces
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
  *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
@@ -2448,7 +2449,9 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
  *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
  */
-function collectTestOptimizationSummariesFromTraces (data, summaries) {
+function collectTestOptimizationSummariesFromTraces (traces, summaries) {
+  if (!Array.isArray(traces)) return
+
   const {
     newTestsWithDynamicNames,
     attemptToFixExecutions,
@@ -2457,7 +2460,6 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
   } = summaries
 
   try {
-    const traces = typeof data === 'string' ? JSON.parse(data) : data
     for (const trace of traces) {
       for (const span of trace) {
         if (testAnnotations && span.type === 'test' &&
@@ -2478,29 +2480,28 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
       }
     }
   } catch {
-    // ignore parse errors
+    // A malformed worker payload must not interrupt the test run.
   }
 }
 
 /**
- * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
- * and populates the provided Set. Silently ignores parse errors.
+ * Scans worker traces for tests tagged with TEST_HAS_DYNAMIC_NAME and populates the provided Set.
  *
- * @param {string} data - JSON-serialized traces from a worker
+ * @param {WorkerTraces} traces
  * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
  */
-function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
-  collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
+function collectDynamicNamesFromTraces (traces, newTestsWithDynamicNames) {
+  collectTestOptimizationSummariesFromTraces(traces, { newTestsWithDynamicNames })
 }
 
 /**
- * Scans serialized worker trace payloads for attempt-to-fix test spans.
+ * Scans worker traces for attempt-to-fix test spans.
  *
- * @param {string} data - JSON-serialized traces from a worker
+ * @param {WorkerTraces} traces
  * @param {AttemptToFixExecutions} attemptToFixExecutions
  */
-function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
-  collectTestOptimizationSummariesFromTraces(data, { attemptToFixExecutions })
+function collectAttemptToFixExecutionsFromTraces (traces, attemptToFixExecutions) {
+  collectTestOptimizationSummariesFromTraces(traces, { attemptToFixExecutions })
 }
 
 function getAttemptToFixManagementNotes (result) {

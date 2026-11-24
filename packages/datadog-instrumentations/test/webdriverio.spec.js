@@ -5594,21 +5594,21 @@ describe('webdriverio instrumentation', () => {
       requestConfiguration(secondWorker, secondFile, 'second-request')
       await new Promise(setImmediate)
 
-      const firstTrace = JSON.stringify([[{
+      const firstTrace = [[{
         meta: {
           [TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]: 'true',
           [TEST_NAME]: 'first test',
           [TEST_STATUS]: 'fail',
           [TEST_SUITE]: 'first.spec.js',
         },
-      }]])
-      const secondTrace = JSON.stringify([[{
+      }]]
+      const secondTrace = [[{
         meta: {
           [TEST_HAS_DYNAMIC_NAME]: 'true',
           [TEST_NAME]: 'dynamic 12345678',
           [TEST_SUITE]: 'second.spec.js',
         },
-      }]])
+      }]]
       firstWorker.emit('message', {
         origin: 'datadog',
         name: 'workerEvent',
@@ -5775,14 +5775,14 @@ describe('webdriverio instrumentation', () => {
       for (const { file, testName, worker } of runs) {
         worker.emit('message', [
           MOCHA_WORKER_TRACE_PAYLOAD_CODE,
-          JSON.stringify([[{
+          [[{
             meta: {
               [TEST_MANAGEMENT_IS_QUARANTINED]: 'true',
               [TEST_NAME]: testName,
               [TEST_STATUS]: 'fail',
               [TEST_SUITE]: path.basename(file),
             },
-          }]]),
+          }]],
         ])
         worker.emit('exit', { exitCode: 0, retries: 0 })
       }
