@@ -982,7 +982,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     // Wrap beforeEach/afterEach hooks so they also run inside the test span context.
     // In vitest 4+, hooks are in a WeakMap accessed via getHooks(). In older versions, they're on suite.hooks.
-    let currentSuite = task.suite
+    // Walk like Vitest's runner: up the suites, then the file, which holds the hooks declared at its top level.
+    let currentSuite = task.suite || task.file
     while (currentSuite) {
       const hooks = vitestGetHooks ? vitestGetHooks(currentSuite) : currentSuite.hooks
       if (hooks) {
@@ -998,7 +999,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           }
         }
       }
-      currentSuite = currentSuite.suite
+      currentSuite = 'filepath' in currentSuite ? undefined : currentSuite.suite || currentSuite.file
     }
 
     return onBeforeTryTask.apply(this, arguments)
