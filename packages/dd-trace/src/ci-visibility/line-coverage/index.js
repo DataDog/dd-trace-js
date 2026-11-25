@@ -34,6 +34,7 @@ const { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameS
 const Module = require('node:module')
 const { tmpdir } = require('node:os')
 const { dirname, join, relative, resolve, sep } = require('node:path')
+const { fileURLToPath } = require('node:url')
 const { threadId } = require('node:worker_threads')
 
 const dc = require('dc-polyfill')
@@ -1042,6 +1043,7 @@ function startCollecting (root, patchModuleLoader) {
       }
       return compile.call(this, content, filename, ...rest)
     }
+    instrumentModulesOnLoad()
   }
   // A worker thread reports to its parent, which writes the dump.
   if (dumpPath && threadId === 0) process.once('exit', writeDump)
@@ -1064,6 +1066,36 @@ function startCollecting (root, patchModuleLoader) {
       }))
     })
   }
+}
+
+/**
+ * Instruments ECMAScript modules under the root as Node.js loads them, through module hooks that run
+ * in the thread that loads them. Node.js versions without such hooks load them as they are.
+ */
+function instrumentModulesOnLoad () {
+  // Node.js 22.15 and 23.5 added in-thread hooks.
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { registerHooks } = Module
+  if (typeof registerHooks !== 'function') return
+  registerHooks({
+    load (url, context, nextLoad) {
+      const result = nextLoad(url, context)
+      if (result?.format !== 'module' || result.source == null || !url.startsWith('file:')) return result
+      let filename
+      try {
+        filename = fileURLToPath(url)
+      } catch {
+        return result
+      }
+      if (!shouldInstrument(filename)) return result
+      const { source } = result
+      const code = typeof source === 'string'
+        ? source
+        : Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8')
+      const instrumented = instrumentSource(code, filename, { isModule: true })
+      return instrumented === code ? result : { ...result, source: instrumented }
+    },
+  })
 }
 
 /**
