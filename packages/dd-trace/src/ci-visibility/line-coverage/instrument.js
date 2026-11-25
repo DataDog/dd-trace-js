@@ -125,6 +125,8 @@ class Instrumenter {
     this.entrySegment = 0
     /** @type {WeakSet<object>} functions that run as a job of their own */
     this.jobFunctions = new WeakSet()
+    /** @type {WeakSet<object>} getters that Vite's module runner adds for exports */
+    this.exportGetters = new WeakSet()
     // The open credit point: probes attached to it run at an instant that is control-equivalent to
     // the current one. `latent` realizes the instant right after the last expression that may throw.
     this.point = null
@@ -605,6 +607,7 @@ class Instrumenter {
   }
 
   functionBody (node) {
+    if (this.exportGetters.has(node)) return
     this.activation(() => {
       this.init = false
       for (const param of node.params) this.pattern(param, false)
@@ -964,6 +967,7 @@ class Instrumenter {
         }
       }
     }
+    addExportGetters(node, this.exportGetters)
     this.arguments(node.arguments)
     this.inChain = inChain
     this.unsafe()
@@ -1269,6 +1273,35 @@ class Instrumenter {
     let text = `${JSON.stringify(this.moduleKey)},${JSON.stringify(JSON.stringify(this.sources))},"${lines}"`
     if (several) text += `,"${sources}"`
     return text
+  }
+}
+
+/**
+ * Adds to `getters` the getter that a call of Vite's module runner defines an export with. Vite adds
+ * these at the top of a module, where its source map may give them a line of the module, but they run
+ * no code of it: an importer runs one each time it reads the export. From Vite 7 the call is
+ * `__vite_ssr_exportName__("name", () => { ... })`; before, it is
+ * `Object.defineProperty(__vite_ssr_exports__, "name", { ..., get(){ ... } })`.
+ *
+ * @param {object} call a CallExpression
+ * @param {WeakSet<object>} getters
+ */
+function addExportGetters (call, getters) {
+  const { callee, arguments: args } = call
+  if (callee.type === 'Identifier') {
+    if (callee.name === '__vite_ssr_exportName__' && FUNCTION_TYPES.has(args[1]?.type)) getters.add(args[1])
+    return
+  }
+  if (callee.type !== 'MemberExpression' || callee.computed || callee.object.type !== 'Identifier' ||
+    callee.object.name !== 'Object' || callee.property.name !== 'defineProperty' ||
+    args[0]?.type !== 'Identifier' || args[0].name !== '__vite_ssr_exports__' || args[2]?.type !== 'ObjectExpression') {
+    return
+  }
+  for (const property of args[2].properties) {
+    if (property.type === 'Property' && !property.computed && property.key.type === 'Identifier' &&
+      property.key.name === 'get' && FUNCTION_TYPES.has(property.value.type)) {
+      getters.add(property.value)
+    }
   }
 }
 
