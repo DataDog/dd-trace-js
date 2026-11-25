@@ -113,6 +113,13 @@ withVersions('fastify', 'fastify', '>=4 <6', version => {
         done()
       }, { prefix: '/api/:tenant' })
 
+      for (const mode of [undefined, 'both', 'slash', 'no-slash']) {
+        app.register((child, options, done) => {
+          child.get('/', { prefixTrailingSlash: mode }, (request, reply) => reply.send('OK'))
+          done()
+        }, { prefix: `/prefix-${mode ?? 'default'}/:tenant` })
+      }
+
       await app.listen({ host: '127.0.0.1', port: 0 })
       origin = 'http://127.0.0.1:' + app.server.address().port
     })
@@ -164,6 +171,14 @@ withVersions('fastify', 'fastify', '>=4 <6', version => {
       await check('/api/acme/groups/admin/members/42',
         '/api/:tenant/groups/:group/members/:member', '/api/{tenant}/groups/{group}/members/{member}')
     })
+
+    for (const mode of [undefined, 'both', 'slash', 'no-slash']) {
+      it(`normalizes prefixed root routes with prefixTrailingSlash=${mode ?? 'default'}`, async () => {
+        const prefix = `/prefix-${mode ?? 'default'}`
+        if (mode !== 'slash') await check(prefix + '/acme', prefix + '/:tenant', prefix + '/{tenant}')
+        if (mode !== 'no-slash') await check(prefix + '/acme/', prefix + '/:tenant/', prefix + '/{tenant}/')
+      })
+    }
 
     it('preserves the match when application hooks change params', async () => {
       await check('/mutate/42', '/mutate/:id?', '/mutate/{id}')

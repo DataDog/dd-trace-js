@@ -181,8 +181,7 @@ function onRequest (request, reply, done) {
   const res = getRes(reply)
   const routeOptions = request?.routeOptions
 
-  const routeConfig = routeOptions?.config ??
-    (request?.is404 ? undefined : request?.routeConfig ?? request?.context?.config)
+  const routeConfig = routeOptions?.config
   const ctx = { req, res, routeConfig, routeOptions, request }
   handleChannel.publish(ctx)
 

@@ -134,6 +134,27 @@ describe('Fastify route capture', () => {
     })
   }
 
+  for (const [prefix, mode, expected] of [
+    ['/api/:tenant', 'both', '/api/{tenant}/'],
+    ['/api/:tenant', 'slash', null],
+    ['/api/:tenant', 'no-slash', null],
+    ['/other', 'both', null],
+    [undefined, 'both', null],
+  ]) {
+    it(`accepts only a prefixed root alias: prefix=${prefix}, prefixTrailingSlash=${mode}`, () => {
+      const req = routedRequest('/api/:tenant/')
+      onRequest({
+        req,
+        request: { server: { ...server, prefix } },
+        routeOptions: { url: '/api/:tenant', prefixTrailingSlash: mode },
+      })
+      assert.equal(normalizeRequest(req, '/api/:tenant/'), expected)
+      assert.equal(normalizeRequest(req, '/api/:tenant'), null)
+      web.setRoute(req, '/api/:tenant/')
+      assert.equal(normalizeRequest(req, '/api/:tenant/'), null)
+    })
+  }
+
   it('omits the tag when the final route disagrees with the capture', () => {
     const req = routedRequest('/items/:id')
     captureRoute(req, '/items/:id')

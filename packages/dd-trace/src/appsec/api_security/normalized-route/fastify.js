@@ -153,8 +153,9 @@ function normalizeRoute (route, params) {
 }
 
 /**
- * @param {{ req: object, request?: { server?: { version?: string }, routerPath?: string,
- *   params?: Record<string, unknown> }, routeOptions?: { url?: string } }} event
+ * @param {{ req: object, request?: { server?: { version?: string, prefix?: string }, routerPath?: string,
+ *   params?: Record<string, unknown> },
+ *   routeOptions?: { url?: string, prefixTrailingSlash?: 'both' | 'slash' | 'no-slash' } }} event
  */
 function onRequest ({ req, request, routeOptions }) {
   const version = request?.server?.version
@@ -164,9 +165,15 @@ function onRequest ({ req, request, routeOptions }) {
   const route = routeOptions ? routeOptions.url : request.routerPath
   if (typeof route !== 'string') return
   const paths = web.getContext(req)?.paths
-  if (paths?.length === 1 && paths[0] === route) {
+  if (paths?.length !== 1) return
+
+  const matched = paths[0]
+  // Fastify 5 shares the prefix declaration between both root-route slash variants.
+  const prefixAlias = routeOptions?.prefixTrailingSlash === 'both' &&
+    route === request.server.prefix && matched === route + '/'
+  if (matched === route || prefixAlias) {
     // Resolve before application hooks mutate params; retain only the normalized declaration.
-    matchedRoutes.set(paths, normalizeRoute(route, request.params))
+    matchedRoutes.set(paths, normalizeRoute(matched, request.params))
   }
 }
 
