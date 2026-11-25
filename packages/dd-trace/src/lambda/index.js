@@ -85,16 +85,14 @@ function registerHooks () {
     return moduleExports
   })
 
-  // The shim can import its completion helpers/listeners before initializing the tracer.
+  // The published datadog-lambda-js ESM entrypoint imports this helper before initializing the tracer.
   // Revisit cached copies through the registered hook without loading datadog-lambda-js early.
-  const completionSuffixes = [
+  const helperSuffixes = [
     path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js'),
     path.join('datadog-lambda-js', 'utils', 'handler.js'),
-    path.join('datadog-lambda-js', 'dist', 'metrics', 'listener.js'),
-    path.join('datadog-lambda-js', 'metrics', 'listener.js'),
   ]
   for (const filename of Object.keys(require.cache)) {
-    if (!completionSuffixes.some(suffix => filename.endsWith(path.sep + suffix))) continue
+    if (!helperSuffixes.some(suffix => filename.endsWith(path.sep + suffix))) continue
     try {
       require(filename)
     } catch (error) {

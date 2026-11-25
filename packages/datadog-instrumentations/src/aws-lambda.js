@@ -23,7 +23,7 @@ const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
  * @param {Function} handler Customer Lambda handler.
  * @param {Record<string, unknown>} [config] Per-handler configuration overrides.
  * @param {Function} [monitor] Monitors the shim adapter for impending timeouts.
- * @param {() => Promise<void>|undefined} [onComplete] Awaits delivery after invocation subscribers finish.
+ * @param {() => void} [onComplete] Runs after invocation subscribers finish.
  * @returns {Function} Wrapped handler, or the existing wrapper when already marked.
  */
 function wrapHandler (handler, config, monitor, onComplete) {

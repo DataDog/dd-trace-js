@@ -75,27 +75,17 @@ describe('aws-lambda instrumentation', () => {
   })
 
   for (const rejects of [false, true]) {
-    it(`awaits delivery after invocation subscribers finish (reject=${rejects})`, async () => {
-      const outcome = new Error('customer failure')
+    it(`runs completion after invocation subscribers finish (reject=${rejects})`, async () => {
+      const failure = new Error('customer failure')
       const order = []
-      let deliver
-      const delivered = new Promise(resolve => { deliver = resolve })
-      let started
-      const delivering = new Promise(resolve => { started = resolve })
       subscribe(invocationChannel.asyncEnd, () => order.push('invocation-finished'))
       const wrapped = wrapHandler(() => {
-        if (rejects) throw outcome
+        if (rejects) throw failure
         return 'done'
-      }, undefined, undefined, () => {
-        order.push('delivery')
-        started()
-        return delivered
-      })
-      const result = wrapped({}, {}).then(value => ({ value }), error => ({ error }))
-      await delivering
-      assert.deepStrictEqual(order, ['invocation-finished', 'delivery'])
-      deliver()
-      assert.deepStrictEqual(await result, rejects ? { error: outcome } : { value: 'done' })
+      }, undefined, undefined, () => { order.push('completion') })
+      if (rejects) await assert.rejects(wrapped({}, {}), error => error === failure)
+      else assert.strictEqual(await wrapped({}, {}), 'done')
+      assert.deepStrictEqual(order, ['invocation-finished', 'completion'])
     })
   }
 

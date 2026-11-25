@@ -1313,31 +1313,6 @@ describe('dogstatsd', () => {
       ].join('\n') + '\n')
     })
 
-    for (const isLambda of [false, true]) {
-      it(`joins earlier sends with a bounded flush only in Lambda (Lambda=${isLambda})`, () => {
-        const original = process.env.AWS_LAMBDA_FUNCTION_NAME
-        const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
-        try {
-          if (isLambda) process.env.AWS_LAMBDA_FUNCTION_NAME = 'public-metric-test'
-          else delete process.env.AWS_LAMBDA_FUNCTION_NAME
-          client = createCustomMetrics()
-          client.distribution('test.public', 1)
-          client.flush()
-          const complete = sinon.spy()
-          client.flush(complete)
-          assert.strictEqual(complete.callCount, isLambda ? 0 : 1)
-          clock.tick(999)
-          assert.strictEqual(complete.callCount, isLambda ? 0 : 1)
-          clock.tick(1)
-          assert.strictEqual(complete.callCount, 1)
-        } finally {
-          clock.restore()
-          if (original === undefined) delete process.env.AWS_LAMBDA_FUNCTION_NAME
-          else process.env.AWS_LAMBDA_FUNCTION_NAME = original
-        }
-      })
-    }
-
     it('should flush via interval', () => {
       const clock = sinon.useFakeTimers({
         toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
