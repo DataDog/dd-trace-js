@@ -73,11 +73,7 @@ const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'Ar
  *   probed. Slot `i` is bit `i % 30` of word `Math.floor(i / 30)` in what the reader writes.
  */
 function instrument (code, options) {
-  const program = options.parse(code)
-  for (const statement of program.body) {
-    if (statement.type.startsWith('Import') || statement.type.startsWith('Export')) return
-  }
-  return new Instrumenter(code, program, options).run()
+  return new Instrumenter(code, options.parse(code), options).run()
 }
 
 class Instrumenter {
@@ -372,9 +368,12 @@ class Instrumenter {
       if (i < directives) {
         this.position(statement, opener)
         this.position(statement.expression, opener)
-      } else if (statement.type === 'FunctionDeclaration') {
-        this.position(statement, opener)
-        this.functionBody(statement)
+      } else {
+        const declaration = getFunctionDeclaration(statement)
+        if (declaration !== undefined) {
+          this.position(declaration, opener)
+          this.functionBody(declaration)
+        }
       }
     }
   }
@@ -383,10 +382,33 @@ class Instrumenter {
     const isProgram = list === this.program.body
     for (let i = from; i < list.length; i++) {
       const statement = list[i]
-      if (statement.type !== 'FunctionDeclaration' && !(isProgram && isExportDefinition(statement))) {
+      if (isProgram && isModuleDeclaration(statement)) {
+        this.moduleDeclaration(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) })
+      } else if (statement.type !== 'FunctionDeclaration' && !(isProgram && isExportDefinition(statement))) {
         this.statement(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) }, LIST)
       }
       floor = statement.end
+    }
+  }
+
+  // An import or export declaration of a module. Imports, re-exports and export lists run no code, and
+  // exported function declarations count when the module body starts. Probes add no binding next to an
+  // exported one, which would export it too.
+  moduleDeclaration (node, opener) {
+    const declaration = node.declaration
+    if (!declaration || declaration.type === 'FunctionDeclaration') return
+    if (declaration.type === 'VariableDeclaration') {
+      this.variableDeclaration(declaration, opener, true)
+    } else if (declaration.type === 'ClassDeclaration') {
+      this.statement(declaration, opener, LIST)
+    } else {
+      // `export default` of an expression, which names an anonymous function or class `default`.
+      this.position(node, opener)
+      if (isAnonymousFunctionDefinition(declaration)) {
+        this.namedValue(declaration, opener, { kind: 'named', node: declaration, name: '"default"' })
+      } else {
+        this.expression(declaration, true, opener)
+      }
     }
   }
 
@@ -565,7 +587,7 @@ class Instrumenter {
     }
   }
 
-  variableDeclaration (node, opener) {
+  variableDeclaration (node, opener, isExported = false) {
     this.position(node, opener)
     const declarations = node.declarations
     for (let i = 0; i < declarations.length; i++) {
@@ -574,7 +596,10 @@ class Instrumenter {
       if (init) {
         const cheap = i === 0 ? opener : null
         if (declarator.id.type === 'Identifier' && isAnonymousFunctionDefinition(init)) {
-          this.namedValue(init, cheap, { kind: 'declarator', node: declarator })
+          const costly = isExported
+            ? { kind: 'named', node: init, name: JSON.stringify(declarator.id.name) }
+            : { kind: 'declarator', node: declarator }
+          this.namedValue(init, cheap, costly)
         } else {
           this.expression(init, true, cheap)
         }
@@ -1340,6 +1365,26 @@ function isField (element) {
 // A constructor or private method has no key to probe in.
 function hasHeaderWithoutKey (method) {
   return method.kind === 'constructor' || method.key.type === 'PrivateIdentifier'
+}
+
+/**
+ * @param {object} statement a statement of a function body or of the program
+ * @returns {object | undefined} the function declaration it is or exports
+ */
+function getFunctionDeclaration (statement) {
+  if (statement.type === 'FunctionDeclaration') return statement
+  if ((statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration') &&
+      statement.declaration?.type === 'FunctionDeclaration') {
+    return statement.declaration
+  }
+}
+
+/**
+ * @param {object} statement a statement of the program
+ */
+function isModuleDeclaration (statement) {
+  return statement.type === 'ImportDeclaration' || statement.type === 'ExportNamedDeclaration' ||
+    statement.type === 'ExportDefaultDeclaration' || statement.type === 'ExportAllDeclaration'
 }
 
 function isAnonymousFunctionDefinition (node) {
