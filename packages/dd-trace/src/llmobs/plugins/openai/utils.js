@@ -240,6 +240,10 @@ const HOSTED_TOOL_NAMES = {
   file_search_call: 'file_search',
   code_interpreter_call: 'code_interpreter',
 }
+// Allowlist: SDK objects can carry extra fields, so new provider fields must not reach the span unreviewed.
+const WEB_SEARCH_ACTION_KEYS = ['type', 'query', 'queries', 'url', 'pattern']
+// Code interpreter stdout can be MBs and is replayed as input on later turns; an oversized event drops all I/O.
+const HOSTED_TOOL_LOGS_MAX_CHARS = 4096
 
 /**
  * Convert an OpenAI Responses item for a provider-hosted tool (web search, file search, code interpreter)
@@ -255,8 +259,12 @@ function getHostedToolMessage (item) {
   let args
   const result = { status: item.status }
   if (name === 'web_search') {
-    const { sources, ...action } = item.action ?? {}
-    args = action
+    const action = item.action ?? {}
+    args = {}
+    for (const key of WEB_SEARCH_ACTION_KEYS) {
+      if (action[key] !== undefined) args[key] = action[key]
+    }
+    const sources = action.sources
     if (Array.isArray(sources)) result.sources = sources.map(source => ({ url: source.url, title: source.title }))
   } else if (name === 'file_search') {
     args = { queries: item.queries }
@@ -267,7 +275,9 @@ function getHostedToolMessage (item) {
   } else {
     args = { code: item.code, container_id: item.container_id }
     if (Array.isArray(item.outputs)) {
-      result.outputs = item.outputs.map(output => (output.type === 'logs' ? output.logs : IMAGE_FALLBACK))
+      result.outputs = item.outputs.map(output => (
+        output.type === 'logs' ? String(output.logs ?? '').slice(0, HOSTED_TOOL_LOGS_MAX_CHARS) : IMAGE_FALLBACK
+      ))
     }
   }
 

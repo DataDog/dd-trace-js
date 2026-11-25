@@ -34,9 +34,38 @@
  * Formats tool result into LLM Observability compatible contents
  * @param {ToolResultBlock['content']} content
  */
+// Fetched page text is replayed on every later turn; an oversized span event drops all input and output.
+const WEB_FETCH_TEXT_MAX_CHARS = 4096
+
+/**
+ * Keep what identifies a fetched page; a PDF or other binary source is replaced by a marker.
+ *
+ * @param {{ url?: string, retrieved_at?: string, content?: { title?: string, source?: { type?: string,
+ *   media_type?: string, data?: unknown } } }} content - A `web_fetch_result` object
+ * @returns {Record<string, string>}
+ */
+function summarizeWebFetch (content) {
+  const summary = {}
+  if (content.url) summary.url = content.url
+  if (content.retrieved_at) summary.retrieved_at = content.retrieved_at
+  const document = content.content ?? {}
+  if (document.title) summary.title = document.title
+  const source = document.source
+  if (source && typeof source === 'object') {
+    if (source.type === 'text') {
+      summary.text = String(source.data ?? '').slice(0, WEB_FETCH_TEXT_MAX_CHARS)
+    } else {
+      summary.document = `[document omitted: ${source.media_type ?? 'unknown'}]`
+    }
+  }
+  return summary
+}
+
 function formatAnthropicToolResultContent (content) {
   if (typeof content === 'string') {
     return content
+  } else if (content?.type === 'web_fetch_result') {
+    return JSON.stringify(summarizeWebFetch(content))
   } else if (Array.isArray(content) && content.some(block => block?.type === 'web_search_result')) {
     // Search results carry no `text`; keep what identifies each page, never the `encrypted_content` payload.
     const sources = content.filter(block => block?.type === 'web_search_result')

@@ -229,4 +229,27 @@ describe('getHostedToolMessage', () => {
       outputs: ['1', '[image]'],
     })
   })
+
+  it('records only allowlisted web search action keys', () => {
+    assertToolMessage({
+      id: 'ws_3',
+      type: 'web_search_call',
+      status: 'completed',
+      action: { type: 'open_page', url: 'https://a.test', page_text: 'full page body' },
+    }, 'web_search', { type: 'open_page', url: 'https://a.test' }, { status: 'completed' })
+  })
+
+  it('caps each code interpreter logs output at 4096 characters', () => {
+    assertToolMessage({
+      id: 'ci_2',
+      type: 'code_interpreter_call',
+      status: 'completed',
+      code: 'print(x)',
+      container_id: 'cntr_1',
+      outputs: [{ type: 'logs', logs: 'a'.repeat(4096) }, { type: 'logs', logs: 'b'.repeat(4097) }],
+    }, 'code_interpreter', { code: 'print(x)', container_id: 'cntr_1' }, {
+      status: 'completed',
+      outputs: ['a'.repeat(4096), 'b'.repeat(4096)],
+    })
+  })
 })

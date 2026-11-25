@@ -79,4 +79,40 @@ describe('anthropic utils', () => {
       },
     ])
   })
+
+  it('summarizes web fetch results, capping page text and omitting binary documents', () => {
+    const fetchResult = (id, source) => ({
+      type: 'web_fetch_tool_result',
+      tool_use_id: id,
+      content: {
+        type: 'web_fetch_result',
+        url: 'https://a.test/doc',
+        retrieved_at: '2026-11-25T10:00:00Z',
+        content: { type: 'document', title: 'Doc', source },
+      },
+    })
+    const messages = []
+
+    appendMessage(messages, {
+      role: 'user',
+      content: [
+        fetchResult('srvtoolu_1', { type: 'text', media_type: 'text/plain', data: 'y'.repeat(4096) }),
+        fetchResult('srvtoolu_2', { type: 'text', media_type: 'text/plain', data: 'z'.repeat(4097) }),
+        fetchResult('srvtoolu_3', { type: 'base64', media_type: 'application/pdf', data: 'J'.repeat(100_000) }),
+        {
+          type: 'web_fetch_tool_result',
+          tool_use_id: 'srvtoolu_4',
+          content: { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' },
+        },
+      ],
+    })
+
+    const page = { url: 'https://a.test/doc', retrieved_at: '2026-11-25T10:00:00Z', title: 'Doc' }
+    assert.deepStrictEqual(messages.map(message => JSON.parse(message.toolResults[0].result)), [
+      { ...page, text: 'y'.repeat(4096) },
+      { ...page, text: 'z'.repeat(4096) },
+      { ...page, document: '[document omitted: application/pdf]' },
+      { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' },
+    ])
+  })
 })
