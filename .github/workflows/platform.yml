@@ -45,9 +45,9 @@ jobs:
             install: >-
               (command -v corepack >/dev/null 2>&1 || npm install -g corepack)
               && yarn set version stable
+              && cat "$GITHUB_WORKSPACE/.yarnrc.yml" >> .yarnrc.yml
               && yarn config set nodeLinker node-modules
               && yarn config set enableScripts true
-              && yarn config set --json npmPreapprovedPackages '["@datadog/*","import-in-the-middle"]'
               && yarn add
           - name: bun
             install: bun --config="$GITHUB_WORKSPACE/bunfig.toml" add --linker=hoisted
