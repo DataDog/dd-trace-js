@@ -10,6 +10,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const { setHttpServerCheckpoint } = require('../../src/datastreams/http')
 const { DsmPathwayCodec } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
@@ -584,7 +585,7 @@ describe('DataStreamsProcessor', () => {
     /**
      * @param {boolean} enabled
      */
-    function processorWithProcessTags (enabled) {
+    function tracerWithProcessTags (enabled) {
       const processTags = { serialized: serializedProcessTags }
       const ownPropagationHash = proxyquire('../../src/propagation-hash', { '../process-tags': processTags })
       ownPropagationHash.configure({ DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: enabled })
@@ -596,21 +597,50 @@ describe('DataStreamsProcessor', () => {
       })
       const withProcessTags = new Processor({ ...config, service: 'service-b', env: 'test' })
       clearTimeout(withProcessTags.timer)
-      return withProcessTags
+      return { tracer: { _dataStreamsProcessor: withProcessTags }, ownPropagationHash }
     }
 
     it('folds process tags and the container tags hash into the pathway hash when enabled', () => {
-      const ctx = processorWithProcessTags(true).setCheckpoint(['direction:in', 'type:http'], null, null)
+      const { tracer } = tracerWithProcessTags(true)
+      const ctx = setHttpServerCheckpoint(tracer, null, {})
 
       // Expected hash comes from dd-trace-java's FNV64Hash, BaseHash and DataStreamsTags with these process tags.
       assert.strictEqual(ctx.hash.readBigUInt64LE(), 14083664075716441722n)
     })
 
     it('leaves process tags and the container tags hash out when disabled', () => {
-      const ctx = processorWithProcessTags(false).setCheckpoint(['direction:in', 'type:http'], null, null)
+      const { tracer } = tracerWithProcessTags(false)
+      const ctx = setHttpServerCheckpoint(tracer, null, {})
 
       // Expected hash comes from dd-trace-java's FNV64Hash with process tags off.
       assert.strictEqual(ctx.hash.readBigUInt64LE(), 11375375775841093325n)
+    })
+
+    it('uses the inbound parent after recording a root HTTP checkpoint', () => {
+      const { tracer } = tracerWithProcessTags(false)
+      const headers = { 'dd-pathway-ctx-base64': 'H4OEGOxLc6SA5MeIumj058eIumg=' }
+
+      const root = setHttpServerCheckpoint(tracer, null, {})
+      const child = setHttpServerCheckpoint(tracer, null, headers)
+      const nextRoot = setHttpServerCheckpoint(tracer, null, {})
+
+      assert.strictEqual(root.hash.readBigUInt64LE(), 11375375775841093325n)
+      assert.strictEqual(child.hash.readBigUInt64LE(), 11291553564431990061n)
+      assert.deepStrictEqual(nextRoot.hash, root.hash)
+    })
+
+    it('uses the current container tags hash for repeated HTTP checkpoints', () => {
+      const { tracer, ownPropagationHash } = tracerWithProcessTags(true)
+      const original = setHttpServerCheckpoint(tracer, null, {}).hash
+      assert.deepStrictEqual(setHttpServerCheckpoint(tracer, null, {}).hash, original)
+
+      ownPropagationHash.updateContainerTagsHash('1234567890abcdef')
+      const changed = setHttpServerCheckpoint(tracer, null, {}).hash
+      assert.notDeepStrictEqual(changed, original)
+      assert.deepStrictEqual(setHttpServerCheckpoint(tracer, null, {}).hash, changed)
+
+      ownPropagationHash.updateContainerTagsHash('c0ffee1234567890')
+      assert.deepStrictEqual(setHttpServerCheckpoint(tracer, null, {}).hash, original)
     })
   })
 })
