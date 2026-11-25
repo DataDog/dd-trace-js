@@ -16,8 +16,8 @@
 // several windows are open, the flag is never set, and every activation asks.
 //
 // A reader reports the slots of its module that ran, as bits of 30-slot words. The module's table,
-// given when it was instrumented, says which file and line each slot stands for, and whether the
-// line is initialiser code. Initialiser lines belong to no owner: they go to the per-file
+// which the module gives at its first touch, says which file and line each slot stands for, and
+// whether the line is initialiser code. Initialiser lines belong to no owner: they go to the per-file
 // initialiser set, which the API adds to every test that ran other code of the file, and to the
 // initialiser part of Shared.
 
@@ -134,8 +134,11 @@ class LineCoverageCollector {
   /** @type {Function[]} readers queued at the previous window boundary */
   #previous = []
 
-  /** @type {Array<ModuleTable | undefined>} */
+  /** @type {Array<ModuleTable | undefined>} the table of each module copy, by id */
   #modules = []
+
+  /** @type {Map<string, ModuleTable | undefined>} slot tables by module key */
+  #tables = new Map()
 
   /** @type {Array<Owner | undefined>} the owner each module's words were recorded for */
   #owners = []
@@ -181,10 +184,23 @@ class LineCoverageCollector {
   }
 
   /**
-   * Returns the id of a module about to be instrumented. Its slots are given by `defineModule`.
+   * Called by each copy of an instrumented module the first time it runs, since a framework can run
+   * the same code more than once, in module registries that live side by side. Returns the copy's
+   * id. Copies of the same code share its slot table.
+   *
+   * @param {string} key identifies the instrumented code
+   * @param {Array<string | null>} sources the file each source stands for, null for a source whose
+   *   lines count nowhere
+   * @param {number[]} lines the line of each slot, negated for initialiser lines
+   * @param {number[]} [sourceOfSlot] the source of each slot, when there is more than one
    */
-  reserveModule () {
-    const id = this.#modules.push(undefined) - 1
+  define (key, sources, lines, sourceOfSlot) {
+    let table = this.#tables.get(key)
+    if (table === undefined) {
+      table = this.#createTable(sources, lines, sourceOfSlot)
+      this.#tables.set(key, table)
+    }
+    const id = this.#modules.push(table) - 1
     if (id >= this.#queued.length) {
       const queued = new Uint8Array(this.#queued.length * 2)
       queued.set(this.#queued)
@@ -194,16 +210,23 @@ class LineCoverageCollector {
   }
 
   /**
-   * @param {number} id
-   * @param {Int32Array} files the file index of each slot, or -1 for a slot that counts nowhere
-   * @param {Int32Array} lines the line of each slot, negated for initialiser lines
+   * @param {Array<string | null>} sources
+   * @param {number[]} lines
+   * @param {number[]} [sourceOfSlot]
+   * @returns {ModuleTable | undefined} undefined when the table is not valid: what the module records
+   *   then counts nowhere
    */
-  defineModule (id, files, lines) {
-    const initMasks = new Int32Array(Math.ceil(lines.length / SLOTS_PER_WORD))
-    for (let slot = 0; slot < lines.length; slot++) {
-      if (lines[slot] < 0) initMasks[Math.floor(slot / SLOTS_PER_WORD)] |= 1 << (slot % SLOTS_PER_WORD)
-    }
-    this.#modules[id] = { files, lines, initMasks }
+  #createTable (sources, lines, sourceOfSlot) {
+    try {
+      const fileOfSource = sources.map(source => typeof source === 'string' ? this.fileIndex(source) : -1)
+      const files = new Int32Array(lines.length)
+      const initMasks = new Int32Array(Math.ceil(lines.length / SLOTS_PER_WORD))
+      for (let slot = 0; slot < lines.length; slot++) {
+        files[slot] = fileOfSource[sourceOfSlot === undefined ? 0 : sourceOfSlot[slot]] ?? -1
+        if (lines[slot] < 0) initMasks[Math.floor(slot / SLOTS_PER_WORD)] |= 1 << (slot % SLOTS_PER_WORD)
+      }
+      return { files, lines: Int32Array.from(lines), initMasks }
+    } catch {}
   }
 
   createOwner () {

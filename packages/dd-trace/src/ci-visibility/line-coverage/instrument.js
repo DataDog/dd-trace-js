@@ -52,7 +52,10 @@ const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'Ar
 /**
  * @typedef {object} InstrumentOptions
  * @property {(code: string) => object} parse returns an ESTree Program with UTF-16 `start` and `end`
- * @property {number} moduleId the collector's id for the slot table of this module
+ * @property {string} [moduleKey] identifies the instrumented code: the module gives it to the collector,
+ *   with its slot table, the first time it runs
+ * @property {Array<string | null>} [sources] the file each source stands for, null for a source whose
+ *   lines count nowhere; one entry, for the code itself, when there is no `mapPosition`
  * @property {(line: number, column: number) => ({ source: number, line: number } | undefined)} [mapPosition]
  *   maps a generated position (1-based line, 0-based column) to a source and its 1-based line, or
  *   undefined when the position is not credited
@@ -80,10 +83,11 @@ class Instrumenter {
    * @param {object} program
    * @param {InstrumentOptions} options
    */
-  constructor (code, program, { moduleId, mapPosition }) {
+  constructor (code, program, { moduleKey = '', sources = [null], mapPosition }) {
     this.code = code
     this.program = program
-    this.moduleId = moduleId
+    this.moduleKey = moduleKey
+    this.sources = sources
     this.mapPosition = mapPosition
     this.prefix = choosePrefix(code)
     this.lineStarts = getLineStarts(code)
@@ -1218,13 +1222,16 @@ class Instrumenter {
 
   // Declares the slot words, the touch function and the reader. The functions are hoisted, so code
   // that runs before the header (hoisted functions called through a circular require) works. The
-  // reader writes the module id into `o`, then a word index and its bits for each word with slots
-  // that ran, clears them, and returns the number of entries it wrote. It returns 0 when it already
-  // ran for boundary `g`.
+  // first touch gives the collector the module's key and slot table, and keeps the id it returns:
+  // the code does not depend on the process that instrumented it, so it can be cached. The reader
+  // writes the module id into `o`, then a word index and its bits for each word with slots that
+  // ran, clears them, and returns the number of entries it wrote. It returns 0 when it already ran
+  // for boundary `g`.
   header (words) {
     const p = this.prefix
-    let reader = `function ${p}x(o,g){if(${p}g===g)return 0;${p}g=g;o[0]=${this.moduleId};var n=1;`
-    let names = `${p}t=0,${p}g=0,${p}c`
+    let reader = `function ${p}x(o,g){if(${p}g===g)return 0;${p}g=g;o[0]=${p}m;var n=1;`
+    // The id has no initialiser, so the header keeps one that a touch before it set.
+    let names = `${p}t=0,${p}g=0,${p}c,${p}m`
     for (const word of words) {
       reader += `if(${p}${word}){o[n++]=${word};o[n++]=${p}${word};${p}${word}=0}`
       // Starting at 0 keeps `|=` on small integers.
@@ -1232,10 +1239,30 @@ class Instrumenter {
     }
     reader += `${p}t=0;return n}`
     const touch = `function ${p}r(){var c=${p}c||(${p}c=globalThis[Symbol.for('dd-trace.line-coverage')]);` +
-      `${p}t=c?c.touch(${this.moduleId},${p}x):1}`
+      `if(c){if(${p}m===void 0)${p}m=${p}d(c);${p}t=c.touch(${p}m,${p}x)}else ${p}t=1}`
+    const define = `function ${p}d(c){return c.define(${this.describe()})}`
     // Passes a value on, so probes can run right after the expression that computes it.
     const identity = `function ${p}a(v){return v}`
-    return `;var ${names};${touch}${reader}${identity}`
+    return `;var ${names};${touch}${define}${reader}${identity}`
+  }
+
+  // The arguments of the collector's `define`: the module key, the sources, the line of each slot,
+  // negated for initialiser lines, and, when slots come from more than one source, the source of
+  // each slot.
+  describe () {
+    let lines = ''
+    let sources = ''
+    let several = false
+    for (let i = 0; i < this.slots.length; i++) {
+      const { source, line, init } = this.slots[i]
+      const separator = i === 0 ? '' : ','
+      lines += separator + (init ? -line : line)
+      sources += separator + source
+      if (source !== 0) several = true
+    }
+    let text = `${JSON.stringify(this.moduleKey)},${JSON.stringify(this.sources)},[${lines}]`
+    if (several) text += `,[${sources}]`
+    return text
   }
 }
 
