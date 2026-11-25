@@ -84,6 +84,15 @@ const ALL_DISABLED_MANAGEMENT_TESTS = {
 const QUARANTINE_MANAGEMENT_TESTS = {
   playwright: {
     suites: {
+      'quarantine-serial-test.js': {
+        tests: {
+          'quarantine serial first fails and is quarantined': {
+            properties: {
+              quarantined: true,
+            },
+          },
+        },
+      },
       'quarantine-test.js': {
         tests: {
           'quarantine should quarantine failed test': {
@@ -374,6 +383,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         isQuarantining,
         hasFlakyTests,
         expectedQuarantinedTestCount,
+        quarantinedTestName,
       }) =>
         receiver
           .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -385,7 +395,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
 
             const flakyTests = tests.filter(test => test.meta[TEST_NAME] === 'flaky should be flaky')
             const quarantinedTests = tests.filter(
-              test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test'
+              test => test.meta[TEST_NAME] === quarantinedTestName
             )
 
             quarantinedTests.forEach(test => {
@@ -431,7 +441,8 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
        *   extraEnvVars?: Record<string, string>,
        *   cliArgs?: string,
        *   hasFlakyTests?: boolean,
-       *   expectedQuarantinedTestCount?: number
+       *   expectedQuarantinedTestCount?: number,
+       *   quarantinedTestName?: string
        * }} options
        */
       const runQuarantineTest = async (receiver, {
@@ -440,6 +451,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         cliArgs = 'quarantine-test.js',
         hasFlakyTests = false,
         expectedQuarantinedTestCount = 1,
+        quarantinedTestName = 'quarantine should quarantine failed test',
       }) => {
         let testOutput = ''
         let proc
@@ -462,6 +474,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
             isQuarantining,
             hasFlakyTests,
             expectedQuarantinedTestCount,
+            quarantinedTestName,
           })
           proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
           proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
@@ -525,6 +538,20 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         })
       })
 
+      for (const retries of [0, 1]) {
+        it(`does not fail the session when a quarantined serial test leaves later tests not run (retries=${retries})`,
+          async (receiver) => {
+            receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
+            receiver.setSettings({ test_management: { enabled: true } })
+            await runQuarantineTest(receiver, {
+              isQuarantining: true,
+              cliArgs: `quarantine-serial-test.js --retries=${retries}`,
+              expectedQuarantinedTestCount: retries + 1,
+              quarantinedTestName: 'quarantine serial first fails and is quarantined',
+            })
+          })
+      }
+
       const runQuarantineMustFailTest = async (receiver, {
         cliArgs = 'quarantine-test.js',
         extraEnvVars,
@@ -570,6 +597,12 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
           proc?.kill()
         }
       }
+
+      it('fails the session when tests outside the quarantined serial group did not run', async (receiver) => {
+        await runQuarantineMustFailTest(receiver, {
+          cliArgs: 'quarantine-serial-test.js quarantine-test.js --workers=1 --max-failures=1',
+        })
+      })
 
       for (const hook of ['BEFORE', 'AFTER']) {
         it(`does not quarantine a ${hook.toLowerCase()}All failure in the quarantined suite`, async (receiver) => {
