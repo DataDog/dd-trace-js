@@ -195,6 +195,67 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
     assert.ok(linesOf('runs instrumented code with every timer faked').has(4))
   })
 
+  it('reports the initialiser lines of the module copy each test ran', async () => {
+    const coverageRecords = []
+    const testsByName = new Map()
+    const coveragePromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcov',
+      (payloads) => {
+        coverageRecords.length = 0
+        coverageRecords.push(...payloads
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content: { coverages } }) => coverages))
+        assert.strictEqual(coverageRecords.filter(({ span_id: spanId }) => spanId !== undefined).length, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        testsByName.clear()
+        for (const { payload } of payloads) {
+          for (const { type, content } of payload.events) {
+            if (type === 'test') testsByName.set(content.meta[TEST_NAME], content)
+          }
+        }
+        assert.strictEqual(testsByName.size, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    // In band, so that one process evaluates branches.js once for each test file.
+    childProcess = exec('node ./node_modules/jest/bin/jest --config config-jest.js --runInBand', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_TEST_LINE_COVERAGE_ENABLED: '1',
+        CONFIG_TEST_MATCH: '**/ci-visibility/jest-line-coverage-copies/*-test.js',
+      },
+    })
+    let testOutput = ''
+    childProcess.stdout.on('data', chunk => { testOutput += chunk })
+    childProcess.stderr.on('data', chunk => { testOutput += chunk })
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+
+    const linesOf = (name) => {
+      const test = testsByName.get(`module copies ${name}`)
+      assert.ok(test, `no test named ${name}`)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
+      assert.ok(record, `no record for ${name}`)
+      return getLines(record.files, 'ci-visibility/jest-line-coverage-copies/branches.js')
+    }
+    // Each copy took the branch its test file selected. A test gets the body of getBranch, and the
+    // initialiser lines of the copy it called, whichever file ran first.
+    const first = linesOf('runs the first branch')
+    const second = linesOf('runs the second branch')
+    assert.ok(first.has(11) && first.has(5), testOutput)
+    assert.ok(!first.has(7), testOutput)
+    assert.ok(second.has(11) && second.has(7), testOutput)
+    assert.ok(!second.has(5), testOutput)
+  })
+
   esModuleIt('reports the lines each test ran in ECMAScript modules', async () => {
     const coverageRecords = []
     const testsByName = new Map()
