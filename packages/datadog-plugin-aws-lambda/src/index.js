@@ -6,6 +6,8 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const TraceContextExtractor = require('./context/extractor')
+const { injectAuthorizerSpan } = require('./context/http')
+const SpanInferrer = require('./span-inferrer')
 
 const invocationStartChannel = dc.channel('datadog:aws-lambda:invocation:start')
 const invocationEndChannel = dc.channel('datadog:aws-lambda:invocation:end')
@@ -70,8 +72,25 @@ class AwsLambdaPlugin extends TracingPlugin {
   bindStart (context) {
     const functionName = context.context?.functionName ||
       getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    if (context.config?.createInferredSpan ?? this.config.createInferredSpan) {
+      const inferrer = new SpanInferrer(this.tracer, {
+        service: getEnvironmentVariable('DD_SERVICE'),
+        serviceMapping: this._tracerConfig.serviceMapping,
+        serviceRepresentationEnabled: context.config?.serviceRepresentationEnabled ??
+          this.config.serviceRepresentationEnabled,
+        removeIntegrationServiceNamesEnabled: this._tracerConfig.spanRemoveIntegrationFromService,
+      })
+      try {
+        // The source listener gates inferred authorizer decoding with encodeAuthorizerContext.
+        context.inferredSpan = this.tracer.scope().activate(null, () =>
+          inferrer.createInferredSpan(context.event, context.context, context.parent,
+            context.config?.encodeAuthorizerContext ?? this.config.encodeAuthorizerContext))
+      } catch (error) {
+        log.debug('Unable to create Lambda inferred span: %s', error)
+      }
+    }
     const span = this.startSpan('aws.lambda', {
-      childOf: context.parent || null,
+      childOf: context.inferredSpan?.span || context.parent || null,
       meta: context.parent && (context.parentSource === 'event' || context.parentSource === 'xray')
         ? { '_dd.parent_source': context.parentSource }
         : undefined,
@@ -115,7 +134,29 @@ class AwsLambdaPlugin extends TracingPlugin {
     invocationEndChannel.publish(context)
     // Span.finish() is idempotent, so a span the impending-timeout monitor already finished when
     // it fired is left untouched here.
+    // The shim's tracer.wrap finishes the invocation before onCompleteInvocation finishes its parent.
     context.lambdaSpan?.finish()
+    const inferred = context.inferredSpan
+    let finishTime
+    try {
+      if (inferred) {
+        if (context.error && !inferred.isAsync) inferred.span.setTag('error', context.error)
+        finishTime = inferred.isAsync ? context.lambdaSpan._startTime : Date.now()
+        inferred.span.finish(finishTime)
+      }
+    } catch (error) {
+      log.debug('Unable to finish Lambda inferred span: %s', error)
+    }
+    if ((context.config?.encodeAuthorizerContext ?? this.config.encodeAuthorizerContext) &&
+        context.result?.principalId && context.result?.policyDocument) {
+      try {
+        const span = inferred?.span || context.lambdaSpan
+        finishTime ??= span._startTime + span._duration
+        injectAuthorizerSpan(this.tracer, context.result, span, context.event?.requestContext?.requestId, finishTime)
+      } catch (error) {
+        log.debug('Unable to inject Lambda authorizer context: %s', error)
+      }
+    }
   }
 }
 

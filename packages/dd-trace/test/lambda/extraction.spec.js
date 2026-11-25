@@ -38,7 +38,7 @@ describe('Lambda facade context extraction', () => {
     delete process.env._X_AMZN_TRACE_ID
     delete process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
     delete process.env.DD_MERGE_XRAY_TRACES
-    tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
+    tracer = await agent.load('aws-lambda', { createInferredSpan: false }, { experimental: { exporter: 'agent' } })
     // agent.load may rebuild the tracer between specs; refresh the internal facade with that instance.
     delete require.cache[require.resolve('../../src/lambda/facade')]
     facade = require('../../src/lambda/facade')
@@ -294,7 +294,7 @@ describe('Lambda facade context extraction', () => {
 
   it('inherits extraction configuration from the plugin without leaking per-handler overrides', async () => {
     const custom = sinon.stub().resolves(customParent)
-    tracer.use('aws-lambda', { traceExtractor: custom, mergeXrayTraces: true })
+    tracer.use('aws-lambda', { traceExtractor: custom, mergeXrayTraces: true, createInferredSpan: false })
     const span = await invoke({})
     assert.strictEqual(span.parent_id.toString(10), '5678')
     traces.length = 0
