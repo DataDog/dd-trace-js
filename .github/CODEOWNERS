@@ -607,6 +607,7 @@
 /packages/dd-trace/src/plugin_manager.js @DataDog/lang-platform-js @DataDog/apm-idm-js
 
 # Automated dependency updates
+/.yarnrc.yml @DataDog/lang-platform-js
 /bunfig.toml @DataDog/lang-platform-js
 /versions/bunfig.toml @DataDog/lang-platform-js
 /package.json @DataDog/lang-platform-js @dd-octo-sts
