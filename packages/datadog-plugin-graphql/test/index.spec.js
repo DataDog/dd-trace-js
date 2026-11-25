@@ -2570,11 +2570,6 @@ describe('Plugin', () => {
           graphql = require(`../../../versions/graphql@${version}`).get()
         })
 
-        // A resolver that re-enters execute() with the same object contextValue
-        // (Apollo federation and stitching do this) is short-circuited by the
-        // plugin and its resolvers reuse the outer operation's context. The
-        // per-resolver variable tags must still come from each field's own
-        // variableValues, not the outer operation's.
         it('tags each resolve span with its own operation variables', () => {
           const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
           const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')

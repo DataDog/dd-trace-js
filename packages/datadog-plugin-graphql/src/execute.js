@@ -33,6 +33,10 @@ const {
  * }} ExecutionArguments
  * @typedef {(value: unknown) => unknown} ThenableCallback
  * @typedef {{ then: (onFulfilled?: ThenableCallback, onRejected?: ThenableCallback) => unknown }} Thenable
+ * @typedef {{
+ *   graphqlRequestSpan?: DatadogSpan,
+ *   graphqlRootCtx?: ReturnType<typeof createRootContext>
+ * }} GraphQLRequestStore
  * @typedef {import('../../datadog-instrumentations/src/helpers/graphql-jit-runtime').ArgumentFactory} ArgumentFactory
  */
 
@@ -91,9 +95,11 @@ class AbortError extends Error {
  * @param {AbortController | undefined} abortController
  * @param {{ fields: object[] } | undefined} jitPlan
  * @param {Record<string, unknown> | undefined} variableValues
- * @returns {object}
+ * @param {unknown} contextValue
+ * @param {string | undefined} requestSource
  */
-function createRootContext (plugin, executeSpan, source, abortController, jitPlan, variableValues) {
+function createRootContext (plugin, executeSpan, source, abortController, jitPlan, variableValues,
+  contextValue, requestSource) {
   const hasIastSub = iastResolveCh.hasSubscribers
   const hasResolverSub = abortController !== undefined
   const traceResolvers = plugin.config.depth !== 0
@@ -104,6 +110,8 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
 
   const rootCtx = {
     source,
+    requestSource,
+    contextValue,
     config: plugin.config,
     abortController,
     executeSpan,
@@ -186,27 +194,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
    */
   readExecutionArgs (ctx) {
     const rawArgs = ctx.arguments
-    const args = readArgs(rawArgs, isObjectForm(rawArgs))
 
     // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
-    // execute internally with the same arguments object — without this we'd
-    // double-span). The contextValue check catches object contexts; the args
-    // check also catches primitive contexts.
+    // execute internally with the same arguments object — without this we'd double-span).
     if (instrumentedArgs.has(rawArgs?.[0])) {
       ctx.ddSkipped = true
       ctx.currentStore = legacyStorage.getStore()
       return
     }
 
-    const { contextValue } = args
-    if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
-      const store = legacyStorage.getStore()
-      ctx.ddSkipped = true
-      ctx.currentStore = store?.graphqlRootCtx === undefined ? store : { ...store, graphqlRootCtx: undefined }
-      return
-    }
-
-    return args
+    return readArgs(rawArgs, isObjectForm(rawArgs))
   }
 
   /**
@@ -237,7 +234,25 @@ class GraphQLExecutePlugin extends TracingPlugin {
   storeRootContext (ctx, contextValue, rootCtx) {
     ctx.currentStore.graphqlRootCtx = rootCtx
     if (isWeakMapKey(contextValue)) {
-      contexts.set(contextValue, rootCtx)
+      const active = contexts.get(contextValue)
+      if (active === undefined) {
+        contexts.set(contextValue, rootCtx)
+      } else {
+        const reference = rootCtx.contextReference ??= new WeakRef(rootCtx)
+        if (active.owners) {
+          active.owners.add(reference)
+          if (--active.registrationsUntilSweep === 0) {
+            pruneContextOwners(contextValue, active)
+          }
+        } else {
+          const previous = active.contextReference ??= new WeakRef(active)
+          contexts.set(contextValue, {
+            owners: new Set([previous, reference]),
+            sweepSize: 2,
+            registrationsUntilSweep: 2,
+          })
+        }
+      }
       ctx.ddContextValue = contextValue
     }
   }
@@ -269,8 +284,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
-    const requestStore =
-      /** @type {{ graphqlRequestSpan?: DatadogSpan } | undefined} */ (legacyStorage.getStore())
+    const requestStore = /** @type {GraphQLRequestStore | undefined} */ (legacyStorage.getStore())
+    const activeRootCtx = requestStore?.graphqlRootCtx
+    const parentCtx = contextValue && typeof contextValue === 'object' && activeRootCtx?.contextValue === contextValue
+      ? activeRootCtx
+      : undefined
     if (type !== undefined) {
       signature = getSignature(
         /** @type {import('graphql').DocumentNode} */ (document),
@@ -278,7 +296,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
         type,
         this.config.signature
       )
-      refineRequestSpanMetadata(requestStore?.graphqlRequestSpan, signature, type, name)
+      if (!parentCtx) {
+        refineRequestSpanMetadata(requestStore?.graphqlRequestSpan, signature, type, name)
+      }
     }
 
     ctx.collapse = this.config.collapse
@@ -298,11 +318,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     addVariableTags(this.config, span, args.variableValues)
 
-    const abortController = resolverStartCh.hasSubscribers ? new AbortController() : undefined
+    const abortController = parentCtx?.abortController ??
+      (resolverStartCh.hasSubscribers ? new AbortController() : undefined)
+    const requestSource = parentCtx?.requestSource ?? parentCtx?.source
 
     this.wrapExecutionResolvers(ctx, args)
 
-    const rootCtx = createRootContext(this, span, docSource, abortController, ctx.ddPlan, args.variableValues)
+    const rootCtx = createRootContext(
+      this, span, docSource, abortController, ctx.ddPlan, args.variableValues,
+      contextValue, requestSource === docSource ? undefined : requestSource
+    )
     ctx.ddRootCtx = rootCtx
     this.storeRootContext(ctx, contextValue, rootCtx)
 
@@ -381,7 +406,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     if (ctx.ddContextValue) {
-      contexts.delete(ctx.ddContextValue)
+      const contextValue = ctx.ddContextValue
+      const active = contexts.get(contextValue)
+      if (active?.owners) {
+        active.owners.delete(ctx.ddRootCtx.contextReference)
+        if (active.owners.size <= 1 || active.owners.size * 2 <= active.sweepSize) {
+          pruneContextOwners(contextValue, active)
+        }
+      } else {
+        contexts.delete(contextValue)
+      }
+      ctx.ddContextValue = undefined
     }
     if (ctx.ddInstrumentedArgs) {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
@@ -567,13 +602,20 @@ function wrapResolve (resolve, isJit = false) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
-    const rootCtx = isJit
-      ? legacyStorage.getStore()?.graphqlRootCtx
-      : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
-    if (!rootCtx) return invokeResolver(resolve, this, arguments, isJit)
+    const remembered = isJit ? undefined : contexts.get(contextValue)
+    let rootCtx = remembered
+    let config = rootCtx?.config
+    if (!config) {
+      rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+      config = rootCtx?.config
+      if (!config && remembered?.owners) {
+        rootCtx = pruneContextOwners(contextValue, remembered, true)
+        config = rootCtx?.config
+      }
+    }
+    if (!config) return invokeResolver(resolve, this, arguments, isJit)
 
     const infoPath = info?.path
-    const config = rootCtx.config
     const traceResolver = !depthDisabled && shouldInstrumentNode(config, infoPath)
 
     // pathString built incrementally off the parent's cached value
@@ -1422,6 +1464,35 @@ function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolve
 
 function isWeakMapKey (value) {
   return value !== null && (typeof value === 'object' || typeof value === 'function')
+}
+
+/**
+ * @param {object} contextValue
+ * @param {{ owners: Set<WeakRef<object>>, sweepSize: number, registrationsUntilSweep: number }} overlap
+ * @param {boolean} [findOnly]
+ */
+function pruneContextOwners (contextValue, overlap, findOnly = false) {
+  const { owners } = overlap
+  let remaining
+  for (const reference of owners) {
+    const owner = reference.deref()
+    if (owner === undefined) {
+      owners.delete(reference)
+    } else if (findOnly && remaining !== undefined) {
+      return
+    } else {
+      remaining = owner
+    }
+  }
+  if (remaining === undefined) {
+    contexts.delete(contextValue)
+  } else if (owners.size === 1) {
+    contexts.set(contextValue, remaining)
+    return remaining
+  } else {
+    overlap.sweepSize = owners.size
+    overlap.registrationsUntilSweep = owners.size
+  }
 }
 
 /**

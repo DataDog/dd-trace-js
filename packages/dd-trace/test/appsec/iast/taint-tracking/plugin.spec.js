@@ -325,6 +325,19 @@ describe('IAST Taint tracking plugin', () => {
       )
     })
 
+    it('Should taint delegated GraphQL resolver arguments from the request source', () => {
+      const source = 'query { delegated }'
+      const requestSource = 'query { original }'
+      const args = { name: 'world' }
+      const getRanges = sinon.stub(TaintedUtils, 'getRanges')
+      getRanges.withArgs(transactionId, source).returns([])
+      getRanges.withArgs(transactionId, requestSource).returns([{ iinfo: { type: HTTP_REQUEST_BODY } }])
+
+      graphqlResolveStartChannel.publish({ rootCtx: { source, requestSource }, args })
+
+      sinon.assert.calledOnceWithExactly(taintTrackingOperations.taintObject, iastContext, args, HTTP_REQUEST_BODY)
+    })
+
     describe('taint database sources', () => {
       it('Should not taint if config is set to 0', () => {
         taintTrackingPlugin.disable()
