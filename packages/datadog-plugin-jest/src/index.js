@@ -486,14 +486,14 @@ class JestPlugin extends CiPlugin {
 
     this.addBind('ci:jest:test:start', (ctx) => {
       const store = storage('legacy').getStore()
+      const span = this.startTestSpan(ctx)
       const test = this.#lineCoverage?.isActive()
         ? {
-            coverage: this.#lineCoverage.startTest(),
+            coverage: this.#lineCoverage.startTest(span),
             describeBlock: ctx.describeBlock,
             suiteId: this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)?.context()._spanId,
           }
         : undefined
-      const span = this.startTestSpan(ctx)
       if (test) {
         this.#lineCoverageTests.set(span, test)
         this.#openLineCoverageTests.add(test)
@@ -513,8 +513,8 @@ class JestPlugin extends CiPlugin {
 
     this.addBind('ci:jest:test-suite:hook:fn', (ctx) => {
       const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)
-      const store = storage('legacy').getStore()
-      return { ...store, span: testSuiteSpan }
+      const store = { ...storage('legacy').getStore(), span: testSuiteSpan }
+      return this.#lineCoverage?.isActive() ? this.#lineCoverage.suiteSetupStore(store) : store
     })
 
     this.addSub('ci:jest:test:finish', ({
