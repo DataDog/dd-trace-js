@@ -8,6 +8,7 @@ const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const { assertObjectContains, sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { TEST_NAME, TEST_STATUS } = require('../../packages/dd-trace/src/plugins/util/test')
 const { getBabelDependencies } = require('./babel-dependencies')
 const { oldest: oldestJestVersion } = require('./versions')
 
@@ -15,6 +16,22 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 
 const SUMMARY_TIMEOUT_MS = 30_000
+
+/**
+ * @param {{ filename: string, bitmap?: Uint8Array }[]} files
+ * @param {string} filename
+ * @returns {Set<number>}
+ */
+function getLines (files, filename) {
+  const lines = new Set()
+  const bitmap = files.find(file => file.filename === filename)?.bitmap
+  for (const [index, byte] of (bitmap ?? []).entries()) {
+    for (let bit = 0; bit < 8; bit++) {
+      if (byte & (1 << bit)) lines.add(index * 8 + bit)
+    }
+  }
+  return lines
+}
 
 // What the line coverage records say about the two test files of the fixture project, which each
 // call ci-visibility/test/sum.js once.
@@ -117,6 +134,62 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
       }
     })
   }
+
+  it('reports the lines of tests that replace fs, path and timers', async () => {
+    const coverageRecords = []
+    const testsByName = new Map()
+    const coveragePromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcov',
+      (payloads) => {
+        coverageRecords.length = 0
+        coverageRecords.push(...payloads
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content: { coverages } }) => coverages))
+        assert.ok(coverageRecords.some(({ shared }) => shared === 'init'), 'should report Shared init')
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        testsByName.clear()
+        for (const { payload } of payloads) {
+          for (const { type, content } of payload.events) {
+            if (type === 'test') testsByName.set(content.meta[TEST_NAME], content)
+          }
+        }
+        assert.strictEqual(testsByName.size, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    // With Jest's cache on, so that loading a module reads and writes cached instrumented code.
+    childProcess = exec(
+      'node ./node_modules/jest/bin/jest --config config-jest.js --cache --cacheDirectory=./jest-line-coverage-cache',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_TEST_LINE_COVERAGE_ENABLED: '1',
+          CONFIG_TEST_MATCH: '**/ci-visibility/jest-line-coverage-patches/patched-globals-test.js',
+        },
+      }
+    )
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
+    assert.strictEqual(exitCode, 0)
+
+    const linesOf = (name) => {
+      const test = testsByName.get(`with replaced fs, path and timers ${name}`)
+      assert.ok(test, `no test named ${name}`)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
+      assert.ok(record, `no record for ${name}`)
+      return getLines(record.files, 'ci-visibility/jest-line-coverage-patches/lazy.js')
+    }
+    // The body of `double`.
+    assert.ok(linesOf('runs code loaded while fs and path functions are replaced').has(4))
+    assert.ok(linesOf('runs instrumented code with every timer faked').has(4))
+  })
 
   it('reports no per-test or Shared records when line coverage is not requested', async () => {
     const coverageRecords = []

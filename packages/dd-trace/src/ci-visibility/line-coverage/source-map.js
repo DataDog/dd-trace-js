@@ -5,8 +5,9 @@
 // mapped segment with the greatest generated column at or before it on the same generated line.
 // Segments without a source do not count, and a position with no such segment is not credited.
 
-const fs = require('node:fs')
-const path = require('node:path')
+// Taken before any test runs, since tests replace fs and path functions.
+const { readFileSync } = require('node:fs')
+const { dirname, resolve } = require('node:path')
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const BASE64_VALUES = new Int8Array(128).fill(-1)
@@ -31,7 +32,7 @@ function readSourceMapUrl (url, filename) {
         ? Buffer.from(payload, 'base64').toString('utf8')
         : decodeURIComponent(payload)
     }
-    return fs.readFileSync(path.resolve(path.dirname(filename), url), 'utf8')
+    return readFileSync(resolve(dirname(filename), url), 'utf8')
   } catch {}
 }
 
@@ -75,10 +76,10 @@ function isWhitespace (c) {
  *   lookup of a generated position (1-based line, 0-based column) as a source index and 1-based line
  */
 function createPositionMapper (map, filename) {
-  const directory = path.dirname(filename)
+  const directory = dirname(filename)
   const sourceRoot = typeof map.sourceRoot === 'string' ? map.sourceRoot : ''
   const sources = map.sources.map(source =>
-    path.resolve(directory, sourceRoot, String(source ?? '').replace(/^file:\/\//, '')))
+    resolve(directory, sourceRoot, String(source ?? '').replace(/^file:\/\//, '')))
   const lines = decodeMappings(typeof map.mappings === 'string' ? map.mappings : '')
   const unsortedLines = new Set()
   for (const segments of lines) {
