@@ -1,5 +1,7 @@
 'use strict'
 
+// Internal bridge for datadog-lambda-js. Applications should use that package's wrapper API.
+
 const tracer = require('../../../..')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const { writeDatadogTraceId, writeDatadogParentId, writeDatadogSamplingPriority } = require('../carrier')
@@ -52,17 +54,16 @@ function reportInitFailure (failure) {
 /**
  * Builds the message for a facade entry point whose implementation has not landed yet.
  *
- * The five-function surface is a cross-major contract, so the names are reserved from the first
- * release of the facade. Throwing keeps the gap loud: a silent no-op here would drop customer
- * metrics with no error anywhere, which is the failure mode this migration exists to avoid.
+ * The shim requires the same internal contract on each supported tracer line. Throwing keeps the gap loud:
+ * a silent no-op here would drop customer metrics with no error anywhere.
  * The shim's integration lands only after these are implemented, so the throw never ships to a
  * shim user.
  *
  * @param {string} name Facade entry point.
  */
 function notImplemented (name) {
-  return `dd-trace/lambda ${name}() is not implemented yet: Lambda metrics land with the metrics ` +
-    'pipeline (migration PR 12). Keep using datadog-lambda-js for custom metrics until then.'
+  return `Internal Lambda ${name}() is not implemented yet. ` +
+    'Keep using datadog-lambda-js for custom metrics until the metrics pipeline is ported.'
 }
 
 module.exports = {

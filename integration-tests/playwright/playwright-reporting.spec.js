@@ -392,6 +392,46 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
+  describe(`playwright@${version} worker traces`, function () {
+    const it = version === 'latest' || satisfies(version, '>=1.38.0') ? createPlaywrightIt() : global.it.skip
+    useSandbox([`@playwright/test@${version}`])
+
+    it('round-trips trace, span, and parent IDs from parallel workers', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2 --workers=2',
+        {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+            DD_INJECT_FORCE: 'true',
+            TEST_DIR: './ci-visibility/playwright-worker-ids',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const spans = payloads.flatMap(({ payload }) => payload.events)
+            .filter(({ type, content }) => type === 'span' && content.name === 'playwright.worker.ids')
+            .map(({ content }) => content)
+          assert.strictEqual(spans.length, 2)
+          assert.notStrictEqual(spans[0].meta['ipc.worker'], spans[1].meta['ipc.worker'])
+          for (const span of spans) {
+            assert.strictEqual(span.meta['ipc.transport'], 'fork')
+            assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+            assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+            assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+            assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+  })
+
   describe(`playwright@${version} global errors`, function () {
     const it = createPlaywrightIt()
     this.timeout(60000)
@@ -547,6 +587,9 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     }
 
+    // Isolate parallel runs and retries so Playwright cleanup cannot remove another run's artifacts.
+    let emptySessionRunId = 0
+
     for (const mode of ['skip-tests', 'skip-suite', 'mixed', 'error']) {
       it(`reports zero-execution sessions: ${mode}`, async (receiver, run) => {
         receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
@@ -556,6 +599,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             TEST_DIR: './ci-visibility/playwright-tests-empty-session',
             EMPTY_SESSION_MODE: mode,
+            PLAYWRIGHT_OUTPUT_DIR: `./test-results-empty-session-${++emptySessionRunId}`,
           },
         })
         const reason = mode.startsWith('skip-') ? 'all_tests_skipped' : undefined
@@ -586,6 +630,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+            PLAYWRIGHT_OUTPUT_DIR: `./test-results-empty-session-${++emptySessionRunId}`,
           },
         }
       )
@@ -618,6 +663,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+            PLAYWRIGHT_OUTPUT_DIR: `./test-results-empty-session-${++emptySessionRunId}`,
           },
         }
       )
@@ -651,6 +697,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+            PLAYWRIGHT_OUTPUT_DIR: `./test-results-empty-session-${++emptySessionRunId}`,
           },
         }
       )
@@ -684,6 +731,7 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             PLAYWRIGHT_THROWING_REPORTER: '1',
             TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+            PLAYWRIGHT_OUTPUT_DIR: `./test-results-empty-session-${++emptySessionRunId}`,
           },
         }
       )
@@ -1840,6 +1888,55 @@ versions.forEach((version) => {
           assert.strictEqual(exitCode, 1)
           assert.strictEqual(testOutput.split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1, 1, testOutput)
         })
+
+      it('uploads failure media when a child-only batch precedes its test span', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisAgentlessConfig(receiver.port),
+          {
+            DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: '1',
+            PLAYWRIGHT_SPLIT_TEST_TRACES: 'true',
+            PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.filter(({ payload }) => payload?.events).flatMap(({ payload }) => payload.events)
+            const failedTest = events.find(event => event.type === 'test' &&
+              event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+            assert.ok(failedTest, getTestOutput())
+            const { meta, trace_id: traceId } = failedTest.content
+            assert.strictEqual(meta[TEST_STATUS], 'fail', getTestOutput())
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true', getTestOutput())
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOADED], 'true', getTestOutput())
+            assert.strictEqual(meta['_dd.playwright.media_attempt_id'], undefined)
+            assert.strictEqual(meta['worker_payload.159']?.length, 4800)
+
+            const children = events.filter(event => event.content.name?.startsWith('worker-batch-child-'))
+            assert.deepStrictEqual(children.map(event => event.content.name).sort(), [
+              'worker-batch-child-first',
+              'worker-batch-child-second',
+            ])
+            for (const { content } of children) {
+              assert.strictEqual(content.trace_id.toString(), traceId.toString())
+              assert.strictEqual(content.meta['worker_payload.159']?.length, 4800)
+            }
+            const uploads = payloads.filter(({ media }) => media).map(({ media }) => media)
+            assert.deepStrictEqual(uploads.map(({ contentType }) => contentType).sort(), ['image/png', 'video/webm'])
+            for (const upload of uploads) {
+              assert.strictEqual(upload.traceId, traceId.toString())
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
 
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
       deferredFailureScreenshotTest(

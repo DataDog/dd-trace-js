@@ -27,6 +27,18 @@ const ALLOWED_ROOTSPAN_NAMES = new Set([
 /** @type {WeakMap<import('http').IncomingMessage, ((error: Error) => void) | undefined>} */
 const requestsToBlockOnDetection = new WeakMap()
 
+/** @type {WeakSet<import('http').IncomingMessage>} */
+const requestsWithBlockingAbort = new WeakSet()
+
+/**
+ * Tells whether RASP aborted an operation of the request to block it.
+ *
+ * @param {import('http').IncomingMessage} req
+ */
+function hasBlockingAbort (req) {
+  return requestsWithBlockingAbort.has(req)
+}
+
 /**
  * @param {import('http').IncomingMessage} req
  * @param {(error: Error) => void} [ignoreError] Keeps the abort error of a blocked request out of the framework's
@@ -100,6 +112,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
         }
       }
 
+      requestsWithBlockingAbort.add(req)
       abortController.abort(abortError)
 
       return
@@ -113,6 +126,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
 module.exports = {
   handleResult,
+  hasBlockingAbort,
   markToBlockOnDetection,
   RULE_TYPES,
   DatadogRaspAbortError,

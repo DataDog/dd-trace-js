@@ -60,6 +60,7 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   getTestLineStart,
   getFileAndLineNumberFromError,
+  getNonDependencyStackFramesFromError,
 } = require('../../../src/plugins/util/test')
 
 const {
@@ -641,7 +642,7 @@ describe('attempt to fix summary', () => {
 
   it('collects attempt to fix executions from worker traces', () => {
     const executions = new Map()
-    const payload = JSON.stringify([
+    const traces = [
       [
         {
           meta: {
@@ -655,9 +656,9 @@ describe('attempt to fix summary', () => {
           },
         },
       ],
-    ])
+    ]
 
-    collectAttemptToFixExecutionsFromTraces(payload, executions)
+    collectAttemptToFixExecutionsFromTraces(traces, executions)
 
     const summary = formatAttemptToFixSummary(executions)
     assert.match(summary, /worker-suite\.js › worker test/)
@@ -667,10 +668,10 @@ describe('attempt to fix summary', () => {
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 
-  it('collects test optimization summaries from worker traces with one parse', () => {
+  it('collects attempt to fix executions and dynamic names from the same worker traces', () => {
     const executions = new Map()
     const newTestsWithDynamicNames = new Set()
-    const payload = JSON.stringify([
+    const traces = [
       [
         {
           meta: {
@@ -689,9 +690,9 @@ describe('attempt to fix summary', () => {
           },
         },
       ],
-    ])
+    ]
 
-    collectTestOptimizationSummariesFromTraces(payload, {
+    collectTestOptimizationSummariesFromTraces(traces, {
       attemptToFixExecutions: executions,
       newTestsWithDynamicNames,
     })
@@ -914,7 +915,7 @@ describe('test management summary', () => {
 
   it('collects disabled and quarantined actions from worker traces', () => {
     const executions = new Map()
-    const payload = JSON.stringify([
+    const traces = [
       [
         {
           meta: {
@@ -933,9 +934,9 @@ describe('test management summary', () => {
           },
         },
       ],
-    ])
+    ]
 
-    collectTestOptimizationSummariesFromTraces(payload, { testManagementExecutions: executions })
+    collectTestOptimizationSummariesFromTraces(traces, { testManagementExecutions: executions })
 
     assert.match(formatTestManagementSummary(executions), /Disabled: 1 test skipped\./)
     assert.match(
@@ -2334,5 +2335,27 @@ describe('getFileAndLineNumberFromError', () => {
   it('stays linear on an attacker-shaped newline-free frame', () => {
     const error = { stack: `at (${'a'.repeat(200_000)} /repo/src/x.js:5:1)` }
     assert.strictEqual(getFileAndLineNumberFromError(error, '/repo')[1], 5)
+  })
+})
+
+describe('getNonDependencyStackFramesFromError', () => {
+  it('returns non-dependency frames under the repo root', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at dep (/repo/node_modules/x/index.js:9:9)',
+        '    at handler (/repo/src/server.js:128:20)',
+        '    at test (/repo/test/server.spec.js:7:5)',
+      ].join('\n'),
+    }
+
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError(error, '/repo'), [
+      { file: '/repo/src/server.js', line: 128 },
+      { file: '/repo/test/server.spec.js', line: 7 },
+    ])
+  })
+
+  it('returns an empty list when the error has no stack', () => {
+    assert.deepStrictEqual(getNonDependencyStackFramesFromError({}, '/repo'), [])
   })
 })

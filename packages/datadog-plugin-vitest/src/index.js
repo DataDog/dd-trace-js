@@ -96,6 +96,8 @@ class VitestPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
+    this.filterDiBreakpointHitByStack = true
+
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:session:configuration', ({ onDone }) => {
@@ -204,9 +206,8 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
-      // might be wrongly overwritten.
       if (mightHitProbe) {
+        this.queueDiBreakpointHitSpan(span)
         this.activeTestSpan = span
       }
 
@@ -549,14 +550,11 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:worker-report:coverage', data => {
-      const formattedCoverages = JSON.parse(data).map(coverage => ({
-        sessionId: id(coverage.sessionId),
-        suiteId: id(coverage.suiteId),
-        files: coverage.files,
-      }))
-      for (const formattedCoverage of formattedCoverages) {
-        this.tracer._exporter.exportCoverage(formattedCoverage)
+    this.addSub('ci:vitest:worker-report:coverage', coverages => {
+      if (!Array.isArray(coverages)) return
+
+      for (const { sessionId, suiteId, files } of coverages) {
+        this.tracer._exporter.exportCoverage({ sessionId: id(sessionId), suiteId: id(suiteId), files })
       }
     })
 

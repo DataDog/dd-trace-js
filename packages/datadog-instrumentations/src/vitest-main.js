@@ -1197,6 +1197,11 @@ function safeWorkspaceProject (ctx) {
   return project
 }
 
+function hasCachedSpecifications (ctx) {
+  const cachedSpecs = ctx?.specifications?._cachedSpecs
+  return typeof cachedSpecs?.size === 'number' && cachedSpecs.size > 0
+}
+
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (this.ctx.config.shard && this.ctx.state.pathsSet.size > 0 && arguments[0].length === 0) {
@@ -1229,13 +1234,16 @@ function getFinishWrapper (exitOrClose) {
 
     // pathsSet contains candidates before sharding, including files that never run.
     const hasNoTestFiles = this.state.pathsSet.size === 0
-    const isEmptyShard = emptyShardContexts.has(this)
+    const files = this.state.getFiles()
+    const tests = getTypeTasks(files)
+    const isEmptyShard = emptyShardContexts.has(this) ||
+      (this.config.shard && this.config.passWithNoTests && !areAllSuitesSkipped &&
+        files.length === 0 && hasCachedSpecifications(this))
     const hasUnexpectedEmptySession = hasNoTestFiles && !isEmptyShard &&
       !areAllSuitesSkipped && !this.config.passWithNoTests
     if (!error && hasUnexpectedEmptySession) {
       error = new Error('No test files were found.')
     }
-    const tests = getTypeTasks(this.state.getFiles())
     const hasExecutedTests = tests.some(test =>
       test.mode !== 'skip' && test.mode !== 'todo' &&
       (test.result?.state === 'pass' || test.result?.state === 'fail')
@@ -2054,7 +2062,7 @@ function handleWorkerReport (interprocessCode, data) {
       newTestsWithDynamicNames,
       attemptToFixExecutions,
     })
-    workerReportTraceCh.publish(data)
+    workerReportTraceCh.publish({ traces: data })
     return true
   }
 

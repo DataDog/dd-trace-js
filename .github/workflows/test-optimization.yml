@@ -185,8 +185,10 @@ jobs:
       TEST_OPTIMIZATION_NODE_SHARD: ${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -199,7 +201,7 @@ jobs:
       - run: npm run test:integration:playwright:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
           SPEC: ${{ matrix.spec }}
       - uses: ./.github/actions/coverage
         with:
@@ -224,8 +226,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -236,7 +240,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}-${{ matrix.spec }}
@@ -360,8 +364,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -376,7 +382,7 @@ jobs:
           JEST_VERSION: ${{ matrix.jest-version }}
           JEST_TEST_PATTERN: ${{ matrix.test-pattern }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
@@ -407,8 +413,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -419,7 +427,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}-${{ matrix.spec }}
@@ -477,8 +485,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -491,7 +501,7 @@ jobs:
       - run: npm run test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-selenium-${{ matrix.version }}
@@ -545,8 +555,10 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -573,7 +585,7 @@ jobs:
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
           SPEC: ${{ matrix.spec }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
@@ -623,8 +635,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -638,7 +652,7 @@ jobs:
             ${{ (matrix.spec == 'vitest.core' || matrix.spec == 'vitest.retries') && matrix.vitest-version == 'all'
             && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
@@ -676,8 +690,10 @@ jobs:
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: ./.github/actions/dd-wif
+        id: dd-wif
+        with:
+          org_uuid: ${{ secrets.DATADOG_ORG_UUID }}
         continue-on-error: true
       - uses: ./.github/actions/node
         with:
@@ -695,7 +711,7 @@ jobs:
       - run: npm run test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          DD_API_KEY: ${{ steps.dd-wif.outputs.api_key }}
           SPEC: vitest.browser
           VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
           VITEST_BROWSER_BINARY: ${{ matrix.browser-binary }}

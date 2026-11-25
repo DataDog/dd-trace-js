@@ -26,6 +26,7 @@ const brokenLoaders = NODE_VERSION.startsWith('18.0')
 const isNode20LoaderWorker = !isMainThread && NODE_VERSION.startsWith('20.0')
 const useDefaultLoader = brokenLoaders || isNode20LoaderWorker
 // Avoid CommonJS in the loader worker on Node 20.0: https://github.com/nodejs/node/issues/47566
+// @ts-expect-error Node supports query strings in module specifiers.
 const loaderHook = useDefaultLoader ? undefined : await import('./loader-hook.mjs?initialize')
 
 let hasInsertedInit = false
@@ -43,7 +44,7 @@ export const globalPreload = isNode20LoaderWorker
 /**
  * @param {{ source?: string|Buffer|Uint8Array, format?: string }} result
  * @param {unknown} _url_
- * @param {{ format?: string, isMain?: boolean }} context
+ * @param {{ format?: string | null, isMain?: boolean }} context
  * @returns {{ source?: string|Buffer|Uint8Array, format?: string }}
  */
 function insertInit (result, _url_, context) {
@@ -103,7 +104,8 @@ if (isMainThread) {
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
   // `registerHooks` alone keeps the gate open once Node.js drops `register` (nodejs/node#67090).
-  if ((Module.registerHooks || Module.register) && initialized) {
-    require('./register.js')
+  const hasSyncHooks = 'registerHooks' in Module && typeof Module.registerHooks === 'function'
+  if (initialized && (hasSyncHooks || typeof Module.register === 'function')) {
+    await import('./register.mjs')
   }
 }

@@ -752,6 +752,34 @@ describe('OpenTelemetry Logs', () => {
       logger.emit({ body: Symbol('test') })
     })
 
+    for (const protocol of ['json', 'protobuf']) {
+      it(`exports integers outside the int64 range as doubles with http/${protocol}`, () => {
+        // Doubles adjacent to the signed 64-bit bounds: the last accepted values and the first rejected ones.
+        const int64Values = { min: -(2 ** 63), max: 2 ** 63 - 1024 }
+        const values = { ...int64Values, below_min: -(2 ** 63) - 2048, above_max: 2 ** 63, huge: 1e20 }
+        const expected = Object.entries(values).map(([key, value]) => ({
+          key,
+          value: key in int64Values ? { intValue: value } : { doubleValue: value },
+        }))
+        process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = `http/${protocol}`
+        let logRecords
+        const verify = mockOtlpExport((decoded) => {
+          const request = protocol === 'json' ? decoded : protoLogsService.toObject(decoded, { longs: Number })
+          logRecords = request.resourceLogs[0].scopeLogs[0].logRecords
+        }, protocol)
+
+        const { logs } = setupLogs(true, String(expected.length))
+        const logger = logs.getLogger('test-logger')
+        for (const value of Object.values(values)) {
+          logger.emit({ body: value, attributes: value === values.min ? values : undefined })
+        }
+
+        verify()
+        assert.deepStrictEqual(logRecords.map(({ body }) => body), expected.map(({ value }) => value))
+        assert.deepStrictEqual(logRecords[0].attributes, expected)
+      })
+    }
+
     it('sends logs after batch timeout expires', (done) => {
       mockOtlpExport((decoded) => {
         const logRecord = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]

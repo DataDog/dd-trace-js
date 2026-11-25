@@ -54,6 +54,9 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  workerIds: {
+    specs: ['./first.e2e.js', './worker-ids.e2e.js'],
+  },
   exclusions: {
     maxInstances: 1,
     specs: ['./test-exclusions.e2e.js'],

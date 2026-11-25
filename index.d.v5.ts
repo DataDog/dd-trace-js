@@ -140,10 +140,11 @@ interface Tracer extends opentracing.Tracer {
    * The span will automatically be finished when one of these conditions is
    * met:
    *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its second parameter, in which case the
-   * span will finish when that callback is called.
+   * * The function declares a second parameter, in which case the span finishes
+   * when the supplied completion callback is called. This takes precedence over
+   * a returned promise, and the return value passes through unchanged.
+   * * Otherwise, the function returns a promise, in which case the span finishes
+   * when the promise is resolved or rejected.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
@@ -158,10 +159,11 @@ interface Tracer extends opentracing.Tracer {
    * The span will automatically be finished when one of these conditions is
    * met:
    *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its last parameter, in which case the
-   * span will finish when that callback is called.
+   * * The final argument at a call site is a function, in which case it is
+   * replaced with a completion callback. The span finishes when that callback
+   * is called, even if the wrapped function also returns a promise.
+   * * Otherwise, the function returns a promise, in which case the span finishes
+   * when the promise is resolved or rejected.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
@@ -1957,6 +1959,58 @@ declare namespace tracer {
          */
         arguments: string;
       };
+      /**
+       * Set when the tool call runs an MCP tool: references an entry of the `mcpServers` evaluate option.
+       */
+      mcp?: {
+        /**
+         * The `id` of the MCP server entry of the tool.
+         */
+        server_id: string;
+      };
+    }
+
+    /**
+     * An MCP server referenced by the `mcp.server_id` of tool calls, sent in the `mcpServers` evaluate option.
+     * The SDK sends these values to AI Guard and stores them on the AI Guard span as given, without redaction:
+     * remove any credential before passing them.
+     */
+    export interface McpServer {
+      /**
+       * Server ID that the tool calls reference with `mcp.server_id`.
+       */
+      id: string;
+      /**
+       * Who runs the MCP client: `client` when the application runs it, `provider` when the model provider runs it.
+       */
+      managed_by: 'client' | 'provider';
+      /**
+       * Transport of the server.
+       */
+      transport: 'streamable_http' | 'sse' | 'stdio' | 'in_process' | 'unknown';
+      /**
+       * Configured name of the server.
+       */
+      name?: string;
+      /**
+       * Origin of the server URL: scheme, host and port only. Remove userinfo, path, query and fragment before
+       * passing it: many MCP providers put the API key there.
+       */
+      url?: string;
+      /**
+       * Program name of a stdio server command. Pass the program name, not the full path, which can contain the
+       * user name.
+       */
+      command?: string;
+      /**
+       * Package or module that a stdio server runs. Leave out other arguments, which can contain paths, tokens or
+       * secrets.
+       */
+      args?: string[];
+      /**
+       * Original MCP tool name of each function name that the model uses.
+       */
+      tools: { [functionName: string]: string };
     }
 
     /**
@@ -2162,6 +2216,9 @@ declare namespace tracer {
        *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
        *             empty key, a key longer than 200 characters, a string value longer than 25000
        *             characters, or a value that is not a string, finite number or boolean are dropped.
+       *   - `mcpServers`: The MCP servers that the `mcp.server_id` of the tool calls reference. Sent with the
+       *                   messages and reported on the AI Guard span; omitted when empty. The entries are sent
+       *                   and stored as given and are not redacted: remove any credential from them first.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
@@ -2171,6 +2228,7 @@ declare namespace tracer {
         opts?: {
           block?: boolean,
           tags?: { [key: string]: string | number | boolean },
+          mcpServers?: McpServer[],
         }
       ): Promise<Evaluation>;
     }

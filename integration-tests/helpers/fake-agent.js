@@ -7,6 +7,9 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
 const createMulter = require('multer')
+
+const { decodeOtlpTraceRequest } = require('./otlp')
+
 const upload = createMulter()
 
 const noop = () => {}
@@ -572,11 +575,11 @@ function buildExpressServer (agent) {
     })
   })
 
-  app.post('/v1/traces', (req, res) => {
+  app.post('/v1/traces', bodyParser.raw({ limit: Infinity, type: 'application/x-protobuf' }), (req, res) => {
     res.status(200).send()
     agent.emit('otlp-traces', {
       headers: req.headers,
-      payload: req.body,
+      payload: req.is('application/x-protobuf') ? decodeOtlpTraceRequest(req.body) : req.body,
     })
   })
 

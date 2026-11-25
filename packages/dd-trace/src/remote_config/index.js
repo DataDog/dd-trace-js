@@ -726,20 +726,24 @@ function supportsAckCallback (handler) {
 
 /**
  * @param {import('@datadog/libdatadog/remote-config').RemoteConfigFetcherOptions} options
- * @returns {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher}
+ * @returns {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher | undefined}
  */
 function createAgentlessFetcher (options) {
-  const { RemoteConfigFetcher, setStorage } = require('@datadog/libdatadog/remote-config')
-  const { storage } = require('../../../datadog-core')
-  const legacyStorage = storage('legacy')
+  try {
+    const { RemoteConfigFetcher, setStorage } = require('@datadog/libdatadog/remote-config')
+    const { storage } = require('../../../datadog-core')
+    const legacyStorage = storage('legacy')
 
-  /** @param {() => void} callback */
-  function runWithoutTracing (callback) {
-    legacyStorage.run({ noop: true }, callback)
+    /** @param {() => void} callback */
+    function runWithoutTracing (callback) {
+      legacyStorage.run({ noop: true }, callback)
+    }
+
+    setStorage(runWithoutTracing)
+    return new RemoteConfigFetcher(options)
+  } catch (error) {
+    log.error('[RC] Could not initialize agentless Remote Config; Remote Config is disabled', error)
   }
-
-  setStorage(runWithoutTracing)
-  return new RemoteConfigFetcher(options)
 }
 
 /**

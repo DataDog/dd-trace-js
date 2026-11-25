@@ -618,6 +618,16 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagIntent', () => {
+      it('tags a span with an intent', () => {
+        tagger._register(span)
+        tagger.tagIntent(span, 'Check the weather')
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.intent': 'Check the weather',
+        })
+      })
+    })
+
     describe('tagToolDefinitions', () => {
       it('tags a span with a full tool definition', () => {
         const toolDefinitions = [

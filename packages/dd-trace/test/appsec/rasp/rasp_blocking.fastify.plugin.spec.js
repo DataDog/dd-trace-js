@@ -98,6 +98,23 @@ describe('RASP - fastify blocking', () => {
         return fs.readFileSync(request.query.payload)
       })
 
+      // Libraries such as sequelize throw their own error and keep the original one in a property other than `cause`.
+      app.get('/lfi-wrapped', async (request, reply) => {
+        try {
+          return fs.readFileSync(request.query.payload)
+        } catch (error) {
+          throw Object.assign(new Error('Library error'), { parent: error })
+        }
+      })
+
+      app.get('/lfi-replaced', async (request, reply) => {
+        try {
+          return fs.readFileSync(request.query.payload)
+        } catch {
+          throw new Error('Application error')
+        }
+      })
+
       app.get('/sqli', async (request, reply) => {
         return pool.query(`SELECT * FROM users WHERE id='${request.query.payload}'`)
       })
@@ -205,6 +222,26 @@ describe('RASP - fastify blocking', () => {
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, blockedJson)
       await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
+    })
+
+    it('should block with LFI when a property of the error holds the abort error', async () => {
+      const res = await httpRequest('/lfi-wrapped?payload=/etc/passwd')
+
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data, blockedJson)
+      const span = await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
+      assert.strictEqual(span.meta['appsec.blocked'], 'true')
+    })
+
+    it('should not block with LFI when the application replaces the abort error', async () => {
+      const res = await httpRequest('/lfi-replaced?payload=/etc/passwd')
+
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 500)
+      assert(res.data.includes('Application error'), `Got: ${inspect(res.data)}`)
+      const span = await checkRaspExecutedAndHasThreat(agent, 'rasp-lfi-rule-id-5')
+      assert.ok(!('appsec.blocked' in span.meta))
     })
 
     it('should block with SQLI', async () => {

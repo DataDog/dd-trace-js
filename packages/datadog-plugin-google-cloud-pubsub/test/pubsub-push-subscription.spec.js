@@ -255,6 +255,56 @@ describe('Push Subscription Plugin', () => {
       })
     })
 
+    /**
+     * @param {Record<string, string>} headers
+     * @param {(meta: Record<string, string>) => void} assertMeta
+     * @param {(error?: Error) => void} done
+     */
+    function assertPushSpanMeta (headers, assertMeta, done) {
+      appListener = createServer().listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        agent
+          .assertSomeTraces(traces => assertMeta(findPubSubSpan(traces).meta))
+          .then(() => done(), done)
+
+        sendPushRequest(port, headers).catch(done)
+      })
+    }
+
+    it('should name the subscription and the propagated topic of another project', (done) => {
+      assertPushSpanMeta({
+        'x-goog-pubsub-subscription-name': 'projects/analytics/subscriptions/warehouse-orders',
+        'pubsub.topic': 'projects/commerce/topics/orders',
+      }, meta => {
+        assertObjectContains(meta, {
+          'pubsub.subscription': 'projects/analytics/subscriptions/warehouse-orders',
+          'pubsub.topic': 'projects/commerce/topics/orders',
+          'gcp.pubsub.subscription.name': 'projects/analytics/subscriptions/warehouse-orders',
+          'gcp.pubsub.topic.name': 'projects/commerce/topics/orders',
+        })
+      }, done)
+    })
+
+    it('should not name a topic for the placeholder used without the pubsub.topic header', (done) => {
+      assertPushSpanMeta({}, meta => {
+        assert.strictEqual(meta['pubsub.topic'], 'push-subscription-topic')
+        assert.strictEqual(meta['gcp.pubsub.subscription.name'], 'projects/test-project/subscriptions/test-sub')
+        assert.ok(!('gcp.pubsub.topic.name' in meta))
+      }, done)
+    })
+
+    it('should not name a topic or subscription that is not a full resource name', (done) => {
+      assertPushSpanMeta({
+        'x-goog-pubsub-subscription-name': 'test-sub',
+        'pubsub.topic': 'test-topic',
+      }, meta => {
+        assert.strictEqual(meta['pubsub.topic'], 'test-topic')
+        assert.ok(!('gcp.pubsub.topic.name' in meta))
+        assert.ok(!('gcp.pubsub.subscription.name' in meta))
+      }, done)
+    })
+
     it('should propagate distributed trace context from producer to push receive', (done) => {
       const producerTraceId = '1234567890abcdef'
       const producerSpanId = 'fedcba0987654321'

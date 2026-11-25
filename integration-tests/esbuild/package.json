@@ -22,16 +22,17 @@
   "dependencies": {
     "@apollo/server": "5.5.2",
     "@koa/router": "15.7.1",
-    "@langchain/core": "1.4.1",
-    "@langchain/langgraph": "1.7.4",
+    "@langchain/core": "1.4.2",
+    "@langchain/langgraph": "1.7.5",
     "@smithy/smithy-client": "4.15.2",
+    "ai": "7.0.172",
     "aws-sdk": "2.1693.0",
     "axios": "1.21.1",
     "esbuild": "^0.28.0",
     "express": "4.22.3",
     "knex": "3.3.0",
     "koa": "3.3.0",
-    "openai": "7.57.0",
+    "openai": "7.61.0",
     "zod": "4.6.7"
   }
 }
