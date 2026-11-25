@@ -73,6 +73,20 @@ describe('rewriter targets', () => {
     )
   })
 
+  it('finds AI SDK model resolution chunks without matching other assets', () => {
+    const filePath = 'dist/default-stop-condition-wtuJTiTo.js'
+    assert.deepStrictEqual(getRewriteTarget(`file:///app/node_modules/ai/${filePath}`), {
+      moduleName: 'ai', filePath, activate: true,
+    })
+    for (const filePath of [
+      'dist/default-stop-condition-.js',
+      'dist/default-stop-condition-wtuJTiTo.js.map',
+      'dist/simulate-readable-stream-wtuJTiTo.js',
+    ]) {
+      assert.strictEqual(getRewriteTarget(`file:///app/node_modules/ai/${filePath}`), undefined)
+    }
+  })
+
   it('finds nested rewrite targets', () => {
     assert.deepStrictEqual(
       getRewriteTarget('file:///app/node_modules/outer/node_modules/@langchain/core/dist/embeddings.js'),
