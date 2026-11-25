@@ -4,11 +4,7 @@ const fs = require('node:fs')
 const { createRequire } = require('node:module')
 const path = require('node:path')
 
-const {
-  createEsmResolver,
-  createEsmWrapper,
-  processModule,
-} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { createEsmResolver, createEsmWrapper } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const {
   classify,
   instrument,
@@ -241,8 +237,8 @@ class EsmInterception {
    * @type {Map<string, string>}
    */
   #specifiers = new Map()
-  /** @type {Map<string, Promise<string[] | undefined>>} */
-  #exports = new Map()
+  /** @type {Map<string, Promise<string | undefined>>} */
+  #wrappers = new Map()
   /** @type {Map<string, string>} */
   #moduleSources = new Map()
   /** @type {ReturnType<typeof createEsmResolver> | undefined} */
@@ -270,19 +266,15 @@ class EsmInterception {
    * @param {string} id The id of the wrapped module.
    */
   load (context, id) {
-    return this.#getExports(context, id).then(setters => {
-      if (!setters) throw new Error(`Could not analyze the exports of ${id}`)
-      return createEsmWrapper({
-        path: id,
-        specifier: this.#specifiers.get(id),
-        setters,
-      })
+    return this.#getWrapper(context, id).then(code => {
+      if (code === undefined) throw new Error(`Could not analyze the exports of ${id}`)
+      return code
     })
   }
 
   buildEnd () {
     const resolver = this.#resolver
-    this.#exports.clear()
+    this.#wrappers.clear()
     this.#moduleSources.clear()
     this.#resolver = undefined
     return resolver?.close().catch(error => {
@@ -307,9 +299,10 @@ class EsmInterception {
       warn: warning => context.warn(warning.message),
     })
     if (kind !== 'esm-intercept') return resolved
-    this.#specifiers.set(id, source)
-    return this.#getExports(context, id).then(setters => {
-      if (!setters) return resolved
+    // The wrapper reports the specifier of the first import of the build resolving to the module.
+    if (!this.#wrappers.has(id)) this.#specifiers.set(id, source)
+    return this.#getWrapper(context, id).then(code => {
+      if (code === undefined) return resolved
       // IITM registration must run even when importers only re-export the module.
       return { id: GENERATED_ID_PREFIX + id, moduleSideEffects: true }
     })
@@ -318,22 +311,22 @@ class EsmInterception {
   /**
    * @param {ResolveContext} context
    * @param {string} id
-   * @returns {Promise<string[] | undefined>}
+   * @returns {Promise<string | undefined>}
    */
-  #getExports (context, id) {
-    const cached = this.#exports.get(id)
+  #getWrapper (context, id) {
+    const cached = this.#wrappers.get(id)
     if (cached) return cached
     this.#resolver ??= createEsmResolver()
-    const exports = /** @type {Promise<string[] | undefined>} */ (processModule({
+    const wrapper = /** @type {Promise<string | undefined>} */ (createEsmWrapper({
       path: id,
-      context: { format: 'module' },
-      moduleSources: this.#moduleSources,
+      specifier: /** @type {string} */ (this.#specifiers.get(id)),
       resolver: this.#resolver,
-    }).then(setters => [...setters.values()], error => {
+      moduleSources: this.#moduleSources,
+    }).catch(error => {
       context.warn(`Skipped intercepting the exports of ${id}: ${error instanceof Error ? error.message : error}`)
     }))
-    this.#exports.set(id, exports)
-    return exports
+    this.#wrappers.set(id, wrapper)
+    return wrapper
   }
 }
 

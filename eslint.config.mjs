@@ -1254,8 +1254,11 @@ export default [
     },
   },
   {
-    name: 'dd-trace/bundler-esm-exports/cyclic-star-fixtures',
-    files: ['packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-cycle-*.mjs'],
+    name: 'dd-trace/bundler-esm-exports/star-fixtures',
+    files: [
+      'packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-cycle-*.mjs',
+      'packages/datadog-instrumentations/test/helpers/bundler-esm-exports/export-shared-star.mjs',
+    ],
     rules: {
       'import/export': 'off',
       'import/no-cycle': 'off',

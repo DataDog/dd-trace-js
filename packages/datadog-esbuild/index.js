@@ -5,11 +5,7 @@ const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
-const {
-  createEsmResolver,
-  createEsmWrapper,
-  processModule,
-} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
+const { createEsmResolver, createEsmWrapper } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
@@ -339,21 +335,12 @@ ${build.initialOptions.banner.js}`
           }
 
           resolver ??= createEsmResolver()
-          const setters = await processModule({
-            path: args.path,
-            internal: data.internal,
-            context: { format: 'module' },
-            excludeDefault: false,
-            moduleSources: new Map(),
-            resolver,
-            transform: build.esbuild.transformSync,
-          })
-
-          contents = createEsmWrapper({
+          contents = await createEsmWrapper({
             path: args.path,
             internal: data.internal,
             specifier: data.raw,
-            setters: setters.values(),
+            resolver,
+            transform: build.esbuild.transformSync,
           })
         } else {
           contents = fs.readFileSync(args.path, 'utf8')

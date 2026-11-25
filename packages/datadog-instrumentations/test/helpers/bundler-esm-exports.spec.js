@@ -11,36 +11,59 @@ const { pathToFileURL } = require('node:url')
 const iitm = require('import-in-the-middle')
 const sinon = require('sinon')
 
-const {
-  createEsmResolver,
-  createEsmWrapper,
-  driveGetExportsGenerator,
-  processModule,
-} = require('../../src/helpers/bundler-esm-exports')
+const { createEsmResolver, createEsmWrapper } = require('../../src/helpers/bundler-esm-exports')
 const transformTypeScript = require('./bundler-esm-exports/transform-typescript')
+
+const FIXTURES = path.join(__dirname, 'bundler-esm-exports')
 
 let spawn
 
+/**
+ * Wrappers import modules by absolute path, which bundlers resolve. Data URLs need file URLs instead.
+ *
+ * @param {string} code
+ */
+function importWrapper (code) {
+  const source = code.replaceAll(/from ("[^"]+")/g, (match, literal) => {
+    const specifier = JSON.parse(literal)
+    return path.isAbsolute(specifier) ? `from ${JSON.stringify(pathToFileURL(specifier).href)}` : match
+  })
+  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+}
+
+/**
+ * @param {Parameters<typeof createEsmWrapper>[0]['path']} modulePath
+ * @param {Partial<Parameters<typeof createEsmWrapper>[0]>} [options]
+ */
+async function createWrapper (modulePath, options) {
+  const resolver = createEsmResolver()
+  try {
+    return await createEsmWrapper({ path: modulePath, specifier: 'fixture', resolver, ...options })
+  } finally {
+    await resolver.close()
+  }
+}
+
+/**
+ * @param {string} code
+ */
+function getExportNames (code) {
+  return [...code.matchAll(/\$\d+ as (default|"(?:[^"\\]|\\.)*")/g)]
+    .map(([, name]) => name === 'default' ? name : JSON.parse(name))
+    .sort()
+}
+
 describe('bundler ESM wrappers', () => {
-  /** @type {Array<[string, boolean, string, string]>} */
+  /** @type {Array<[string, boolean, string, string, string]>} */
   const modules = [
-    [require.resolve('./bundler-esm-exports/space ü.mjs'), false, 'fixture/space "ü"', 'unicodePath'],
-    ['node:dns/promises', true, 'node:dns/promises', 'lookup'],
+    [path.join(FIXTURES, 'space ü.mjs'), false, 'fixture/space "ü"', 'unicodePath',
+      pathToFileURL(path.join(FIXTURES, 'space ü.mjs')).href],
+    ['node:dns/promises', true, 'node:dns/promises', 'lookup', 'node:dns/promises'],
+    ['dns/promises', true, 'dns/promises', 'lookup', 'node:dns/promises'],
   ]
-  for (const [modulePath, internal, specifier, exportName] of modules) {
+  for (const [modulePath, internal, specifier, exportName, moduleURL] of modules) {
     it(`registers replaceable exports and the original specifier for ${specifier}`, async () => {
-      const setters = await processModule({
-        path: modulePath,
-        internal,
-        context: { format: 'module' },
-        moduleSources: new Map(),
-      })
-      const code = createEsmWrapper({ path: modulePath, internal, specifier, setters: setters.values() })
-      const moduleURL = internal ? modulePath : pathToFileURL(modulePath).href
-      const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-      const source = code
-        .replace(JSON.stringify(modulePath), JSON.stringify(moduleURL))
-        .replace(JSON.stringify(iitmPath), JSON.stringify(pathToFileURL(iitmPath).href))
+      const code = await createWrapper(modulePath, { internal, specifier })
       const replacement = () => 'instrumented'
       const registrations = []
       const hook = (url, namespace, originalSpecifier) => {
@@ -49,17 +72,150 @@ describe('bundler ESM wrappers', () => {
         namespace[exportName] = replacement
       }
       iitm.addHook(hook)
+      // Adding a hook replays the registrations of wrappers evaluated by earlier tests.
+      registrations.length = 0
       try {
-        const exports = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+        const exports = await importWrapper(code)
 
         assert.deepStrictEqual(registrations, [specifier])
         assert.strictEqual(exports[exportName], replacement)
-        assert.doesNotMatch(code, /dd-trace:bundler:load|new Proxy/)
+        assert.doesNotMatch(code, /dd-trace:bundler:load|__iitm_/)
       } finally {
         iitm.removeHook(hook)
       }
     })
   }
+
+  it('imports the module defining a name re-exported through several star exports', async () => {
+    const definingPath = path.join(FIXTURES, 'export-method.mjs')
+    const code = await createWrapper(path.join(FIXTURES, 'export-shared-star.mjs'))
+    const exports = await importWrapper(code)
+
+    assert.ok(code.includes(`from ${JSON.stringify(definingPath)}`))
+    assert.deepStrictEqual(Object.keys(exports), ['exportMethod'])
+    assert.strictEqual(typeof exports.exportMethod, 'function')
+  })
+
+  it('should set a single exported method', async () => {
+    assert.deepStrictEqual(getExportNames(await createWrapper(path.join(FIXTURES, 'export-method.mjs'))),
+      ['exportMethod'])
+  })
+
+  it('should set the default exported method', async () => {
+    assert.deepStrictEqual(getExportNames(await createWrapper(path.join(FIXTURES, 'export-default-method.mjs'))),
+      ['default'])
+  })
+
+  it('should set the nested exports and share the sources it reads', async () => {
+    const modulePath = path.join(FIXTURES, 'export-method-and-nested-method.mjs')
+    const nestedPath = path.join(FIXTURES, 'export-method.mjs')
+    const moduleSources = new Map()
+    const code = await createWrapper(modulePath, { moduleSources })
+
+    assert.deepStrictEqual(getExportNames(code), ['exportMethod', 'exportedMethod2'])
+    assert.strictEqual(moduleSources.size, 2)
+    assert.strictEqual(moduleSources.get(modulePath), fs.readFileSync(modulePath, 'utf8'))
+    assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
+  })
+
+  it('should resolve bare star exports with import conditions', async () => {
+    const modulePath = path.join(FIXTURES, 'export-bare-star.mjs')
+    const code = await createWrapper(modulePath, {
+      moduleSources: new Map([[modulePath, "export * from '@actions/core'\n"]]),
+    })
+
+    assert.ok(getExportNames(code).includes('setSecret'))
+  })
+
+  it('should resolve package imports with import conditions', async () => {
+    const code = await createWrapper(path.join(FIXTURES, 'imports', 'index.mjs'))
+
+    assert.deepStrictEqual(getExportNames(code), ['imported'])
+  })
+
+  it('should resolve CommonJS re-exports with require conditions', async () => {
+    const code = await createWrapper(path.join(FIXTURES, 'conditions', 'index.mjs'))
+
+    const names = getExportNames(code)
+
+    assert.ok(names.includes('required'))
+    assert.ok(names.includes('join'), 'builtin re-exports resolve to the builtin')
+    assert.ok(!names.includes('imported'))
+  })
+
+  it('should collect builtin star exports without reading them as files', async () => {
+    const modulePath = path.join(FIXTURES, 'export-builtin.mjs')
+    const code = await createWrapper(modulePath, {
+      moduleSources: new Map([[modulePath, "export * from 'node:fs'\n"]]),
+    })
+
+    assert.ok(getExportNames(code).includes('readFile'))
+  })
+
+  it('should reject non-file star export targets', async () => {
+    const modulePath = path.join(FIXTURES, 'export-non-file.mjs')
+
+    await assert.rejects(createWrapper(modulePath, {
+      moduleSources: new Map([[modulePath, "export * from 'data:text/javascript,export const value = true'\n"]]),
+    }), /Unsupported ESM resolution URL: data:/)
+  })
+
+  it('should reject native module star exports', async () => {
+    const modulePath = path.join(FIXTURES, 'export-native.mjs')
+
+    await assert.rejects(createWrapper(modulePath, {
+      moduleSources: new Map([[modulePath, "export * from './value.node'\n"]]),
+    }), /Unsupported ESM analysis target: .*value\.node/)
+  })
+
+  it('should ignore JSON star exports', async () => {
+    const modulePath = path.join(FIXTURES, 'export-json.mjs')
+    const code = await createWrapper(modulePath, {
+      moduleSources: new Map([[modulePath, "export * from './value.json'\n"]]),
+    })
+
+    assert.deepStrictEqual(getExportNames(code), [])
+  })
+
+  it('should terminate cyclic star exports', async () => {
+    const code = await createWrapper(path.join(FIXTURES, 'export-cycle-a.mjs'))
+
+    assert.deepStrictEqual(getExportNames(code), ['fromA', 'fromB'])
+  })
+
+  it('should strip TypeScript from star export targets', async () => {
+    let transforms = 0
+    const code = await createWrapper(path.join(FIXTURES, 'export-typescript-star.mjs'), {
+      transform: (source, options) => {
+        transforms++
+        return transformTypeScript(source, options)
+      },
+    })
+
+    assert.deepStrictEqual(getExportNames(code), ['Client', 'sibling', 'value'])
+    assert.strictEqual(transforms, 3)
+  })
+
+  it('should strip TypeScript from the wrapped module', async () => {
+    const code = await createWrapper(path.join(FIXTURES, 'typescript-export.mts'), { transform: transformTypeScript })
+
+    assert.deepStrictEqual(getExportNames(code), ['Client'])
+  })
+
+  it('should preserve explicit ESM module.exports star exports', async () => {
+    const code = await createWrapper(path.join(FIXTURES, 'export-module-exports-star.mjs'))
+
+    assert.deepStrictEqual(getExportNames(code), ['module.exports'])
+  })
+
+  it('should set the builtin module exports', async () => {
+    const names = getExportNames(await createWrapper('http', { internal: true }))
+
+    assert.strictEqual(names.length, Object.keys(await import('http')).length)
+    assert.ok(names.includes('default'))
+    assert.ok(names.includes('createServer'))
+    assert.ok(names.includes('METHODS'))
+  })
 })
 
 function createChild () {
@@ -193,70 +349,6 @@ describe('ESM resolver', () => {
     await resolver.close()
 
     await assert.rejects(resolver.resolve('closed', parentURL), /The ESM resolver is closed/)
-  })
-
-  it('drives synchronous loads and asynchronous resolutions through one generator', async () => {
-    function * operations () {
-      const loaded = yield [0, parentURL, { format: 'module' }]
-      const resolved = yield [1, './value.mjs', { parentURL }]
-      return new Set([loaded.source, resolved.url.href])
-    }
-    const getSource = sinon.stub().returns({ format: 'module', source: 'source' })
-    const resolve = sinon.stub().resolves({ format: 'module', url: new URL('./value.mjs', parentURL) })
-
-    const result = await driveGetExportsGenerator(operations(), getSource, resolve)
-
-    assert.deepEqual(result, { exportNames: new Set(['source', new URL('./value.mjs', parentURL).href]) })
-    sinon.assert.calledWithExactly(getSource, parentURL, { format: 'module' })
-    sinon.assert.calledWithExactly(resolve, './value.mjs', { parentURL })
-  })
-
-  it('normalizes supported import-in-the-middle export result shapes', async () => {
-    const legacyExportNames = new Set(['legacy'])
-    const moduleExports = {
-      exportNames: ['modern'],
-      starReexports: [{ parentURL: parentURL.href, specifier: './value.mjs' }],
-    }
-    function * exportsResult (result) {
-      yield [0, parentURL, { format: 'module' }]
-      return result
-    }
-
-    assert.deepEqual(
-      await driveGetExportsGenerator(exportsResult(legacyExportNames), sinon.stub(), sinon.stub()),
-      { exportNames: legacyExportNames }
-    )
-    assert.strictEqual(
-      await driveGetExportsGenerator(exportsResult(moduleExports), sinon.stub(), sinon.stub()),
-      moduleExports
-    )
-  })
-
-  it('returns generator-owned resolution and protocol errors', async () => {
-    function * resolutionFailure () {
-      try {
-        yield [1, 'missing', { parentURL }]
-      } catch (error) {
-        return new Set([error.message])
-      }
-    }
-    function * protocolFailure () {
-      try {
-        yield [2]
-      } catch (error) {
-        return new Set([error.message])
-      }
-    }
-    const expected = new Error('resolution failed')
-
-    assert.deepEqual(
-      await driveGetExportsGenerator(resolutionFailure(), sinon.stub(), sinon.stub().rejects(expected)),
-      { exportNames: new Set([expected.message]) }
-    )
-    assert.deepEqual(
-      await driveGetExportsGenerator(protocolFailure(), sinon.stub(), sinon.stub()),
-      { exportNames: new Set(['Unsupported import-in-the-middle getExports operation: 2']) }
-    )
   })
 
   it('rejects malformed correlated responses without failing another request', async () => {
@@ -444,180 +536,5 @@ describe('ESM resolver', () => {
 
     await results
     sinon.assert.calledOnce(child.kill)
-  })
-})
-
-describe('ESM export analysis', () => {
-  describe('processModule', () => {
-    it('should set a single exported method', async () => {
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'export-method.mjs'),
-        context: { format: 'module' },
-      })
-      assert.strictEqual(setters.size, 1)
-      assert.strictEqual(setters.has('exportMethod'), true)
-    })
-
-    it('should set the default exported method', async () => {
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'export-default-method.mjs'),
-        context: { format: 'module' },
-      })
-
-      assert.strictEqual(setters.size, 1)
-      assert.strictEqual(setters.has('default'), true)
-    })
-
-    it('should set the nested exports', async () => {
-      const modulePath = path.join(__dirname, 'bundler-esm-exports', 'export-method-and-nested-method.mjs')
-      const nestedPath = path.join(__dirname, 'bundler-esm-exports', 'export-method.mjs')
-      const moduleSources = new Map()
-      const setters = await processModule({
-        path: modulePath,
-        context: { format: 'module' },
-        moduleSources,
-      })
-
-      assert.strictEqual(setters.size, 2)
-      assert.strictEqual(setters.has('exportMethod'), true)
-      assert.strictEqual(setters.has('exportedMethod2'), true)
-      assert.strictEqual(moduleSources.size, 2)
-      assert.strictEqual(moduleSources.get(modulePath), fs.readFileSync(modulePath, 'utf8'))
-      assert.strictEqual(moduleSources.get(nestedPath), fs.readFileSync(nestedPath, 'utf8'))
-    })
-
-    it('should resolve bare star exports with import conditions', async () => {
-      const modulePath = path.join(__dirname, 'bundler-esm-exports', 'export-bare-star.mjs')
-      const setters = await processModule({
-        path: modulePath,
-        context: { format: 'module' },
-        moduleSources: new Map([[modulePath, "export * from '@actions/core'\n"]]),
-      })
-
-      assert.strictEqual(setters.has('setSecret'), true)
-    })
-
-    it('should resolve package imports with import conditions', async () => {
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'imports', 'index.mjs'),
-        context: { format: 'module' },
-      })
-
-      assert.strictEqual(setters.has('imported'), true)
-    })
-
-    it('should collect builtin star exports without reading them as files', async () => {
-      const modulePath = path.join(__dirname, 'bundler-esm-exports', 'export-builtin.mjs')
-      const setters = await processModule({
-        path: modulePath,
-        context: { format: 'module' },
-        moduleSources: new Map([[modulePath, "export * from 'node:fs'\n"]]),
-      })
-
-      assert.strictEqual(setters.has('readFile'), true)
-    })
-
-    it('should reject non-file star export targets', async () => {
-      const nonFilePath = path.join(__dirname, 'bundler-esm-exports', 'export-non-file.mjs')
-
-      await assert.rejects(processModule({
-        path: nonFilePath,
-        context: { format: 'module' },
-        moduleSources: new Map([[
-          nonFilePath,
-          "export * from 'data:text/javascript,export const value = true'\n",
-        ]]),
-      }), /Unsupported ESM resolution URL: data:/)
-    })
-
-    it('should reject native module star exports', async () => {
-      const nativePath = path.join(__dirname, 'bundler-esm-exports', 'export-native.mjs')
-
-      await assert.rejects(processModule({
-        path: nativePath,
-        context: { format: 'module' },
-        moduleSources: new Map([[nativePath, "export * from './value.node'\n"]]),
-      }), /Unsupported ESM analysis target: .*value\.node/)
-    })
-
-    it('should ignore JSON star exports', async () => {
-      const jsonPath = path.join(__dirname, 'bundler-esm-exports', 'export-json.mjs')
-      const setters = await processModule({
-        path: jsonPath,
-        context: { format: 'module' },
-        moduleSources: new Map([[jsonPath, "export * from './value.json'\n"]]),
-      })
-
-      assert.deepStrictEqual([...setters.keys()], [])
-    })
-
-    it('should terminate cyclic star exports', async () => {
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'export-cycle-a.mjs'),
-        context: { format: 'module' },
-      })
-
-      assert.deepStrictEqual([...setters.keys()].sort(), ['fromA', 'fromB'])
-    })
-
-    it('should set TypeScript star exports', async () => {
-      let transforms = 0
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'export-typescript-star.mjs'),
-        context: { format: 'module' },
-        transform: (source, options) => {
-          transforms++
-          return transformTypeScript(source, options)
-        },
-      })
-
-      assert.deepStrictEqual([...setters.keys()].sort(), ['Client', 'sibling', 'value'])
-      assert.strictEqual(transforms, 3)
-    })
-
-    it('should preserve explicit ESM module.exports star exports', async () => {
-      const setters = await processModule({
-        path: path.join(__dirname, 'bundler-esm-exports', 'export-module-exports-star.mjs'),
-        context: { format: 'module' },
-      })
-
-      assert.deepStrictEqual([...setters.keys()], ['module.exports'])
-    })
-
-    it('should set the native module exports', async () => {
-      const setters = await processModule({
-        path: 'http',
-        internal: true,
-        context: { format: 'module' },
-      })
-
-      assert.strictEqual(setters.size, Object.keys(await import('http')).length)
-      assert.strictEqual(setters.has('default'), true)
-      assert.strictEqual(setters.has('createServer'), true)
-      assert.strictEqual(setters.has('METHODS'), true)
-    })
-
-    it('should generate distinct locals for export names that sanitize identically', async () => {
-      const modulePath = path.join(__dirname, 'bundler-esm-exports', 'colliding-export-names.mjs')
-      const setters = await processModule({
-        path: modulePath,
-        context: { format: 'module' },
-        moduleSources: new Map([[
-          modulePath,
-          'const foo_bar = 1, fooBar = 2\nexport { foo_bar, fooBar as "foo-bar" }\n',
-        ]]),
-      })
-      const source = `
-        const namespace = { foo_bar: 1, 'foo-bar': 2 }
-        const _ = {}
-        const set = {}
-        const get = {}
-        ${[...setters.values()].join('\n')}
-      `
-      const namespace = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
-
-      assert.strictEqual(namespace.foo_bar, 1)
-      assert.strictEqual(namespace['foo-bar'], 2)
-    })
   })
 })
