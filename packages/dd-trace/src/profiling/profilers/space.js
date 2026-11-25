@@ -82,7 +82,10 @@ class NativeSpaceProfiler {
   }
 
   profile (restart) {
-    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
+    const { heap } = this.#pprof
+    const profile = heap.profileEncoded === undefined
+      ? heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
+      : heap.profileEncoded(undefined, this.#mapper, getThreadLabels, 'pack')
     if (!restart) {
       this.stop()
     }
