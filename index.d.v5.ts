@@ -140,10 +140,11 @@ interface Tracer extends opentracing.Tracer {
    * The span will automatically be finished when one of these conditions is
    * met:
    *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its second parameter, in which case the
-   * span will finish when that callback is called.
+   * * The function declares a second parameter, in which case the span finishes
+   * when the supplied completion callback is called. This takes precedence over
+   * a returned promise, and the return value passes through unchanged.
+   * * Otherwise, the function returns a promise, in which case the span finishes
+   * when the promise is resolved or rejected.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
@@ -158,10 +159,11 @@ interface Tracer extends opentracing.Tracer {
    * The span will automatically be finished when one of these conditions is
    * met:
    *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its last parameter, in which case the
-   * span will finish when that callback is called.
+   * * The final argument at a call site is a function, in which case it is
+   * replaced with a completion callback. The span finishes when that callback
+   * is called, even if the wrapped function also returns a promise.
+   * * Otherwise, the function returns a promise, in which case the span finishes
+   * when the promise is resolved or rejected.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */

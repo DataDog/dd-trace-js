@@ -4648,7 +4648,7 @@ function onMessageWrapper (onMessage) {
     const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
       collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
-      workerReportTraceCh.publish(data)
+      workerReportTraceCh.publish({ traces: data })
       return
     }
     if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload

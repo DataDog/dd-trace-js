@@ -2,7 +2,6 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
@@ -145,148 +144,110 @@ function wrapTracer (tracer) {
   })
 }
 
-let orchestrionSubscribed = false
+// Orchestrion setup requires this module before activating the plugins. Module caching keeps these subscribers
+// singletons even when both entry points or multiple copies of the SDK are loaded.
+tracingChannel('orchestrion:ai:getTracer').subscribe({
+  end (ctx) {
+    const { arguments: args, result: tracer } = ctx
+    const { isEnabled } = args[0] ?? {}
 
-for (const hook of getHooks('ai').values()) {
-  if (hook.file === 'dist/index.js') {
-    // if not removed, the below hook will never match correctly
-    // however, it is still needed in the orchestrion definition
-    hook.file = null
-  }
+    if (isEnabled !== false) {
+      wrapTracer(tracer)
+    }
+  },
+})
 
-  addHook(hook, exports => {
-    if (orchestrionSubscribed) return exports
-    orchestrionSubscribed = true
+// Collect telemetry attributes by default, without overriding an explicit opt-out.
+tracingChannel('orchestrion:ai:selectTelemetryAttributes').subscribe({
+  start (ctx) {
+    const { arguments: args } = ctx
+    const options = args[0]
 
-    const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
-    getTracerChannel.subscribe({
-      end (ctx) {
-        const { arguments: args, result: tracer } = ctx
-        const { isEnabled } = args[0] ?? {}
+    if (options.telemetry?.isEnabled !== false) {
+      args[0] = {
+        ...options,
+        telemetry: {
+          ...options.telemetry,
+          isEnabled: true,
+        },
+      }
+    }
+  },
+})
 
-        if (isEnabled !== false) {
-          wrapTracer(tracer)
-        }
+tracingChannel('orchestrion:ai:includeRuntimeContext').subscribe({
+  start (ctx) {
+    const options = ctx.arguments[0]
+    const runtimeContext = options?.runtimeContext
+    const telemetry = options?.telemetry ?? options?.experimental_telemetry
+
+    if (!runtimeContext || typeof runtimeContext !== 'object' || telemetry?.isEnabled === false) return
+
+    const keys = Object.keys(runtimeContext)
+    if (!keys.length) return
+
+    const includeRuntimeContext = { ...telemetry?.includeRuntimeContext }
+    for (const key of keys) {
+      if (includeRuntimeContext[key] === undefined) includeRuntimeContext[key] = true
+    }
+
+    ctx.arguments[0] = {
+      ...options,
+      telemetry: {
+        ...telemetry,
+        includeRuntimeContext,
       },
-    })
+    }
+  },
+})
 
-    /**
-     * We patch this function to ensure that the telemetry attributes/tags are set always,
-     * even when telemetry options are not specified. This is to ensure easy use of this integration.
-     *
-     * If it is explicitly disabled, however, we will not change the options.
-     */
-    const selectTelemetryAttributesChannel = tracingChannel('orchestrion:ai:selectTelemetryAttributes')
-    selectTelemetryAttributesChannel.subscribe({
-      start (ctx) {
-        const { arguments: args } = ctx
-        const options = args[0]
+// resolveLanguageModel is called by all LLM entry points (generateText, streamText, generateObject, streamObject).
+tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
+  end (ctx) {
+    const model = ctx.arguments[0]
 
-        if (options.telemetry?.isEnabled !== false) {
-          args[0] = {
-            ...options,
-            telemetry: {
-              ...options.telemetry,
-              isEnabled: true,
-            },
-          }
-        }
-      },
-    })
-
-    tracingChannel('orchestrion:ai:includeRuntimeContext').subscribe({
-      start (ctx) {
-        const options = ctx.arguments[0]
-        const runtimeContext = options?.runtimeContext
-        const telemetry = options?.telemetry ?? options?.experimental_telemetry
-
-        if (!runtimeContext || typeof runtimeContext !== 'object' || telemetry?.isEnabled === false) return
-
-        const keys = Object.keys(runtimeContext)
-        if (!keys.length) return
-
-        const includeRuntimeContext = { ...telemetry?.includeRuntimeContext }
-        for (const key of keys) {
-          if (includeRuntimeContext[key] === undefined) includeRuntimeContext[key] = true
-        }
-
-        ctx.arguments[0] = {
-          ...options,
-          telemetry: {
-            ...telemetry,
-            includeRuntimeContext,
-          },
-        }
-      },
-    })
-
-    // resolveLanguageModel is called by all LLM entry points (generateText, streamText,
-    // generateObject, streamObject)
-    tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
-      end (ctx) {
-        const model = ctx.arguments[0]
-
-        // The SDK builds a model from a string id, in which case only the resolved instance is
-        // worth wrapping; when the caller passed an instance, that is the one the SDK calls.
-        if (typeof model === 'string' || model === ctx.result) {
-          wrapModel(ctx.result)
-        } else {
-          wrapModel(model)
-          wrappedModels.add(ctx.result)
-        }
-      },
-    })
-
-    return exports
-  })
-}
+    // The SDK builds a model from a string id, in which case only the resolved instance is
+    // worth wrapping; when the caller passed an instance, that is the one the SDK calls.
+    if (typeof model === 'string' || model === ctx.result) {
+      wrapModel(ctx.result)
+    } else {
+      wrapModel(model)
+      wrappedModels.add(ctx.result)
+    }
+  },
+})
 
 const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
 const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
 
-// for testing, and possibly actual instrumentation use, we want to
-// guard against double-subscribing to the asyncEnd channel of the
-// vercel ai-provided tracingChannel
-let subscribed = false
+// Only v7+ publishes this channel, so older SDKs never run the stream observer.
+aiSdkTelemetryChannel.subscribe({
+  asyncEnd (ctx) {
+    // guard against this event being re-emitted.
+    if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
 
-// as of the v7 release, the ai sdk does not automatically aggregate streamed responses
-// we will handle emitting the chunks directly for products to handle
-addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
-  if (subscribed) return exports
-  subscribed = true
+    // ai sdk v7 only supported on node.js 22+
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+    const { TransformStream } = require('node:stream/web')
+    const transform = new TransformStream({
+      transform (chunk, controller) {
+        const done = chunk.type === 'finish'
 
-  // ai sdk v7 only supported on node.js 22+
-  // inlining this import here so we only import in those cases
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  const { TransformStream } = require('node:stream/web')
+        aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
 
-  aiSdkTelemetryChannel.subscribe({
-    asyncEnd (ctx) {
-      // guard against this event being re-emitted.
-      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+        if (done) {
+          aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+        }
 
-      const transform = new TransformStream({
-        transform (chunk, controller) {
-          const done = chunk.type === 'finish'
+        controller.enqueue(chunk) // pass through value
+      },
+    })
 
-          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
-
-          if (done) {
-            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
-          }
-
-          controller.enqueue(chunk) // pass through value
-        },
-      })
-
-      // The telemetry result may be a copy, but its stream is shared with the SDK.
-      // Preserve that identity and attach the observer when the SDK pipes the stream.
-      shimmer.wrap(ctx.result.stream, 'pipeThrough', pipeThrough => function () {
-        const stream = pipeThrough.call(this, transform)
-        return pipeThrough.apply(stream, arguments)
-      })
-    },
-  })
-
-  return exports
+    // The telemetry result may be a copy, but its stream is shared with the SDK.
+    // Preserve that identity and attach the observer when the SDK pipes the stream.
+    shimmer.wrap(ctx.result.stream, 'pipeThrough', pipeThrough => function () {
+      const stream = pipeThrough.call(this, transform)
+      return pipeThrough.apply(stream, arguments)
+    })
+  },
 })

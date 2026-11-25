@@ -87,13 +87,14 @@ describe('loader hook', () => {
           'bullmq'
         ),
         includesHybridOrchestrion: data.shouldInclude(
-          'file:///app/node_modules/ai/dist/index.js',
-          'ai'
+          'file:///app/node_modules/@openai/agents-openai/dist/openaiChatCompletionsModel.mjs',
+          '@openai/agents-openai'
         ),
         pureIncludes: Object.fromEntries(${JSON.stringify([
           '@azure/cosmos',
           '@langchain/core',
           '@langchain/langgraph',
+          'ai',
           'bullmq',
           'mercurius',
         ])}.map(name => [name, data.shouldInclude(
@@ -127,6 +128,7 @@ describe('loader hook', () => {
         '@azure/cosmos': false,
         '@langchain/core': false,
         '@langchain/langgraph': false,
+        ai: false,
         bullmq: false,
         mercurius: false,
       },
