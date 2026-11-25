@@ -110,6 +110,8 @@ class NativeWallProfiler {
   #captureSpanData = false
   #codeHotspotsEnabled = false
   #otlp = false
+  // The OTLP labels of custom labels objects, for the profile being captured
+  #otelCustomLabels = new WeakMap()
   #contextCountGaugeUpdater
   collectsCpuTime = false
   #currentContext
@@ -377,6 +379,10 @@ class NativeWallProfiler {
     }
 
     // Labels are generated when the profile is visited, in the format it's exported in
+    if (this.#otlp) {
+      // A profile converts custom labels as they are when it's visited
+      this.#otelCustomLabels = new WeakMap()
+    }
     const options = this.#otlp
       // Every sample with a context is a timestamped observation, as the timeline needs
       ? { generateLabels: this.#boundGenerateOtelLabels, samplePerContext: true }
@@ -458,7 +464,7 @@ class NativeWallProfiler {
     // As in _generateLabels, internal labels take precedence over custom labels of the same key
     const labels = customLabels === undefined
       ? { ...getOtelThreadLabels() }
-      : { ...getOtelCustomLabels(customLabels), ...getOtelThreadLabels() }
+      : { ...getOtelCustomLabels(customLabels, this.#otelCustomLabels), ...getOtelThreadLabels() }
 
     const asyncId = context.asyncId
     if (asyncId !== undefined && asyncId !== -1) {

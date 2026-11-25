@@ -66,23 +66,24 @@ function getNonJSThreadsOtelLabels () {
   return nonJSThreadsOtelLabels
 }
 
-// The OTLP labels of custom labels objects, which the samples taken in a runWithLabels() call share
-const otelCustomLabels = new WeakMap()
-
 /**
  * Returns the custom labels of a sample as OTLP sample labels: execution context labels under their own keys.
+ * They're cached for the custom labels object, which the samples taken in a runWithLabels() call share, in a
+ * cache for one profile: callers may change the object between profiles, and a profile has its values when it's
+ * visited, as pprof profiles do.
  *
  * @param {Record<string, string | number>} customLabels
+ * @param {WeakMap<object, Record<string, string | number>>} cache
  * @returns {Record<string, string | number>}
  */
-function getOtelCustomLabels (customLabels) {
-  let labels = otelCustomLabels.get(customLabels)
+function getOtelCustomLabels (customLabels, cache) {
+  let labels = cache.get(customLabels)
   if (labels === undefined) {
     labels = {}
     for (const [key, value] of Object.entries(customLabels)) {
       labels[`${OTEL_CONTEXT_LABEL_PREFIX}${key}`] = value
     }
-    otelCustomLabels.set(customLabels, labels)
+    cache.set(customLabels, labels)
   }
   return labels
 }

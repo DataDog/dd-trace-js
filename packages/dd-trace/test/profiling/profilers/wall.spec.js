@@ -328,6 +328,12 @@ describe('profilers/native/wall', () => {
       'process.context.label.datadog.local_root_span_id': 41n,
     })
 
+    // A labels object changed between profiles has its new values in the next one, as in pprof
+    customLabels.customer = 'beta'
+    profiler.capture(true)
+    const { generateLabels: generateNextLabels } = pprof.time.stopAndCapture.secondCall.args[1]
+    assert.strictEqual(generateNextLabels({ node: {}, context })['process.context.label.customer'], 'beta')
+
     profiler.capture(false)
   })
 
