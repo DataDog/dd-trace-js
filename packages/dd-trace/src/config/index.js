@@ -698,6 +698,16 @@ class Config extends ConfigBase {
     if (this.OTEL_PROFILES_EXPORTER === 'none' && !trackedConfigOrigins.has('profiling.DD_PROFILING_ENABLED')) {
       setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
     }
+    // OTLP profiles are an OpenTelemetry signal too: like the others, OTEL_SDK_DISABLED disables them, even over an
+    // explicit Datadog opt-in. With OTLP export, that disables profiling.
+    if (this.OTEL_SDK_DISABLED && this.OTEL_PROFILES_EXPORTER === 'otlp') {
+      this.#deactivate(
+        'profiling.DD_PROFILING_ENABLED',
+        'Profiling is disabled, because OTEL_SDK_DISABLED=true disables the OpenTelemetry SDK, which exports ' +
+          'profiles with OTEL_PROFILES_EXPORTER=otlp.',
+        'false'
+      )
+    }
 
     if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
@@ -928,16 +938,18 @@ class Config extends ConfigBase {
    *
    * @param {ConfigPath} name
    * @param {string} reason
+   * @param {false | 'false'} [value] - The option's value when it's off: false, or 'false' for string options
    */
-  #deactivate (name, reason) {
-    if (!get(this, name)) return
+  #deactivate (name, reason, value = false) {
+    const current = get(this, name)
+    if (!current || current === value) return
 
     if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
       this.#explainedDeactivations.add(name)
       // `log.warn` only prints with debug logging enabled, so write the diagnostic like the startup logs do
       warn(`DATADOG TRACER DIAGNOSTIC - ${reason}`)
     }
-    setAndTrack(this, name, false)
+    setAndTrack(this, name, value)
   }
 }
 

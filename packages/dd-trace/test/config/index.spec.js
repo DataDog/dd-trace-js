@@ -902,6 +902,36 @@ describe('Config', () => {
       })
     }
 
+    it('should disable explicitly enabled profiling with OTLP export', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.OTEL_PROFILES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'calculated')
+      sinon.assert.calledOnceWithExactly(
+        logWriter.warn,
+        'DATADOG TRACER DIAGNOSTIC - Profiling is disabled, because OTEL_SDK_DISABLED=true disables the ' +
+          'OpenTelemetry SDK, which exports profiles with OTEL_PROFILES_EXPORTER=otlp.'
+      )
+    })
+
+    it('should keep profiling without OTLP export', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
     it('should not explain anything when OTel metrics and logs are not enabled', () => {
       process.env.DD_TRACE_STARTUP_LOGS = 'true'
       process.env.OTEL_SDK_DISABLED = 'true'
