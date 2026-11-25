@@ -13,6 +13,7 @@ const { isSyncLoaderHookVersionSupported } = require('../../../../dd-trace/src/r
 const root = resolve(__dirname, '../../../../..')
 const fixture = join(__dirname, 'fixtures', 'require-esm')
 const init = join(root, 'init.js')
+const loaderUrl = pathToFileURL(join(root, 'loader-hook.mjs')).href
 const registerPath = join(root, 'register.js')
 const passThroughLoader = 'data:text/javascript,export async function load(url, context, nextLoad) {' +
   'return nextLoad(url, context)}'
@@ -46,6 +47,53 @@ describe('rewriting ES modules loaded through require()', () => {
       'const registerHooks = Module.registerHooks; delete Module.registerHooks;' +
       `await import(${JSON.stringify(pathToFileURL(registerPath).href)});` +
       'Module.registerHooks = registerHooks'
+    assert.deepStrictEqual(
+      run(['-r', init, '--import', preload], "require('postgres')"),
+      ['rewritten', 'unsupported']
+    )
+  })
+
+  it('rewrites each target once and keeps the inline source map last with --loader', function () {
+    if (!process.allowedNodeEnvironmentFlags.has('--loader')) {
+      // Newer Node.js releases no longer support the legacy loader flag.
+      this.skip()
+    }
+
+    assert.deepStrictEqual(
+      run(['-r', init, '--loader', loaderUrl, '--enable-source-maps'], `
+        const assert = require('node:assert/strict')
+        const { findSourceMap, registerHooks } = require('node:module')
+        const { pathToFileURL } = require('node:url')
+        const poolPath = require.resolve('./node_modules/postgres/src/pool.js')
+        const poolUrl = pathToFileURL(poolPath).href
+        let sawPool = false
+        registerHooks({
+          load (url, context, nextLoad) {
+            const result = nextLoad(url, context)
+            if (url === poolUrl) {
+              sawPool = true
+              assert.ok(result.source.split('\\n').at(-1).startsWith('//# sourceMappingURL=data:'))
+            }
+            return result
+          },
+        })
+
+        require('./imports-postgres.mjs')
+        assert.ok(sawPool)
+        assert.ok(findSourceMap(poolPath))
+      `),
+      ['rewritten', 'unsupported']
+    )
+  })
+
+  it('rewrites each target once with a directly registered Datadog async loader', function () {
+    if (!register) {
+      // Newer Node.js releases no longer have the async loader API.
+      this.skip()
+    }
+
+    const preload = 'data:text/javascript,import { register } from "node:module";' +
+      `register(${JSON.stringify(loaderUrl)})`
     assert.deepStrictEqual(
       run(['-r', init, '--import', preload], "require('postgres')"),
       ['rewritten', 'unsupported']

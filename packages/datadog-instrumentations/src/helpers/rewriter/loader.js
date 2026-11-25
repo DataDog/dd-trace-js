@@ -8,6 +8,7 @@ const { isMainThread } = require('node:worker_threads')
 const shimmer = require('../../../../datadog-shimmer')
 const log = require('../../../../dd-trace/src/log')
 const { getLoaderMode, isSyncLoaderHookVersionSupported } = require('../../../../dd-trace/src/register-loader')
+const { hasRewriteMarker } = require('./rewrite-marker')
 const { rewrite } = require('./')
 
 /**
@@ -62,9 +63,12 @@ shimmer.wrap(Module.prototype, '_compile', compile => function (content, filenam
  */
 function loadEsmDependency (url, context, nextLoad) {
   const result = nextLoad(url, context)
-  // A nested require(esm) still goes through _compile. Let it rewrite its own entry.
   if ((result.format ?? context.format) !== 'module' || result.source == null ||
-      !url.startsWith('file:') || context.conditions?.includes('require')) return result
+      !url.startsWith('file:') ||
+      // A nested require(esm) goes through _compile. Let it rewrite its own entry.
+      context.conditions?.includes('require') ||
+      // An explicit async Datadog loader may already have rewritten this source in nextLoad().
+      hasRewriteMarker(result.source)) return result
 
   result.source = rewrite(result.source, url, 'module')
   return result
