@@ -29,8 +29,9 @@
 // A mock that replaces the fs binding, like mock-fs, still reaches these functions, as it reaches
 // the test framework's own module loading; what fails to read or write is then skipped.
 const { createHash } = require('node:crypto')
-const { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } =
-  require('node:fs')
+const {
+  mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
+} = require('node:fs')
 const Module = require('node:module')
 const { tmpdir } = require('node:os')
 const { dirname, join, relative, resolve, sep } = require('node:path')
@@ -130,8 +131,25 @@ let isOxcInCacheSalt = false
 /** @type {Set<string>} cache directories known to exist */
 const cacheDirectories = new Set()
 
+/**
+ * Where code that no framework caches is kept, for the other processes of a run and for later runs:
+ * the repository's `node_modules/.cache`, where other tools keep theirs. Undefined when the repository
+ * has no `node_modules`.
+ *
+ * @type {string | undefined}
+ */
+let defaultCacheDirectory
+
 function isActive () {
   return enabled
+}
+
+/**
+ * @returns {string | undefined} the directory to keep instrumented code in when the framework has no
+ *   cache of its own
+ */
+function getDefaultCacheDirectory () {
+  return defaultCacheDirectory
 }
 
 /**
@@ -1034,11 +1052,15 @@ function startCollecting (root, patchModuleLoader) {
     realRoot = realpathSync(root)
   } catch {}
   rootPrefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep
+  try {
+    const modules = `${rootPrefix}node_modules`
+    if (statSync(modules, { throwIfNoEntry: false })?.isDirectory()) defaultCacheDirectory = join(modules, '.cache')
+  } catch {}
   if (patchModuleLoader) {
     const compile = Module.prototype._compile
     Module.prototype._compile = function (content, filename, ...rest) {
       if (typeof content === 'string' && shouldInstrument(filename)) {
-        content = instrumentSource(content, filename)
+        content = instrumentSource(content, filename, { cacheDirectory: defaultCacheDirectory })
       }
       return compile.call(this, content, filename, ...rest)
     }
@@ -1121,6 +1143,7 @@ module.exports = {
   finishSuiteSetup,
   finishTest,
   getCollector,
+  getDefaultCacheDirectory,
   installGlobal,
   instrumentSource,
   isActive,
