@@ -116,6 +116,9 @@ class LineCoverageCollector {
   /** what runs in no window, or in a context whose window has closed */
   unowned = new Owner()
 
+  /** @type {Set<Owner>} owners with lines that `takeLines` has not taken yet */
+  ownersWithLines = new Set()
+
   /** whether initialiser lines go to their owner, as in a process that runs for a single test */
   initToOwner = false
 
@@ -336,6 +339,7 @@ class LineCoverageCollector {
     if (words === undefined) {
       words = new Int32Array(module.initMasks.length)
       owner.words[id] = words
+      if (owner.modules.length === 0) this.ownersWithLines.add(owner)
       owner.modules.push(id)
     }
     const initMasks = module.initMasks
@@ -396,6 +400,7 @@ class LineCoverageCollector {
       }
     }
     owner.modules.length = 0
+    this.ownersWithLines.delete(owner)
   }
 }
 
