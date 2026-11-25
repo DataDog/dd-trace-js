@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { getCheckRuns, getRestJobs } from './workflow-jobs.mjs'
+
 const OWNER = 'DataDog'
 const REPO = 'dd-trace-js'
 const ALL_GREEN_WORKFLOW = '.github/workflows/all-green.yml'
@@ -22,30 +24,12 @@ const ONE_DAY = 24 * 60 * 60 * 1000
 
 const genericOwners = new Set(['dd-trace-js', 'dd-octo-sts'])
 
-/**
- * @typedef {{
- *   name: string,
- *   conclusion?: string,
- *   started_at?: string,
- *   completed_at?: string,
- * }} WorkflowStep
- */
+/** @typedef {import('./workflow-jobs.mjs').WorkflowJob} WorkflowJob */
 
 /**
  * @typedef {{
  *   id: number,
- *   name: string,
- *   html_url: string,
- *   conclusion?: string,
- *   started_at?: string,
- *   completed_at?: string,
- *   steps?: WorkflowStep[],
- * }} WorkflowJob
- */
-
-/**
- * @typedef {{
- *   id: number,
+ *   node_id: string,
  *   name: string,
  *   path: string,
  *   event: string,
@@ -65,14 +49,14 @@ const genericOwners = new Set(['dd-trace-js', 'dd-octo-sts'])
  *   name: string,
  *   durationMs: number,
  *   jobName: string,
- *   jobUrl: string,
+ *   jobUrl: string | null,
  *   jobDurationMs: number,
  * }} ScenarioDuration
  */
 
 /**
- * @param {string | undefined} startedAt
- * @param {string | undefined} completedAt
+ * @param {string | null | undefined} startedAt
+ * @param {string | null | undefined} completedAt
  * @returns {number | undefined}
  */
 export function getDurationMs (startedAt, completedAt) {
@@ -316,27 +300,6 @@ async function getRunsForCommit (api, sha, page = 1) {
 }
 
 /**
- * @param {{ actions: Record<string, Function> }} api
- * @param {WorkflowRun} run
- * @param {number} [page]
- * @returns {Promise<WorkflowJob[]>}
- */
-async function getJobs (api, run, page = 1) {
-  const response = await api.actions.listJobsForWorkflowRunAttempt({
-    owner: OWNER,
-    repo: REPO,
-    run_id: run.id,
-    attempt_number: run.run_attempt ?? 1,
-    page,
-    per_page: PAGE_SIZE,
-  })
-  const jobs = response.data.jobs
-
-  if (jobs.length < PAGE_SIZE) return jobs
-  return [...jobs, ...await getJobs(api, run, page + 1)]
-}
-
-/**
  * @param {WorkflowRun[]} runs
  * @returns {WorkflowRun[]}
  */
@@ -390,7 +353,7 @@ function selectFastestRuns (runs) {
 }
 
 /**
- * @param {{ actions: Record<string, Function> }} api
+ * @param {import('octokit').Octokit} api
  * @param {string} codeowners
  * @param {Date} [now]
  * @param {string} [created]
@@ -412,13 +375,13 @@ export async function collectSnapshot (
   now = new Date(),
   created = getReportDateRange('1', undefined, now)
 ) {
-  const anchors = await getRecentGreenRuns(api, created)
+  const anchors = await getRecentGreenRuns(api.rest, created)
   const anchor = anchors[0]
   if (!anchor) throw new Error('No successful All Green push was found on master.')
 
   const workflowTeams = parseWorkflowTeams(codeowners)
   const runsByCommit = await Promise.all(anchors.map(async anchor => {
-    return selectRuns(await getRunsForCommit(api, anchor.head_sha))
+    return selectRuns(await getRunsForCommit(api.rest, anchor.head_sha))
   }))
   const workflows = selectFastestRuns(runsByCommit.flat()).map(run => ({
     ...run,
@@ -430,7 +393,11 @@ export async function collectSnapshot (
       return
     }
 
-    workflow.analysis = analyzeJobs(await getJobs(api, workflow))
+    // Latest checks can include jobs from earlier attempts of a partial rerun.
+    const useRest = normalizeWorkflowPath(workflow.path) === SYSTEM_TESTS_WORKFLOW ||
+      (workflow.run_attempt ?? 1) > 1
+    const jobs = useRest ? await getRestJobs(api, workflow) : await getCheckRuns(api, workflow)
+    workflow.analysis = analyzeJobs(jobs)
   }))
 
   workflows.sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1))
@@ -581,7 +548,7 @@ async function main () {
   const { Octokit } = await import('octokit')
   const octokit = new Octokit({ auth: GITHUB_TOKEN })
   const codeowners = readFileSync(new URL('../.github/CODEOWNERS', import.meta.url), 'utf8')
-  const snapshot = await collectSnapshot(octokit.rest, codeowners, new Date(), getReportDateRange(DAYS, UNTIL))
+  const snapshot = await collectSnapshot(octokit, codeowners, new Date(), getReportDateRange(DAYS, UNTIL))
   const reportUrl = GITHUB_REPOSITORY && GITHUB_RUN_ID
     ? `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
     : snapshot.anchor.html_url

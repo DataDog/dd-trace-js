@@ -4,10 +4,9 @@ const assert = require('node:assert/strict')
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const { execFileSync, execSync, spawn } = require('node:child_process')
+const { execFileSync, spawn } = require('node:child_process')
 const { once } = require('node:events')
-const { mkdirSync, writeFileSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
-const { rm } = require('node:fs/promises')
+const { cpSync, mkdirSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
 
@@ -15,10 +14,11 @@ const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
+const { version: semverVersion } = require('semver/package.json')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
-const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
-const { BUN, BUN_CONFIG } = require('../../../integration-tests/helpers/bun')
+const { assertObjectContains, sandboxCwd, stopProc, useSandbox } = require('../../../integration-tests/helpers')
+const { BUN } = require('../../../integration-tests/helpers/bun')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
@@ -132,7 +132,7 @@ async function assertImageRequest (
   let cacheWritten
   if (cacheStatus === 'MISS') {
     const distDir = standalone ? '.next/standalone/.next' : '.next'
-    const cacheDir = path.join(__dirname, distDir, 'cache/images')
+    const cacheDir = path.join(sandboxCwd(), distDir, 'cache/images')
     mkdirSync(cacheDir, { recursive: true })
     const directories = new Set(readdirSync(cacheDir))
     cacheWritten = new Promise((resolve, reject) => {
@@ -211,7 +211,7 @@ describe('Plugin', function () {
   describe('next', () => {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-    withVersions('next', 'next', min, version => {
+    withVersions('next', 'next', min, (version, _, realVersion) => {
       const pkg = require(require(`../../../versions/next@${version}`).pkgJsonPath())
 
       before(done => {
@@ -226,6 +226,17 @@ describe('Plugin', function () {
       })
 
       after(done => downstreamServer.close(done))
+
+      const { dependencies } = require(`../../../versions/next@${version}/package.json`)
+      const needsReact19 = satisfies(realVersion, '>=16')
+      useSandbox([
+        `next@${realVersion}`,
+        `react@${needsReact19 ? '^19' : dependencies.react}`,
+        `react-dom@${needsReact19 ? '^19' : dependencies['react-dom']}`,
+        `semver@${semverVersion}`,
+      ], false, [
+        'app', 'pages', 'public', 'datadog.js', 'middleware.js', 'next.config.js', 'server.js', 'server-raw.js',
+      ].map(file => `./packages/datadog-plugin-next/test/${file}`), undefined, { useCheckoutTracer: true })
 
       const startServer = (
         {
@@ -245,8 +256,8 @@ describe('Plugin', function () {
 
         const launchServer = () => new Promise((resolve, reject) => {
           const cwd = standalone
-            ? path.join(__dirname, '.next/standalone')
-            : __dirname
+            ? path.join(sandboxCwd(), '.next/standalone')
+            : sandboxCwd()
 
           server = spawn('node', [serverFile], {
             cwd,
@@ -262,8 +273,7 @@ describe('Plugin', function () {
               WITH_HTTP_RESOURCE_RENAMING: String(httpResourceRenamingEnabled),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-              // eslint-disable-next-line n/no-path-concat
-              NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              NODE_OPTIONS: `--require "${path.join(sandboxCwd(), 'datadog.js')}"`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0,
               ...(httpServerErrorStatuses === undefined
@@ -312,44 +322,7 @@ describe('Plugin', function () {
       before(async function () {
         this.timeout(240 * 1000) // Webpack is very slow and builds on every test run
 
-        const cwd = __dirname
-        const pkg = require(`../../../versions/next@${version}/package.json`)
-        const realVersion = require(`../../../versions/next@${version}`).version()
-
-        delete pkg.workspaces
-
-        // Next.js 16's app-router build needs react 19; the version manager resolves next's
-        // loose peer to react 18, which fails the build. Pin both to what a next-16 app runs.
-        if (satisfies(realVersion, '>=16')) {
-          pkg.dependencies.react = '^19'
-          pkg.dependencies['react-dom'] = '^19'
-        }
-
-        writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
-
-        // Install a standalone tree because copying node_modules from versions does not generate the server files.
-        const installArguments = [`--config=${BUN_CONFIG}`, 'install', '--linker=hoisted', '--trust']
-        try {
-          execFileSync(BUN, installArguments, { cwd })
-        } catch { // retry in case of error from registry
-          execFileSync(BUN, installArguments, { cwd })
-        }
-
-        // dd-trace is the package under test, not a published dependency of this app. Drop a tiny
-        // resolvable `dd-trace` package into node_modules that delegates to the monorepo root, so
-        // route handlers can `require('dd-trace')` exactly like a customer. Kept external by the
-        // pages-API default and `serverExternalPackages`, it resolves at runtime to the one tracer
-        // the server loads via `--require datadog.js`, so the active span flows into the route.
-        const ddTraceStub = path.join(cwd, 'node_modules', 'dd-trace')
-        mkdirSync(ddTraceStub, { recursive: true })
-        writeFileSync(
-          path.join(ddTraceStub, 'package.json'),
-          JSON.stringify({ name: 'dd-trace', version: '0.0.0-local', main: 'index.js' })
-        )
-        writeFileSync(
-          path.join(ddTraceStub, 'index.js'),
-          `module.exports = require(${JSON.stringify(path.join(__dirname, '..', '..', '..'))})\n`
-        )
+        const cwd = sandboxCwd()
 
         // building in-process makes tests fail for an unknown reason
         // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer
@@ -366,23 +339,8 @@ describe('Plugin', function () {
         })
 
         if (satisfiesStandalone(realVersion)) {
-          // copy public and static files to the `standalone` folder
-          const publicOrigin = path.join(__dirname, 'public')
-          const publicDestination = path.join(__dirname, '.next/standalone/public')
-          mkdirSync(publicDestination, { recursive: true })
-          execSync(`cp ${publicOrigin}/test.txt ${publicOrigin}/test.png ${publicDestination}/`)
+          cpSync(path.join(cwd, 'public'), path.join(cwd, '.next/standalone/public'), { recursive: true })
         }
-      })
-
-      after(async function () {
-        this.timeout(5000)
-        const files = [
-          'package.json',
-          'node_modules',
-          '.next',
-          'bun.lock',
-        ]
-        await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
 
       withNamingSchema(
@@ -829,7 +787,7 @@ describe('Plugin', function () {
 
           it('should do automatic instrumentation for static chunks', () => {
             // Get first static chunk file programmatically
-            const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
+            const file = readdirSync(path.join(sandboxCwd(), '.next/static/chunks'))[0]
 
             const tracingPromise = agent
               .assertSomeTraces(traces => {
