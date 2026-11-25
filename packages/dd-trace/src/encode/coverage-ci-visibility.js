@@ -16,6 +16,8 @@ const COVERAGE_KEYS_LENGTH = 2
 function getBitmapBuffer (bitmap) {
   if (!bitmap) return
   if (Buffer.isBuffer(bitmap)) return bitmap
+  // Test workers send bitmaps as base64.
+  if (typeof bitmap === 'string') return Buffer.from(bitmap, 'base64')
   if (ArrayBuffer.isView(bitmap)) {
     return Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength)
   }
