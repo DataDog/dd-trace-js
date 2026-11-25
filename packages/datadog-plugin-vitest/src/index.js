@@ -222,7 +222,7 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      if (lineCoverage.isActive()) this.#lineCoverageTests.set(span, lineCoverage.startTest())
+      if (lineCoverage.isActive()) this.#lineCoverageTests.set(span, lineCoverage.startTest(span))
 
       if (mightHitProbe) {
         this.queueDiBreakpointHitSpan(span)
@@ -689,8 +689,11 @@ class VitestPlugin extends CiPlugin {
       ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, { isModule: true, reuse: true, sourceMap })
     })
 
-    this.addSub('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
-      if (lineCoverage.isActive()) lineCoverage.startSuiteSetup(suite)
+    this.addBind('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
+      const store = storage('legacy').getStore()
+      if (!lineCoverage.isActive()) return store
+      lineCoverage.startSuiteSetup(suite)
+      return lineCoverage.suiteSetupStore(store)
     })
 
     this.addSub('ci:vitest:line-coverage:suite-setup:finish', () => {
