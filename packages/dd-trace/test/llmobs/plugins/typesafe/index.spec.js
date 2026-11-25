@@ -347,6 +347,25 @@ describe('Plugin', () => {
         assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: requestBody(STATE) }])
       })
 
+      it('records only request keys, since other keys are sent too and can carry credentials', async () => {
+        let sent
+        const client = new sdk.TypeSafeClient({
+          apiKey: 'not-a-real-key',
+          retry: { maxRetries: 0 },
+          fetch: (url, init) => {
+            sent = JSON.parse(init.body)
+            return Promise.resolve(new Response(JSON.stringify(STUB_RESPONSE), {
+              headers: { 'content-type': 'application/json' },
+            }))
+          },
+        })
+        await client.systemOne({ state: STATE, questions: questions(), model: MODEL, providerToken: 'secret' })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(sent.providerToken, 'secret')
+        assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: requestBody(STATE) }])
+      })
+
       it('sends what toJSON returned on its first call', async () => {
         let calls = 0
         let sent
