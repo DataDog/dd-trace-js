@@ -234,18 +234,30 @@ function isInjectedTelemetry (telemetry) {
  * when the request has no `telemetry` argument of the injected shape. Other values belong to the tool.
  *
  * @param {{ params?: { arguments?: unknown } }} request
- * @returns {{ request: object, intent?: string, conversationId?: string } | undefined}
+ * @returns {{ request: object, empty: boolean, intent?: string, conversationId?: string } | undefined}
  */
 function stripTelemetry (request) {
-  const args = request?.params?.arguments
-  if (!isObject(args) || !Object.hasOwn(args, TELEMETRY_KEY) || !isInjectedTelemetry(args[TELEMETRY_KEY])) return
+  if (!hasTelemetryArgument(request)) return
+  const args = /** @type {Record<string, unknown>} */ (request.params.arguments)
+  if (!isInjectedTelemetry(args[TELEMETRY_KEY])) return
 
   const { [TELEMETRY_KEY]: telemetry, ...rest } = args
+  const empty = telemetry === null ||
+    (!Object.hasOwn(telemetry, INTENT_KEY) && !Object.hasOwn(telemetry, CONVERSATION_ID_KEY))
   return {
     request: { ...request, params: { ...request.params, arguments: rest } },
+    empty,
     intent: capString(telemetry?.intent, MAX_INTENT_LENGTH),
     conversationId: capString(telemetry?.conversation_id, MAX_CONVERSATION_ID_LENGTH),
   }
+}
+
+/**
+ * @param {{ params?: { arguments?: unknown } }} request
+ */
+function hasTelemetryArgument (request) {
+  const args = request?.params?.arguments
+  return isObject(args) && Object.hasOwn(args, TELEMETRY_KEY)
 }
 
 /**
@@ -280,6 +292,7 @@ module.exports = {
   formatOutput,
   formatServerInput,
   getClientInfoTags,
+  hasTelemetryArgument,
   injectTelemetrySchema,
   safeStringify,
   stripTelemetry,

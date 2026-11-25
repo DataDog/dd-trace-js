@@ -341,6 +341,27 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
 <h5 id="modelcontextprotocol-sdk"></h5>
+
+With LLM Observability enabled, MCP server enrichment is on by default
+(`DD_MCP_ENRICHMENT_ENABLED=true`). Each model-callable tool in a `tools/list`
+result gets a `telemetry` argument with a required `intent` and an optional
+`conversation_id`. The tracer removes the argument before the tool runs and
+records the intent on the tool span. Tools that declare their own `telemetry`
+argument are not changed.
+
+When a request has no MCP session (stdio or the stateless protocol), the tool
+span gets a session ID. A call without a valid `conversation_id` gets a
+generated ID, and the tool result gets one extra text block that asks the agent
+to send the ID on later calls. Clients that do not send the ID back, such as
+scripts, get this block on every result. Requests with an `mcp-session-id` and
+spans that already have a session ID keep their session. The
+`mcp_session_source` tag is `echoed`, `generated` or `reused`.
+
+Set `DD_MCP_ENRICHMENT_ENABLED=false` to turn enrichment off, or
+`DD_MCP_CAPTURE_INTENT=false` to keep sessions without intent capture. With
+enrichment off, the tracer still removes a non-empty `telemetry` argument of the
+injected shape that a client kept from an earlier `tools/list`.
+
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongoose"></h5>

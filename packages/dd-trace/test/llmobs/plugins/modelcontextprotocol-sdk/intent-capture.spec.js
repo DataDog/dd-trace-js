@@ -12,6 +12,8 @@ const { assertLlmObsSpanEvent, MOCK_STRING, useLlmObs } = require('../../util')
 const TAGS = { ml_app: 'test', integration: 'modelcontextprotocol-sdk' }
 const INTENT = 'Check the weather to plan a trip'
 const TOOL_RESULT = { content: [{ type: 'text', text: 'sunny' }] }
+// A transport session keeps session capture out of these results
+const TRANSPORT_SESSION_ID = 'transport-session'
 
 /**
  * @param {string} tool
@@ -24,6 +26,7 @@ function serverToolTags (tool) {
     mcp_tool_kind: 'server',
     mcp_client_name: 'test-client',
     mcp_client_version: '1.0.0',
+    mcp_session_id: TRANSPORT_SESSION_ID,
   }
 }
 
@@ -53,7 +56,7 @@ function findServerToolSpan ({ apmSpans, llmobsSpans }, tool) {
 
 describe('integrations', () => {
   describe('modelcontextprotocol-sdk intent capture', () => {
-    useEnv({ DD_MCP_CAPTURE_INTENT: 'true', DD_MCP_ENRICHMENT_ENABLED: 'false' })
+    useEnv({ DD_MCP_ENRICHMENT_ENABLED: 'true' })
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/server', '>=2', version => {
@@ -96,6 +99,7 @@ describe('integrations', () => {
         }, async () => TOOL_RESULT)
 
         const [clientTransport, serverTransport] = serverModule.InMemoryTransport.createLinkedPair()
+        serverTransport.sessionId = TRANSPORT_SESSION_ID
         await server.connect(serverTransport)
         client = new clientModule.Client({ name: 'test-client', version: '1.0.0' })
         await client.connect(clientTransport)
@@ -215,6 +219,7 @@ describe('integrations', () => {
         server.registerTool('weather', { description: 'Weather', inputSchema: {} }, async () => TOOL_RESULT)
 
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+        serverTransport.sessionId = TRANSPORT_SESSION_ID
         await server.connect(serverTransport)
         client = new Client({ name: 'test-client', version: '1.0.0' })
         await client.connect(clientTransport)

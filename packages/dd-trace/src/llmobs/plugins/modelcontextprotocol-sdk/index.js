@@ -9,6 +9,7 @@ const {
   formatOutput,
   formatServerInput,
   getClientInfoTags,
+  hasTelemetryArgument,
   injectTelemetrySchema,
   safeStringify,
   stripTelemetry,
@@ -99,29 +100,34 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
   /**
    * With MCP enrichment, tools/list results ask the model for a `telemetry` argument, and tools/call requests reach
    * the tool without it. The instrumentation passes `ctx.request` to the handler and applies `ctx.transformResult` to
-   * its result. `DD_MCP_CAPTURE_INTENT` predates `DD_MCP_ENRICHMENT_ENABLED` and overrides it for intent capture.
+   * its result. `DD_MCP_CAPTURE_INTENT` predates `DD_MCP_ENRICHMENT_ENABLED` and can only turn intent capture off.
    *
    * @param {object} ctx
    */
   start (ctx) {
     super.start(ctx)
+    if (!ctx.llmobs) return
+
     const mcpConfig = this._tracerConfig.mcp
-    const options = {
-      intent: mcpConfig?.DD_MCP_CAPTURE_INTENT ?? mcpConfig?.DD_MCP_ENRICHMENT_ENABLED,
-      session: mcpConfig?.DD_MCP_ENRICHMENT_ENABLED,
-    }
-    if (!ctx.llmobs || (!options.intent && !options.session)) return
+    const enrichment = mcpConfig?.DD_MCP_ENRICHMENT_ENABLED
+    const options = { intent: enrichment && (mcpConfig?.DD_MCP_CAPTURE_INTENT ?? true), session: enrichment }
 
     const method = ctx.request?.method
     if (method === 'tools/list') {
-      ctx.transformResult = result => injectTelemetrySchema(result, options)
+      if (enrichment) ctx.transformResult = result => injectTelemetrySchema(result, options)
     } else if (method === 'tools/call') {
       const stripped = stripTelemetry(ctx.request)
+      // Any other value is the tool's own telemetry argument, so the call is left as it is
+      if (!stripped && hasTelemetryArgument(ctx.request)) return
       if (stripped) {
+        // Removed even when enrichment is off, since clients can keep a schema listed while it was on. Such clients
+        // send at least one field, so an empty value is left for the tool in that case.
+        if (!enrichment && stripped.empty) return
         ctx.request = stripped.request
-        if (options.intent) ctx.llmobs.intent = stripped.intent
       }
-      if (options.session) this.#captureSession(ctx, stripped?.conversationId)
+      if (!enrichment) return
+      if (options.intent) ctx.llmobs.intent = stripped?.intent
+      this.#captureSession(ctx, stripped?.conversationId)
     }
   }
 
@@ -142,10 +148,11 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
       }
       ctx.llmobs.sessionSource = 'echoed'
     } else {
-      const id = getNewConversationId(ctx.server)
+      const { id, reused } = getNewConversationId(ctx.server)
       conversationId = id
       ctx.transformResult = result => addConversationIdInstruction(result, id)
-      ctx.llmobs.sessionSource = 'generated'
+      // Calls of other conversations on the same connection can also reuse a pending ID, so reuse stays visible
+      ctx.llmobs.sessionSource = reused ? 'reused' : 'generated'
     }
     this._tagger.tagSessionId(span, conversationId)
   }
@@ -179,15 +186,16 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
  * Reuses the ID generated for a call on the same connection that the agent has not sent back yet.
  *
  * @param {object} [server]
+ * @returns {{ id: string, reused: boolean }}
  */
 function getNewConversationId (server) {
   const now = performance.now()
   const pending = server && pendingConversationIds.get(server)
-  if (pending && now - pending.time < PENDING_CONVERSATION_ID_MS) return pending.conversationId
+  if (pending && now - pending.time < PENDING_CONVERSATION_ID_MS) return { id: pending.conversationId, reused: true }
 
-  const conversationId = randomUUID().replaceAll('-', '')
-  if (server) pendingConversationIds.set(server, { conversationId, time: now })
-  return conversationId
+  const id = randomUUID().replaceAll('-', '')
+  if (server) pendingConversationIds.set(server, { conversationId: id, time: now })
+  return { id, reused: false }
 }
 
 /**
