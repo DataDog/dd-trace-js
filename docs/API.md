@@ -321,6 +321,16 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="find-my-way"></h5>
 <h5 id="fs"></h5>
 <h5 id="google-cloud-pubsub"></h5>
+
+Google Cloud Pub/Sub tracing propagates trace context from publishers to pull and push subscribers by default.
+Set `DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false` to turn propagation off. It is read from the environment
+when the tracer starts and applies to publishing, pull subscriptions and push subscriptions alike. When it is off, the
+tracer injects no trace context into published messages, and subscribers ignore any incoming trace context, including
+context the application placed in the message attributes. Publish spans stay children of the active span, and each
+`pubsub.receive` or `pubsub.push.receive` span starts a new trace without span links. Messages still carry the topic,
+project, batch and publish-time attributes used for span tags and delivery duration. Data Streams Monitoring is not
+affected.
+
 <h5 id="google-cloud-vertexai"></h5>
 <h5 id="google-genai"></h5>
 <h5 id="graphql"></h5>

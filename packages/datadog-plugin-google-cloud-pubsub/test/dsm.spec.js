@@ -251,6 +251,8 @@ describe('Plugin', () => {
       describe('with DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false', () => {
         let topic
         let subscription
+        let producerEdgeTags
+        let consumerEdgeTags
 
         before(async () => {
           process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED = 'false'
@@ -265,10 +267,12 @@ describe('Plugin', () => {
           const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
           const containerTagsHash = propagationHash.getContainerTagsHash()
           const fullTopic = `projects/${project}/topics/${dsmTopicName}`
+          producerEdgeTags = ['direction:out', 'topic:' + fullTopic, 'type:google-pubsub']
+          consumerEdgeTags = ['direction:in', 'topic:' + fullTopic, 'type:google-pubsub']
           expectedProducerHash = computePathwayHash(
             'test',
             'tester',
-            ['direction:out', 'topic:' + fullTopic, 'type:google-pubsub'],
+            producerEdgeTags,
             ENTRY_PARENT_HASH,
             processTagsForHash,
             containerTagsHash
@@ -276,7 +280,7 @@ describe('Plugin', () => {
           expectedConsumerHash = computePathwayHash(
             'test',
             'tester',
-            ['direction:in', 'topic:' + fullTopic, 'type:google-pubsub'],
+            consumerEdgeTags,
             expectedProducerHash,
             processTagsForHash,
             containerTagsHash
@@ -290,8 +294,10 @@ describe('Plugin', () => {
 
         it('still sets the produce and consume checkpoints of one pathway', async () => {
           const statsPromise = agent.expectPipelineStats(() => {
-            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64LE(0).toString()), true)
-            assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64LE(0).toString()), true)
+            const producerHash = expectedProducerHash.readBigUInt64LE(0).toString()
+            const consumerHash = expectedConsumerHash.readBigUInt64LE(0).toString()
+            assert.strictEqual(agent.dsmStatsExist(agent, producerHash, producerEdgeTags), true)
+            assert.strictEqual(agent.dsmStatsExist(agent, consumerHash, consumerEdgeTags), true)
           }, { timeoutMs: TIMEOUT })
 
           subscription.on('message', msg => msg.ack())
