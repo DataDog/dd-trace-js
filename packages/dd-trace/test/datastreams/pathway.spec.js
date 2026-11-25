@@ -9,10 +9,6 @@ require('../setup/core')
 const { debugChannel } = require('../../src/log/channels')
 const {
   computePathwayHash,
-  encodePathwayContext,
-  decodePathwayContext,
-  encodePathwayContextBase64,
-  decodePathwayContextBase64,
   DsmPathwayCodec,
 } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
@@ -25,47 +21,20 @@ describe('encoding', () => {
     assert.strictEqual(hash.toString('hex'), '43ac630dffaa73de')
   })
 
-  it('encoding and decoding should be a no op', () => {
-    const expectedContext = {
-      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
+  it('preserves the wire bytes and clears padding after a longer checkpoint', () => {
+    const hash = Buffer.from('67b0b35e65c0acfa', 'hex')
+    const longContext = {
+      hash,
       pathwayStartNs: 1685673482722000000,
       edgeStartNs: 1685673506404000000,
     }
-    const encoded = encodePathwayContext(expectedContext)
-    const decoded = decodePathwayContext(encoded)
-    assert.strictEqual(decoded.hash.toString('hex'), expectedContext.hash.toString('hex'))
-    assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
-    assert.strictEqual(decoded.edgeStartNs, expectedContext.edgeStartNs)
-  })
+    const carrier = DsmPathwayCodec.encode(longContext)
+    assert.strictEqual(carrier['dd-pathway-ctx-base64'], 'Z7CzXmXArPrE58Cfj2LI2cOfj2I=')
 
-  it('decoding of a context should be consistent between languages', () => {
-    const data = Buffer.from([103, 176, 179, 94, 101, 192, 172, 250, 196, 231,
-      192, 159, 143, 98, 200, 217, 195, 159, 143, 98])
-    const decoded = decodePathwayContext(data)
-    const expectedContext = {
-      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
-      pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000,
-    }
-    assert.strictEqual(decoded.hash.toString('hex'), expectedContext.hash.toString('hex'))
-    assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
-    assert.strictEqual(decoded.edgeStartNs, expectedContext.edgeStartNs)
-  })
-
-  it('should encode and decode to the same value when using base64', () => {
-    const ctx = {
-      pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000,
-    }
-    ctx.hash = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
-
-    const encodedPathway = encodePathwayContextBase64(ctx)
-    const decodedPathway = decodePathwayContextBase64(encodedPathway)
-
-    assert.strictEqual(decodedPathway.hash.toString('hex'), ctx.hash.toString('hex'))
-    assert.strictEqual(decodedPathway.pathwayStartNs, ctx.pathwayStartNs)
-    assert.strictEqual(decodedPathway.edgeStartNs, ctx.edgeStartNs)
+    const shortContext = { hash, pathwayStartNs: 1e6, edgeStartNs: 2e6 }
+    const shortCarrier = DsmPathwayCodec.encode(shortContext)
+    const wire = Buffer.from(shortCarrier['dd-pathway-ctx-base64'], 'base64')
+    assert.deepStrictEqual(wire, Buffer.from('67b0b35e65c0acfa020400000000000000000000', 'hex'))
   })
 
   it('should encode and decode to the same value when using the PathwayCodec', () => {
@@ -104,21 +73,26 @@ describe('encoding', () => {
     assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
   })
 
-  it('should encode/decode to the same value when using the PathwayCodec and the deprecated encoding', () => {
-    const ctx = {
-      pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000,
+  it('decodes a legacy binary pathway fixture', () => {
+    const carrier = {
+      'dd-pathway-ctx': Buffer.from('Z7CzXmXArPrE58Cfj2LI2cOfj2I=', 'base64'),
     }
-    const carrier = {}
-    ctx.hash = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
-
-    carrier['dd-pathway-ctx'] = encodePathwayContext(ctx)
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    assert.strictEqual(decodedCtx.hash.toString('hex'), ctx.hash.toString('hex'))
-    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
-    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
+    assert.deepStrictEqual(decodedCtx, {
+      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000,
+    })
+  })
+
+  it('rejects a truncated pathway hash or timestamp', () => {
+    const wire = Buffer.from('Z7CzXmXArPrE58Cfj2LI2cOfj2I=', 'base64')
+
+    for (const length of [7, 9, 15]) {
+      const carrier = { 'dd-pathway-ctx-base64': wire.subarray(0, length).toString('base64') }
+      assert.strictEqual(DsmPathwayCodec.decode(carrier), null)
+    }
   })
 
   it('should inject the base64 encoded string to the carrier', () => {
@@ -214,21 +188,17 @@ describe('encoding', () => {
   })
 
   it('should resolve a repeated deprecated pathway field to the last one', () => {
-    const ctx = {
-      pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000,
-      hash: computePathwayHash('test-service', 'test-env',
-        ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex')),
-    }
     const carrier = {
-      'dd-pathway-ctx': ['Z7CzXmXArPrE58Cfj2LI2cOfj2I=', encodePathwayContextBase64(ctx)],
+      'dd-pathway-ctx': ['Z7CzXmXArPrE58Cfj2LI2cOfj2I=', 'Q6xjDf+qc97E58Cfj2LI2cOfj2I='],
     }
 
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
-    assert.strictEqual(decodedCtx.hash.toString('hex'), ctx.hash.toString('hex'))
-    assert.strictEqual(decodedCtx.pathwayStartNs, ctx.pathwayStartNs)
-    assert.strictEqual(decodedCtx.edgeStartNs, ctx.edgeStartNs)
+    assert.deepStrictEqual(decodedCtx, {
+      hash: Buffer.from('43ac630dffaa73de', 'hex'),
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000,
+    })
   })
 
   it('returns undefined when the carrier has no pathway field', () => {

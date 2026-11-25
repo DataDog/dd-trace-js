@@ -5,19 +5,22 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('../setup/core')
-const { encodeVarint, decodeVarint } = require('../../src/datastreams/encoding')
+const { decodeVarint, encodeVarintInto } = require('../../src/datastreams/encoding')
+
+/** @param {number} value */
+function encode (value) {
+  const bytes = new Uint8Array(9)
+  return bytes.subarray(0, encodeVarintInto(bytes, 0, value))
+}
 
 describe('encoding', () => {
   describe('encodeVarInt', () => {
     it('encoding then decoding should be a no op for int32 numbers', () => {
       const n = 1679672748
       const expectedEncoded = new Uint8Array([216, 150, 238, 193, 12])
-      const encoded = encodeVarint(n)
-      assert.strictEqual(encoded.length, expectedEncoded.length)
-      assert.strictEqual(encoded.every((val, i) => val === expectedEncoded[i]), true)
-      const [decoded, bytes] = decodeVarint(encoded)
-      assert.strictEqual(decoded, n)
-      assert.strictEqual(bytes.length, 0)
+      const encoded = encode(n)
+      assert.deepStrictEqual(encoded, expectedEncoded)
+      assert.deepStrictEqual(decodeVarint(encoded, 0), [n, encoded.length])
     })
 
     it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
@@ -25,32 +28,24 @@ describe('encoding', () => {
       const expectedEncoded = new Uint8Array([
         128, 171, 237, 233, 226, 97,
       ])
-      const encoded = encodeVarint(n)
-      assert.strictEqual(encoded.length, expectedEncoded.length)
-      assert.strictEqual(encoded.every((val, i) => val === expectedEncoded[i]), true)
-      const toDecode = [...encoded, ...encoded]
-      const [decoded, bytes] = decodeVarint(toDecode)
-      assert.strictEqual(decoded, n)
-      assert.strictEqual(bytes.every((val, i) => val === expectedEncoded[i]), true)
-      const [decoded2, bytes2] = decodeVarint(bytes)
-      assert.strictEqual(decoded2, n)
-      assert.strictEqual(bytes2.length, 0)
+      const bytes = new Uint8Array(2 * expectedEncoded.length)
+      const edgeOffset = encodeVarintInto(bytes, 0, n)
+      const end = encodeVarintInto(bytes, edgeOffset, n)
+      assert.deepStrictEqual(bytes, Uint8Array.from([...expectedEncoded, ...expectedEncoded]))
+      assert.deepStrictEqual(decodeVarint(bytes, 0), [n, edgeOffset])
+      assert.deepStrictEqual(decodeVarint(bytes, edgeOffset), [n, end])
     })
 
     it('encoding then decoding should be a no op at the largest encodable magnitude', () => {
       const n = Math.floor(Number.MAX_SAFE_INTEGER / 2)
 
-      const encoded = encodeVarint(n)
+      const encoded = encode(n)
       assert.deepStrictEqual([...encoded], [254, 255, 255, 255, 255, 255, 255, 15])
-      const [decoded, bytes] = decodeVarint(encoded)
-      assert.strictEqual(decoded, n)
-      assert.strictEqual(bytes.length, 0)
+      assert.deepStrictEqual(decodeVarint(encoded, 0), [n, encoded.length])
 
-      const encodedNegative = encodeVarint(-n)
+      const encodedNegative = encode(-n)
       assert.deepStrictEqual([...encodedNegative], [255, 255, 255, 255, 255, 255, 255, 15])
-      const [decodedNegative, negativeBytes] = decodeVarint(encodedNegative)
-      assert.strictEqual(decodedNegative, -n)
-      assert.strictEqual(negativeBytes.length, 0)
+      assert.deepStrictEqual(decodeVarint(encodedNegative, 0), [-n, encodedNegative.length])
     })
 
     it('encoding then decoding should be a no op when a group shifts down to 0x80', () => {
@@ -62,20 +57,23 @@ describe('encoding', () => {
         const bandTop = base + 2 ** Math.max(exponent - 7, 0) - 1
 
         for (const n of new Set([base, bandTop, -base, -bandTop])) {
-          const encoded = encodeVarint(n)
-          const [decoded, bytes] = decodeVarint(encoded)
-          assert.strictEqual(decoded, n)
-          assert.strictEqual(bytes.length, 0)
+          const encoded = encode(n)
+          assert.deepStrictEqual(decodeVarint(encoded, 0), [n, encoded.length])
         }
       }
 
-      assert.deepStrictEqual([...encodeVarint(2 ** 6)], [128, 1])
+      assert.deepStrictEqual([...encode(2 ** 6)], [128, 1])
     })
 
-    it('encoding a number bigger than Max safe int fails.', () => {
-      const n = Number.MAX_SAFE_INTEGER + 10
-      const encoded = encodeVarint(n)
-      assert.strictEqual(encoded, undefined)
+    it('leaves the offset and bytes unchanged above the maximum magnitude', () => {
+      const bytes = Uint8Array.of(1, 2)
+      assert.strictEqual(encodeVarintInto(bytes, 1, Math.ceil(Number.MAX_SAFE_INTEGER / 2)), 1)
+      assert.deepStrictEqual(bytes, Uint8Array.of(1, 2))
     })
+  })
+
+  it('preserves decoding at the ninth byte even if it has a continuation bit', () => {
+    const bytes = Uint8Array.of(0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xff)
+    assert.deepStrictEqual(decodeVarint(bytes, 1), [-(2 ** 62), 10])
   })
 })
