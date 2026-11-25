@@ -3,10 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { before, describe, it } = require('mocha')
-const sinon = require('sinon')
 
 const EventBridge = require('../src/services/eventbridge')
-const tracer = require('../../dd-trace')
 const { withAwsSdkVersions } = require('./spec_helpers')
 
 const EVENTBRIDGE_EVENT_MAX_BYTES = 1024 * 1024
@@ -33,17 +31,18 @@ function makeEventDetailForInjectedSize (size) {
 
 describe('EventBridge', () => {
   let span
+  let tracer
   withAwsSdkVersions((version, moduleName) => {
     before(() => {
+      // agent.load() can rebuild the singleton in earlier suites. Initializing
+      // a stale proxy would register a second set of AWS completion subscribers.
+      tracer = require('../../dd-trace')
       tracer.init()
       // A hand-rolled span context cannot satisfy the propagators, which silently drop the whole
       // injection when one of them throws.
       span = tracer.startSpan('aws.request')
       expectedContext = tracer._tracer.inject(span.context(), 'text_map')
       expectedContextBytes = Buffer.byteLength(`,"_datadog":${JSON.stringify(expectedContext)}`)
-      tracer._tracer.startSpan = sinon.spy(() => {
-        return span
-      })
     })
 
     it('generates tags for an event', () => {
