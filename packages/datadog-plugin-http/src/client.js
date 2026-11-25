@@ -15,6 +15,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
+const { clientResourceName } = require('../../dd-trace/src/plugins/util/path-quantization')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { isAwsSdkRequest, setHttpClientCheckpoint } = require('../../dd-trace/src/datastreams')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -59,7 +60,7 @@ class HttpClientPlugin extends ClientPlugin {
     const meta = {
       [COMPONENT]: this.component,
       'span.kind': 'client',
-      'resource.name': method,
+      'resource.name': clientResourceName(method, path, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE),
       'span.type': 'http',
       'http.method': method,
       'http.url': otelUrl,

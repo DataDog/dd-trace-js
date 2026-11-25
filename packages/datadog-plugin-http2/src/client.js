@@ -16,6 +16,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl, getQsObfuscator } = require('../../dd-trace/src/plugins/util/url')
+const { clientResourceName } = require('../../dd-trace/src/plugins/util/path-quantization')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -53,7 +54,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const meta = {
       [COMPONENT]: this.constructor.id,
       [SPAN_KIND]: CLIENT,
-      'resource.name': method,
+      'resource.name': clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE),
       'span.type': 'http',
       'http.method': method,
       'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, path, otelUri) : uri,

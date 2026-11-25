@@ -7,6 +7,7 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { clientResourceName } = require('../../dd-trace/src/plugins/util/path-quantization')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const {
@@ -78,7 +79,7 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    let resource = method
+    let resource = clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
     const childOf = store && allowed ? store.span : null
 
     const meta = {
