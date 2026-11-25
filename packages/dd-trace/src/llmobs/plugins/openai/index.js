@@ -23,6 +23,8 @@ const {
   hasMultimodalInputs,
   getModelProviderAndClient,
   getServerToolUsageMetrics,
+  getHostedToolMessage,
+  HOSTED_TOOL_NAMES,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -357,6 +359,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               type: item.type,
             }],
           })
+        } else if (Object.hasOwn(HOSTED_TOOL_NAMES, item.type)) {
+          inputMessages.push(getHostedToolMessage(item))
         } else if (item.role && item.content) {
           // Regular message
           inputMessages.push({ role: item.role, content: item.content })
@@ -413,6 +417,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               type: item.type,
             }],
           })
+        } else if (Object.hasOwn(HOSTED_TOOL_NAMES, item.type)) {
+          outputMessages.push(getHostedToolMessage(item))
         } else {
           // Handle regular message objects
           const outputMsg = { role: item.role || 'assistant', content: '' }

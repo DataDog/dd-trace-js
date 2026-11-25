@@ -51,6 +51,51 @@ function createMessageOutput (text) {
   }
 }
 
+const WEB_SEARCH_CALL = {
+  id: 'ws_test',
+  type: 'web_search_call',
+  status: 'completed',
+  action: {
+    type: 'search',
+    query: 'nonstop flights JFK to LIS',
+    queries: ['nonstop flights JFK to LIS'],
+    sources: [{ type: 'url', url: 'https://example.com/flights', title: 'Flights' }],
+  },
+}
+
+const WEB_SEARCH_MESSAGE = {
+  role: 'assistant',
+  content: '',
+  tool_calls: [{
+    name: 'web_search',
+    arguments: {
+      type: 'search',
+      query: 'nonstop flights JFK to LIS',
+      queries: ['nonstop flights JFK to LIS'],
+    },
+    tool_id: 'ws_test',
+    type: 'web_search_call',
+  }],
+  tool_results: [{
+    name: 'web_search',
+    result: '{"status":"completed","sources":[{"url":"https://example.com/flights","title":"Flights"}]}',
+    tool_id: 'ws_test',
+    type: 'tool_result',
+  }],
+}
+
+// Streams only the events the agents SDK needs: its response span takes the final response from `response.completed`.
+function createStreamFetch (response) {
+  return async () => {
+    const events = [
+      { type: 'response.created', response: { ...response, status: 'in_progress', output: [] }, sequence_number: 0 },
+      { type: 'response.completed', response, sequence_number: 1 },
+    ]
+    const body = events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+}
+
 function createFetch (responses) {
   let index = 0
 
@@ -75,6 +120,8 @@ describe('integrations', () => {
     let chatCompletionsAgent
     let handoffAgent
     let toolErrorAgent
+    let webSearchAgent
+    let webSearchStreamAgent
 
     withVersions('openai-agents', '@openai/agents', (version) => {
       before(() => {
@@ -198,6 +245,46 @@ describe('integrations', () => {
           instructions: 'You are a calculator. Use the `add` tool to answer math questions.',
           model: new OpenAIResponsesModel(toolErrorClient, 'gpt-4o-mini'),
           tools: [additionErrorTool],
+        })
+
+        // A hosted web search followed by a function call, so the second model call
+        // receives the search back as input (an agents-core `hosted_tool_call` item).
+        const webSearchClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createFetch([
+            createResponse([WEB_SEARCH_CALL, {
+              id: 'fc_lookup',
+              type: 'function_call',
+              call_id: 'call_lookup',
+              name: 'lookup',
+              arguments: '{}',
+              status: 'completed',
+            }], 'gpt-4o-mini'),
+            createResponse([createMessageOutput('done')], 'gpt-4o-mini'),
+          ]),
+        })
+        webSearchAgent = new agentsCore.Agent({
+          name: 'web_search_agent',
+          instructions: AGENT_INSTRUCTIONS,
+          model: new OpenAIResponsesModel(webSearchClient, 'gpt-4o-mini'),
+          tools: [agentsCore.tool({
+            name: 'lookup',
+            description: 'Looks something up.',
+            parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+            execute: async () => 'found',
+          })],
+        })
+
+        const webSearchStreamClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createStreamFetch(createResponse([WEB_SEARCH_CALL, createMessageOutput('done')], 'gpt-4o-mini')),
+        })
+        webSearchStreamAgent = new agentsCore.Agent({
+          name: 'web_search_stream_agent',
+          instructions: AGENT_INSTRUCTIONS,
+          model: new OpenAIResponsesModel(webSearchStreamClient, 'gpt-4o-mini'),
         })
       })
 
@@ -344,6 +431,34 @@ describe('integrations', () => {
           assert.strictEqual(toolEvent.meta['span.kind'], 'tool')
           assert.strictEqual(toolEvent.name, 'add')
           assert.strictEqual(toolEvent.status, 'error')
+        })
+
+        it('records a hosted web search as a tool call and result on both llm spans', async () => {
+          await agentsCore.run(webSearchAgent, 'Find flights', { maxTurns: 2 })
+
+          const { llmobsSpans } = await getEvents(5)
+          const [first, second] = llmobsSpans.filter(s => s.meta?.['span.kind'] === 'llm')
+
+          assert.deepStrictEqual(first.meta.output.messages[0], WEB_SEARCH_MESSAGE)
+          assert.deepStrictEqual(
+            second.meta.input.messages.find(message => message.tool_calls?.[0]?.type === 'web_search_call'),
+            WEB_SEARCH_MESSAGE
+          )
+        })
+
+        it('records a hosted web search from a streamed run', async () => {
+          const result = await agentsCore.run(webSearchStreamAgent, 'Find flights', { stream: true })
+          // eslint-disable-next-line no-unused-vars
+          for await (const _ of result) { /* drain */ }
+          await result.completed
+
+          const { llmobsSpans } = await getEvents(3)
+          const llmEvent = llmobsSpans.find(s => s.meta?.['span.kind'] === 'llm')
+
+          assert.deepStrictEqual(llmEvent.meta.output.messages, [
+            WEB_SEARCH_MESSAGE,
+            { role: 'assistant', content: 'done' },
+          ])
         })
       })
     }) // withVersions

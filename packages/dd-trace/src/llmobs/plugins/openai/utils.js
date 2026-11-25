@@ -235,6 +235,50 @@ function getServerToolUsageMetrics (response) {
   return metrics
 }
 
+const HOSTED_TOOL_NAMES = {
+  web_search_call: 'web_search',
+  file_search_call: 'file_search',
+  code_interpreter_call: 'code_interpreter',
+}
+
+/**
+ * Convert an OpenAI Responses item for a provider-hosted tool (web search, file search, code interpreter)
+ * into one message carrying both the tool call and its result, since the provider runs the tool inside
+ * the model call and no client-side tool span will ever exist for it.
+ *
+ * @param {Record<string, unknown>} item - A Responses API input or output item whose type is a key of HOSTED_TOOL_NAMES
+ * @returns {Record<string, unknown>}
+ */
+function getHostedToolMessage (item) {
+  const name = HOSTED_TOOL_NAMES[item.type]
+
+  let args
+  const result = { status: item.status }
+  if (name === 'web_search') {
+    const { sources, ...action } = item.action ?? {}
+    args = action
+    if (Array.isArray(sources)) result.sources = sources.map(source => ({ url: source.url, title: source.title }))
+  } else if (name === 'file_search') {
+    args = { queries: item.queries }
+    // File contents (`text`) are left out; ids, names and scores identify what was retrieved.
+    if (Array.isArray(item.results)) {
+      result.results = item.results.map(r => ({ file_id: r.file_id, filename: r.filename, score: r.score }))
+    }
+  } else {
+    args = { code: item.code, container_id: item.container_id }
+    if (Array.isArray(item.outputs)) {
+      result.outputs = item.outputs.map(output => (output.type === 'logs' ? output.logs : IMAGE_FALLBACK))
+    }
+  }
+
+  return {
+    role: 'assistant',
+    content: '',
+    toolCalls: [{ name, arguments: args, toolId: item.id, type: item.type }],
+    toolResults: [{ name, result: JSON.stringify(result), toolId: item.id, type: 'tool_result' }],
+  }
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -244,4 +288,6 @@ module.exports = {
   getModelProviderAndClient,
   getOpenAIModelProvider,
   getServerToolUsageMetrics,
+  getHostedToolMessage,
+  HOSTED_TOOL_NAMES,
 }

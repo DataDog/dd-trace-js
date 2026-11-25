@@ -1,6 +1,11 @@
 'use strict'
 
-const { extractContentParts, extractTextFromContentItem } = require('../openai/utils')
+const {
+  extractContentParts,
+  extractTextFromContentItem,
+  getHostedToolMessage,
+  HOSTED_TOOL_NAMES,
+} = require('../openai/utils')
 const { safeJsonParse } = require('../../util')
 
 /**
@@ -145,6 +150,9 @@ function extractInputMessages (input, instructions) {
             type: item.type,
           }],
         })
+      } else if (item.type === 'hosted_tool_call' && Object.hasOwn(HOSTED_TOOL_NAMES, item.name)) {
+        // agents-core keeps the Responses item, minus `status`, under `providerData`.
+        messages.push(getHostedToolMessage({ ...item.providerData, type: item.name, id: item.id, status: item.status }))
       }
     }
   }
@@ -195,6 +203,8 @@ function extractOutputMessages (result) {
             type: item.type,
           }],
         })
+      } else if (Object.hasOwn(HOSTED_TOOL_NAMES, item.type)) {
+        messages.push(getHostedToolMessage(item))
       }
     }
   }
