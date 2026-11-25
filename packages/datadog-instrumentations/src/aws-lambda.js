@@ -23,9 +23,10 @@ const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
  * @param {Function} handler Customer Lambda handler.
  * @param {Record<string, unknown>} [config] Per-handler configuration overrides.
  * @param {Function} [monitor] Monitors the shim adapter for impending timeouts.
+ * @param {() => Promise<void>|undefined} [onComplete] Awaits delivery after invocation subscribers finish.
  * @returns {Function} Wrapped handler, or the existing wrapper when already marked.
  */
-function wrapHandler (handler, config, monitor) {
+function wrapHandler (handler, config, monitor, onComplete) {
   if (typeof handler !== 'function') {
     throw new TypeError('AWS Lambda handler must be a function')
   }
@@ -50,15 +51,14 @@ function wrapHandler (handler, config, monitor) {
     // Resolve parent context before the invocation span starts. Diagnostic-channel publishing is synchronous,
     // so the plugin supplies `preparation` when extraction must be awaited.
     if (prepareChannel.hasSubscribers) prepareChannel.publish(invocationContext)
-    if (invocationContext.preparation) {
-      return invocationContext.preparation.then(() => invocationChannel.tracePromise(
+    const result = invocationContext.preparation
+      ? invocationContext.preparation.then(() => invocationChannel.tracePromise(
         () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)), invocationContext
       ))
-    }
-    return invocationChannel.tracePromise(
-      () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)),
-      invocationContext
-    )
+      : invocationChannel.tracePromise(
+        () => Promise.resolve().then(() => Reflect.apply(invoke, this, args)), invocationContext
+      )
+    return onComplete ? result.finally(onComplete) : result
   }
 
   // Frozen customer handlers cannot carry markers; share their identity through the tracer registry.

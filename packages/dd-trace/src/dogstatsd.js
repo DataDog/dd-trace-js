@@ -14,6 +14,7 @@ const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
 const { registerTelemetryFlusher } = require('./flush')
 const { createServerlessDeliveryTracker } = require('./serverless')
+const { getEnvironmentVariable } = require('./config/helper')
 
 const legacyStorage = storage('legacy')
 
@@ -807,6 +808,8 @@ class CustomMetrics {
   #client
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+    // Lambda can freeze between invocations, including while an interval-triggered send is pending.
+    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) clientConfig.flushTimeoutMs = 1000
     this.#client = createMetricsAggregationClient(clientConfig)
 
     // CustomMetrics has process-lifetime flush handlers and no stop hook, so this shares that lifetime.

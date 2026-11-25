@@ -5,6 +5,7 @@ const { types: { isModuleNamespaceObject } } = require('node:util')
 
 const { datadog } = require('../handler')
 const { withTimeoutMonitor } = require('../wrap')
+const { flushDogStatsD } = require('../flush')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
@@ -37,6 +38,26 @@ function patchDatadogLambdaHandler (datadogHandler) {
 function patchPromisifiedHandlerModule (moduleExports) {
   shimmer.wrap(moduleExports, 'promisifiedHandler', promisify => {
     return handler => datadog(promisify(handler), true)
+  })
+  return moduleExports
+}
+
+/**
+ * The released shim owns its awaited completion listeners. Drain the public client after its own metrics,
+ * independently of enhanced-metric settings or tracing-plugin enablement.
+ *
+ * @param {{ MetricsListener: { prototype: { onCompleteInvocation: Function } } }} moduleExports
+ */
+function patchMetricsListenerModule (moduleExports) {
+  // An awaited finally must also delay a rejected completion; a synchronous channel error subscriber cannot do that.
+  shimmer.wrap(moduleExports.MetricsListener.prototype, 'onCompleteInvocation', original => {
+    return async function (...args) {
+      try {
+        return await Reflect.apply(original, this, args)
+      } finally {
+        await flushDogStatsD()
+      }
+    }
   })
   return moduleExports
 }
@@ -81,6 +102,8 @@ const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 // The npm package keeps dist/; Lambda layer builds place its contents directly in the package root.
 addHook({ name: 'datadog-lambda-js', file: 'dist/utils/handler.js' }, patchPromisifiedHandlerModule)
 addHook({ name: 'datadog-lambda-js', file: 'utils/handler.js' }, patchPromisifiedHandlerModule)
+addHook({ name: 'datadog-lambda-js', file: 'dist/metrics/listener.js' }, patchMetricsListenerModule)
+addHook({ name: 'datadog-lambda-js', file: 'metrics/listener.js' }, patchMetricsListenerModule)
 
 if (originalLambdaHandler === undefined) {
   addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)

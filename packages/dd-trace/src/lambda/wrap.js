@@ -2,6 +2,7 @@
 
 const { getWrappedHandler, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
 const { datadog: monitor } = require('./handler')
+const { flushDogStatsD } = require('./flush')
 
 /**
  * Reuses a raw timeout monitor, or its invocation wrapper after facade promotion.
@@ -38,7 +39,7 @@ function wrapLambdaHandler (handler, config) {
   // Normalize the original so a hook-first call has the same completion boundary as facade-first.
   // forceWrap(raw) replaces its wrapper; explicitly force-wrapping a span wrapper still nests it.
   const originals = globalThis[Symbol.for('dd-trace')]?.lambda?.originals
-  return wrapHandler(originals?.get(handler) || handler, config, monitor)
+  return wrapHandler(originals?.get(handler) || handler, config, monitor, flushDogStatsD)
 }
 
 module.exports = { withTimeoutMonitor, wrapLambdaHandler }
