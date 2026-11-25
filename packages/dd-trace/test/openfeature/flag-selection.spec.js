@@ -247,7 +247,7 @@ describe('OpenFeature flag selection', () => {
       )
       assert.strictEqual(
         packages['@datadog/flagging-core'][0],
-        `@datadog/flagging-core@${dependencies['@datadog/flagging-core']}`
+        `@datadog/flagging-core@${dependencies['@datadog/flagging-core'].replace(/^file:/, '')}`
       )
     })
 
@@ -336,6 +336,10 @@ describe('OpenFeature flag selection', () => {
         configurationSource = proxyquire('../../src/openfeature/configuration_source', {
           '../log': log,
           './agentless_configuration_source': AgentlessConfigurationSource,
+          './evaluator-capabilities': {
+            DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
+            getEvaluatorCapabilities,
+          },
           './flag-selection': flagSelection,
         })
       })

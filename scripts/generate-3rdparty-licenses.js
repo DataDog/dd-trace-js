@@ -179,7 +179,16 @@ async function fillMetadata (wanted, previous) {
       out.push({ component: entry.name, ...rootSelfMetadata() })
       continue
     }
-    for (const version of entry.versions) {
+    const registryVersions = [...entry.versions].filter(version => !isLocalTarballVersion(version))
+    if (registryVersions.length === 0) {
+      const previousRow = previous.get(entry.name)
+      if (!previousRow) {
+        throw new Error(`Local tarball dependency ${entry.name} has no reviewed attribution row`)
+      }
+      out.push(previousRow)
+      continue
+    }
+    for (const version of registryVersions) {
       toFetch.push({ name: entry.name, version })
     }
   }
@@ -220,6 +229,17 @@ async function fillMetadata (wanted, previous) {
   }
 
   return out
+}
+
+/**
+ * Bun records file tarballs as repository-relative paths in package resolutions.
+ * These artifacts have no registry metadata, so retain their existing reviewed
+ * attribution while the temporary local dependency is in use.
+ *
+ * @param {string} version
+ */
+function isLocalTarballVersion (version) {
+  return version.endsWith('.tgz') && !version.includes('://')
 }
 
 /**

@@ -3,11 +3,12 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { OpenFeature, ProviderEvents, ProviderStatus } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 
 require('../setup/mocha')
 

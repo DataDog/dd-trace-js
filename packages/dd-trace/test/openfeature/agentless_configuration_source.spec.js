@@ -37,6 +37,7 @@ describe('AgentlessConfigurationSource', () => {
   let clock
   let config
   let count
+  let flagSelection
   let increment
   let log
   let random
@@ -108,7 +109,7 @@ describe('AgentlessConfigurationSource', () => {
     increment = sinon.spy()
     count = sinon.spy(() => ({ inc: increment }))
 
-    const flagSelection = proxyquire('../../src/openfeature/flag-selection', {
+    flagSelection = proxyquire('../../src/openfeature/flag-selection', {
       '../log': log,
       '../telemetry/metrics': { manager: { namespace: () => ({ count }) } },
     })
@@ -235,6 +236,7 @@ describe('AgentlessConfigurationSource', () => {
     clock = undefined
     const body = zlib.gzipSync(responseBody())
     config.endpoint = new URL('http://flags.dev.internal:8080/custom/ufc')
+    config.endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
     delete config.apiKey
     nock('http://flags.dev.internal:8080', {
       badheaders: ['dd-api-key'],
@@ -243,6 +245,7 @@ describe('AgentlessConfigurationSource', () => {
       },
     })
       .get('/custom/ufc')
+      .query({ 'cap_dependent-flags-variant-key': 'v1' })
       .reply(200, body, {
         'content-encoding': 'gzip',
         etag: '"real-path"',

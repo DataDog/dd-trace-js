@@ -190,6 +190,22 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     )
   })
 
+  it('retains reviewed attribution for a local tarball without querying the registry', async () => {
+    fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: { '': { dependencies: { foo: 'file:vendor/foo-2.0.0.tgz' } } },
+      packages: { foo: ['foo@vendor/foo-2.0.0.tgz', '', {}] },
+    }))
+
+    await runGenerator({ DD_TEST_LICENSE_FAILURE: '1' })
+
+    const generated = fs.readFileSync(path.join(fixtureDirectory, 'LICENSE-3rdparty.csv'), 'utf8')
+    assert.match(
+      generated,
+      /"foo","https:\/\/old\.example\/""quoted""","\['MIT'\]","\['Old author'\]"/
+    )
+  })
+
   it('fails when a copied-source attribution names an installed dependency', async () => {
     fs.writeFileSync(
       path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),

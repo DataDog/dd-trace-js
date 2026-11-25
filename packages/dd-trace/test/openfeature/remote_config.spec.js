@@ -63,6 +63,19 @@ describe('OpenFeature Remote Config', () => {
     })
   }
 
+  it('advertises dependent flags when the bundled evaluator reports support', () => {
+    const { enable: enableWithEvaluator } = proxyquire('../../src/openfeature/remote_config', {
+      '../log': log,
+    })
+
+    enableWithEvaluator(rc, getOpenfeatureProxy, true)
+
+    assert.deepStrictEqual(rc.updateCapabilities.args, [
+      [RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true],
+      [RemoteConfigCapabilities.FFE_FLAG_DEPENDENT_FLAG_VARIANT_KEY_V1, true],
+    ])
+  })
+
   describe('enable', () => {
     it('should enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
       enable(rc, getOpenfeatureProxy, true)

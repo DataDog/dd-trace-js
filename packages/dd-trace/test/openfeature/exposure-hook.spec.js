@@ -6,10 +6,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { OpenFeature } = require('@openfeature/server-sdk')
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 
 require('../setup/core')
 
@@ -191,7 +192,7 @@ describe('ExposureHook', () => {
       const thrower = () => { throw new Error('configured logger failed') }
       log.configure({ logger: { debug: thrower, info: thrower, warn: thrower, error: thrower }, logLevel: 'debug' })
       const { OpenFeature } = require('@openfeature/server-sdk')
-      const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+      const { DatadogNodeServerProvider } = require('./vendor/dist/@datadog/openfeature-node-server')
       const { ExposureHook } = require('./openfeature/exposure-hook')
       ;(async () => {
         const provider = new DatadogNodeServerProvider({ exposureChannel: { hasSubscribers: false, publish () {} } })

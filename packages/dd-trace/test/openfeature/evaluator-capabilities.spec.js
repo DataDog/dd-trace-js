@@ -4,10 +4,13 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
-const { getEvaluatorCapabilities } = require('../../src/openfeature/evaluator-capabilities')
+const {
+  DEPENDENT_FLAG_VARIANT_KEY_V1,
+  getEvaluatorCapabilities,
+} = require('../../src/openfeature/evaluator-capabilities')
 
 describe('evaluator capabilities', () => {
-  it('does not advertise unsupported dependent flags', () => {
-    assert.deepStrictEqual(getEvaluatorCapabilities(), [])
+  it('advertises dependent flag evaluation support', () => {
+    assert.deepStrictEqual(getEvaluatorCapabilities(), [DEPENDENT_FLAG_VARIANT_KEY_V1])
   })
 })
