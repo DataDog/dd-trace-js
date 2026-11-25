@@ -381,7 +381,12 @@ function getLineCoverage () {
   return lineCoverage
 }
 
-/** Source maps by path: Jest names its cache files after a hash of their content. */
+/**
+ * Source maps by path, null for a path with no file: Jest names its cache files after a hash of
+ * their content.
+ *
+ * @type {Map<string, string | null>}
+ */
 const sourceMapsByPath = new Map()
 
 const INLINE_SOURCE_MAP_RE = /\/\/[#@] sourceMappingURL=data:application\/json[^,]*;base64,([\w+/=]+)\s*$/
@@ -401,11 +406,12 @@ function getTransformedSourceMap (code, sourceMapPath) {
       try {
         sourceMap = readFileSync(sourceMapPath, 'utf8')
       } catch {
-        return
+        // Jest names a map file for code read from its cache whether or not one was written.
+        sourceMap = null
       }
       sourceMapsByPath.set(sourceMapPath, sourceMap)
     }
-    return sourceMap
+    if (sourceMap !== null) return sourceMap
   }
   const inline = INLINE_SOURCE_MAP_RE.exec(code.slice(-4096))
   if (inline) return Buffer.from(inline[1], 'base64').toString('utf8')
@@ -440,7 +446,9 @@ function instrumentScriptTransformer (transformer) {
       ...result,
       code: lineCoverage.instrumentSource(result.code, filename, {
         reuse: true,
-        sourceMap: getTransformedSourceMap(result.code, result.sourceMapPath),
+        sourceMap: () => getTransformedSourceMap(result.code, result.sourceMapPath),
+        // Instrumented code is cached where Jest caches transformed code, and only when Jest does.
+        cacheDirectory: this?._config?.cache === false ? undefined : this?._config?.cacheDirectory,
       }),
     }
   })
