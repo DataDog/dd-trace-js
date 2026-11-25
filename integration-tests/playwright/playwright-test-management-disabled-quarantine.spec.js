@@ -84,6 +84,23 @@ const ALL_DISABLED_MANAGEMENT_TESTS = {
 const QUARANTINE_MANAGEMENT_TESTS = {
   playwright: {
     suites: {
+      'quarantine-serial-interrupted-test.js': {
+        tests: {
+          'quarantine interruption retried group quarantined failure': {
+            properties: { quarantined: true },
+          },
+          'quarantine interruption fail-fast group quarantined failure': {
+            properties: { quarantined: true },
+          },
+        },
+      },
+      'quarantine-serial-jobs-test.js': {
+        tests: {
+          'quarantine separate jobs quarantined failure': {
+            properties: { quarantined: true },
+          },
+        },
+      },
       'quarantine-serial-test.js': {
         tests: {
           'quarantine serial first fails and is quarantined': {
@@ -593,6 +610,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
             eventsPromise,
           ])
           assert.strictEqual(exitCode, 1, testOutput)
+          return testOutput
         } finally {
           proc?.kill()
         }
@@ -601,6 +619,33 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
       it('fails the session when tests outside the quarantined serial group did not run', async (receiver) => {
         await runQuarantineMustFailTest(receiver, {
           cliArgs: 'quarantine-serial-test.js quarantine-test.js --workers=1 --max-failures=1',
+        })
+      })
+
+      context('serial job completion', () => {
+        const reporter = '--reporter=line,./ci-visibility/playwright-tests-test-management/serial-results-reporter.js'
+        it('fails when a previously passing serial prerequisite is interrupted on retry', async (receiver) => {
+          // Older Playwright counts the first, retryable failure toward max-failures.
+          const maxFailures = version === latest ? 1 : 2
+          const output = await runQuarantineMustFailTest(receiver, {
+            cliArgs: 'quarantine-serial-interrupted-test.js --workers=2 --retries=1 ' +
+              `--max-failures=${maxFailures} ${reporter}`,
+          })
+          const results = JSON.parse(output.match(/SERIAL_RESULTS=(.*)/)[1])
+          const prerequisite = results.find(test => test.title === 'prerequisite')
+          assert.deepStrictEqual(prerequisite.statuses, ['passed', 'interrupted'])
+          assert.strictEqual(prerequisite.outcome, 'expected')
+        })
+
+        it('fails the session when another job in the quarantined serial group did not run', async (receiver) => {
+          const output = await runQuarantineMustFailTest(receiver, {
+            cliArgs: `quarantine-serial-jobs-test.js --workers=1 --max-failures=1 ${reporter}`,
+          })
+          const results = JSON.parse(output.match(/SERIAL_RESULTS=(.*)/)[1])
+          const queued = results.find(test => test.title === 'queued in another job')
+          const failure = results.find(test => test.title === 'quarantined failure')
+          assert.notStrictEqual(queued.workerHash, failure.workerHash)
+          assert.ok(queued.statuses.every(status => status === 'skipped'))
         })
       })
 

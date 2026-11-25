@@ -31,24 +31,30 @@ function isPlaywrightReporterError (message) {
 }
 
 /**
- * Adds every serial suite that contains the test to the set.
- * @param {Set<object>} serialSuites
+ * Records the worker fixture pool for each serial suite containing the test.
+ * @param {Map<object, Set<string>>} serialSuites
  * @param {object} test
  */
 function addSerialSuites (serialSuites, test) {
   for (let suite = test.parent; suite; suite = suite.parent) {
-    if (suite._parallelMode === 'serial') serialSuites.add(suite)
+    if (suite._parallelMode !== 'serial') continue
+    let workerHashes = serialSuites.get(suite)
+    if (!workerHashes) {
+      workerHashes = new Set()
+      serialSuites.set(suite, workerHashes)
+    }
+    workerHashes.add(test._workerHash)
   }
 }
 
 /**
- * Reports whether the test belongs to one of the given serial suites.
- * @param {Set<object>} serialSuites
+ * Reports whether the test shares a serial suite and scheduled job with a quarantined failure.
+ * @param {Map<object, Set<string>>} serialSuites
  * @param {object} test
  */
 function isInSerialSuite (serialSuites, test) {
   for (let suite = test.parent; suite; suite = suite.parent) {
-    if (serialSuites.has(suite)) return true
+    if (serialSuites.get(suite)?.has(test._workerHash)) return true
   }
   return false
 }
@@ -171,14 +177,14 @@ class DatadogPlaywrightReporter {
     let quarantinedFailureCount = 0
     let hasIncompleteTests = suitesWithHookErrors.size > 0
     const tests = this.suite?.allTests?.()
-    const quarantinedSerialSuites = new Set()
+    const quarantinedSerialSuites = new Map()
     const skippedTests = []
     if (tests) {
       for (const test of tests) {
         const outcome = test.outcome()
         // A serial retry can append skipped results after the real failure, so ignore them.
         const finalResult = test.results.findLast(result => result.status !== 'skipped') ?? test.results.at(-1)
-        hasIncompleteTests ||= hasFailedSuiteHook(finalResult?.steps)
+        hasIncompleteTests ||= finalResult?.status === 'interrupted' || hasFailedSuiteHook(finalResult?.steps)
         if (outcome === 'unexpected' || (outcome === 'flaky' && this.failOnFlakyTests)) {
           failureCount += 1
           const finalResultStatus = finalResult?.status
