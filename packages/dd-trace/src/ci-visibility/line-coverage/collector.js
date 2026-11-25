@@ -6,8 +6,8 @@
 // An instrumented module records the slots that ran in module-scope words. At the first probe of
 // an activation it calls `touch` unless its touched flag is set (see instrument.js). `touch` asks
 // who owns the running context. When the module's words were recorded for another owner, they go
-// to that owner first. The module's reader is queued, so the next reset moves its words to its
-// owner and clears its flag.
+// to that owner first. The module's reader is queued, so the next reset clears its flag. Its words
+// stay where they are until a touch finds another owner or a window boundary reads them.
 //
 // While at most one window is open, `touch` sets the module's flag, and the module skips `touch`
 // until the next reset. Resets happen at window boundaries, when a macrotask starts, and when a
@@ -51,6 +51,25 @@ class LineSet {
   }
 
   /**
+   * Returns the bitmap of `file`, with at least `length` bytes.
+   *
+   * @param {number} file
+   * @param {number} length
+   * @returns {Uint8Array}
+   */
+  reserve (file, length) {
+    let bitmap = this.bitmaps.get(file)
+    if (bitmap === undefined) {
+      bitmap = new Uint8Array(length)
+      this.bitmaps.set(file, bitmap)
+    } else if (bitmap.length < length) {
+      bitmap = grow(bitmap, length)
+      this.bitmaps.set(file, bitmap)
+    }
+    return bitmap
+  }
+
+  /**
    * @param {number} file
    * @param {Uint8Array} source
    */
@@ -73,6 +92,18 @@ class LineSet {
   addAll (other) {
     for (const [file, bitmap] of other.bitmaps) this.addBitmap(file, bitmap)
   }
+}
+
+/**
+ * @param {string} text integers separated by commas
+ * @returns {Int32Array}
+ */
+function parseIntegers (text) {
+  if (text === '') return new Int32Array(0)
+  const values = text.split(',')
+  const integers = new Int32Array(values.length)
+  for (let i = 0; i < values.length; i++) integers[i] = Number(values[i])
+  return integers
 }
 
 /**
@@ -100,7 +131,8 @@ class Owner {
 }
 
 /**
- * @typedef {{ files: Int32Array, lines: Int32Array, initMasks: Int32Array }} ModuleTable
+ * @typedef {{ files: Int32Array, lines: Int32Array, initMasks: Int32Array, bytes: number }} ModuleTable
+ *   `bytes` is the length of a bitmap that holds every line of the module
  */
 
 class LineCoverageCollector {
@@ -146,6 +178,12 @@ class LineCoverageCollector {
   /** @type {Uint8Array} 1 for each module whose reader is in `q` */
   #queued = new Uint8Array(64)
 
+  /** @type {Function[]} readers of the modules touched since the last window boundary */
+  #touched = []
+
+  /** @type {Uint8Array} 1 for each module whose reader is in `#touched` */
+  #isTouched = new Uint8Array(64)
+
   /** @type {Owner | undefined} the owner the touches since the last reset found */
   #segmentOwner
 
@@ -189,10 +227,11 @@ class LineCoverageCollector {
    * id. Copies of the same code share its slot table.
    *
    * @param {string} key identifies the instrumented code
-   * @param {Array<string | null>} sources the file each source stands for, null for a source whose
-   *   lines count nowhere
-   * @param {number[]} lines the line of each slot, negated for initialiser lines
-   * @param {number[]} [sourceOfSlot] the source of each slot, when there is more than one
+   * @param {string} sources JSON of the file each source stands for, null for a source whose lines
+   *   count nowhere
+   * @param {string} lines the line of each slot, negated for initialiser lines, separated by commas
+   * @param {string} [sourceOfSlot] the source of each slot, when there is more than one, separated by
+   *   commas
    */
   define (key, sources, lines, sourceOfSlot) {
     let table = this.#tables.get(key)
@@ -202,30 +241,33 @@ class LineCoverageCollector {
     }
     const id = this.#modules.push(table) - 1
     if (id >= this.#queued.length) {
-      const queued = new Uint8Array(this.#queued.length * 2)
-      queued.set(this.#queued)
-      this.#queued = queued
+      this.#queued = grow(this.#queued, id + 1)
+      this.#isTouched = grow(this.#isTouched, id + 1)
     }
     return id
   }
 
   /**
-   * @param {Array<string | null>} sources
-   * @param {number[]} lines
-   * @param {number[]} [sourceOfSlot]
+   * @param {string} sources
+   * @param {string} lines
+   * @param {string} [sourceOfSlot]
    * @returns {ModuleTable | undefined} undefined when the table is not valid: what the module records
    *   then counts nowhere
    */
   #createTable (sources, lines, sourceOfSlot) {
     try {
-      const fileOfSource = sources.map(source => typeof source === 'string' ? this.fileIndex(source) : -1)
-      const files = new Int32Array(lines.length)
-      const initMasks = new Int32Array(Math.ceil(lines.length / SLOTS_PER_WORD))
-      for (let slot = 0; slot < lines.length; slot++) {
-        files[slot] = fileOfSource[sourceOfSlot === undefined ? 0 : sourceOfSlot[slot]] ?? -1
-        if (lines[slot] < 0) initMasks[Math.floor(slot / SLOTS_PER_WORD)] |= 1 << (slot % SLOTS_PER_WORD)
+      const fileOfSource = JSON.parse(sources).map(source => typeof source === 'string' ? this.fileIndex(source) : -1)
+      const lineOfSlot = parseIntegers(lines)
+      const sourceOfEachSlot = sourceOfSlot === undefined ? undefined : parseIntegers(sourceOfSlot)
+      const files = new Int32Array(lineOfSlot.length)
+      const initMasks = new Int32Array(Math.ceil(lineOfSlot.length / SLOTS_PER_WORD))
+      let lastLine = 0
+      for (let slot = 0; slot < lineOfSlot.length; slot++) {
+        files[slot] = fileOfSource[sourceOfEachSlot === undefined ? 0 : sourceOfEachSlot[slot]] ?? -1
+        if (lineOfSlot[slot] < 0) initMasks[Math.floor(slot / SLOTS_PER_WORD)] |= 1 << (slot % SLOTS_PER_WORD)
+        lastLine = Math.max(lastLine, Math.abs(lineOfSlot[slot]))
       }
-      return { files, lines: Int32Array.from(lines), initMasks }
+      return { files, lines: lineOfSlot, initMasks, bytes: (lastLine >> 3) + 1 }
     } catch {}
   }
 
@@ -293,6 +335,10 @@ class LineCoverageCollector {
     if (this.#queued[id] === 0) {
       this.#queued[id] = 1
       this.q.push(reader)
+      if (this.#isTouched[id] === 0) {
+        this.#isTouched[id] = 1
+        this.#touched.push(reader)
+      }
       if (!this.#resetScheduled && this.#scheduleReset !== undefined) {
         this.#resetScheduled = true
         this.#scheduleReset()
@@ -302,8 +348,8 @@ class LineCoverageCollector {
   }
 
   /**
-   * Moves the words of the modules touched since the last reset to their owners, and clears their
-   * touched flags.
+   * Clears the touched flags of the modules touched since the last reset, so their next activation
+   * asks who owns it.
    */
   reset () {
     this.#resetScheduled = false
@@ -311,33 +357,34 @@ class LineCoverageCollector {
     const queued = this.q
     if (queued.length === 0) return
     this.stats.resets++
-    const generation = ++this.#generation
-    for (let i = 0; i < queued.length; i++) this.#unqueue(this.#read(queued[i], generation))
+    for (let i = 0; i < queued.length; i++) this.#queued[queued[i](null, 0)] = 0
     queued.length = 0
   }
 
   /**
-   * A reset at a window boundary. It also reads the modules queued at the previous boundary: a
-   * function that was running when that boundary happened keeps recording without touching.
+   * A reset at a window boundary, which moves the words of every module touched since the previous
+   * boundary to their owners. It also reads the modules queued at the previous boundary: a function
+   * that was running when that boundary happened keeps recording without touching.
    */
   boundary () {
     this.#resetScheduled = false
     this.#segmentOwner = undefined
-    const queued = this.q
+    const touched = this.#touched
     const previous = this.#previous
     const generation = ++this.#generation
-    for (let i = 0; i < queued.length; i++) this.#unqueue(this.#read(queued[i], generation))
+    for (let i = 0; i < touched.length; i++) {
+      // Every module in `q` is among them, so this clears every touched flag.
+      const id = this.#read(touched[i], generation)
+      if (id !== -1) {
+        this.#isTouched[id] = 0
+        this.#queued[id] = 0
+      }
+    }
+    touched.length = 0
     for (let i = 0; i < previous.length; i++) this.#read(previous[i], generation)
     previous.length = 0
-    this.#previous = queued
+    this.#previous = this.q
     this.q = previous
-  }
-
-  /**
-   * @param {number} id a module id, or -1
-   */
-  #unqueue (id) {
-    if (id !== -1) this.#queued[id] = 0
   }
 
   /**
@@ -408,7 +455,9 @@ class LineCoverageCollector {
       const module = this.#modules[id]
       owner.words[id] = undefined
       if (words === undefined || module === undefined) continue
-      const { files, lines } = module
+      const { files, lines, bytes } = module
+      let file = -1
+      let bitmap
       for (let word = 0; word < words.length; word++) {
         let bits = words[word]
         const base = word * SLOTS_PER_WORD
@@ -416,9 +465,15 @@ class LineCoverageCollector {
           const lowest = bits & -bits
           bits ^= lowest
           const slot = base + 31 - Math.clz32(lowest)
-          const file = files[slot]
+          const slotFile = files[slot]
+          if (slotFile === -1) continue
+          if (slotFile !== file) {
+            file = slotFile
+            bitmap = target.reserve(file, bytes)
+          }
           // Initialiser lines are negated; they reach an owner only when `initToOwner` is set.
-          if (file !== -1) target.add(file, Math.abs(lines[slot]))
+          const line = Math.abs(lines[slot])
+          bitmap[line >> 3] |= 1 << (line & 7)
         }
       }
     }

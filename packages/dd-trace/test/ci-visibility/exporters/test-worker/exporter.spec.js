@@ -74,6 +74,25 @@ describe('CI Visibility Test Worker Exporter', () => {
       )
     })
 
+    it('sends line bitmaps as base64', () => {
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      jestWorkerExporter.exportCoverage({
+        sessionId: '1',
+        testId: '2',
+        files: [
+          { filename: 'a.js', bitmap: Buffer.from([0, 0, 0, 0x40, 0x01, 0x60]) },
+          { filename: 'b.js', bitmap: new Uint8Array([0xff, 0x80, 0x01]).subarray(1) },
+          { filename: 'c.js' },
+        ],
+      })
+      jestWorkerExporter.flush()
+      sinon.assert.calledWith(send, [JEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([{
+        sessionId: '1',
+        testId: '2',
+        files: [{ filename: 'a.js', bitmap: 'AAAAQAFg' }, { filename: 'b.js', bitmap: 'gAE=' }, { filename: 'c.js' }],
+      }])])
+    })
+
     it('signals completion after all queued payloads flush', () => {
       const callbacks = []
       send = sinon.stub().callsFake((payload, callback) => {

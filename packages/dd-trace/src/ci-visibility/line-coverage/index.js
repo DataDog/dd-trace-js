@@ -650,6 +650,9 @@ function writeDump () {
   writeFileSync(dumpPath, JSON.stringify({ files }))
 }
 
+/** @type {Map<string, boolean>} */
+const isRepositoryPathByFilename = new Map()
+
 /**
  * Whether `filename` is a file of the repository: under the root, outside `node_modules` and
  * outside directories whose name starts with a dot.
@@ -657,6 +660,18 @@ function writeDump () {
  * @param {string} filename an absolute path
  */
 function shouldInstrument (filename) {
+  let should = isRepositoryPathByFilename.get(filename)
+  if (should === undefined) {
+    should = isRepositoryPath(filename)
+    isRepositoryPathByFilename.set(filename, should)
+  }
+  return should
+}
+
+/**
+ * @param {string} filename an absolute path
+ */
+function isRepositoryPath (filename) {
   if (!filename.startsWith(rootPrefix)) return false
   const parts = filename.slice(rootPrefix.length).split(sep)
   for (let i = 0; i < parts.length; i++) {

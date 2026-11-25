@@ -35,6 +35,9 @@ const TOUCH_ALWAYS = 2
 // Calls whose function arguments run as a job of their own.
 const JOB_METHODS = new Set(['then', 'catch', 'finally'])
 
+// Line terminators besides `\n`, which JavaScript counts and source maps do not.
+const OTHER_LINE_TERMINATORS = /[\r\u2028\u2029]/
+
 const LIST = 0
 const SLOT = 1
 const LABEL = 2
@@ -90,9 +93,10 @@ class Instrumenter {
     this.sources = sources
     this.mapPosition = mapPosition
     this.prefix = choosePrefix(code)
-    this.lineStarts = getLineStarts(code)
+    const isNewlineOnly = !OTHER_LINE_TERMINATORS.test(code)
+    this.lineStarts = isNewlineOnly ? getNewlineStarts(code) : getLineStarts(code)
     // Source maps count lines by `\n` alone.
-    this.mapLineStarts = mapPosition ? getNewlineStarts(code) : undefined
+    this.mapLineStarts = mapPosition ? (isNewlineOnly ? this.lineStarts : getNewlineStarts(code)) : undefined
 
     /** @type {Map<number, number>} */
     this.slotByKey = new Map()
@@ -1226,10 +1230,11 @@ class Instrumenter {
   // the code does not depend on the process that instrumented it, so it can be cached. The reader
   // writes the module id into `o`, then a word index and its bits for each word with slots that
   // ran, clears them, and returns the number of entries it wrote. It returns 0 when it already ran
-  // for boundary `g`.
+  // for boundary `g`. Given null for `o`, it only clears the touched flag, and returns the module id.
   header (words) {
     const p = this.prefix
-    let reader = `function ${p}x(o,g){if(${p}g===g)return 0;${p}g=g;o[0]=${p}m;var n=1;`
+    let reader = `function ${p}x(o,g){if(o===null){${p}t=0;return ${p}m}` +
+      `if(${p}g===g)return 0;${p}g=g;o[0]=${p}m;var n=1;`
     // The id has no initialiser, so the header keeps one that a touch before it set.
     let names = `${p}t=0,${p}g=0,${p}c,${p}m`
     for (const word of words) {
@@ -1246,9 +1251,10 @@ class Instrumenter {
     return `;var ${names};${touch}${define}${reader}${identity}`
   }
 
-  // The arguments of the collector's `define`: the module key, the sources, the line of each slot,
-  // negated for initialiser lines, and, when slots come from more than one source, the source of
-  // each slot.
+  // The arguments of the collector's `define`: the module key, the sources as JSON, the line of each
+  // slot, negated for initialiser lines, and, when slots come from more than one source, the source
+  // of each slot. The tables are strings, one token for the compiler and nothing to allocate for each
+  // copy of the module; the collector parses them once per module key.
   describe () {
     let lines = ''
     let sources = ''
@@ -1260,8 +1266,8 @@ class Instrumenter {
       sources += separator + source
       if (source !== 0) several = true
     }
-    let text = `${JSON.stringify(this.moduleKey)},${JSON.stringify(this.sources)},[${lines}]`
-    if (several) text += `,[${sources}]`
+    let text = `${JSON.stringify(this.moduleKey)},${JSON.stringify(JSON.stringify(this.sources))},"${lines}"`
+    if (several) text += `,"${sources}"`
     return text
   }
 }
