@@ -814,23 +814,10 @@ describe('Plugin', () => {
         it('ignores incoming trace and batch context and the active span on receive', async () => {
           const [topic] = await pubsub.createTopic(topicName)
           const [sub] = await topic.createSubscription('foo')
-          let ambientContext
-          let delivered
 
-          const received = agent.assertSomeTraces(traces => {
-            const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
-            assert.ok(span)
-            assert.strictEqual(span.parent_id.toString(), '0')
-            assert.notStrictEqual(span.trace_id.toString(), '42')
-            assert.notStrictEqual(span.trace_id.toString(), ambientContext.toTraceId())
-            assert.ok(!('_dd.span_links' in span.meta))
-            assert.ok(!('pubsub.batch.request_trace_id' in span.meta))
-            assert.strictEqual(span.metrics['pubsub.batch.message_index'], 0)
-          }, { spanResourceMatch: /^Message from /, timeoutMs: TIMEOUT })
-
+          // Publish without the plugin so the subscriber receives the attributes exactly as written here.
+          tracer.use('google-cloud-pubsub', false)
           try {
-            // Publish without the plugin so the subscriber receives the attributes exactly as written here.
-            tracer.use('google-cloud-pubsub', false)
             await publish(topic, {
               data: Buffer.from('hello'),
               attributes: {
@@ -844,27 +831,39 @@ describe('Plugin', () => {
                 '_dd.batch.index': '0',
               },
             })
+          } finally {
             tracer.use('google-cloud-pubsub', { dsmEnabled: false })
+          }
 
-            // Opening the stream under an active span makes it the ambient span when the message is delivered.
-            const ambientSpan = tracer.startSpan('subscriber')
-            ambientContext = ambientSpan.context()
-            delivered = tracer.scope().activate(ambientSpan, () => new Promise(resolve => {
-              sub.once('message', msg => {
-                msg.ack()
-                resolve(msg.attributes)
-              })
-            }))
-            ambientSpan.finish()
+          const ambientSpan = tracer.startSpan('subscriber')
+          const ambientContext = ambientSpan.context()
+          const received = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+            assert.ok(span)
+            assert.strictEqual(span.parent_id.toString(), '0')
+            assert.notStrictEqual(span.trace_id.toString(), '42')
+            assert.notStrictEqual(span.trace_id.toString(), ambientContext.toTraceId())
+            assert.ok(!('_dd.span_links' in span.meta))
+            assert.ok(!('pubsub.batch.request_trace_id' in span.meta))
+            assert.strictEqual(span.metrics['pubsub.batch.message_index'], 0)
+          }, { spanResourceMatch: /^Message from /, timeoutMs: TIMEOUT })
 
-            await received
+          // Opening the stream under an active span makes it the ambient span when the message is delivered.
+          const delivered = tracer.scope().activate(ambientSpan, () => new Promise(resolve => {
+            sub.once('message', msg => {
+              msg.ack()
+              resolve(msg.attributes)
+            })
+          }))
+          ambientSpan.finish()
+
+          try {
+            const [receivedAttributes] = await Promise.all([delivered, received])
+            assert.strictEqual(receivedAttributes['x-datadog-trace-id'], '42')
+            assert.strictEqual(receivedAttributes['_dd.pubsub_request.span_id'], '000000000000002c')
           } finally {
             await sub.close()
           }
-
-          const receivedAttributes = await delivered
-          assert.strictEqual(receivedAttributes['x-datadog-trace-id'], '42')
-          assert.strictEqual(receivedAttributes['_dd.pubsub_request.span_id'], '000000000000002c')
         })
 
         it('ignores Datadog context supplied in the message attributes', async () => {

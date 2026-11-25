@@ -301,8 +301,7 @@ describe('Plugin', () => {
           }, { timeoutMs: TIMEOUT })
 
           subscription.on('message', msg => msg.ack())
-          await publish(topic, { data: Buffer.from('DSM without trace propagation') })
-          await statsPromise
+          await Promise.all([publish(topic, { data: Buffer.from('DSM without trace propagation') }), statsPromise])
         })
       })
     })
