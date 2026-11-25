@@ -41,6 +41,9 @@ module.exports = {
     // ESM-only default exports being wrapped in a namespace by rspack's interop,
     // which would break patterns like `require('esquery').parse`.
     mainFields: ['main', 'module'],
+    // Prefer the CommonJS export condition. Some vendored ESM entrypoints use
+    // transitive star exports that Rspack cannot statically link reliably.
+    conditionNames: ['require', 'node', 'default'],
   },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
