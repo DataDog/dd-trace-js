@@ -230,8 +230,12 @@ module.exports = {
   ],
   fastify: [
     {
+      name: 'express',
+      versions: ['5'],
+    },
+    {
       name: 'fastify',
-      versions: ['2.15.0', '3.0.0', '3.9.2'],
+      versions: ['2.15.0', '3.0.0', '3.9.2', '4.0.0'],
     },
     {
       name: 'middie',
