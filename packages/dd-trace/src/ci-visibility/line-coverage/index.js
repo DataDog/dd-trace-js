@@ -120,11 +120,6 @@ let cacheSalt
 /** @type {Set<string>} cache directories known to exist */
 const cacheDirectories = new Set()
 
-function isEnabled () {
-  const value = getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED')
-  return value === 'true' || value === '1'
-}
-
 function isActive () {
   return enabled
 }
@@ -1004,7 +999,6 @@ module.exports = {
   installGlobal,
   instrumentSource,
   isActive,
-  isEnabled,
   shouldInstrument,
   startSuiteSetup,
   startTest,
