@@ -9,7 +9,6 @@ require('../setup/core')
 const { debugChannel } = require('../../src/log/channels')
 const {
   computePathwayHash,
-  decodePathwayContext,
   DsmPathwayCodec,
 } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
@@ -36,20 +35,6 @@ describe('encoding', () => {
     const shortCarrier = DsmPathwayCodec.encode(shortContext)
     const wire = Buffer.from(shortCarrier['dd-pathway-ctx-base64'], 'base64')
     assert.deepStrictEqual(wire, Buffer.from('67b0b35e65c0acfa020400000000000000000000', 'hex'))
-  })
-
-  it('decoding of a context should be consistent between languages', () => {
-    const data = Buffer.from([103, 176, 179, 94, 101, 192, 172, 250, 196, 231,
-      192, 159, 143, 98, 200, 217, 195, 159, 143, 98])
-    const decoded = decodePathwayContext(data)
-    const expectedContext = {
-      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
-      pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000,
-    }
-    assert.strictEqual(decoded.hash.toString('hex'), expectedContext.hash.toString('hex'))
-    assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
-    assert.strictEqual(decoded.edgeStartNs, expectedContext.edgeStartNs)
   })
 
   it('should encode and decode to the same value when using the PathwayCodec', () => {
@@ -99,6 +84,15 @@ describe('encoding', () => {
       pathwayStartNs: 1685673482722000000,
       edgeStartNs: 1685673506404000000,
     })
+  })
+
+  it('rejects a truncated pathway hash or timestamp', () => {
+    const wire = Buffer.from('Z7CzXmXArPrE58Cfj2LI2cOfj2I=', 'base64')
+
+    for (const length of [7, 9, 15]) {
+      const carrier = { 'dd-pathway-ctx-base64': wire.subarray(0, length).toString('base64') }
+      assert.strictEqual(DsmPathwayCodec.decode(carrier), null)
+    }
   })
 
   it('should inject the base64 encoded string to the carrier', () => {

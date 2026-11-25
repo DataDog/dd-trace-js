@@ -616,6 +616,19 @@ describe('DataStreamsProcessor', () => {
       assert.strictEqual(ctx.hash.readBigUInt64LE(), 11375375775841093325n)
     })
 
+    it('uses the inbound parent after recording a root HTTP checkpoint', () => {
+      const { tracer } = tracerWithProcessTags(false)
+      const headers = { 'dd-pathway-ctx-base64': 'H4OEGOxLc6SA5MeIumj058eIumg=' }
+
+      const root = setHttpServerCheckpoint(tracer, null, {})
+      const child = setHttpServerCheckpoint(tracer, null, headers)
+      const nextRoot = setHttpServerCheckpoint(tracer, null, {})
+
+      assert.strictEqual(root.hash.readBigUInt64LE(), 11375375775841093325n)
+      assert.strictEqual(child.hash.readBigUInt64LE(), 11291553564431990061n)
+      assert.deepStrictEqual(nextRoot.hash, root.hash)
+    })
+
     it('uses the current container tags hash for repeated HTTP checkpoints', () => {
       const { tracer, ownPropagationHash } = tracerWithProcessTags(true)
       const original = setHttpServerCheckpoint(tracer, null, {}).hash

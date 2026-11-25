@@ -149,7 +149,12 @@ function computeHash (service, env, edgeTags, parentHash, processTags, container
   const fixed = fixedEdgeTags.get(edgeTags)
   if (fixed !== undefined) return fixed(service, env, parentHash, processTags, containerTagsHash)
 
-  edgeTags.sort()
+  for (let index = 1; index < edgeTags.length; index++) {
+    if (edgeTags[index] < edgeTags[index - 1]) {
+      edgeTags.sort()
+      break
+    }
+  }
   const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
   const key = pathwayCachePrefix(seed, edgeTags.join('\0')) + parentHash.toString('hex')
   return cache.get(key) ?? cachePathwayHash(key, seed, Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), parentHash)
@@ -180,13 +185,12 @@ function cachePathwayHash (key, seed, tagBytes, parentHash) {
 }
 
 /**
- * @param {...string} edgeTags
+ * @param {'direction:in' | 'direction:out'} direction
  */
-function prepareFixedEdgeTags (...edgeTags) {
-  edgeTags.sort()
-  Object.freeze(edgeTags)
+function prepareHttpEdgeTags (direction) {
+  const edgeTags = [direction, 'type:http']
   const edgeKey = edgeTags.join('\0')
-  const tagBytes = Buffer.from(hashedEdgeTags(edgeTags), 'utf8')
+  const tagBytes = Buffer.from(edgeTags.join(''), 'utf8')
   let fixedSeed
   let keyPrefix
   let rootHash
@@ -258,18 +262,15 @@ function decodePathwayContext (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return null
   }
-  // hash and parent hash are in LE
-  const pathwayHash = pathwayContext.subarray(0, 8)
-  const encodedTimestamps = pathwayContext.subarray(8)
-  const [pathwayStartMs, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
+  const [pathwayStartMs, edgeOffset] = decodeVarint(pathwayContext, 8)
   if (pathwayStartMs === undefined) {
     return null
   }
-  const [edgeStartMs] = decodeVarint(encodedTimeSincePrev)
+  const [edgeStartMs] = decodeVarint(pathwayContext, edgeOffset)
   if (edgeStartMs === undefined) {
     return null
   }
-  return { hash: pathwayHash, pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
+  return { hash: pathwayContext.subarray(0, 8), pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
 }
 
 /**
@@ -342,9 +343,8 @@ const DsmPathwayCodec = {
 
 module.exports = {
   computePathwayHash: computeHash,
-  prepareFixedEdgeTags,
+  prepareHttpEdgeTags,
   ENTRY_PARENT_HASH,
-  decodePathwayContext,
   DsmPathwayCodec,
   statsPointKey,
 }
