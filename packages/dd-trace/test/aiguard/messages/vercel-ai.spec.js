@@ -155,6 +155,21 @@ describe('aiguard/messages/vercel-ai', () => {
       })
     }
 
+    it('preserves a file URL with the generic image media type', () => {
+      const prompt = [{
+        role: 'user',
+        content: [{
+          type: 'file',
+          mediaType: 'image',
+          data: { type: 'url', url: new URL('https://example.com/cat.png') },
+        }],
+      }]
+
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.com/cat.png' } }],
+      }])
+    })
+
     it('should ignore file parts with non-image media types', () => {
       const prompt = [{
         role: 'user',

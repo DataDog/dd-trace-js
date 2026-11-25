@@ -57,7 +57,7 @@ function convertVercelPromptToMessages (prompt) {
         for (const part of msg.content) {
           if (part.type === 'text') {
             contentParts.push({ type: 'text', text: part.text })
-          } else if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+          } else if (part.type === 'file' && (part.mediaType === 'image' || part.mediaType?.startsWith('image/'))) {
             const converted = convertFilePartToImageUrl(part)
             if (converted) contentParts.push(converted)
           }

@@ -41,6 +41,7 @@ const server = createServer(async (req, res) => {
   }
 
   const model = new MockLanguageModelV4({
+    supportedUrls: { 'image/*': [/^https:\/\/example\.com\//] },
     doGenerate: async ({ prompt }) => result(prompt),
     doStream: async ({ prompt }) => {
       const generated = result(prompt)
@@ -77,14 +78,14 @@ const server = createServer(async (req, res) => {
   }
   const options = { model, prompt: 'Hello', tools, maxRetries: 0, onError () {} }
   if (searchParams.has('image')) {
-    options.prompt = [{
-      role: 'user',
-      content: [{
-        type: 'file',
-        mediaType: 'image/png',
-        data: new Uint8Array([1, 2, 3]),
-      }],
-    }]
+    const image = searchParams.get('image')
+    const url = new URL('https://example.com/cat.png')
+    const part = image === 'legacy'
+      ? { type: 'image', image: url }
+      : image === 'generic'
+        ? { type: 'file', mediaType: 'image', data: url }
+        : { type: 'file', mediaType: 'image/png', data: new Uint8Array([1, 2, 3]) }
+    options.prompt = [{ role: 'user', content: [part] }]
   }
 
   try {

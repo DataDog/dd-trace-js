@@ -90,7 +90,21 @@ describe('AI Guard with Vercel AI', () => {
     assert.deepStrictEqual(evaluations[2].find(message => message.role === 'assistant'), assistant)
   })
 
-  it('evaluates an image-only prompt', async () => {
+  for (const image of ['legacy', 'generic']) {
+    for (const operation of ['generate', 'agent']) {
+      it(`blocks ${operation} unsafe output after a ${image} image-only prompt`, async () => {
+        assert.deepStrictEqual(await request(`/${operation}?image=${image}&mixed&deny=text`), {
+          text: '',
+          toolExecutions: 0,
+          error: { name: 'AIGuardAbortError', message: 'Blocked by policy' },
+        })
+        assert.strictEqual(evaluations.length, 2)
+        assert.deepStrictEqual(evaluations[1].at(-1).content, '[deny] unsafe text')
+      })
+    }
+  }
+
+  it('preserves image content in evaluation requests', async () => {
     assert.deepStrictEqual(await request('/generate?image'), { text: 'Hello', toolExecutions: 0 })
     assert.strictEqual(evaluations.length, 2)
     assert.deepStrictEqual(evaluations[0], [{
