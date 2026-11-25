@@ -2062,7 +2062,7 @@ function handleWorkerReport (interprocessCode, data) {
       newTestsWithDynamicNames,
       attemptToFixExecutions,
     })
-    workerReportTraceCh.publish(data)
+    workerReportTraceCh.publish({ traces: data })
     return true
   }
 
