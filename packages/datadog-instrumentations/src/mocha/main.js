@@ -1671,7 +1671,7 @@ function onMessage (message) {
         testAnnotations: workerTestAnnotations,
         attemptToFixExecutions,
       })
-      workerReportTraceCh.publish(payload)
+      workerReportTraceCh.publish({ traces: payload })
     } else if (messageCode === MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE) {
       workerReportTelemetryCh.publish(payload)
     }

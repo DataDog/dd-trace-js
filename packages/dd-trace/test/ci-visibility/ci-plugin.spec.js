@@ -402,7 +402,7 @@ describe('CiPlugin', () => {
   it('consumes worker telemetry for every test framework', () => {
     const plugin = createPlugin('vitest_worker', true)
 
-    dc.channel('ci:vitest:worker-report:telemetry').publish(JSON.stringify([
+    dc.channel('ci:vitest:worker-report:telemetry').publish([
       {
         type: 'ciVisEvent',
         name: 'code_coverage_started',
@@ -423,7 +423,7 @@ describe('CiPlugin', () => {
         tags: {},
         measure: 3,
       },
-    ]))
+    ])
     plugin.configure(false)
 
     sinon.assert.calledWith(incrementCountMetric, 'code_coverage_started', {
@@ -434,6 +434,18 @@ describe('CiPlugin', () => {
     })
     sinon.assert.calledWith(incrementCountMetric, 'itr_unskippable', { testLevel: 'suite' }, 2)
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
+  })
+
+  it('forwards worker log objects using coordinator metadata', () => {
+    const plugin = createPlugin('agent_proxy', true)
+    const exportDiLogs = sinon.spy()
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    const logMessage = { message: '', debugger: { snapshot: { id: 'snapshot-1' } } }
+
+    dc.channel('ci:vitest:worker-report:logs').publish([logMessage])
+    plugin.configure(false)
+
+    sinon.assert.calledOnceWithExactly(exportDiLogs, plugin.testEnvironmentMetadata, logMessage)
   })
 
   it('replaces stale worker Git fields while preserving PR relationships and other tags', () => {
@@ -492,15 +504,20 @@ describe('CiPlugin', () => {
     }
   })
 
-  it('exports worker traces normally', () => {
-    const plugin = createPlugin('vitest_worker')
+  it('exports worker trace arrays received on the reporting channel', () => {
+    const plugin = createPlugin('vitest_worker', true)
     const exportTrace = sinon.spy()
-    const trace = [{ type: 'test_suite_end', meta: {} }]
+    const span = { type: 'test_suite_end', span_id: '1', trace_id: '2', parent_id: '3', meta: {} }
+    const trace = [span]
     plugin.tracer._exporter = { export: exportTrace }
 
-    plugin._exportWorkerTraceOrBuffer(trace)
+    dc.channel('ci:vitest:worker-report:trace').publish({ traces: [trace] })
+    plugin.configure(false)
 
     sinon.assert.calledOnceWithExactly(exportTrace, trace)
+    assert.strictEqual(span.span_id.toBigInt(), 1n)
+    assert.strictEqual(span.trace_id.toBigInt(), 2n)
+    assert.strictEqual(span.parent_id.toBigInt(), 3n)
   })
 
   it('uploads regular coverage reports from canonical paths', () => {
