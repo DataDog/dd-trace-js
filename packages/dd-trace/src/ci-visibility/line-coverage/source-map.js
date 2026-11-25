@@ -72,90 +72,93 @@ function isWhitespace (c) {
  * @param {object} map a parsed source map with a `sources` array
  * @param {string} filename the file of the code the map describes, which relative sources resolve against
  * @returns {{ sources: string[], mapPosition: (line: number, column: number) =>
- *   ({ source: number, line: number } | undefined) }} the absolute path of each source, and the
- *   lookup of a generated position (1-based line, 0-based column) as a source index and 1-based line
+ *   ({ source: number, line: number, start: number, end: number } | undefined) }} the absolute path
+ *   of each source, and the lookup of a generated position (1-based line, 0-based column) as a source
+ *   index and 1-based line, with the columns of the line between which every position maps the same
  */
 function createPositionMapper (map, filename) {
   const directory = dirname(filename)
   const sourceRoot = typeof map.sourceRoot === 'string' ? map.sourceRoot : ''
   const sources = map.sources.map(source =>
     resolve(directory, sourceRoot, String(source ?? '').replace(/^file:\/\//, '')))
-  const lines = decodeMappings(typeof map.mappings === 'string' ? map.mappings : '')
-  const unsortedLines = new Set()
-  for (const segments of lines) {
-    for (let i = 3; i < segments.length; i += 3) {
-      if (segments[i] < segments[i - 3]) {
-        unsortedLines.add(segments)
-        break
-      }
-    }
-  }
+  const { lines, unsortedLines } = decodeMappings(typeof map.mappings === 'string' ? map.mappings : '')
   return {
     sources,
     mapPosition (line, column) {
       const segments = lines[line - 1]
       if (segments === undefined) return
-      const found = unsortedLines.has(segments) ? scan(segments, column) : search(segments, column)
+      if (unsortedLines.has(segments)) {
+        const found = scan(segments, column)
+        if (found === -1) return
+        return { source: segments[found * 3 + 1], line: segments[found * 3 + 2] + 1, start: column, end: column + 1 }
+      }
+      const found = search(segments, column)
       if (found === -1) return
-      return { source: segments[found * 3 + 1], line: segments[found * 3 + 2] + 1 }
+      const next = found * 3 + 3
+      return {
+        source: segments[found * 3 + 1],
+        line: segments[found * 3 + 2] + 1,
+        start: segments[found * 3],
+        end: next < segments.length ? segments[next] : Infinity,
+      }
     },
   }
 }
 
 /**
  * @param {string} mappings
- * @returns {number[][]} for each generated line, triples of generated column, source index and
- *   0-based original line, for segments that have a source
+ * @returns {{ lines: number[][], unsortedLines: Set<number[]> }} for each generated line, triples of
+ *   generated column, source index and 0-based original line, for segments that have a source; and
+ *   the lines whose triples are not ordered by generated column
  */
 function decodeMappings (mappings) {
   const lines = []
+  const unsortedLines = new Set()
   let segments = []
   let generatedColumn = 0
   let source = 0
   let originalLine = 0
+  // The fields of the current segment read so far, and the source and line deltas among them.
   let fields = 0
+  let sourceDelta = 0
+  let lineDelta = 0
   let value = 0
   let shift = 0
-  const values = [0, 0, 0, 0]
-  const endSegment = () => {
-    if (fields === 0) return
-    generatedColumn += values[0]
-    if (fields >= 4) {
-      source += values[1]
-      originalLine += values[2]
-      segments.push(generatedColumn, source, originalLine)
-    }
-    fields = 0
-  }
-  for (let i = 0; i < mappings.length; i++) {
-    const c = mappings.charCodeAt(i)
-    if (c === 59) { // `;`
-      endSegment()
-      lines.push(segments)
-      segments = []
-      generatedColumn = 0
-      continue
-    }
-    if (c === 44) { // `,`
-      endSegment()
+  for (let i = 0; i <= mappings.length; i++) {
+    // The end of the mappings ends the last line, as `;` ends the others.
+    const c = i === mappings.length ? 59 : mappings.charCodeAt(i)
+    if (c === 44 || c === 59) { // `,` or `;`
+      if (fields >= 4) {
+        source += sourceDelta
+        originalLine += lineDelta
+        if (segments.length > 0 && generatedColumn < segments.at(-3)) unsortedLines.add(segments)
+        segments.push(generatedColumn, source, originalLine)
+      }
+      fields = 0
+      if (c === 59) {
+        lines.push(segments)
+        segments = []
+        generatedColumn = 0
+      }
       continue
     }
     const digit = c < 128 ? BASE64_VALUES[c] : -1
     if (digit === -1) continue
-    value += (digit & 31) * 2 ** shift
+    // Source maps encode 32-bit values.
+    value |= (digit & 31) << shift
     if (digit & 32) {
       shift += 5
       continue
     }
-    const decoded = value % 2 === 1 ? -Math.floor(value / 2) : Math.floor(value / 2)
-    if (fields < 4) values[fields] = decoded
+    const decoded = value & 1 ? -(value >>> 1) : value >>> 1
+    if (fields === 0) generatedColumn += decoded
+    else if (fields === 1) sourceDelta = decoded
+    else if (fields === 2) lineDelta = decoded
     fields++
     value = 0
     shift = 0
   }
-  endSegment()
-  lines.push(segments)
-  return lines
+  return { lines, unsortedLines }
 }
 
 /**
