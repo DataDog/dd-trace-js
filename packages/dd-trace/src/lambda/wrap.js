@@ -1,6 +1,7 @@
 'use strict'
 
 const { getWrappedHandler, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
+const log = require('../log')
 const { datadog: monitor } = require('./handler')
 
 /**
@@ -38,7 +39,19 @@ function wrapLambdaHandler (handler, config) {
   // Normalize the original so a hook-first call has the same completion boundary as facade-first.
   // forceWrap(raw) replaces its wrapper; explicitly force-wrapping a span wrapper still nests it.
   const originals = globalThis[Symbol.for('dd-trace')]?.lambda?.originals
-  return wrapHandler(originals?.get(handler) || handler, config, monitor)
+  return wrapHandler(originals?.get(handler) || handler, config, monitor, flushMetrics)
+}
+
+/** Flushes public metrics without waiting for the transport, matching datadog-lambda-js. */
+function flushMetrics () {
+  try {
+    const tracer = global._ddtrace
+    // Keep the public client's lazy getter unused when the function has never emitted metrics.
+    const dogstatsd = tracer && Object.getOwnPropertyDescriptor(tracer, 'dogstatsd')?.value
+    if (typeof dogstatsd?.flush === 'function') dogstatsd.flush()
+  } catch (error) {
+    log.debug('Unable to flush Lambda DogStatsD metrics: %s', error)
+  }
 }
 
 module.exports = { withTimeoutMonitor, wrapLambdaHandler }

@@ -74,6 +74,21 @@ describe('aws-lambda instrumentation', () => {
     assert.strictEqual(starts.length, 1)
   })
 
+  for (const rejects of [false, true]) {
+    it(`runs completion after invocation subscribers finish (reject=${rejects})`, async () => {
+      const failure = new Error('customer failure')
+      const order = []
+      subscribe(invocationChannel.asyncEnd, () => order.push('invocation-finished'))
+      const wrapped = wrapHandler(() => {
+        if (rejects) throw failure
+        return 'done'
+      }, undefined, undefined, () => { order.push('completion') })
+      if (rejects) await assert.rejects(wrapped({}, {}), error => error === failure)
+      else assert.strictEqual(await wrapped({}, {}), 'done')
+      assert.deepStrictEqual(order, ['invocation-finished', 'completion'])
+    })
+  }
+
   it('does not claim datadog-lambda-js\'s _ddWrapped marker', () => {
     const handler = () => 'result'
     const wrapped = wrapHandler(handler)
