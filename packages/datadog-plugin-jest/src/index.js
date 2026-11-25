@@ -61,12 +61,34 @@ const {
 const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
 
+/**
+ * @param {object} [describeBlock] a Jest Circus describe block
+ * @yields {object} the block and its ancestors, up to the root describe block
+ */
+function * enclosingDescribeBlocks (describeBlock) {
+  for (; describeBlock; describeBlock = describeBlock.parent) yield describeBlock
+}
+
 class JestPlugin extends CiPlugin {
   static id = 'jest'
+
+  /**
+   * The line-coverage module, loaded only when per-test line coverage is requested: it pulls in a parser.
+   *
+   * @type {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined}
+   */
+  #lineCoverage = isLineCoverageRequested ? require('../../dd-trace/src/ci-visibility/line-coverage') : undefined
+
+  /** @type {WeakMap<object, { coverage: object, describeBlock: object | undefined, suiteId: object | undefined }>} */
+  #lineCoverageTests = new WeakMap()
+
+  /** Tests whose window is open: the ones a finished test file must still close. */
+  #openLineCoverageTests = new Set()
 
   // The lists are the same for every test suite, so we can cache them
   getUnskippableSuites (unskippableSuitesList) {
@@ -81,6 +103,44 @@ class JestPlugin extends CiPlugin {
       this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
     }
     return this.forcedToRunSuites
+  }
+
+  /**
+   * Closes the test's coverage window and exports what it covered.
+   *
+   * @param {import('../../dd-trace/src/opentracing/span')} span the finished test's span
+   */
+  #exportLineCoverage (span) {
+    const test = this.#lineCoverageTests.get(span)
+    if (test === undefined) return
+    this.#lineCoverageTests.delete(span)
+    this.#openLineCoverageTests.delete(test)
+    const files = this.#lineCoverage.finishTest(test.coverage, enclosingDescribeBlocks(test.describeBlock))
+    if (files.length === 0) return
+    const context = span.context()
+    this.tracer._exporter.exportCoverage({
+      sessionId: context._traceId,
+      suiteId: test.suiteId,
+      testId: context._spanId,
+      files,
+    })
+  }
+
+  /**
+   * Exports what ran in this process outside any test since the previous test file.
+   *
+   * @param {import('../../dd-trace/src/opentracing/span')} testSuiteSpan the finished file's suite span
+   */
+  #exportSharedLineCoverage (testSuiteSpan) {
+    // A test that never finished must not keep the next file's tests from being told apart.
+    for (const test of this.#openLineCoverageTests) {
+      this.#lineCoverage.finishTest(test.coverage, enclosingDescribeBlocks(test.describeBlock))
+    }
+    this.#openLineCoverageTests.clear()
+    const sessionId = testSuiteSpan.context()._traceId
+    for (const { shared, files } of this.#lineCoverage.takeShared()) {
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+    }
   }
 
   constructor (...args) {
@@ -243,7 +303,11 @@ class JestPlugin extends CiPlugin {
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
+        _ddRepositoryRoot: repositoryRoot,
       } = testEnvironmentOptions
+
+      // Jest compiles the repository's modules itself: the instrumentation hands each one to the collector.
+      this.#lineCoverage?.enable({ root: repositoryRoot || process.cwd(), patchModuleLoader: false })
 
       const carrier = /** @type {Record<string, unknown>} */ ({})
       writeDatadogTraceId(carrier, testSessionId)
@@ -304,11 +368,14 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:worker-report:coverage', data => {
-      const formattedCoverages = JSON.parse(data).map(coverage => ({
-        sessionId: id(coverage.sessionId),
-        suiteId: id(coverage.suiteId),
-        files: coverage.files,
-      }))
+      const formattedCoverages = JSON.parse(data).map(coverage => {
+        const formattedCoverage = { sessionId: id(coverage.sessionId), files: coverage.files }
+        // Line coverage records have a test id, or none and a `shared` part instead of a suite id.
+        if (coverage.suiteId) formattedCoverage.suiteId = id(coverage.suiteId)
+        if (coverage.testId) formattedCoverage.testId = id(coverage.testId)
+        if (coverage.shared) formattedCoverage.shared = coverage.shared
+        return formattedCoverage
+      })
       for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
       }
@@ -328,6 +395,8 @@ class JestPlugin extends CiPlugin {
         onDone?.()
         return
       }
+      // Before the next test file in this process starts: what ran since belongs to that file.
+      if (this.#lineCoverage?.isActive()) this.#exportSharedLineCoverage(testSuiteSpan)
       testSuiteSpan.setTag(TEST_STATUS, status)
       if (error) {
         testSuiteSpan.setTag('error', error)
@@ -407,9 +476,28 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
+    this.addSub('ci:jest:suite-setup:start', ({ describeBlock }) => {
+      if (this.#lineCoverage?.isActive()) this.#lineCoverage.startSuiteSetup(describeBlock)
+    })
+
+    this.addSub('ci:jest:suite-setup:finish', () => {
+      if (this.#lineCoverage?.isActive()) this.#lineCoverage.finishSuiteSetup()
+    })
+
     this.addBind('ci:jest:test:start', (ctx) => {
       const store = storage('legacy').getStore()
+      const test = this.#lineCoverage?.isActive()
+        ? {
+            coverage: this.#lineCoverage.startTest(),
+            describeBlock: ctx.describeBlock,
+            suiteId: this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)?.context()._spanId,
+          }
+        : undefined
       const span = this.startTestSpan(ctx)
+      if (test) {
+        this.#lineCoverageTests.set(span, test)
+        this.#openLineCoverageTests.add(test)
+      }
 
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
@@ -442,6 +530,7 @@ class JestPlugin extends CiPlugin {
       earlyFlakeAbortReason,
       promises,
     }) => {
+      if (this.#lineCoverage?.isActive()) this.#exportLineCoverage(span)
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
