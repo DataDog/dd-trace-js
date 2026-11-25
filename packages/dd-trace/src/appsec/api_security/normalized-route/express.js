@@ -1,8 +1,8 @@
 'use strict'
 
-const { HTTP_ROUTE } = require('../../../../../ext/tags')
-const web = require('../../plugins/util/web')
-const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
+const { getParse, getMatch } = require('../../../../../datadog-instrumentations/src/path-to-regexp')
+
+const { renderRoute, isEmptyValue, segmentsFromTokens } = require('./renderer')
 
 /**
  * Normalize an HTTP route to the _dd.appsec.normalized_route format.
@@ -110,21 +110,7 @@ function tokensToSegments (ptTokens) {
   }
   walk(ptTokens, 0)
 
-  /** @type {RouteSegment[]} */
-  const segments = []
-  let cur = null
-  for (const token of flat) {
-    if (token.type === 'slash') {
-      if (cur) segments.push(cur)
-      cur = { group: token.group, tokens: [] }
-    } else {
-      if (!cur) cur = { group: 0, tokens: [] }
-      cur.tokens.push(token)
-    }
-  }
-  if (cur) segments.push(cur)
-
-  return { segments, groupParent, groupIds }
+  return { ...segmentsFromTokens(flat, groupParent), groupIds }
 }
 
 /**
@@ -200,111 +186,6 @@ function compileRoute (route, parse) {
   }
   compiled.variants = new Map()
   return compiled
-}
-
-/**
- * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
- * @param {number} g
- * @param {Map<number, number>} groupParent
- * @param {Set<number>} present
- */
-function groupActive (g, groupParent, present) {
-  while (g !== 0) {
-    if (!present.has(g)) return false
-    g = groupParent.get(g)
-  }
-  return true
-}
-
-/**
- * URL-encode chars outside the static alphabet [A-Za-z0-9.-~_], keeping valid %XX escapes. The 'u' flag iterates whole
- * codepoints so surrogate pairs encode as correct multi-byte UTF-8.
- * @param {string} str
- */
-function encodeStaticSegment (str) {
-  return str.replaceAll(/%[0-9A-Fa-f]{2}|[^A-Za-z0-9.\-~_]/gu, c => {
-    if (c.length === 3) return c.toUpperCase()
-    const code = c.charCodeAt(0)
-    if (code < 0x80) return '%' + code.toString(16).toUpperCase().padStart(2, '0')
-    try {
-      return encodeURIComponent(c)
-    } catch {
-      return '%EF%BF%BD'
-    }
-  })
-}
-
-/**
- * Render the normalized route for a given set of present optional groups.
- * @param {CompiledRoute} compiled
- * @param {Set<number>} present
- */
-function renderRoute (compiled, present) {
-  const { segments, groupParent } = compiled
-
-  // Pass 1: present dynamic tokens (param/wildcard) in declaration order. Activity is per token: a
-  // mandatory token can share a segment with an absent optional group (e.g. '.json' in '/x{/:id}.json').
-  const dyn = []
-  for (const seg of segments) {
-    for (const t of seg.tokens) {
-      if (t.type !== 'static' && groupActive(t.group, groupParent, present)) dyn.push(t)
-    }
-  }
-
-  // Pass 2: a valid name keeps itself at its last present occurrence (the value Express exposes);
-  // every other token takes its sanitized name if free, else the smallest free _N suffix.
-  const sanitized = dyn.map(t => t.name.replaceAll(/[^A-Za-z0-9_]/gu, '_'))
-  const lastIndexByName = new Map()
-  for (let idx = 0; idx < dyn.length; idx++) {
-    if (sanitized[idx] === dyn[idx].name) lastIndexByName.set(dyn[idx].name, idx)
-  }
-  const used = new Set(lastIndexByName.keys())
-  const resolvedNames = new Array(dyn.length)
-  for (let idx = 0; idx < dyn.length; idx++) {
-    let name = dyn[idx].name
-    if (lastIndexByName.get(name) !== idx) {
-      name = sanitized[idx]
-      for (let n = 2; used.has(name); n++) name = `${sanitized[idx]}_${n}`
-      used.add(name)
-    }
-    resolvedNames[idx] = name
-  }
-
-  // Pass 3: build the output elements. Each present leading slash starts a new element; a segment
-  // whose leading slash is absent merges its still-present tokens into the current element (so the
-  // '.json' in '/x{/:id}.json' survives when :id is absent) rather than being dropped with the slash.
-  const out = []
-  let dynPtr = 0
-  let current = ''
-  let trailingSlash = false
-
-  for (const seg of segments) {
-    if (groupActive(seg.group, groupParent, present)) {
-      out.push(current)
-      current = ''
-      trailingSlash = true
-    }
-    for (const t of seg.tokens) {
-      if (!groupActive(t.group, groupParent, present)) continue
-      current += t.type === 'static' ? encodeStaticSegment(t.text) : `{${resolvedNames[dynPtr++]}}`
-      trailingSlash = false
-    }
-  }
-  out.push(current)
-
-  const normalized = '/' + out.filter(Boolean).join('/')
-  return trailingSlash && normalized !== '/' ? normalized + '/' : normalized
-}
-
-/**
- * True when a param value is missing or empty; a catch-all that captured only slashes is empty.
- * @param {unknown} value - raw string (match) or decoded value (req.params)
- * @param {boolean} wildcard
- */
-function isEmptyValue (value, wildcard) {
-  if (value === undefined || value === '') return true
-  if (!wildcard) return false
-  return Array.isArray(value) ? value.every(part => part === '') : /^\/*$/.test(String(value))
 }
 
 /**
@@ -448,7 +329,7 @@ function matchParts (parts, path, parse, makeMatcher) {
  * @param {MatcherFactory} makeMatcher
  * @param {MatchedPart[]} [parts] - the route's parts, in order, as its Routers matched them
  */
-function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher, parts) {
+function normalizeRoute (route, params, urlPath, parse, makeMatcher, parts) {
   if (typeof route !== 'string' || !route || typeof parse !== 'function' || typeof makeMatcher !== 'function') {
     return null
   }
@@ -511,32 +392,15 @@ function splitRoute (req, route) {
 }
 
 /**
- * Normalize an HTTP route from a request. Reads the framework from the span component tag.
+ * Normalize a request with the serving Express app's grammar and Router options.
  * @param {object} req
+ * @param {string | undefined} route
  */
-function normalizeRoute (req) {
-  const spanContext = web.root(req)?.context()
-  const component = spanContext?.getTag?.('component')
-
-  // eslint-disable-next-line sonarjs/no-small-switch
-  switch (component) {
-    case 'express': {
-      // Routes are read as Express 5 grammar, and 4's differs ('/a{2}' matches '/aa' there), so skip
-      // Express 4. Decided per request off the serving app — a process can load both majors, and the
-      // parser adapters are process-wide — via the legacy `app.del` alias that Express 5 removed.
-      if (typeof req.app?.del === 'function') return null
-
-      const parse = getParse()
-      const makeMatcher = getMatch()
-      if (parse === undefined || makeMatcher === undefined) return null
-      // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook.
-      const route = spanContext.getTag(HTTP_ROUTE)
-      return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher,
-        splitRoute(req, route))
-    }
-    default:
-      return null
-  }
+function normalizeRequest (req, route) {
+  // Express 5 removed app.del; the serving app distinguishes mixed-major processes.
+  if (typeof req.app?.del === 'function') return null
+  return normalizeRoute(route, req.params, req.originalUrl || req.url, getParse(), getMatch(),
+    splitRoute(req, route))
 }
 
 /**
@@ -547,9 +411,4 @@ function onRouteCreate ({ route, sensitive, strict }) {
   routeOptions.set(route, { sensitive, strict })
 }
 
-module.exports = {
-  normalizeRoute,
-  onRouteCreate,
-  // exported for unit testing (framework-agnostic core)
-  normalizeRouteExpress,
-}
+module.exports = { normalizeRoute, normalizeRequest, onRouteCreate }
