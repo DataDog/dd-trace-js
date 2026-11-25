@@ -3,7 +3,10 @@
 const express = require('express')
 
 // TODO we could try to use cassettes instead of a mock for the AI Guard API
-function startApiMock () {
+/**
+ * @param {(messages: Array<object>) => void} [onEvaluate]
+ */
+function startApiMock (onEvaluate) {
   return new Promise((resolve, reject) => {
     try {
       const app = express()
@@ -26,6 +29,7 @@ function startApiMock () {
             })
         }
         const messages = attributes.messages
+        onEvaluate?.(messages)
         const lastMessage = messages[messages.length - 1]
         let action = 'ALLOW'
         let reason = 'The prompt looks harmless'
@@ -84,17 +88,19 @@ function startApiMock () {
 }
 
 function extractContent (message) {
-  if (typeof message.content === 'string') return message.content
-  if (Array.isArray(message.content)) {
-    return message.content
+  let content
+  if (typeof message.content === 'string') {
+    content = message.content
+  } else if (Array.isArray(message.content)) {
+    content = message.content
       .map(part => (typeof part === 'string' ? part : part?.text ?? ''))
       .join(' ')
   }
   if (message.tool_calls) {
-    return message.tool_calls.map(tc => tc.function?.arguments || '').join(' ')
+    const argumentsText = message.tool_calls.map(tc => tc.function?.arguments || '').join(' ')
+    return content ? `${content} ${argumentsText}` : argumentsText
   }
-  if (message.refusal) return message.refusal
-  return ''
+  return content ?? message.refusal ?? ''
 }
 
 module.exports = startApiMock
