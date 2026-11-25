@@ -1,10 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
 const path = require('node:path')
+const { promisify } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
+const { bundlerMarker } = require('../packages/datadog-instrumentations/src/helpers/bundler-telemetry')
 const {
   sandboxCwd,
   useSandbox,
@@ -15,7 +18,64 @@ const {
   assertObjectContains,
 } = require('./helpers')
 
+const execFileAsync = promisify(execFile)
+
 describe('telemetry', () => {
+  describe('bundler usage', () => {
+    let agent
+    let usage
+
+    beforeEach(async () => {
+      usage = []
+      agent = await new FakeAgent().start()
+      agent.on('telemetry', ({ payload }) => {
+        if (payload.request_type !== 'generate-metrics' || payload.payload.namespace !== 'tracers') return
+        usage.push(...payload.payload.series.filter(({ metric }) => metric === 'bundler.used'))
+      })
+    })
+
+    afterEach(async () => {
+      await agent.stop()
+    })
+
+    /** @param {Record<string, string>} [env] */
+    async function runMarkedBundle (env) {
+      const preloader = require.resolve('../init.js')
+      const telemetry = require.resolve('../packages/dd-trace/src/telemetry')
+      await execFileAsync(process.execPath, ['-r', preloader, '-e', `
+        const { flush } = require(${JSON.stringify(telemetry)});
+        ${bundlerMarker('esbuild')}
+        ${bundlerMarker('esbuild')}
+        flush();
+        ${bundlerMarker('vite')}
+      `], {
+        env: {
+          ...process.env,
+          DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}`,
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+          DD_TELEMETRY_METRICS_ENABLED: 'true',
+          ...env,
+        },
+      })
+    }
+
+    it('reports each bundler only once, including ones loaded after the tracer starts', async () => {
+      await runMarkedBundle()
+      const counts = usage.map(({ tags, points, type }) => [tags, points.map(point => point[1]), type])
+      assert.deepStrictEqual(counts.sort(), [
+        [['bundler:esbuild'], [1], 'count'],
+        [['bundler:vite'], [1], 'count'],
+      ])
+    })
+
+    for (const setting of ['DD_INSTRUMENTATION_TELEMETRY_ENABLED', 'DD_TELEMETRY_METRICS_ENABLED']) {
+      it(`does not report when ${setting} is disabled`, async () => {
+        await runMarkedBundle({ [setting]: 'false' })
+        assert.deepStrictEqual(usage, [])
+      })
+    }
+  })
+
   describe('ESM dependencies', () => {
     // Both entry points register the synchronous loader (module.registerHooks) on Node.js versions that
     // support it, and the asynchronous loader (module.register) otherwise.

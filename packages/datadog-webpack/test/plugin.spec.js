@@ -134,6 +134,15 @@ describe('DatadogWebpackPlugin', () => {
         const plugin = new Plugin()
         plugin.apply({
           options: { optimization: { minimize: false } },
+          webpack: {
+            sources: {
+              ConcatSource: class {
+                constructor (banner, old, footer) {
+                  this.source = () => banner + old.source() + footer
+                }
+              },
+            },
+          },
           hooks: {
             environment: { tap: () => {} },
             thisCompilation: { tap: (_name, fn) => fn(compilation) },
@@ -151,20 +160,18 @@ describe('DatadogWebpackPlugin', () => {
         assert.equal(asset.filename, 'bundle.mjs')
         const content = asset.value.source()
         assert.match(content, /DD_GIT_COMMIT_SHA|DD_GIT_REPOSITORY_URL/)
-        assert.match(content, /module\.exports = 1\n$/)
-        assert.equal(typeof asset.value.size(), 'number')
-        assert.equal(asset.value.map(), null)
-        assert.equal(asset.value.sourceAndMap().source, content)
-        asset.value.updateHash({ update () {} })
+        assert.match(content, /module\.exports = 1\n\n.+dd-trace:bundler:webpack/)
       })
 
-      it('skips asset rewriting when DD_BUNDLER_INJECT_GIT_METADATA=false', () => {
+      it('keeps the bundler marker without git metadata', () => {
         process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
         delete require.cache[pluginPath]
         const Plugin = require('../index')
         const asset = applyAndProcessAssets(Plugin)
 
-        assert.equal(asset, undefined)
+        const content = asset.value.source()
+        assert.doesNotMatch(content, /DD_GIT_COMMIT_SHA|DD_GIT_REPOSITORY_URL/)
+        assert.match(content, /dd-trace:bundler:webpack/)
       })
     })
   })

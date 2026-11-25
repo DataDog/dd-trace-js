@@ -58,6 +58,7 @@ describe('Turbopack loader', () => {
     sinon.assert.calledTwice(callback)
     assert.equal(callback.firstCall.args[0], undefined)
     assert.match(callback.firstCall.args[1], /\/\/ rewritten/)
+    assert.match(callback.firstCall.args[1], /dd-trace:bundler:turbopack/)
     assert.strictEqual(callback.firstCall.args[2], outputMap)
     sinon.assert.calledWithExactly(callback.secondCall, undefined, brokenSource, sourceMap)
     sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.instanceOf(SyntaxError))

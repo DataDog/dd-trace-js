@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const { bundlerMarker } = require('../datadog-instrumentations/src/helpers/bundler-telemetry')
 const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
@@ -51,37 +52,27 @@ class DatadogWebpackPlugin {
       }
     })
 
-    // Bake DD_GIT_* into assets unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
-    if (DD_BUNDLER_INJECT_GIT_METADATA) {
-      const banner = getGitMetadataBanner(log)
-      if (banner) {
-        compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
-          compilation.hooks.processAssets.tap(
-            { name: PLUGIN_NAME, stage: -2000 },
-            () => {
-              for (const chunk of compilation.chunks) {
-                if (!chunk.canBeInitial()) continue
-                for (const filename of chunk.files) {
-                  if (!filename.endsWith('.js') && !filename.endsWith('.mjs')) continue
-                  compilation.updateAsset(filename, (old) => {
-                    const content = banner + old.source()
-                    return {
-                      source () { return content },
-                      size () { return Buffer.byteLength(content, 'utf8') },
-                      map () { return old.map() },
-                      sourceAndMap () { return { source: content, map: old.map() } },
-                      updateHash (hash) { hash.update(content) },
-                    }
-                  })
-                }
-              }
-            }
-          )
-        })
-      }
-    } else {
+    const banner = DD_BUNDLER_INJECT_GIT_METADATA ? getGitMetadataBanner(log) : ''
+    if (!DD_BUNDLER_INJECT_GIT_METADATA) {
       log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
     }
+
+    const footer = bundlerMarker('webpack')
+    compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name: PLUGIN_NAME, stage: -2000 },
+        () => {
+          const { ConcatSource } = compiler.webpack.sources
+          for (const chunk of compilation.chunks) {
+            if (!chunk.canBeInitial()) continue
+            for (const filename of chunk.files) {
+              if (!/\.[cm]?js$/.test(filename)) continue
+              compilation.updateAsset(filename, old => new ConcatSource(banner, old, footer))
+            }
+          }
+        }
+      )
+    })
 
     compiler.hooks.normalModuleFactory.tap(PLUGIN_NAME, (nmf) => {
       nmf.hooks.afterResolve.tap(PLUGIN_NAME, (resolveData) => {

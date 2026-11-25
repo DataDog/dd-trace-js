@@ -112,6 +112,10 @@ workspaces, Prisma clients outside `node_modules`, and Yarn Plug'n'Play packages
 For Node.js applications built with Vite 6 or newer, use `datadogVite` from `dd-trace/vite.js`.
 See the [Vite setup and limitations](https://datadoghq.dev/dd-trace-js/#vite).
 
+With instrumentation telemetry enabled, the tracer reports which Datadog bundler plugins were used, once per bundler
+per runtime. The build itself sends nothing. Turbopack is reported when a dependency instrumented by the plugin runs.
+Set `DD_INSTRUMENTATION_TELEMETRY_ENABLED=false` or `DD_TELEMETRY_METRICS_ENABLED=false` at runtime to disable reporting.
+
 ## Security Vulnerabilities
 
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.

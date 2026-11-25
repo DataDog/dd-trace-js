@@ -4,6 +4,7 @@ const os = require('os')
 const dc = require('dc-polyfill')
 
 const tracerVersion = require('../../../../package.json').version
+const { bundlers, markerKey } = require('../../../datadog-instrumentations/src/helpers/bundler-telemetry')
 const { errors } = require('../startup-log')
 const logger = require('../log')
 const processTags = require('../process-tags')
@@ -92,6 +93,7 @@ let heartbeatFailedIntegrations = []
 let heartbeatFailedDependencies = []
 
 const sentIntegrations = new Set()
+const pendingBundlers = new Map(bundlers.map(bundler => [bundler, Symbol.for(markerKey(bundler))]))
 
 function getRetryData () {
   return retryData
@@ -209,6 +211,15 @@ function appClosing () {
 function flush () {
   if (!config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) return
 
+  // The tracer may have been preloaded before any marked bundle ran.
+  if (config.telemetry.DD_TELEMETRY_METRICS_ENABLED) {
+    for (const [bundler, marker] of pendingBundlers) {
+      if (Object.getOwnPropertyDescriptor(globalThis, marker)?.value !== true) continue
+      metricsManager.namespace('tracers').count('bundler.used', { bundler }).inc()
+      pendingBundlers.delete(bundler)
+    }
+  }
+
   metricsManager.send(config, application, host)
   telemetryLogger.send(config, application, host)
 }
@@ -294,8 +305,7 @@ function createPayload (currReqType, currPayload = {}) {
  */
 function heartbeat (config, application) {
   setInterval(() => {
-    metricsManager.send(config, application, host)
-    telemetryLogger.send(config, application, host)
+    flush()
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
