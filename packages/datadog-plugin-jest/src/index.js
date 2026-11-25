@@ -61,7 +61,6 @@ const {
 const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
-const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -78,11 +77,11 @@ class JestPlugin extends CiPlugin {
   static id = 'jest'
 
   /**
-   * The line-coverage module, loaded only when per-test line coverage is requested: it pulls in a parser.
+   * The line-coverage module, loaded when the first test file runs with per-test line coverage on.
    *
    * @type {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined}
    */
-  #lineCoverage = isLineCoverageRequested ? require('../../dd-trace/src/ci-visibility/line-coverage') : undefined
+  #lineCoverage
 
   /** @type {WeakMap<object, { coverage: object, describeBlock: object | undefined, suiteId: object | undefined }>} */
   #lineCoverageTests = new WeakMap()
@@ -302,12 +301,16 @@ class JestPlugin extends CiPlugin {
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
+        _ddLineCoverageEnabled,
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
         _ddRepositoryRoot: repositoryRoot,
       } = testEnvironmentOptions
 
       // Jest compiles the repository's modules itself: the instrumentation hands each one to the collector.
-      this.#lineCoverage?.enable({ root: repositoryRoot || process.cwd(), patchModuleLoader: false })
+      if (_ddLineCoverageEnabled) {
+        this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+        this.#lineCoverage.enable({ root: repositoryRoot || process.cwd(), patchModuleLoader: false })
+      }
 
       const carrier = /** @type {Record<string, unknown>} */ ({})
       writeDatadogTraceId(carrier, testSessionId)
