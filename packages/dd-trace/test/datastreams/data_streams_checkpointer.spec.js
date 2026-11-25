@@ -9,7 +9,7 @@ const sinon = require('sinon')
 require('../setup/core')
 const agent = require('../plugins/agent')
 
-const { computePathwayHash, encodePathwayContextBase64 } = require('../../src/datastreams/pathway')
+const { computePathwayHash, DsmPathwayCodec } = require('../../src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../src/datastreams/processor')
 const processTags = require('../../src/process-tags')
 const propagationHash = require('../../src/propagation-hash')
@@ -20,7 +20,7 @@ describe('data streams checkpointer manual api', () => {
   let tracer
   let expectedProducerHash
   let expectedConsumerHash
-  let encodedProducerContext
+  let producerHeaders
 
   before(async () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -42,7 +42,7 @@ describe('data streams checkpointer manual api', () => {
     )
     expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
 
-    encodedProducerContext = encodePathwayContextBase64({
+    producerHeaders = DsmPathwayCodec.encode({
       hash: producerHash,
       pathwayStartNs: 0,
       edgeStartNs: 0,
@@ -104,13 +104,9 @@ describe('data streams checkpointer manual api', () => {
       assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags), true)
     }, { timeoutMs: 5000 }).then(done, done)
 
-    const headers = {
-      [DSM_CONTEXT_HEADER]: encodedProducerContext,
-    }
+    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', producerHeaders)
 
-    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)
-
-    assert.strictEqual(DSM_CONTEXT_HEADER in headers, true)
+    assert.strictEqual(DSM_CONTEXT_HEADER in producerHeaders, true)
   })
 
   it('should set manual checkpoint when setConsumeCheckpoint is called without additional parameters', function () {
