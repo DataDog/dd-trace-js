@@ -68,7 +68,13 @@ function getReportedProperties (task) {
 
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
+// Line coverage: the plugin instruments modules and routes executed lines to tests and suite setups.
+const lineCoverageInstrumentCh = channel('ci:vitest:line-coverage:instrument')
+const lineCoverageSuiteSetupStartCh = channel('ci:vitest:line-coverage:suite-setup:start')
+const lineCoverageSuiteSetupFinishCh = channel('ci:vitest:line-coverage:suite-setup:finish')
+const lineCoverageTestFinishCh = channel('ci:vitest:line-coverage:test:finish')
 const wrappedTestRunners = new WeakSet()
+const wrappedBeforeAllHooks = new WeakSet()
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -549,11 +555,88 @@ function wrapSuiteHookFn (hookType, fn, fallbackTask) {
   })
 }
 
+/**
+ * Wraps the beforeAll hooks of a suite so each call is reported as the suite's setup.
+ * Vitest has no callback around them.
+ *
+ * @param {object} suite
+ */
+function wrapBeforeAllHooks (suite) {
+  const hooks = vitestGetHooks ? vitestGetHooks(suite) : suite.hooks
+  const beforeAllHooks = hooks?.beforeAll
+  if (!beforeAllHooks) return
+  for (let i = 0; i < beforeAllHooks.length; i++) {
+    if (wrappedBeforeAllHooks.has(beforeAllHooks[i])) continue
+    const wrapped = shimmer.wrapFunction(beforeAllHooks[i], hook => function () {
+      lineCoverageSuiteSetupStartCh.publish({ suite })
+      let result
+      try {
+        result = hook.apply(this, arguments)
+      } catch (error) {
+        lineCoverageSuiteSetupFinishCh.publish()
+        throw error
+      }
+      if (typeof result?.then !== 'function') {
+        lineCoverageSuiteSetupFinishCh.publish()
+        return result
+      }
+      return result.then(
+        value => {
+          lineCoverageSuiteSetupFinishCh.publish()
+          return value
+        },
+        error => {
+          lineCoverageSuiteSetupFinishCh.publish()
+          throw error
+        }
+      )
+    })
+    wrappedBeforeAllHooks.add(wrapped)
+    beforeAllHooks[i] = wrapped
+  }
+}
+
+/**
+ * Closes the line-coverage window of the attempt that ran last for the task. Closing twice is harmless.
+ *
+ * @param {object} task a Vitest test
+ */
+function finishLineCoverageTest (task) {
+  if (!lineCoverageTestFinishCh.hasSubscribers) return
+  const ctx = taskToCtx.get(task)
+  if (ctx?.currentStore) lineCoverageTestFinishCh.publish({ task, ...ctx.currentStore })
+}
+
+// The last callback of an attempt: it runs after the afterEach hooks, which run after `onAfterTryTask`.
+function wrapOnAfterRetryTask (onAfterRetryTask) {
+  return async function (task) {
+    try {
+      return await onAfterRetryTask.apply(this, arguments)
+    } finally {
+      finishLineCoverageTest(task)
+    }
+  }
+}
+
 function wrapVitestTestRunner (VitestTestRunner) {
   // ESM hooks can expose the same runner through multiple module identities.
   // Wrapping its lifecycle methods twice would report each retry twice.
   if (wrappedTestRunners.has(VitestTestRunner)) return
   wrappedTestRunners.add(VitestTestRunner)
+
+  if (typeof VitestTestRunner.prototype.onBeforeRunSuite === 'function') {
+    shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunSuite', onBeforeRunSuite => function (suite) {
+      if (lineCoverageSuiteSetupStartCh.hasSubscribers) wrapBeforeAllHooks(suite)
+      return onBeforeRunSuite.apply(this, arguments)
+    })
+  }
+
+  // Runners before Vitest 4 have no per-attempt end callback: an attempt ends where the next one begins
+  // or where the task ends.
+  const hasOnAfterRetryTask = typeof VitestTestRunner.prototype.onAfterRetryTask === 'function'
+  if (hasOnAfterRetryTask) {
+    shimmer.wrap(VitestTestRunner.prototype, 'onAfterRetryTask', wrapOnAfterRetryTask)
+  }
 
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
@@ -662,6 +745,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
   // `onAfterRunTask` is run after all repetitions or attempts are run
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
+    if (!hasOnAfterRetryTask) finishLineCoverageTest(task)
     const { isTestManagementTestsEnabled } = getProvidedContext()
 
     // Vitest 5 aggregates failed repetitions into the final state. Preserve the last attempt's actual result.
@@ -708,6 +792,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
   // test start (only tests that are not marked as skip or todo)
   // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
+    if (!hasOnAfterRetryTask) finishLineCoverageTest(task)
     if (!testPassCh.hasSubscribers && !testErrorCh.hasSubscribers && !testSkipCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
     }
@@ -1061,6 +1146,63 @@ addHook({
     vitestGetHooks = runnerModule.getHooks
   }
   return runnerModule
+})
+
+/**
+ * Offers the transformed code of a module to line coverage before Vitest evaluates it.
+ *
+ * @param {string} code
+ * @param {string | undefined} filename
+ * @param {object | undefined} vm the module evaluator's vm options, for vm pools
+ * @param {string | undefined} sourceMap the map as JSON, when the runner hands it over apart from the code
+ */
+function instrumentForLineCoverage (code, filename, vm, sourceMap) {
+  if (typeof filename !== 'string') return code
+  const ctx = {
+    code,
+    filename,
+    sourceMap,
+    realm: vm?.context,
+    repositoryRoot: getProvidedContext().repositoryRoot || process.cwd(),
+  }
+  lineCoverageInstrumentCh.publish(ctx)
+  return ctx.code
+}
+
+// Vitest 4 and 5 evaluate each module through Vite's module runner. `code` is the transformed module.
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  file: 'dist/module-evaluator.js',
+}, (evaluatorModule) => {
+  const prototype = evaluatorModule.VitestModuleEvaluator?.prototype
+  if (typeof prototype?.runInlinedModule === 'function') {
+    shimmer.wrap(prototype, 'runInlinedModule', runInlinedModule => function (context, code, module) {
+      if (lineCoverageInstrumentCh.hasSubscribers) {
+        code = instrumentForLineCoverage(code, module?.file, this.vm, module?.meta?.sourceMap)
+      }
+      return runInlinedModule.call(this, context, code, module)
+    })
+  }
+  return evaluatorModule
+})
+
+// Vitest 1.6 to 3 evaluate each module through vite-node.
+addHook({
+  name: 'vite-node',
+  versions: ['>=1.6.0 <4.0.0'],
+  file: 'dist/client.mjs',
+}, (clientModule) => {
+  const prototype = clientModule.ViteNodeRunner?.prototype
+  if (typeof prototype?.runModule === 'function') {
+    shimmer.wrap(prototype, 'runModule', runModule => function (context, transformed) {
+      if (lineCoverageInstrumentCh.hasSubscribers && typeof transformed === 'string') {
+        transformed = instrumentForLineCoverage(transformed, context?.__filename)
+      }
+      return runModule.call(this, context, transformed)
+    })
+  }
+  return clientModule
 })
 
 addHook({
