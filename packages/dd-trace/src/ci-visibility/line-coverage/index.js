@@ -24,11 +24,16 @@
 //   startSuiteSetup(suite) / finishSuiteSetup(), and runs each suite setup hook in suiteSetupStore()
 //   takeShared()                        after the last test, or after each test file
 
-const crypto = require('node:crypto')
-const fs = require('node:fs')
+// Functions that tests replace (fake timers, fs mocks, stubs) are taken before any test runs. What
+// runs for each test calls no path function, since path functions call each other through the module.
+// A mock that replaces the fs binding, like mock-fs, still reaches these functions, as it reaches
+// the test framework's own module loading; what fails to read or write is then skipped.
+const { createHash } = require('node:crypto')
+const { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } =
+  require('node:fs')
 const Module = require('node:module')
-const os = require('node:os')
-const path = require('node:path')
+const { tmpdir } = require('node:os')
+const { dirname, join, relative, resolve, sep } = require('node:path')
 const { threadId } = require('node:worker_threads')
 
 const dc = require('dc-polyfill')
@@ -49,6 +54,9 @@ const { followWorkers, getParentSettings, reportToParent } = require('./worker-t
  */
 
 const legacyStorage = storage('legacy')
+
+const { queueMicrotask } = globalThis
+const hrtime = process.hrtime.bigint
 
 // Marks a context opened on an owner's behalf: a suite setup hook, or a message for a worker
 // thread. Stores derived from it keep the mark, with the trace of the span it was set on: a span of
@@ -349,11 +357,18 @@ function targetFor (owner) {
   if (owner === getCollector().unowned) return
   let target = childTargetByOwner.get(owner)
   if (target === undefined) {
-    childDirectory ??= fs.mkdtempSync(path.join(os.tmpdir(), 'dd-line-coverage-'))
-    target = path.join(childDirectory, String(++childTargets))
+    childDirectory ??= mkdtempSync(`${tmpdir()}${sep}dd-line-coverage-`)
+    target = `${childDirectory}${sep}${++childTargets}`
     childTargetByOwner.set(owner, target)
   }
   return target
+}
+
+/**
+ * @param {string} target a target in the child directory
+ */
+function getTargetName (target) {
+  return target.slice(childDirectory.length + sep.length)
 }
 
 /**
@@ -367,7 +382,8 @@ function takeChildLines (owner, lines) {
   const target = childTargetByOwner.get(owner)
   if (target === undefined) return
   childTargetByOwner.delete(owner)
-  readChildLines(name => name.startsWith(`${path.basename(target)}-`), lines)
+  const prefix = `${getTargetName(target)}-`
+  readChildLines(name => name.startsWith(prefix), lines)
 }
 
 /**
@@ -380,7 +396,7 @@ function takeLateChildLines (lines) {
   const open = new Set()
   for (const owner of openTests) {
     const target = childTargetByOwner.get(owner)
-    if (target !== undefined) open.add(path.basename(target))
+    if (target !== undefined) open.add(getTargetName(target))
   }
   readChildLines(name => !open.has(name.slice(0, name.indexOf('-'))), lines)
 }
@@ -390,15 +406,26 @@ function takeLateChildLines (lines) {
  * @param {LineSet} lines
  */
 function readChildLines (accept, lines) {
-  for (const name of fs.readdirSync(childDirectory)) {
+  let names
+  try {
+    names = readdirSync(childDirectory)
+  } catch (error) {
+    log.debug('Line coverage could not read %s: %s', childDirectory, error.message)
+    return
+  }
+  for (const name of names) {
     if (!name.endsWith('.json') || !accept(name)) continue
-    const filename = path.join(childDirectory, name)
+    const filename = `${childDirectory}${sep}${name}`
     try {
-      addPathLines(lines, JSON.parse(fs.readFileSync(filename, 'utf8')).files)
+      addPathLines(lines, JSON.parse(readFileSync(filename, 'utf8')).files)
     } catch (error) {
       log.debug('Line coverage could not read %s: %s', filename, error.message)
     }
-    fs.rmSync(filename, { force: true })
+    try {
+      rmSync(filename, { force: true })
+    } catch (error) {
+      log.debug('Line coverage could not remove %s: %s', filename, error.message)
+    }
   }
 }
 
@@ -559,15 +586,22 @@ function writeChildLines (target, owner) {
     // A worker thread of the child that writes for itself shares the child's process id.
     const writer = threadId === 0 ? String(process.pid) : `${process.pid}.${threadId}`
     const temporary = `${target}-${writer}.tmp`
-    fs.writeFileSync(temporary, JSON.stringify({ files: toPathLines(lines) }))
-    fs.renameSync(temporary, `${target}-${writer}.json`)
+    // The parent may have created the directory while a test replaced the fs binding.
+    mkdirSync(target.slice(0, target.lastIndexOf(sep)), { recursive: true })
+    writeFileSync(temporary, JSON.stringify({ files: toPathLines(lines) }))
+    renameSync(temporary, `${target}-${writer}.json`)
   } catch (error) {
     log.debug('Line coverage could not write the lines of a child process: %s', error.message)
   }
 }
 
 function removeChildDirectory () {
-  if (childDirectory !== undefined) fs.rmSync(childDirectory, { recursive: true, force: true })
+  if (childDirectory === undefined) return
+  try {
+    rmSync(childDirectory, { recursive: true, force: true })
+  } catch (error) {
+    log.debug('Line coverage could not remove %s: %s', childDirectory, error.message)
+  }
 }
 
 /**
@@ -583,7 +617,9 @@ function toFiles (lines) {
     if (end === 0) continue
     let filename = relativeFilenames[file]
     if (filename === undefined) {
-      filename = path.relative(rootPrefix, collector.filename(file)).split(path.sep).join('/')
+      filename = collector.filename(file)
+      filename = filename.startsWith(rootPrefix) ? filename.slice(rootPrefix.length) : relative(rootPrefix, filename)
+      if (sep !== '/') filename = filename.split(sep).join('/')
       relativeFilenames[file] = filename
     }
     files.push({ filename, bitmap: Buffer.from(bitmap.buffer, bitmap.byteOffset, end) })
@@ -600,7 +636,7 @@ function writeDump () {
   all.addAll(testUnion)
   for (const { files } of takeShared()) {
     for (const { filename, bitmap } of files) {
-      all.addBitmap(getCollector().fileIndex(path.resolve(rootPrefix, filename)), bitmap)
+      all.addBitmap(getCollector().fileIndex(resolve(rootPrefix, filename)), bitmap)
     }
   }
   const files = {}
@@ -611,7 +647,7 @@ function writeDump () {
     }
     if (lines.length > 0) files[getCollector().filename(file)] = lines
   }
-  fs.writeFileSync(dumpPath, JSON.stringify({ files }))
+  writeFileSync(dumpPath, JSON.stringify({ files }))
 }
 
 /**
@@ -622,7 +658,7 @@ function writeDump () {
  */
 function shouldInstrument (filename) {
   if (!filename.startsWith(rootPrefix)) return false
-  const parts = filename.slice(rootPrefix.length).split(path.sep)
+  const parts = filename.slice(rootPrefix.length).split(sep)
   for (let i = 0; i < parts.length; i++) {
     if (parts[i] === 'node_modules' || (i < parts.length - 1 && parts[i].startsWith('.'))) return false
   }
@@ -636,9 +672,9 @@ function shouldInstrument (filename) {
 function getRepositoryFile (filename) {
   let real
   try {
-    real = fs.realpathSync(filename)
+    real = realpathSync(filename)
   } catch {
-    real = path.resolve(filename)
+    real = resolve(filename)
   }
   return shouldInstrument(real) ? real : undefined
 }
@@ -705,9 +741,9 @@ function toSourceMap (sourceMap) {
 function getCacheSalt () {
   if (cacheSalt !== undefined) return cacheSalt
   try {
-    const hash = crypto.createHash('sha1')
+    const hash = createHash('sha1')
     for (const file of ['./index', './collector', './instrument', './source-map']) {
-      hash.update(fs.readFileSync(require.resolve(file)))
+      hash.update(readFileSync(require.resolve(file)))
     }
     // The parser is named from its package rather than loaded: when every module comes from the
     // cache, nothing is parsed.
@@ -731,7 +767,7 @@ function getCacheSalt () {
  * @param {string} key
  */
 function getCachePath (directory, key) {
-  return path.join(directory, 'dd-trace-line-coverage', key.slice(0, 2), key)
+  return join(directory, 'dd-trace-line-coverage', key.slice(0, 2), key)
 }
 
 /**
@@ -743,7 +779,7 @@ function getCachePath (directory, key) {
 function readCachedCode (directory, key) {
   let text
   try {
-    text = fs.readFileSync(getCachePath(directory, key), 'utf8')
+    text = readFileSync(getCachePath(directory, key), 'utf8')
   } catch {
     return
   }
@@ -763,19 +799,19 @@ function writeCachedCode (directory, key, code) {
   const file = getCachePath(directory, key)
   const temporary = `${file}.${process.pid}-${threadId}`
   try {
-    const parent = path.dirname(file)
+    const parent = dirname(file)
     if (!cacheDirectories.has(parent)) {
-      fs.mkdirSync(parent, { recursive: true })
+      mkdirSync(parent, { recursive: true })
       cacheDirectories.add(parent)
     }
     // Readers in other processes see the whole file or none.
-    fs.writeFileSync(temporary, `${key}:${code.length}\n${code}`)
-    fs.renameSync(temporary, file)
+    writeFileSync(temporary, `${key}:${code.length}\n${code}`)
+    renameSync(temporary, file)
     stats.cacheWrites++
   } catch (error) {
     log.debug('Line coverage could not cache %s: %s', file, error.message)
     try {
-      fs.rmSync(temporary, { force: true })
+      rmSync(temporary, { force: true })
     } catch {}
   }
 }
@@ -791,7 +827,7 @@ function writeCachedCode (directory, key, code) {
  * @param {object | string | undefined} sourceMap
  */
 function getCacheKey (salt, code, filename, isModule, sourceMap) {
-  return crypto.createHash('sha1')
+  return createHash('sha1')
     .update(`${salt}\0${rootPrefix}\0${filename}\0${isModule}\0`)
     .update(typeof sourceMap === 'string' ? sourceMap : JSON.stringify(sourceMap ?? null))
     .update('\0')
@@ -824,7 +860,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     instrumentedByFilename.set(filename, { code, instrumented })
     return instrumented
   }
-  const start = process.hrtime.bigint()
+  const start = hrtime()
   try {
     if (typeof sourceMap === 'function') sourceMap = sourceMap()
     let url
@@ -875,7 +911,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     log.debug('Line coverage could not instrument %s: %s', filename, error.message)
     return code
   } finally {
-    stats.instrumentNs += process.hrtime.bigint() - start
+    stats.instrumentNs += hrtime() - start
   }
 }
 
@@ -927,9 +963,9 @@ function startCollecting (root, patchModuleLoader) {
   scheduleResets(collector)
   let realRoot = root
   try {
-    realRoot = fs.realpathSync(root)
+    realRoot = realpathSync(root)
   } catch {}
-  rootPrefix = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep
+  rootPrefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep
   if (patchModuleLoader) {
     const compile = Module.prototype._compile
     Module.prototype._compile = function (content, filename, ...rest) {

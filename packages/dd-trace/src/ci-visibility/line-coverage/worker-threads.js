@@ -21,6 +21,8 @@
 // named one.
 
 const { randomUUID } = require('node:crypto')
+// Taken before any test runs, since fake timers replace the global one.
+const { setImmediate } = require('node:timers')
 const workerThreads = require('node:worker_threads')
 
 const shimmer = require('../../../../datadog-shimmer')
