@@ -18,11 +18,25 @@ const { writeFnv64LE } = require('./fnv')
 
 const cache = new LRUCache({ max: 500 })
 const seeds = new LRUCache({ max: 100 })
+const ENTRY_PARENT_HASH = Buffer.alloc(8)
 let nextSeedId = 0
-/** @type {{ id: number, state: Buffer } | undefined} */
+/** @typedef {{ id: number, state: Buffer }} HashSeed */
+/** @type {HashSeed | undefined} */
 let lastSeed
 /** @type {unknown[]} */
 let lastSeedInputs = []
+
+/**
+ * @callback FixedPathwayHasher
+ * @param {string} service
+ * @param {string | undefined} env
+ * @param {Buffer} parentHash
+ * @param {string | undefined} processTags
+ * @param {string | null | undefined} containerTagsHash
+ * @returns {Buffer}
+ */
+/** @type {WeakMap<string[], FixedPathwayHasher>} */
+const fixedEdgeTags = new WeakMap()
 
 // dd-trace-java hashes these tag keys in this order, not alphabetically. Keys it does not know are
 // hashed after them, alphabetically.
@@ -56,8 +70,6 @@ const statsPointKeys = new WeakMap()
 
 const PATHWAY_CONTEXT_BYTES = 20
 
-// Reused across `encodePathwayContext` calls; the buffer is fully rewritten before each
-// `Buffer.from(...)` copy-out so callers never observe mutation between checkpoints.
 const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
 
 /**
@@ -76,7 +88,7 @@ function tagRank (tag) {
 }
 
 /**
- * @param {string[]} sortedEdgeTags
+ * @param {readonly string[]} sortedEdgeTags
  */
 function hashedEdgeTags (sortedEdgeTags) {
   return sortedEdgeTags
@@ -94,7 +106,7 @@ function hashedEdgeTags (sortedEdgeTags) {
  * @param {string | undefined} env
  * @param {string | undefined} processTags
  * @param {string | null | undefined} containerTagsHash
- * @returns {{ id: number, state: Buffer }}
+ * @returns {HashSeed}
  */
 function nodeHashSeed (service, env, processTags, containerTagsHash) {
   if (
@@ -123,7 +135,7 @@ function nodeHashSeed (service, env, processTags, containerTagsHash) {
 }
 
 /**
- * Sorts `edgeTags` in place.
+ * Sorts `edgeTags` in place unless the tags have already been prepared.
  *
  * @param {string} service
  * @param {string | undefined} env
@@ -134,22 +146,67 @@ function nodeHashSeed (service, env, processTags, containerTagsHash) {
  * @returns {Buffer} Pathway hash as uint64 little-endian.
  */
 function computeHash (service, env, edgeTags, parentHash, processTags, containerTagsHash) {
+  const fixed = fixedEdgeTags.get(edgeTags)
+  if (fixed !== undefined) return fixed(service, env, parentHash, processTags, containerTagsHash)
+
   edgeTags.sort()
   const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
-  const key = `${seed.id}\0${edgeTags.join('\0')}\0${parentHash.toString('hex')}`
+  const key = pathwayCachePrefix(seed, edgeTags.join('\0')) + parentHash.toString('hex')
+  return cache.get(key) ?? cachePathwayHash(key, seed, Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), parentHash)
+}
 
-  let value = cache.get(key)
-  if (value) {
-    return value
-  }
+/**
+ * @param {HashSeed} seed
+ * @param {string} edgeKey
+ */
+function pathwayCachePrefix (seed, edgeKey) {
+  return `${seed.id}\0${edgeKey}\0`
+}
 
+/**
+ * @param {string} key
+ * @param {HashSeed} seed
+ * @param {Buffer} tagBytes
+ * @param {Buffer} parentHash
+ */
+function cachePathwayHash (key, seed, tagBytes, parentHash) {
   const pathwayInput = Buffer.alloc(16)
-  writeFnv64LE(Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), pathwayInput, 0, seed.state)
+  writeFnv64LE(tagBytes, pathwayInput, 0, seed.state)
   parentHash.copy(pathwayInput, 8)
-  value = Buffer.allocUnsafe(8)
+  const value = Buffer.allocUnsafe(8)
   writeFnv64LE(pathwayInput, value, 0)
   cache.set(key, value)
   return value
+}
+
+/**
+ * @param {...string} edgeTags
+ */
+function prepareFixedEdgeTags (...edgeTags) {
+  edgeTags.sort()
+  Object.freeze(edgeTags)
+  const edgeKey = edgeTags.join('\0')
+  const tagBytes = Buffer.from(hashedEdgeTags(edgeTags), 'utf8')
+  let fixedSeed
+  let keyPrefix
+  let rootHash
+
+  fixedEdgeTags.set(edgeTags, (service, env, parentHash, processTags, containerTagsHash) => {
+    const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
+    if (seed !== fixedSeed) {
+      fixedSeed = seed
+      keyPrefix = pathwayCachePrefix(seed, edgeKey)
+      rootHash = undefined
+    }
+    const isRoot = parentHash === ENTRY_PARENT_HASH
+    if (isRoot && rootHash !== undefined) return rootHash
+
+    const key = keyPrefix + parentHash.toString('hex')
+    const hash = cache.get(key) ?? cachePathwayHash(key, seed, tagBytes, parentHash)
+    if (isRoot) rootHash = hash
+    return hash
+  })
+  return edgeTags
 }
 
 /**
@@ -159,7 +216,7 @@ function computeHash (service, env, edgeTags, parentHash, processTags, container
  * is built once per Buffer.
  *
  * @param {Buffer} hash Pathway hash as uint64 little-endian.
- * @param {string[]} edgeTags
+ * @param {readonly string[]} edgeTags
  */
 function statsPointKey (hash, edgeTags) {
   let key = statsPointKeys.get(hash)
@@ -183,26 +240,14 @@ function statsPointKey (hash, edgeTags) {
  * @param {Buffer} dataStreamsContext.hash
  * @param {number} dataStreamsContext.pathwayStartNs
  * @param {number} dataStreamsContext.edgeStartNs
- * @returns {Buffer}
  */
-function encodePathwayContext (dataStreamsContext) {
+function encodePathwayContextBase64 (dataStreamsContext) {
   let offset = dataStreamsContext.hash.copy(pathwayScratch, 0)
   offset = encodeVarintInto(pathwayScratch, offset, Math.round(dataStreamsContext.pathwayStartNs / 1e6))
   offset = encodeVarintInto(pathwayScratch, offset, Math.round(dataStreamsContext.edgeStartNs / 1e6))
   // No-op when offset >= PATHWAY_CONTEXT_BYTES; otherwise pads stale bytes from a previous call.
   pathwayScratch.fill(0, offset, PATHWAY_CONTEXT_BYTES)
-  return Buffer.from(pathwayScratch.subarray(0, PATHWAY_CONTEXT_BYTES))
-}
-
-/**
- * @param {object} dataStreamsContext
- * @param {Buffer} dataStreamsContext.hash
- * @param {number} dataStreamsContext.pathwayStartNs
- * @param {number} dataStreamsContext.edgeStartNs
- */
-function encodePathwayContextBase64 (dataStreamsContext) {
-  const encodedPathway = encodePathwayContext(dataStreamsContext)
-  return encodedPathway.toString('base64')
+  return pathwayScratch.toString('base64')
 }
 
 /**
@@ -297,10 +342,9 @@ const DsmPathwayCodec = {
 
 module.exports = {
   computePathwayHash: computeHash,
-  encodePathwayContext,
+  prepareFixedEdgeTags,
+  ENTRY_PARENT_HASH,
   decodePathwayContext,
-  encodePathwayContextBase64,
-  decodePathwayContextBase64,
   DsmPathwayCodec,
   statsPointKey,
 }
