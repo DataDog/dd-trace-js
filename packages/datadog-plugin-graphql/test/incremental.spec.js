@@ -114,6 +114,43 @@ describe('GraphQL incremental execution', () => {
       await assertion
     })
 
+    it('preserves the resolver span across a delegated execution that shares its context', async () => {
+      const tracer = require('../../dd-trace')
+      const innerSchema = graphql.buildSchema('type Query { inner: String, fail: String }')
+      const invalidSchema = new graphql.GraphQLSchema({})
+      const innerDocument = graphql.parse('{ inner outer: fail }')
+      const delegatedError = new Error('Delegated resolver failed')
+      const rootValue = {
+        inner: () => tracer.trace('delegated.child', () => 'inner-value'),
+        fail () { throw delegatedError },
+      }
+      const schema = graphql.buildSchema('type Query { outer: String }')
+      schema.getQueryType().getFields().outer.resolve = (source, args, contextValue) => {
+        const result = execute({ schema: innerSchema, document: innerDocument, rootValue, contextValue })
+        assert.strictEqual(result.errors?.[0].originalError, delegatedError)
+        assert.throws(() => execute({ schema: invalidSchema, document: innerDocument, contextValue }), {
+          message: 'Query root type must be provided.',
+        })
+        return result.data.inner
+      }
+
+      const assertion = agent.assertSomeTraces(([trace]) => {
+        const resolver = trace.find(span => span.resource === 'outer:String')
+        const child = trace.find(span => span.name === 'delegated.child')
+        assert.ok(resolver)
+        assert.strictEqual(resolver.meta[ERROR_MESSAGE], undefined)
+        assert.strictEqual(resolver.error, 0)
+        assert.ok(child, 'delegated.child must belong to the outer execution trace')
+        assert.strictEqual(child.parent_id.toString(), resolver.span_id.toString())
+        assert.strictEqual(trace.filter(span => span.name === expectedSchema.server.opName).length, 1)
+      }, { spanResourceMatch: /Delegated/ })
+      const document = graphql.parse('query Delegated { outer }')
+      const [result] = await Promise.all([normalizedExecutor({ schema, document, contextValue: {} }), assertion])
+
+      assert.strictEqual(result.errors, undefined)
+      assert.strictEqual(result.data.outer, 'inner-value')
+    })
+
     it('records reused resolver errors from the GraphQL Tools executor', async () => {
       const operationName = 'ReusedResolverError'
       const error = new Error('GraphQL Tools resolver failed')

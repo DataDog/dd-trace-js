@@ -200,7 +200,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const { contextValue } = args
     if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
+      const store = legacyStorage.getStore()
       ctx.ddSkipped = true
+      ctx.currentStore = store?.graphqlRootCtx === undefined ? store : { ...store, graphqlRootCtx: undefined }
       return
     }
 
@@ -339,6 +341,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   error (ctx) {
+    if (ctx?.ddSkipped) return
+
     const span = ctx?.currentStore?.span || this.activeSpan
     if (span && ctx?.error) {
       span.setTag('error', ctx.error)
