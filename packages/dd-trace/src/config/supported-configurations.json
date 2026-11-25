@@ -3234,6 +3234,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED": [
       {
         "implementation": "A",

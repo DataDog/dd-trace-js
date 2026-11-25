@@ -247,6 +247,58 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false', () => {
+        let topic
+        let subscription
+
+        before(async () => {
+          process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED = 'false'
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: true })
+
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          pubsub = new PubSub({ projectId: project })
+          ;[topic] = await pubsub.createTopic(dsmTopicName)
+          ;[subscription] = await topic.createSubscription('DSM')
+
+          const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+          const containerTagsHash = propagationHash.getContainerTagsHash()
+          const fullTopic = `projects/${project}/topics/${dsmTopicName}`
+          expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + fullTopic, 'type:google-pubsub'],
+            ENTRY_PARENT_HASH,
+            processTagsForHash,
+            containerTagsHash
+          )
+          expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'topic:' + fullTopic, 'type:google-pubsub'],
+            expectedProducerHash,
+            processTagsForHash,
+            containerTagsHash
+          )
+        })
+
+        after(async () => {
+          delete process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+          await subscription?.close()
+        })
+
+        it('still sets the produce and consume checkpoints of one pathway', async () => {
+          const statsPromise = agent.expectPipelineStats(() => {
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64LE(0).toString()), true)
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64LE(0).toString()), true)
+          }, { timeoutMs: TIMEOUT })
+
+          subscription.on('message', msg => msg.ack())
+          await publish(topic, { data: Buffer.from('DSM without trace propagation') })
+          await statsPromise
+        })
+      })
     })
   })
 })
