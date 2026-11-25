@@ -1065,8 +1065,8 @@ function startCollecting (root, patchModuleLoader) {
 /**
  * Makes the collector reset when a macrotask starts: what runs from then on may run in another
  * context. Where async hooks can leave promises out, a `before` hook does it, at no cost to promise
- * jobs. Elsewhere a microtask queued after the first touch since the last reset does it, since the
- * microtask queue drains before the next macrotask.
+ * jobs, and only for a macrotask of another owner. Elsewhere a microtask queued after the first touch
+ * since the last reset does it, since the microtask queue drains before the next macrotask.
  *
  * @param {import('./collector').LineCoverageCollector} collector
  */
@@ -1081,7 +1081,15 @@ function scheduleResets (collector) {
   const mode = getEnvironmentVariable('_DD_LINE_COVERAGE_RESET')
   const asyncHooks = require('node:async_hooks')
   if (mode !== 'microtask' && canLeavePromisesOut(asyncHooks)) {
-    asyncHooks.createHook({ before: reset, trackPromises: false }).enable()
+    // `before` runs in the context of the macrotask that starts.
+    const startMacrotask = () => {
+      try {
+        collector.startMacrotask()
+      } catch (error) {
+        log.debug('Line coverage could not reset: %s', error.message)
+      }
+    }
+    asyncHooks.createHook({ before: startMacrotask, trackPromises: false }).enable()
     if (mode !== 'both') return
   }
   collector.setResetScheduler(() => queueMicrotask(reset))

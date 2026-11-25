@@ -10,10 +10,10 @@
 // owner and clears its flag.
 //
 // While at most one window is open, `touch` sets the module's flag, and the module skips `touch`
-// until the next reset. Resets happen at window boundaries, when a macrotask starts, and when a
-// touch finds a different owner than the touches before it. Code that may start a job calls
-// `touch` even when the flag is set, so a job that runs in another context is noticed. While
-// several windows are open, the flag is never set, and every activation asks.
+// until the next reset. Resets happen at window boundaries, when a macrotask starts that may run in
+// another context, and when a touch finds a different owner than the touches before it. Code that
+// may start a job calls `touch` even when the flag is set, so a job that runs in another context is
+// noticed. While several windows are open, the flag is never set, and every activation asks.
 //
 // A reader reports the slots of its module that ran, as bits of 30-slot words. The module's table,
 // which the module gives at its first touch, says which file and line each slot stands for, and
@@ -270,12 +270,7 @@ class LineCoverageCollector {
    * @param {Function} reader
    */
   touch (id, reader) {
-    let owner
-    try {
-      owner = this.resolveOwner()
-    } catch {
-      owner = this.unowned
-    }
+    const owner = this.#resolveOwner()
     this.stats.touches++
     if (owner !== this.#segmentOwner) {
       // The context changed since the modules in `q` were touched: they must ask again.
@@ -299,6 +294,25 @@ class LineCoverageCollector {
       }
     }
     return this.#concurrent ? 0 : 1
+  }
+
+  /** @returns {Owner} */
+  #resolveOwner () {
+    try {
+      return this.resolveOwner()
+    } catch {
+      return this.unowned
+    }
+  }
+
+  /**
+   * A reset where a macrotask starts, in its context. The touches since the last reset still hold
+   * when they found the owner of that context, unless several windows are open.
+   */
+  startMacrotask () {
+    const segmentOwner = this.#segmentOwner
+    if (segmentOwner !== undefined && !this.#concurrent && this.#resolveOwner() === segmentOwner) return
+    this.reset()
   }
 
   /**
