@@ -1249,7 +1249,7 @@ function getStartTestsWrapper (frameworkVersion) {
     const shouldUseVitestCoverage = usesVitestV8CoverageSnapshot(coverageOptions)
     const coverageLibrary = 'v8'
     vitestCoverageSnapshot = undefined
-    const isLineCoverageEnabled = providedContext.isCodeCoverageEnabled && lineCoverageInstrumentCh.hasSubscribers
+    const isLineCoverageEnabled = providedContext.isLineCoverageEnabled && lineCoverageInstrumentCh.hasSubscribers
     lineCoverageRoot = isLineCoverageEnabled ? repositoryRoot : undefined
     const isSuiteCoverageEnabled = providedContext.isCodeCoverageEnabled && !isLineCoverageEnabled
     if (isSuiteCoverageEnabled) {
