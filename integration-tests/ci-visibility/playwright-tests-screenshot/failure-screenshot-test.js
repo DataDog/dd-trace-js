@@ -43,6 +43,18 @@ test('does not upload programmatic screenshots', async ({ page }, testInfo) => {
 test.skip('does not reserve a worker trace slot for an expected skip', () => {})
 
 test('uploads only the automatic failure screenshot', async ({ page }, testInfo) => {
+  if (process.env.PLAYWRIGHT_SPLIT_TEST_TRACES === 'true') {
+    const tracer = require('dd-trace')
+    const value = 'a'.repeat(4800)
+    const tags = {}
+    for (let index = 0; index < 160; index++) {
+      tags['worker_payload.' + index] = value
+    }
+    tracer.scope().active().addTags(tags)
+    tracer.trace('worker-batch-child-first', { tags }, () => {})
+    tracer.trace('worker-batch-child-second', { tags }, () => {})
+  }
+
   await page.goto(process.env.PW_BASE_URL)
 
   if (process.env.PLAYWRIGHT_LOG_MEDIA_CONFIG === 'true') {
