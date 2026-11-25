@@ -122,6 +122,8 @@ const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
+const suiteSetupStartCh = channel('ci:mocha:suite-setup:start')
+const suiteSetupFinishCh = channel('ci:mocha:suite-setup:finish')
 
 // session channels
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
@@ -1476,6 +1478,24 @@ addHook({
       const test = hook.ctx?.currentTest
       if (!test) return
       finishRootSuiteAfterFinalAttempt(test)
+    })
+
+    // A describe block's before-all hooks are its suite setup. Root hooks and after-all hooks
+    // belong to no suite setup, and also close one that failed.
+    this.prependListener('hook', function (hook) {
+      if (!suiteSetupStartCh.hasSubscribers) return
+      const suite = hook.parent
+      const isBeforeAll = suite?._beforeAll?.includes(hook)
+      if (isBeforeAll && !suite.root) {
+        suiteSetupStartCh.publish({ suite })
+      } else if (isBeforeAll || suite?._afterAll?.includes(hook)) {
+        suiteSetupFinishCh.publish()
+      }
+    })
+    this.prependListener('hook end', function (hook) {
+      if (suiteSetupFinishCh.hasSubscribers && hook.parent?._beforeAll?.includes(hook)) {
+        suiteSetupFinishCh.publish()
+      }
     })
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted.
