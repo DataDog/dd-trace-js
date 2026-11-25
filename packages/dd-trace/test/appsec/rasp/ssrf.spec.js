@@ -5,7 +5,6 @@ const { EventEmitter } = require('events')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
 const {
@@ -296,31 +295,6 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.notCalled(scope.dispose)
       httpClientResponseFinish.publish({ ctx, res, body: null })
       sinon.assert.calledTwice(scope.run)
-      sinon.assert.calledOnce(scope.dispose)
-    })
-
-    it('retains the subcontext when a timeout is followed by a response', () => {
-      stubStore()
-      const ctx = makeCtx({ req: new EventEmitter() })
-      downstream.extractResponseData.returns({ [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' })
-      publishRequestStart({ ctx })
-      const scope = contexts.get(ctx)
-
-      ctx.req.emit('timeout')
-      ctx.error = undefined
-      httpClientRequestError.publish(ctx)
-      // The HTTP instrumentation publishes request finish on timeout, before a possible response.
-      dc.channel('apm:http:client:request:finish').publish(ctx)
-      assert.strictEqual(ctx.req.listenerCount('close'), 1)
-      sinon.assert.notCalled(scope.dispose)
-      httpClientResponseFinish.publish({ ctx, res: createResponse(), body: null })
-
-      sinon.assert.calledTwice(scope.run)
-      sinon.assert.calledWithExactly(scope.run.secondCall,
-        { [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200' }, { type: 'ssrf', variant: 'response' })
-      ctx.req.destroyed = true
-      ctx.req.emit('close')
-      assert.strictEqual(ctx.req.listenerCount('close'), 0)
       sinon.assert.calledOnce(scope.dispose)
     })
 

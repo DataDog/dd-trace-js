@@ -205,6 +205,10 @@ function patch (http, methodName) {
         const finish = () => {
           if (!finished) {
             finished = true
+            const responseError = ctx.res?.errored
+            if (responseError && !ctx.error) {
+              ctx.responseError = responseError
+            }
             finishChannel.publish(ctx)
           }
         }
@@ -212,16 +216,8 @@ function patch (http, methodName) {
         try {
           const req = request.call(this, options, callback)
           const emit = req.emit
-          const setTimeout = req.setTimeout
 
           ctx.req = req
-
-          // tracked to accurately discern custom request socket timeout
-          let customRequestTimeout = false
-          req.setTimeout = function (...args) {
-            customRequestTimeout = true
-            return setTimeout.apply(this, args)
-          }
 
           req.emit = function (...args) {
             const eventName = args[0]
@@ -254,12 +250,14 @@ function patch (http, methodName) {
                 ctx.res = arg
                 finish()
                 break
+              case 'abort':
+                if (!ctx.res && !req.socket) {
+                  finish()
+                }
+                break
               case 'error':
-              case 'timeout':
                 ctx.error = arg
-                ctx.customRequestTimeout = customRequestTimeout
                 errorChannel.publish(ctx)
-              case 'abort': // deprecated and replaced by `close` in node 17
               case 'close':
                 finish()
             }
