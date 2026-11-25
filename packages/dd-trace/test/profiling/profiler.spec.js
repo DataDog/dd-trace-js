@@ -198,6 +198,39 @@ describe('profiler', function () {
       assert.deepStrictEqual(profiler.getRunningTypes(), [])
     })
 
+    it('should announce each change of its running state', () => {
+      const states = []
+      profiler.on('enabledChanged', () => states.push(profiler.enabled))
+
+      profiler.start(makeStartOptions())
+      profiler.start(makeStartOptions())
+      profiler.stop()
+      profiler.stop()
+
+      assert.deepStrictEqual(states, [true, false])
+    })
+
+    it('should announce stopping itself when capturing failed', () => {
+      const states = []
+      profiler.on('enabledChanged', () => states.push(profiler.enabled))
+      wallProfiler.profile.throws(new Error('boom'))
+
+      profiler.start(makeStartOptions({ logger }))
+      clock.tick(interval)
+
+      assert.deepStrictEqual(states, [true, false])
+    })
+
+    it('should announce only the cleanup stop of a failed partial start', () => {
+      const states = []
+      profiler.on('enabledChanged', () => states.push(profiler.enabled))
+      spaceProfiler.start.throws()
+
+      profiler.start(makeStartOptions({ logger }))
+
+      assert.deepStrictEqual(states, [false])
+    })
+
     it('should report allocations when the space profiler collects them', async () => {
       spaceProfiler.collectsAllocations = true
       await profiler.start(makeStartOptions())

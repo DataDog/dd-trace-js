@@ -10,15 +10,28 @@ const sinon = require('sinon')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
 
+// Running-state reports are scheduled as microtasks; this resolves after they have run.
+function flushReports () {
+  return new Promise(resolve => setImmediate(resolve))
+}
+
 describe('profiler', () => {
   let profiler
   let profilingModule
   let ssiHeuristics
   let FakeSSIHeuristics
   let log
+  let telemetry
 
   function publishConfig (enabled) {
     configUpdateChannel.publish({ profiling: { DD_PROFILING_ENABLED: enabled } })
+  }
+
+  // Like the real profiling layer, the fakes announce every change of their running state.
+  function setEnabled (enabled) {
+    if (profilingModule.profiler.enabled === enabled) return
+    profilingModule.profiler.enabled = enabled
+    profilingModule.profiler.emit('enabledChanged')
   }
 
   before(() => {
@@ -59,24 +72,27 @@ describe('profiler', () => {
       warn: sinon.spy(),
     }
 
+    telemetry = { updateProfilerEnabled: sinon.spy() }
+
     profiler = proxyquire('../src/profiler', {
       './profiling': profilingModule,
       './profiling/ssi-heuristics': { SSIHeuristics: FakeSSIHeuristics },
       './log': log,
+      './telemetry': telemetry,
     })
   })
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // profiler.js reads `enabled` straight off the profiling layer rather than caching it, so the
     // fakes mirror the real Profiler class's start()/stop() by flipping it themselves.
     profilingModule.profiler.start.reset()
     profilingModule.profiler.start.callsFake(() => {
-      profilingModule.profiler.enabled = true
+      setEnabled(true)
       return true
     })
     profilingModule.profiler.stop.reset()
     profilingModule.profiler.stop.callsFake(() => {
-      profilingModule.profiler.enabled = false
+      setEnabled(false)
     })
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
@@ -89,6 +105,8 @@ describe('profiler', () => {
     publishConfig('false')
     ssiHeuristics = undefined
     profilingModule.profiler.stop.resetHistory()
+    await flushReports()
+    telemetry.updateProfilerEnabled.resetHistory()
   })
 
   describe('config update', () => {
@@ -282,13 +300,13 @@ describe('profiler', () => {
         if (profilingModule.profiler.stopping) {
           throw new Error('Cannot start the profiler while a shutdown collection is still in flight')
         }
-        profilingModule.profiler.enabled = true
+        setEnabled(true)
         return true
       })
       profilingModule.profiler.stop.callsFake(() => {
         if (!profilingModule.profiler.enabled) return
-        profilingModule.profiler.enabled = false
         profilingModule.profiler.stopping = true
+        setEnabled(false)
       })
     })
 
@@ -476,6 +494,41 @@ describe('profiler', () => {
         sinon.assert.calledTwice(FakeSSIHeuristics)
         assert.strictEqual(profiler.isStarted(), false)
       })
+
+      it('keeps reporting a profiler that restarts for changed settings as running', async () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: undefined })
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: false })
+        await flushReports()
+        settleShutdown()
+        await flushReports()
+
+        sinon.assert.alwaysCalledWithExactly(telemetry.updateProfilerEnabled, true)
+      })
+
+      it('reports a stopped profiler when an explicit stop retracts a pending restart', async () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: undefined })
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: false })
+        await flushReports()
+        telemetry.updateProfilerEnabled.resetHistory()
+
+        profiler.stop()
+        await flushReports()
+
+        sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, false)
+      })
+
+      it('reports a stopped profiler when a disable published during the restart wins', async () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: undefined })
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: true })
+        publishSettings('false', { DD_PROFILING_HEAP_ENABLED: true })
+        await flushReports()
+        telemetry.updateProfilerEnabled.resetHistory()
+
+        settleShutdown()
+        await flushReports()
+
+        sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, false)
+      })
     })
   })
 
@@ -489,6 +542,59 @@ describe('profiler', () => {
       sinon.assert.calledTwice(profilingModule.profiler.start)
       assert.strictEqual(profilingModule.profiler.start.secondCall.args[0], changed)
       assert.strictEqual(profiler.isStarted(), true)
+    })
+  })
+
+  describe('running state telemetry', () => {
+    it('reports a started profiler', async () => {
+      publishConfig('true')
+      await flushReports()
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, true)
+    })
+
+    it('reports a stopped profiler', async () => {
+      publishConfig('true')
+      await flushReports()
+      telemetry.updateProfilerEnabled.resetHistory()
+
+      publishConfig('false')
+      await flushReports()
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, false)
+    })
+
+    it('reports a profiler started by the SSI heuristics only once they start it', async () => {
+      publishConfig('auto')
+      await flushReports()
+      sinon.assert.notCalled(telemetry.updateProfilerEnabled)
+
+      ssiHeuristics.triggeredCallback()
+      await flushReports()
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, true)
+    })
+
+    it('reports a profiler that stopped itself', async () => {
+      publishConfig('true')
+      await flushReports()
+      telemetry.updateProfilerEnabled.resetHistory()
+
+      setEnabled(false)
+      await flushReports()
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, false)
+    })
+
+    it('reports a restart without a shutdown export once, as running', async () => {
+      configUpdateChannel.publish({ profiling: { DD_PROFILING_ENABLED: 'true' }, DD_PROFILING_HEAP_ENABLED: true })
+      await flushReports()
+      telemetry.updateProfilerEnabled.resetHistory()
+
+      configUpdateChannel.publish({ profiling: { DD_PROFILING_ENABLED: 'true' }, DD_PROFILING_HEAP_ENABLED: false })
+      await flushReports()
+
+      sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, true)
     })
   })
 

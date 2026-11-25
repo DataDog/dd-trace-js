@@ -15,6 +15,7 @@ const getAgentlessTelemetryUrl = require('./agentless-url')
  *   | 'app-heartbeat'
  *   | 'app-extended-heartbeat'
  *   | 'app-client-configuration-change'
+ *   | 'app-product-change'
  *   | 'app-closing'
  *   | 'app-dependencies-loaded'
  *   | 'app-endpoints'

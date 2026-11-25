@@ -154,7 +154,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: profilingEnabledToBoolean(config.profiling.DD_PROFILING_ENABLED),
+      enabled: profilerEnabled ?? config.profiling.DD_PROFILING_ENABLED === 'true',
     },
     dynamic_instrumentation: {
       enabled: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED,
@@ -180,8 +180,10 @@ function getInstallSignature (config) {
 
 /** @param {import('../config/config-base')} config */
 function appStarted (config) {
+  const products = getProducts(config)
+  sentProfilerEnabled = products.profiler.enabled
   const app = {
-    products: getProducts(config),
+    products,
     configuration: latestConfiguration,
   }
   const installSignature = getInstallSignature(config)
@@ -391,17 +393,44 @@ function updateConfig (configuration, config) {
   latestConfiguration = configuration
 }
 
+// Whether the profiler runs, once it has reported a state. Until then, app-started assumes that
+// only DD_PROFILING_ENABLED=true starts it: under auto, the SSI heuristics may never start it.
+/** @type {boolean | undefined} */
+let profilerEnabled
+
+// The profiler state last sent in app-started or app-product-change; undefined before app-started.
+/** @type {boolean | undefined} */
+let sentProfilerEnabled
+
 /**
- * @param {import('../config/config-base')['profiling']['enabled']} profilingEnabled
+ * Reports whether the profiler runs, sending app-product-change when that differs from the last
+ * state sent. Before app-started, the state is only recorded, as app-started includes it.
+ *
+ * @param {boolean} enabled
  */
-function profilingEnabledToBoolean (profilingEnabled) {
-  return profilingEnabled === 'true' || profilingEnabled === 'auto'
+function updateProfilerEnabled (enabled) {
+  profilerEnabled = enabled
+  if (
+    !config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED ||
+    sentProfilerEnabled === undefined ||
+    sentProfilerEnabled === enabled
+  ) return
+
+  sentProfilerEnabled = enabled
+  // A product change waiting to be retried would be batched after this one, so the intake would end
+  // up with its outdated state. This one carries the whole profiler state, so it supersedes that.
+  if (retryData?.reqType === 'app-product-change') retryData = null
+  const { reqType, payload } = createPayload('app-product-change', {
+    products: { profiler: { version: tracerVersion, enabled } },
+  })
+  sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
 module.exports = {
   start,
   updateIntegrations,
   updateConfig,
+  updateProfilerEnabled,
   appClosing,
   flush,
 }

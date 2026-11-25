@@ -19,6 +19,12 @@ module.exports = {
   updateIntegrations () {
     telemetry?.updateIntegrations()
   },
+  /**
+   * @param {boolean} enabled - Whether the profiler runs
+   */
+  updateProfilerEnabled (enabled) {
+    telemetry?.updateProfilerEnabled(enabled)
+  },
   appClosing () {
     telemetry?.appClosing()
   },

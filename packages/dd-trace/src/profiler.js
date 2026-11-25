@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 
 const log = require('./log')
+const telemetry = require('./telemetry')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
 
@@ -35,14 +36,30 @@ let deferredConfig
 // The profiler is stopping to apply new settings, not to stay disabled.
 let restartPending = false
 
+let runningStateReportScheduled = false
+
 function getProfilingModule () {
   if (profilingModule === undefined) {
     profilingModule = require('./profiling')
     // The profiling layer never restarts itself; it only reports that a shutdown export has
     // settled, which is when a configuration deferred during that window gets its decision.
     profilingModule.profiler.on('stopped', applyDeferredConfig)
+    profilingModule.profiler.on('enabledChanged', scheduleRunningStateReport)
   }
   return profilingModule
+}
+
+// Telemetry gets the outcome of each decision rather than every step, so that a restart for new
+// settings, which stops the profiler before starting it again, doesn't report it as stopped.
+function scheduleRunningStateReport () {
+  if (runningStateReportScheduled) return
+  runningStateReportScheduled = true
+  queueMicrotask(reportRunningState)
+}
+
+function reportRunningState () {
+  runningStateReportScheduled = false
+  telemetry.updateProfilerEnabled(isStarted() || restartPending)
 }
 
 // The profiling engine can stop itself (e.g. a collection error) without going through stop(), so
@@ -105,7 +122,11 @@ function stop () {
   // An explicit stop is the latest desired state, so it retracts a configuration still waiting
   // for an in-flight shutdown to settle.
   deferredConfig = undefined
-  restartPending = false
+  if (restartPending) {
+    // The profiling layer is already stopped, so only this retraction changes the reported state.
+    restartPending = false
+    scheduleRunningStateReport()
+  }
 
   // A stop command for a profiler that has never been loaded is already satisfied.
   if (profilingModule === undefined) return
@@ -176,6 +197,8 @@ function applyDeferredConfig () {
   const restarting = restartPending
   restartPending = false
   applyConfig(config, restarting)
+  // The deferred configuration may leave the profiler stopped without it changing state.
+  if (restarting) scheduleRunningStateReport()
 }
 
 /**
