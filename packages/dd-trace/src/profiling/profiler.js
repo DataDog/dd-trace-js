@@ -5,6 +5,8 @@ const { setImmediate: yieldToEventLoop } = require('node:timers/promises')
 const dc = require('dc-polyfill')
 const { version } = require('../../../../package.json')
 const crashtracker = require('../crashtracking')
+const { getEnvironmentVariable } = require('../config/helper')
+const getGitMetadata = require('../git_metadata')
 const log = require('../log')
 const { transformAttributes } = require('../opentelemetry/otlp/attributes')
 const { buildResourceAttributes } = require('../opentelemetry/resource-attributes')
@@ -43,8 +45,10 @@ function findWebSpan (startedSpans, spanId) {
  */
 
 /**
- * The OTLP resource of the profiles: the attributes the other OTLP signals send, the SDK's, and the process's, which
- * pprof uploads have as the process_id and runtime_version tags, leaving out unset values.
+ * The OTLP resource of the profiles: the attributes the other OTLP signals send, the SDK's, and what pprof uploads
+ * have as tags, as semantic-convention attributes: the process's (process_id and runtime_version), the source code's
+ * Git metadata (git.commit.sha and git.repository_url) and the AWS Lambda function's name (functionname). The backend
+ * turns them back into those tags. Unset values are left out.
  *
  * @param {import('../config/config-base')} config
  */
@@ -58,6 +62,12 @@ function buildOtlpResourceAttributes (config) {
     'process.runtime.name': 'nodejs',
     // Without process.version's "v", as the semantic conventions and the OpenTelemetry SDK have it
     'process.runtime.version': process.versions.node,
+    'faas.name': getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME'),
+  }
+  const { commitSHA, repositoryUrl } = getGitMetadata(config)
+  if (repositoryUrl && commitSHA) {
+    attributes['vcs.ref.head.revision'] = commitSHA
+    attributes['vcs.repository.url.full'] = repositoryUrl
   }
   for (const [key, value] of Object.entries(attributes)) {
     if (value === undefined || value === null) {

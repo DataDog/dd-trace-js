@@ -677,6 +677,7 @@ describe('profiler', function () {
           PprofProfileBuilder: FakePprofProfileBuilder,
           OtelProfilesBuilder: pprof.OtelProfilesBuilder,
         },
+        '../git_metadata': () => ({ commitSHA: 'abc123', repositoryUrl: 'https://github.com/org/repo' }),
       })
       otlp = true
       const wall = { type: 'wall', unit: 'nanoseconds' }
@@ -698,11 +699,16 @@ describe('profiler', function () {
       wallProfiler.capture.returns(captured)
       profilers = [wallProfiler]
 
-      await profiler.start(makeStartOptions({ service: 'otlp-service', tags: { service: 'otlp-service' } }))
-      clock.tick(interval)
-      // Encoding the request yields to the event loop
-      for (let i = 0; i < 100 && exporter.export.notCalled; i++) {
-        await new Promise(resolve => setImmediate(resolve))
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'otlp-function'
+      try {
+        await profiler.start(makeStartOptions({ service: 'otlp-service', tags: { service: 'otlp-service' } }))
+        clock.tick(interval)
+        // Encoding the request yields to the event loop
+        for (let i = 0; i < 100 && exporter.export.notCalled; i++) {
+          await new Promise(resolve => setImmediate(resolve))
+        }
+      } finally {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
       }
 
       sinon.assert.calledOnce(exporter.export)
@@ -725,6 +731,11 @@ describe('profiler', function () {
       assert.strictEqual(Number(resource['process.pid'].intValue), process.pid)
       assert.strictEqual(resource['process.runtime.name'].stringValue, 'nodejs')
       assert.strictEqual(resource['process.runtime.version'].stringValue, process.versions.node)
+      // The source code's Git metadata and the Lambda function's name, which pprof uploads have as tags
+      assert.strictEqual(resource['vcs.ref.head.revision'].stringValue, 'abc123')
+      assert.strictEqual(resource['vcs.repository.url.full'].stringValue, 'https://github.com/org/repo')
+      assert.strictEqual(resource['faas.name'].stringValue, 'otlp-function')
+      assert.ok(!Object.keys(resource).some(key => key.startsWith('git.')), Object.keys(resource).join())
       assert.ok(!Object.keys(resource).some(key => key.startsWith('datadog.')), Object.keys(resource).join())
       assert.strictEqual(resource['service.name'].stringValue, 'otlp-service')
       const { profiles } = resourceProfiles.scopeProfiles[0]
