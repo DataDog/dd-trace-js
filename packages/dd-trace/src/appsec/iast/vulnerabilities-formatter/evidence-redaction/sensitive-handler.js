@@ -48,6 +48,9 @@ class SensitiveHandler {
   }
 
   isSensibleValue (value) {
+    if (typeof value === 'string' && value.length > MAX_EVIDENCE_LENGTH) {
+      return true
+    }
     this._valuePattern.lastIndex = 0
     return this._valuePattern.test(value)
   }

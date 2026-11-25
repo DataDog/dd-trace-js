@@ -1466,14 +1466,14 @@
     ],
     "DD_IAST_REDACTION_VALUE_PATTERN": [
       {
-        "implementation": "A",
+        "implementation": "J",
         "type": "string",
         "namespace": "iast",
         "configurationNames": [
           "iast.redactionValuePattern",
           "experimental.iast.redactionValuePattern"
         ],
-        "default": "(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,})|[\\w\\.-]+@[a-zA-Z\\d\\.-]+\\.[a-zA-Z]{2,})"
+        "default": "(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:(?!ey[I-L][\\w=\\-])[\\w=\\-])+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,})|(?<![\\w\\.-])[\\w\\.-]+@[a-zA-Z\\d\\.-]+\\.[a-zA-Z]{2,})"
       }
     ],
     "DD_IAST_REQUEST_SAMPLING": [
