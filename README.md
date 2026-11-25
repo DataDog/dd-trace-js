@@ -69,30 +69,6 @@ For more information about library versioning and compatibility, see the [Node.j
 Changes associated with each individual release are documented on the [GitHub Releases](https://github.com/DataDog/dd-trace-js/releases) screen.
 
 
-## Bun (experimental)
-
-Bun support is experimental and is not covered by the Node.js compatibility policy. The capabilities and safety
-fallbacks below depend on the installed tracer version and require a release that includes the corresponding Bun
-support.
-
-```sh
-bun --preload dd-trace/init app.js
-```
-
-Alternatively, call `require('dd-trace').init()` before loading instrumented modules.
-
-- Verified working: `Bun.serve` and Elysia server spans, Express, fetch clients, `pg`, winston,
-  CommonJS-loaded pino/OpenAI, and manual LLMObs.
-  Wall/timeline profiling uploads work, but without JavaScript stack samples.
-- Orchestrion-based integrations are not yet supported on Bun.
-- ESM-imported packages are generally not instrumented, including CommonJS packages loaded via `import`. Not supported:
-  `node:http` clients from ESM and pino/OpenAI/ai/postgres via `import`. Hono route names require CommonJS.
-- Static `Response` routes keep Bun's fast path and do not produce server spans.
-- `Bun.SQL`, `bun:sqlite`, IAST, heap profiling, and JavaScript stack samples in wall profiles are not supported.
-  With Bun runtime safety support, IAST and heap profiling are disabled automatically, and runtime metrics use the
-  JavaScript collector instead of the unsupported native collector.
-
-
 ## Development and Contribution
 
 Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
