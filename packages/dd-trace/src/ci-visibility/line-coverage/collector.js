@@ -18,10 +18,10 @@
 // A reader reports the slots of its module that ran, as bits of 30-slot words. The module's table,
 // which the module gives at its first touch, says which file and line each slot stands for, and
 // whether the line is initialiser code. Initialiser lines belong to no owner: they go to the
-// initialiser set of the module copy, and to the initialiser part of Shared. Taking an owner's lines
-// adds, for each file of a copy whose other code the owner ran, the copy's initialiser lines of that
-// file. The set is per copy because copies can take different branches: Jest evaluates a module once
-// per test file, each time in that file's own globals.
+// initialiser set of their file, and to the initialiser part of Shared. Taking an owner's lines adds,
+// for each file whose other code the owner ran, the initialiser lines that file ran so far. The set
+// is for the whole process: when a framework runs a module more than once, such as Jest once per test
+// file, each copy's initialiser lines count for every copy, whichever branch the copy took.
 
 const GLOBAL_KEY = Symbol.for('dd-trace.line-coverage')
 
@@ -112,6 +112,9 @@ class LineCoverageCollector {
   /** initialiser lines executed since Shared was last taken */
   sharedInit = new LineSet()
 
+  /** initialiser lines executed in the process, in any module copy */
+  init = new LineSet()
+
   /** what runs in no window, or in a context whose window has closed */
   unowned = new Owner()
 
@@ -138,9 +141,6 @@ class LineCoverageCollector {
 
   /** @type {Map<string, ModuleTable | undefined>} slot tables by module key */
   #tables = new Map()
-
-  /** @type {Array<LineSet | undefined>} the initialiser lines each module copy ran, by id */
-  #initLines = []
 
   /** @type {Array<Owner | undefined>} the owner each module's words were recorded for */
   #owners = []
@@ -387,25 +387,19 @@ class LineCoverageCollector {
       const word = scratch[i]
       const bits = scratch[i + 1]
       const init = initToOwner ? 0 : bits & initMasks[word]
-      if (init !== 0) this.#addInit(id, module, word, init)
+      if (init !== 0) this.#addInit(module, word, init)
       words[word] |= bits & ~init
     }
     return id
   }
 
   /**
-   * @param {number} id
    * @param {ModuleTable} module
    * @param {number} word
    * @param {number} bits
    */
-  #addInit (id, module, word, bits) {
+  #addInit (module, word, bits) {
     const { files, lines } = module
-    let initLines = this.#initLines[id]
-    if (initLines === undefined) {
-      initLines = new LineSet()
-      this.#initLines[id] = initLines
-    }
     const base = word * SLOTS_PER_WORD
     while (bits !== 0) {
       const lowest = bits & -bits
@@ -413,27 +407,27 @@ class LineCoverageCollector {
       const slot = base + 31 - Math.clz32(lowest)
       const file = files[slot]
       if (file === -1) continue
-      initLines.add(file, -lines[slot])
+      this.init.add(file, -lines[slot])
       this.sharedInit.add(file, -lines[slot])
     }
   }
 
   /**
    * Adds the lines recorded for `owner` to `target`, and forgets them. Unless `owner` is the
-   * unowned one, it also gets the initialiser lines of each file of a copy whose other code it ran.
+   * unowned one, it also gets the initialiser lines of each file whose other code it ran.
    *
    * @param {Owner} owner
    * @param {LineSet} target
    */
   takeLines (owner, target) {
-    const withInit = owner !== this.unowned
+    /** @type {Set<number> | undefined} */
+    const filesRun = owner === this.unowned ? undefined : new Set()
     for (const id of owner.modules) {
       const words = owner.words[id]
       const module = this.#modules[id]
       owner.words[id] = undefined
       if (words === undefined || module === undefined) continue
       const { files, lines } = module
-      const initLines = withInit ? this.#initLines[id] : undefined
       let previousFile = -1
       for (let word = 0; word < words.length; word++) {
         let bits = words[word]
@@ -446,12 +440,18 @@ class LineCoverageCollector {
           if (file === -1) continue
           // Initialiser lines are negated; they are in `words` only when `initToOwner` is set.
           target.add(file, Math.abs(lines[slot]))
-          if (initLines !== undefined && file !== previousFile) {
+          if (filesRun !== undefined && file !== previousFile) {
             previousFile = file
-            const initBitmap = initLines.bitmaps.get(file)
-            if (initBitmap !== undefined) target.addBitmap(file, initBitmap)
+            filesRun.add(file)
           }
         }
+      }
+    }
+    if (filesRun !== undefined) {
+      const init = this.init.bitmaps
+      for (const file of filesRun) {
+        const initBitmap = init.get(file)
+        if (initBitmap !== undefined) target.addBitmap(file, initBitmap)
       }
     }
     owner.modules.length = 0
