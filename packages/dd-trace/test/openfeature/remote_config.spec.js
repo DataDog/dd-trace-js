@@ -17,11 +17,11 @@ describe('OpenFeature Remote Config', () => {
   let getOpenfeatureProxy
   let handlers
   let log
-  let getEvaluatorCapabilities
+  let getRemoteConfigCapabilities
   let enable
 
   beforeEach(() => {
-    getEvaluatorCapabilities = sinon.stub().returns([])
+    getRemoteConfigCapabilities = sinon.stub().returns([])
     log = {
       debug: sinon.spy((messageOrFn) => {
         // Simulates a debug-enabled logger, which invokes the lazy callback form.
@@ -32,8 +32,7 @@ describe('OpenFeature Remote Config', () => {
     ;({ enable } = proxyquire('../../src/openfeature/remote_config', {
       '../log': log,
       './evaluator-capabilities': {
-        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
-        getEvaluatorCapabilities,
+        getRemoteConfigCapabilities,
       },
     }))
 
@@ -53,12 +52,13 @@ describe('OpenFeature Remote Config', () => {
     getOpenfeatureProxy = sinon.stub().returns(openfeatureProxy)
   })
 
-  for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
-    it(`gates dependent flag RC capability for ${JSON.stringify(capabilities)}`, () => {
-      getEvaluatorCapabilities.returns(capabilities)
+  for (const capabilities of [[], [1n << 50n]]) {
+    it(`composes evaluator RC capabilities for ${JSON.stringify(capabilities, (_, value) =>
+      typeof value === 'bigint' ? value.toString() : value)}`, () => {
+      getRemoteConfigCapabilities.returns(capabilities)
       enable(rc, getOpenfeatureProxy, true)
       const expected = [[1n << 46n, true]]
-      if (capabilities.includes('dependent-flag-variant-key-v1')) expected.push([1n << 50n, true])
+      if (capabilities.length > 0) expected.push([1n << 50n, true])
       assert.deepStrictEqual(rc.updateCapabilities.args, expected)
     })
   }
@@ -220,11 +220,11 @@ describe('OpenFeature Remote Config', () => {
     })
 
     it('should not advertise capability or register a handler without Remote Config delivery', () => {
-      getEvaluatorCapabilities.returns(['dependent-flag-variant-key-v1'])
+      getRemoteConfigCapabilities.returns([1n << 50n])
 
       enable(rc, getOpenfeatureProxy, false)
 
-      sinon.assert.notCalled(getEvaluatorCapabilities)
+      sinon.assert.notCalled(getRemoteConfigCapabilities)
       sinon.assert.notCalled(rc.updateCapabilities)
       sinon.assert.notCalled(rc.setProductHandler)
     })

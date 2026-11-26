@@ -49,7 +49,7 @@ describe('OpenFeature flag selection', () => {
   let config
   let configurationSource
   let count
-  let getEvaluatorCapabilities
+  let getOriginCapabilities
   let increment
   let log
   let namespace
@@ -74,7 +74,7 @@ describe('OpenFeature flag selection', () => {
     }
     increment = sinon.spy()
     count = sinon.spy(() => ({ inc: increment }))
-    getEvaluatorCapabilities = sinon.stub().returns([])
+    getOriginCapabilities = sinon.stub().returns({ query: undefined, headers: {} })
     namespace = sinon.spy(() => ({ count }))
     AgentlessConfigurationSource = sinon.stub()
 
@@ -86,8 +86,7 @@ describe('OpenFeature flag selection', () => {
       '../log': log,
       './agentless_configuration_source': AgentlessConfigurationSource,
       './evaluator-capabilities': {
-        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
-        getEvaluatorCapabilities,
+        getOriginCapabilities,
       },
       './flag-selection': flagSelection,
     })
@@ -262,7 +261,10 @@ describe('OpenFeature flag selection', () => {
       const base = 'https://flags.example.test/ufc?pad='
       const capability = '&cap_dependent-flags-variant-key=v1'
       const parameter = '&selected_flag_tags=mobile'
-      getEvaluatorCapabilities.returns(['dependent-flag-variant-key-v1'])
+      getOriginCapabilities.returns({
+        query: { 'cap_dependent-flags-variant-key': 'v1' },
+        headers: {},
+      })
 
       config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
         base + 'p'.repeat(8192 - base.length - capability.length - parameter.length)

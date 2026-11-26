@@ -24,6 +24,7 @@ const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuratio
  * @property {boolean} [flagSelectionSent]
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
+ * @property {Record<string, string>} capabilityHeaders
  * @property {string | undefined} apiKey
  * @property {string | undefined} env
  * @property {string | undefined} service
@@ -162,6 +163,7 @@ class AgentlessConfigurationSource {
    */
   #request (signal) {
     const headers = getClientLibraryHeaders()
+    Object.assign(headers, this.#config.capabilityHeaders)
     headers['Accept-Encoding'] = 'gzip'
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     // The CDN uses this header to attribute the usage of this request to the service.

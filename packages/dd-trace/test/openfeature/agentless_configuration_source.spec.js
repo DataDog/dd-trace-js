@@ -146,6 +146,7 @@ describe('AgentlessConfigurationSource', () => {
 
   it('composes dependent flag negotiation with service and flag-selection requests', async () => {
     config.endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
+    config.capabilityHeaders = { 'X-Datadog-Test-Capability': 'v1' }
     config.endpoint.searchParams.set('selected_flag_tags', 'mobile')
     config.flagSelectionSent = true
     config.service = 'checkout'
@@ -167,6 +168,7 @@ describe('AgentlessConfigurationSource', () => {
       assert.strictEqual(request.options.url.searchParams.get('cap_dependent-flags-variant-key'), 'v1')
       assert.strictEqual(request.options.url.searchParams.get('selected_flag_tags'), 'mobile')
       assert.strictEqual(request.options.headers['DD-Service'], 'checkout')
+      assert.strictEqual(request.options.headers['X-Datadog-Test-Capability'], 'v1')
       assert.strictEqual(Object.hasOwn(request.options.headers, 'X-DD-FEATURE-FLAGS-CAPABILITIES'), false)
     }
     assert.strictEqual(requests[1].options.headers['If-None-Match'], '"selected"')

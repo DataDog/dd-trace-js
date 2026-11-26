@@ -3,11 +3,10 @@
 const { normalizeService } = require('../config/normalize-service')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
-const { DEPENDENT_FLAG_VARIANT_KEY_V1, getEvaluatorCapabilities } = require('./evaluator-capabilities')
+const { getOriginCapabilities } = require('./evaluator-capabilities')
 const { warnRemoteConfigFlagSelection, withFlagSelection } = require('./flag-selection')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
-const DEPENDENT_FLAG_CAPABILITY_PARAMETER = 'cap_dependent-flags-variant-key'
 const MAX_POLL_INTERVAL_SECONDS = 60 * 60
 const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration source at %s ' +
   '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)'
@@ -61,7 +60,8 @@ function create (config, applyConfiguration) {
 
   const AgentlessConfigurationSource = require('./agentless_configuration_source')
   const resolvedEndpoint = endpoint(config, baseUrl)
-  const capabilityEndpoint = withEvaluatorCapabilities(resolvedEndpoint)
+  const originCapabilities = getOriginCapabilities()
+  const capabilityEndpoint = withEvaluatorCapabilities(resolvedEndpoint, originCapabilities.query)
   const selectedEndpoint = withFlagSelection(capabilityEndpoint, flagSelection)
   const effectivePollIntervalSeconds = Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS)
   log.debug(
@@ -77,6 +77,7 @@ function create (config, applyConfiguration) {
     flagSelectionSent: selectedEndpoint !== undefined,
     pollIntervalMs: effectivePollIntervalSeconds * 1000,
     requestTimeoutMs: requestTimeoutSeconds * 1000,
+    capabilityHeaders: originCapabilities.headers,
     apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
     env: config.env,
     service: usageService(config.service),
@@ -87,13 +88,14 @@ function create (config, applyConfiguration) {
  * Adds transport parameters supported by the bundled evaluator before flag selection enforces the final URL limit.
  *
  * @param {URL} endpoint
+ * @param {Record<string, string> | undefined} capabilityParameters
  * @returns {URL}
  */
-function withEvaluatorCapabilities (endpoint) {
-  if (!getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)) return endpoint
+function withEvaluatorCapabilities (endpoint, capabilityParameters) {
+  if (capabilityParameters === undefined) return endpoint
 
   const url = new URL(endpoint)
-  url.searchParams.set(DEPENDENT_FLAG_CAPABILITY_PARAMETER, 'v1')
+  for (const [key, value] of Object.entries(capabilityParameters)) url.searchParams.set(key, value)
   return url
 }
 

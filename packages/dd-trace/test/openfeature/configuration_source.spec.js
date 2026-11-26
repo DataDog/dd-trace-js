@@ -11,7 +11,7 @@ require('../setup/core')
 describe('OpenFeature configuration source', () => {
   let config
   let configurationSource
-  let getEvaluatorCapabilities
+  let getOriginCapabilities
   let log
   let AgentlessConfigurationSource
 
@@ -33,14 +33,13 @@ describe('OpenFeature configuration source', () => {
       error: sinon.spy(),
       warn: sinon.spy(),
     }
-    getEvaluatorCapabilities = sinon.stub().returns([])
+    getOriginCapabilities = sinon.stub().returns({ query: undefined, headers: {} })
     AgentlessConfigurationSource = sinon.stub()
     configurationSource = proxyquire('../../src/openfeature/configuration_source', {
       '../log': log,
       './agentless_configuration_source': AgentlessConfigurationSource,
       './evaluator-capabilities': {
-        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
-        getEvaluatorCapabilities,
+        getOriginCapabilities,
       },
     })
   })
@@ -145,20 +144,31 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
-    it(`gates the dependent flag capability parameter for ${JSON.stringify(capabilities)}`, () => {
-      getEvaluatorCapabilities.returns(capabilities)
+  for (const [query, expected] of [
+    [undefined, 'operator'],
+    [{ 'cap_dependent-flags-variant-key': 'v1' }, 'v1'],
+  ]) {
+    it(`composes the origin capability parameters ${JSON.stringify(query)}`, () => {
+      getOriginCapabilities.returns({ query, headers: {} })
       config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
         'https://example.com/custom/ufc?tenant=one&cap_dependent-flags-variant-key=operator'
 
       const endpoint = createSourceConfig().endpoint
-      const expected = capabilities.includes('dependent-flag-variant-key-v1') ? 'v1' : 'operator'
 
       assert.strictEqual(endpoint.searchParams.get('cap_dependent-flags-variant-key'), expected)
       assert.deepStrictEqual(endpoint.searchParams.getAll('cap_dependent-flags-variant-key'), [expected])
       assert.strictEqual(endpoint.searchParams.get('tenant'), 'one')
     })
   }
+
+  it('passes origin capability headers to the poller', () => {
+    getOriginCapabilities.returns({ query: undefined, headers: { 'X-Datadog-Test-Capability': 'v1' } })
+
+    assert.deepStrictEqual(
+      createSourceConfig().capabilityHeaders,
+      { 'X-Datadog-Test-Capability': 'v1' }
+    )
+  })
 
   it('logs only the origin, dropping credentials, path, and query, when starting the agentless source', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
