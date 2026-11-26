@@ -3,6 +3,7 @@
 const getConfig = require('../config')
 const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 const log = require('../log')
+const { encodeMetaStructObject, isEncodableMetaStructValue } = require('./meta-struct')
 const { normalizeSpan, eventTimeNano } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -235,6 +236,7 @@ class AgentEncoder {
   #config
   #debugEncoding
   #formatSpan
+  #encodeString
 
   constructor (writer, limit = SOFT_LIMIT) {
     this.#limit = limit
@@ -244,6 +246,7 @@ class AgentEncoder {
     this._reset()
     this.#config = getConfig()
     this.#debugEncoding = this.#config.DD_TRACE_ENCODING_DEBUG
+    this.#encodeString = this._encodeString.bind(this)
     // Pick the per-span formatter once so the hot loop pays no per-span
     // config check. The native path keeps the raw `span_events` slot for
     // `#encodeSpanEvents`; the legacy path serializes it into meta.events.
@@ -663,24 +666,6 @@ class AgentEncoder {
     return offset + 8
   }
 
-  /**
-   * @param {MsgpackChunk} bytes
-   * @param {string | number | boolean} value
-   */
-  #encodeValue (bytes, value) {
-    switch (typeof value) {
-      case 'string':
-        this._encodeString(bytes, value)
-        break
-      case 'number':
-        bytes.writeFloat(value)
-        break
-      case 'boolean':
-        bytes.writeBoolean(value)
-        break
-    }
-  }
-
   #encodeMetaStruct (bytes, value) {
     if (Array.isArray(value)) {
       bytes.writeMapPrefix(0)
@@ -694,8 +679,7 @@ class AgentEncoder {
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' || typeof entryValue === 'boolean' ||
-        (entryValue !== null && typeof entryValue === 'object')) {
+      if (isEncodableMetaStructValue(entryValue)) {
         this._encodeString(bytes, key)
         this.#encodeObjectAsByteArray(bytes, entryValue)
         count++
@@ -715,7 +699,7 @@ class AgentEncoder {
 
     bytes.reserve(prefixLength)
 
-    this.#encodeObject(bytes, value)
+    encodeMetaStructObject(bytes, value, this.#encodeString)
 
     // The byte length isn't known until the inner object has been encoded.
     const length = bytes.length - offset - prefixLength
@@ -724,62 +708,6 @@ class AgentEncoder {
     bytes.buffer[offset + 2] = length >> 16
     bytes.buffer[offset + 3] = length >> 8
     bytes.buffer[offset + 4] = length
-  }
-
-  #encodeObject (bytes, value, circularReferencesDetector = new Set()) {
-    circularReferencesDetector.add(value)
-    if (Array.isArray(value)) {
-      this.#encodeObjectAsArray(bytes, value, circularReferencesDetector)
-    } else if (value !== null && typeof value === 'object') {
-      this.#encodeObjectAsMap(bytes, value, circularReferencesDetector)
-    } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      this.#encodeValue(bytes, value)
-    }
-  }
-
-  #encodeObjectAsMap (bytes, value, circularReferencesDetector) {
-    const offset = bytes.length
-    bytes.reserve(5)
-    bytes.buffer[offset] = 0xDF
-
-    let count = 0
-    for (const key of Object.keys(value)) {
-      const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' || typeof entryValue === 'boolean' ||
-        (entryValue !== null && typeof entryValue === 'object' &&
-          !circularReferencesDetector.has(entryValue))) {
-        this._encodeString(bytes, key)
-        this.#encodeObject(bytes, entryValue, circularReferencesDetector)
-        count++
-      }
-    }
-
-    const target = bytes.buffer
-    target[offset + 1] = count >>> 24
-    target[offset + 2] = count >>> 16
-    target[offset + 3] = count >>> 8
-    target[offset + 4] = count
-  }
-
-  #encodeObjectAsArray (bytes, value, circularReferencesDetector) {
-    const offset = bytes.length
-    bytes.reserve(5)
-    bytes.buffer[offset] = 0xDD
-
-    let count = 0
-    for (const item of value) {
-      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' ||
-        (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item))) {
-        this.#encodeObject(bytes, item, circularReferencesDetector)
-        count++
-      }
-    }
-
-    const target = bytes.buffer
-    target[offset + 1] = count >>> 24
-    target[offset + 2] = count >>> 16
-    target[offset + 3] = count >>> 8
-    target[offset + 4] = count
   }
 
   /**

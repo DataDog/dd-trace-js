@@ -18,6 +18,7 @@ const traceSampledCh = channel('dd-trace:trace:sampled')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+let partialFlushOnFinishKey
 let otelSampling
 
 /** @param {import('./opentracing/span_context')} context */
@@ -90,7 +91,13 @@ class SpanProcessor {
     return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT
   }
 
-  process (span) {
+  /** @param {import('./opentracing/span')} span */
+  static requestPartialFlushOnFinish (span) {
+    partialFlushOnFinishKey ??= Symbol('partialFlushOnFinish')
+    span.context()[partialFlushOnFinishKey] = true
+  }
+
+  process (span, flushPartial = false) {
     const spanContext = span.context()
     const active = []
     const formatted = []
@@ -103,7 +110,7 @@ class SpanProcessor {
       this._erase(trace, active)
       return
     }
-    if (started.length === finished.length || finished.length >= flushMinSpans) {
+    if (started.length === finished.length || finished.length >= flushMinSpans || flushPartial) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
@@ -153,6 +160,12 @@ class SpanProcessor {
       }
 
       this._erase(trace, active)
+    } else if (partialFlushOnFinishKey !== undefined && spanContext[partialFlushOnFinishKey] === true) {
+      queueMicrotask(() => {
+        if (trace.finished === finished) {
+          this.process(span, true)
+        }
+      })
     }
 
     if (this._killAll) {

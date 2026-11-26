@@ -9,13 +9,11 @@ const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
 const telemetryMetrics = require('../telemetry/metrics')
-const { computePathwayHash, statsPointKey } = require('./pathway')
+const { computePathwayHash, ENTRY_PARENT_HASH, statsPointKey } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
-
-const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 // Parent hashes come from inbound headers, so without a bound a caller can grow a bucket without limit.
 const MAX_CHECKPOINTS_PER_BUCKET = 2000

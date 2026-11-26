@@ -19,6 +19,7 @@ const {
 } = require('../../../plugins/util/test')
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
+const encodeTrace = require('../../encode/trace-object-encoder')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
@@ -86,9 +87,7 @@ function getInterprocessTelemetryCode () {
 }
 
 /**
- * Lightweight exporter whose writers only do simple JSON serialization
- * of trace, coverage and logs payloads, which they send to the test framework's main process.
- * Currently used by Jest, Cucumber and Mocha workers.
+ * Sends trace, coverage, log and telemetry payloads from workers to the test framework's main process.
  */
 class TestWorkerCiVisibilityExporter {
   constructor () {
@@ -97,7 +96,8 @@ class TestWorkerCiVisibilityExporter {
     const interprocessLogsCode = getInterprocessLogsCode()
     const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
-    this._writer = new Writer(interprocessTraceCode)
+    const includeAgentFields = !getConfig().testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
+    this._writer = new Writer(interprocessTraceCode, encodeTrace.bind(null, includeAgentFields))
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
     if (interprocessTelemetryCode) {
@@ -112,12 +112,12 @@ class TestWorkerCiVisibilityExporter {
     this._writer.append(payload)
   }
 
-  exportCoverage (formattedCoverage) {
-    this._coverageWriter.append(formattedCoverage)
+  exportCoverage ({ sessionId, suiteId, files }) {
+    this._coverageWriter.append({ sessionId: sessionId.toString(), suiteId: suiteId?.toString(), files })
   }
 
-  exportDiLogs (testEnvironmentMetadata, logMessage) {
-    this._logsWriter.append({ testEnvironmentMetadata, logMessage })
+  exportDiLogs (_testEnvironmentMetadata, logMessage) {
+    this._logsWriter.append(logMessage)
   }
 
   /**

@@ -1546,6 +1546,33 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     ])
   })
 
+  parallelIt('round-trips trace, span, and parent IDs from a parallel worker', async () => {
+    childProcess = exec(
+      'node ./node_modules/mocha/bin/mocha --parallel --jobs 2' +
+      ' ./ci-visibility/mocha-plugin-tests/mocha-worker-ids.js ./ci-visibility/mocha-plugin-tests/passing.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+          DD_INJECT_FORCE: 'true',
+        },
+      }
+    )
+    await receiver.gatherPayloadsUntilChildExit(childProcess, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+      const spans = payloads.flatMap(({ payload }) => payload.events)
+        .filter(({ type, content }) => type === 'span' && content.name === 'mocha.worker.ids')
+      assert.strictEqual(spans.length, 1)
+      const { content: span } = spans[0]
+      assert.strictEqual(span.meta['ipc.transport'], 'fork')
+      assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+      assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+      assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+      assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+    })
+    assert.strictEqual(childProcess.exitCode, 0)
+  })
+
   parallelIt('forwards telemetry from parallel workers', async () => {
     receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 

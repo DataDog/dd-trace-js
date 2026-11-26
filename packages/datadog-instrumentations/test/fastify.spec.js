@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 // Channels the addHook wrapper feeds. The unit tests subscribe to each in turn
 // to exercise the wrapper's slow paths without spinning up a real fastify server.
+const handleChannel = dc.channel('apm:fastify:request:handle')
 const errorChannel = dc.channel('apm:fastify:middleware:error')
 const cookieParserReadCh = dc.channel('datadog:fastify-cookie:read:finish')
 const callbackFinishCh = dc.channel('datadog:fastify:callback:execute')
@@ -60,6 +61,30 @@ describe('fastify instrumentation (unit)', () => {
 
     return { app: fakeApp, registered, internalByName }
   }
+
+  it('forwards the request and public route configuration', () => {
+    const config = { example: true }
+    const { internalByName } = buildWrappedAddHook()
+    const request = { raw: {}, params: { id: '42' }, routeOptions: { url: '/items/:id?', config } }
+    const reply = { raw: {} }
+    const done = sinon.spy()
+    const receive = sinon.spy()
+    handleChannel.subscribe(receive)
+    try {
+      internalByName('onRequest')[0](request, reply, done)
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(receive)
+      assert.deepEqual(receive.firstCall.args[0], {
+        req: request.raw,
+        res: reply.raw,
+        request,
+        routeOptions: request.routeOptions,
+        routeConfig: config,
+      })
+    } finally {
+      handleChannel.unsubscribe(receive)
+    }
+  })
 
   describe('addHook fast path (no channel subscribers)', () => {
     it('forwards the user hook with the original done callback', () => {

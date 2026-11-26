@@ -142,6 +142,34 @@ describe('aiguard/messages/vercel-ai', () => {
       }])
     })
 
+    for (const [name, data, expected] of [
+      ['URL', { type: 'url', url: new URL('https://example.com/cat.png') }, 'https://example.com/cat.png'],
+      ['base64', { type: 'data', data: 'aGVsbG8=' }, 'data:image/png;base64,aGVsbG8='],
+      ['bytes', { type: 'data', data: new Uint8Array([1, 2, 3]) }, 'data:image/png;base64,AQID'],
+    ]) {
+      it(`converts LanguageModelV4 ${name} image data`, () => {
+        const prompt = [{ role: 'user', content: [{ type: 'file', mediaType: 'image/png', data }] }]
+        assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+          role: 'user', content: [{ type: 'image_url', image_url: { url: expected } }],
+        }])
+      })
+    }
+
+    it('preserves a file URL with the generic image media type', () => {
+      const prompt = [{
+        role: 'user',
+        content: [{
+          type: 'file',
+          mediaType: 'image',
+          data: { type: 'url', url: new URL('https://example.com/cat.png') },
+        }],
+      }]
+
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.com/cat.png' } }],
+      }])
+    })
+
     it('should ignore file parts with non-image media types', () => {
       const prompt = [{
         role: 'user',
@@ -194,18 +222,18 @@ describe('aiguard/messages/vercel-ai', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [])
     })
 
-    it('should convert assistant messages with tool calls', () => {
+    it('should preserve assistant text alongside tool calls', () => {
       const prompt = [{
         role: 'assistant',
-        content: [{
-          type: 'tool-call',
-          toolCallId: 'call_1',
-          toolName: 'search',
-          args: { query: 'test' },
-        }],
+        content: [
+          { type: 'text', text: 'I can help' },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'search', args: { query: 'test' } },
+          { type: 'text', text: 'with that' },
+        ],
       }]
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
         role: 'assistant',
+        content: 'I can help\nwith that',
         tool_calls: [{
           id: 'call_1',
           function: {
@@ -498,14 +526,17 @@ describe('aiguard/messages/vercel-ai', () => {
       ])
     })
 
-    it('should prefer tool calls over text when both present', () => {
+    it('should preserve text alongside tool calls', () => {
       const content = [
         { type: 'text', text: 'Some text' },
         { type: 'tool-call', toolCallId: 'call_1', toolName: 'action', args: {} },
       ]
       const result = buildOutputMessages(input, content)
-      assert.strictEqual(result[1].role, 'assistant')
-      assert.ok(result[1].tool_calls)
+      assert.deepStrictEqual(result[1], {
+        role: 'assistant',
+        content: 'Some text',
+        tool_calls: [{ id: 'call_1', function: { name: 'action', arguments: '{}' } }],
+      })
     })
 
     it('should return empty array for empty content', () => {
@@ -539,10 +570,10 @@ describe('aiguard/messages/vercel-ai', () => {
       assert.deepStrictEqual(getStreamedContent([{ type: 'text-delta', id: '1' }]), [])
     })
 
-    it('prefers tool calls over accumulated text', () => {
+    it('preserves text alongside streamed tool calls', () => {
       const toolCall = { type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: {} }
-      const chunks = [{ type: 'text-delta', delta: 'ignored' }, toolCall]
-      assert.deepStrictEqual(getStreamedContent(chunks), [toolCall])
+      const chunks = [{ type: 'text-delta', delta: 'Hello' }, toolCall, { type: 'text-delta', delta: ' there' }]
+      assert.deepStrictEqual(getStreamedContent(chunks), [{ type: 'text', text: 'Hello there' }, toolCall])
     })
 
     it('returns nothing for chunks with no evaluable content', () => {

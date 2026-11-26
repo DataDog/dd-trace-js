@@ -162,6 +162,13 @@ describe('util', () => {
         assert.deepStrictEqual(getFunctionArguments((foo, bar) => {}, ['foo', 'bar']), { foo: 'foo', bar: 'bar' })
       })
 
+      it('should capture names containing supplementary Unicode characters', () => {
+        assert.deepStrictEqual(
+          getFunctionArguments((𐐀, second) => {}, ['first', 'second']),
+          { 𐐀: 'first', second: 'second' }
+        )
+      })
+
       it('should ignore arguments not passed in', () => {
         assert.deepStrictEqual(getFunctionArguments((foo, bar, baz) => {}, ['foo', 'bar']), { foo: 'foo', bar: 'bar' })
       })

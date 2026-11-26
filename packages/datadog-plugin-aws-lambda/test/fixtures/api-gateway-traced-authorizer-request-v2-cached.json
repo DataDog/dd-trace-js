@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /hello",
+  "rawPath": "/hello",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "*/*",
+    "accept-encoding": "gzip, deflate, br",
+    "authorization": "secretT0k3n",
+    "authorizationtoken": "secretT0k3n",
+    "cache-control": "no-cache",
+    "content-length": "0",
+    "host": "l9flvsey83.execute-api.eu-west-1.amazonaws.com",
+    "postman-token": "e0a783f5-8f72-427f-99bb-81d28ac3b37b",
+    "user-agent": "PostmanRuntime/7.29.2",
+    "userid": "27",
+    "x-amzn-trace-id": "Root=1-6346fdb8-74147ee52ffc4c685787d44c",
+    "x-forwarded-for": "24.193.182.233",
+    "x-forwarded-port": "443",
+    "x-forwarded-proto": "https"
+  },
+  "requestContext": {
+    "accountId": "601427279990",
+    "apiId": "l9flvsey83",
+    "authorizer": {
+      "lambda": {
+        "_datadog": "eyJ4LWRhdGFkb2ctdHJhY2UtaWQiOiIzNzI2NzU1MTU4Mjk1OTIxMDQiLCJ4LWRhdGFkb2ctcGFyZW50LWlkIjoiMzcyNjc1NTE1ODI5NTkyMTA0IiwieC1kYXRhZG9nLXNhbXBsaW5nLXByaW9yaXR5IjoiMSIsIngtZGF0YWRvZy1wYXJlbnQtc3Bhbi1maW5pc2gtdGltZSI6MTY2NTU5Njc3MTgxMiwieC1kYXRhZG9nLWF1dGhvcml6aW5nLXJlcXVlc3RpZCI6Ilo1eUhmaDVFR2pRRUpCZz0ifQ==",
+        "scope": "this is just a string"
+      }
+    },
+    "domainName": "l9flvsey83.execute-api.eu-west-1.amazonaws.com",
+    "domainPrefix": "l9flvsey83",
+    "http": {
+      "method": "GET",
+      "path": "/hello",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "24.193.182.233",
+      "userAgent": "PostmanRuntime/7.29.2"
+    },
+    "requestId": "Z5yU6jHVmjQEJ4Q=",
+    "routeKey": "GET /hello",
+    "stage": "$default",
+    "time": "12/Oct/2022:17:47:36 +0000",
+    "timeEpoch": 1665596856876
+  },
+  "isBase64Encoded": false
+}
