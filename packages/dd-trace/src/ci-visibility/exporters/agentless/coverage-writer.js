@@ -1,4 +1,6 @@
 'use strict'
+const zlib = require('node:zlib')
+
 const getConfig = require('../../../config')
 const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../../evp_proxy/path')
@@ -23,12 +25,13 @@ const TestOptimizationRequestTracker = require('./request-tracker')
 class Writer extends BaseWriter {
   #requestTracker
 
-  constructor ({ url, evpProxyPrefix = '' }) {
+  constructor ({ url, evpProxyPrefix = '', isGzipCompatible = false }) {
     super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
     this._evpProxyPrefix = evpProxyPrefix
+    this._isGzipCompatible = isGzipCompatible
   }
 
   /**
@@ -69,7 +72,9 @@ class Writer extends BaseWriter {
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'code_coverage' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'code_coverage' }, form.size())
 
-    this.#requestTracker.send(request, form, options, (err, res, statusCode) => {
+    if (this._isGzipCompatible) options.headers['Content-Encoding'] = 'gzip'
+    const send = this._isGzipCompatible ? requestGzipped : request
+    this.#requestTracker.send(send, form, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'code_coverage' },
@@ -92,6 +97,26 @@ class Writer extends BaseWriter {
       done()
     })
   }
+}
+
+/**
+ * Sends a coverage form gzipped. Coverage repeats the same file names test after test and shrinks
+ * about tenfold, and a short test run waits at exit for its whole coverage upload.
+ *
+ * @param {import('node:stream').Readable} form
+ * @param {object} options
+ * @param {(error: Error|null, response?: string, statusCode?: number) => void} callback
+ */
+function requestGzipped (form, options, callback) {
+  const chunks = []
+  form.on('data', chunk => { chunks.push(chunk) })
+  form.once('error', callback)
+  form.once('end', () => {
+    zlib.gzip(Buffer.concat(chunks), { level: zlib.constants.Z_BEST_SPEED }, (error, body) => {
+      if (error) return callback(error)
+      request(body, options, callback)
+    })
+  })
 }
 
 module.exports = Writer

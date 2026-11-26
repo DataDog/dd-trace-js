@@ -1,10 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const zlib = require('node:zlib')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../../../../dd-trace/test/setup/core')
+const FormData = require('../../../../src/exporters/common/form-data')
 const id = require('../../../../src/id')
 
 let CoverageWriter
@@ -101,6 +105,36 @@ describe('CI Visibility Coverage Writer', () => {
           method: 'POST',
           agent,
         })
+        assert.equal(request.firstCall.args[1].headers['Content-Encoding'], undefined)
+        done()
+      })
+    })
+
+    it('should send the form gzipped when the intake accepts gzip', (done) => {
+      const form = new FormData()
+      form.append('coverage1', Buffer.from('coverage'), {
+        filename: 'coverage1.msgpack',
+        contentType: 'application/msgpack',
+      })
+      const boundary = form.getHeaders()['Content-Type'].split('boundary=')[1]
+      encoder.count.returns(1)
+      encoder.makePayload.returns(form)
+      coverageWriter = new CoverageWriter({ url, isGzipCompatible: true })
+
+      coverageWriter.flush((error) => {
+        assert.equal(error, undefined)
+        const [body, options] = request.firstCall.args
+        assert.equal(options.headers['Content-Encoding'], 'gzip')
+        assert.equal(options.path, '/api/v2/citestcov')
+        assert.equal(zlib.gunzipSync(body).toString(), [
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"',
+          'Content-Type: application/msgpack',
+          '',
+          'coverage',
+          `--${boundary}--`,
+          '',
+        ].join('\r\n'))
         done()
       })
     })
