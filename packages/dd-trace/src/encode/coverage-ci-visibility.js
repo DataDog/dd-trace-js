@@ -71,6 +71,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     let keysLength = 2
     if (coverage.suiteId) keysLength++
     if (coverage.testId) keysLength++
+    if (coverage.shared) keysLength++
 
     bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'test_session_id')
@@ -82,6 +83,11 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     if (coverage.testId) {
       this._encodeString(bytes, 'span_id')
       this._encodeId(bytes, coverage.testId)
+    }
+    // Which part of the process-wide record that belongs to no test: 'init', 'suiteSetup' or 'unowned'.
+    if (coverage.shared) {
+      this._encodeString(bytes, 'shared')
+      this._encodeString(bytes, coverage.shared)
     }
     this._encodeString(bytes, 'files')
     bytes.writeArrayPrefix(coverage.files)
