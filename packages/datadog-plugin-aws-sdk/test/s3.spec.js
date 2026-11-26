@@ -164,7 +164,7 @@ describe('Plugin', () => {
                 ],
               },
             }
-            const tracePromise = agent.assertFirstTraceSpan(span => {
+            await agent.assertFirstTraceSpan(span => {
               const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
               assert.strictEqual(links.length, 1)
@@ -174,12 +174,10 @@ describe('Plugin', () => {
                 'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
                 'link.kind': 'span-pointer',
               })
-            }, { spanResourceMatch: /^completeMultipartUpload / })
-
-            await Promise.all([
-              tracePromise,
-              callViaCallback(s3, 'completeMultipartUpload', completeParams),
-            ])
+            }, {
+              spanResourceMatch: /^completeMultipartUpload /,
+              operation: () => callViaCallback(s3, 'completeMultipartUpload', completeParams),
+            })
           })
         })
 
