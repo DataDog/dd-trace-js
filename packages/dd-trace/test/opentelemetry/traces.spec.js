@@ -15,6 +15,7 @@ require('../setup/core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
+const { AgentEncoder } = require('../../src/encode/0.4')
 const id = require('../../src/id')
 const log = require('../../src/log')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
@@ -406,6 +407,94 @@ describe('OpenTelemetry Traces', () => {
         assert.equal(typeof attr?.value.bytesValue, 'string', key)
         assert.deepStrictEqual(msgpack.decode(Buffer.from(attr.value.bytesValue, 'base64')), expected)
       }
+    })
+
+    it('matches the v0.4 agent encoder for meta_struct edge cases', () => {
+      const circular = { keep: 'ok' }
+      circular.self = circular
+
+      const metaStruct = {
+        '_dd.stack': {
+          exploit: [{
+            id: 'stack-1',
+            language: 'nodejs',
+            frames: [{
+              id: 0,
+              file: 'app.js',
+              line: 42,
+              function: null,
+              class_name: undefined,
+              isNative: false,
+            }],
+          }],
+        },
+        'http.request.body': {
+          maxInt64Plus: 2 ** 63,
+          uint64Overflow: 2 ** 64,
+          hugePositive: 1e20,
+          minInt64Minus: -(2 ** 63) - 2048,
+          hugeNegative: -1e20,
+          notANumber: Number.NaN,
+          items: [1, null, undefined, 'two', 1, 'two'],
+          circular,
+        },
+        droppedNull: null,
+        droppedUndefined: undefined,
+      }
+
+      const span = createMockSpan({ meta_struct: metaStruct })
+
+      const agentEncoder = new AgentEncoder({ flush: () => {} })
+      agentEncoder.encode([span])
+      const agentSpan = msgpack.decode(agentEncoder.makePayload())[0][0]
+
+      const jsonTransformer = new OtlpTraceTransformer({}, 'http/json')
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const jsonAttrs = decodePayload(jsonTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+      const protoAttrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      for (const attrs of [jsonAttrs, protoAttrs]) {
+        assert.strictEqual(attrs.find(a => a.key === 'droppedNull'), undefined)
+        assert.strictEqual(attrs.find(a => a.key === 'droppedUndefined'), undefined)
+      }
+
+      for (const key of ['_dd.stack', 'http.request.body']) {
+        const expectedBytes = Buffer.from(agentSpan.meta_struct[key])
+        const jsonBytes = Buffer.from(jsonAttrs.find(a => a.key === key).value.bytesValue, 'base64')
+        const protoBytes = Buffer.from(protoAttrs.find(a => a.key === key).value.bytesValue)
+
+        assert.deepStrictEqual(jsonBytes, expectedBytes, `http/json byte parity for ${key}`)
+        assert.deepStrictEqual(protoBytes, expectedBytes, `http/protobuf byte parity for ${key}`)
+      }
+
+      const decodedBody = msgpack.decode(protoAttrs.find(a => a.key === 'http.request.body').value.bytesValue)
+      assert.strictEqual(decodedBody.maxInt64Plus, 2 ** 63)
+      assert.strictEqual(decodedBody.uint64Overflow, 2 ** 64)
+      assert.strictEqual(decodedBody.hugePositive, 1e20)
+      assert.strictEqual(decodedBody.minInt64Minus, -(2 ** 63) - 2048)
+      assert.strictEqual(decodedBody.hugeNegative, -1e20)
+      assert.ok(Number.isNaN(decodedBody.notANumber))
+      assert.deepStrictEqual(decodedBody.items, [1, 'two', 1, 'two'])
+      assert.deepStrictEqual(decodedBody.circular, { keep: 'ok' })
+
+      const decodedStack = msgpack.decode(protoAttrs.find(a => a.key === '_dd.stack').value.bytesValue)
+      assert.deepStrictEqual(decodedStack.exploit[0].frames[0], {
+        id: 0,
+        file: 'app.js',
+        line: 42,
+        isNative: false,
+      })
+    })
+
+    it('ignores array meta_struct like the v0.4 agent encoder', () => {
+      const span = createMockSpan({ meta_struct: ['ignored'] })
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const protoAttrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      assert.strictEqual(protoAttrs.find(a => a.key === '0'), undefined)
     })
 
     it('excludes _dd.span_links and span.kind from attributes', () => {

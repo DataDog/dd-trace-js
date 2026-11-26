@@ -7,7 +7,7 @@ const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
-const { encode: encodeMsgpack } = require('../../msgpack')
+const { encodeMetaStructValue, isEncodableMetaStructValue } = require('../../encode/meta-struct')
 const { eventTimeNano } = require('../../encode/tags-processors')
 
 const { protoSpanKind, protoTraceService } = getProtobufTypes()
@@ -260,10 +260,11 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    if (span.meta_struct) {
+    if (span.meta_struct && !Array.isArray(span.meta_struct)) {
       for (const [key, value] of Object.entries(span.meta_struct)) {
+        if (!isEncodableMetaStructValue(value)) continue
         // Protobuf holds one buffer per attribute until the batch is serialized; start small.
-        const bytes = encodeMsgpack(value, 1024)
+        const bytes = encodeMetaStructValue(value, 1024)
         attributes.push({ key, value: { bytesValue: this.#isJson ? bytes.toString('base64') : bytes } })
       }
     }
