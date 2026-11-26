@@ -40,7 +40,7 @@ const NO_MERGEABLE_KEYS = []
 /** @type {NativeHeaders} */
 const EMPTY_NATIVE_HEADERS = []
 
-// we need to store the offset per partition per topic for the consumer to track offsets for DSM
+// we need to store the offset per partition per topic per cluster for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
 // librdkafka: the client is not connected (yet), so the lookup may succeed later.
@@ -178,6 +178,8 @@ function instrumentBaseModule (module) {
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
+                  // The lookup started on `ready` may have settled since `consume()` was called.
+                  ctx.clusterId = clusterIds.get(consumer) ?? undefined
                   if (messages && messages.length > 0) {
                     for (const message of messages) {
                       ctx.topic = message?.topic
@@ -494,7 +496,8 @@ function getGroupId (config) {
 }
 
 function updateLatestOffset (topic, partition, offset, groupId, clusterId) {
-  const key = `${topic}:${partition}`
+  // Consumers of different clusters may read topics and partitions of the same name.
+  const key = `${clusterId ?? ''}:${topic}:${partition}`
   latestConsumerOffsets.set(key, {
     topic,
     partition,

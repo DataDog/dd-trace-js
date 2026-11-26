@@ -13,6 +13,7 @@ const HOOK = globalThis[Symbol.for('_ddtrace_instrumentations')]['@confluentinc/
 const producerStart = dc.channel('apm:confluentinc-kafka-javascript:produce:start')
 const consumerStart = dc.channel('apm:confluentinc-kafka-javascript:consume:start')
 const batchConsumerStart = dc.channel('apm:confluentinc-kafka-javascript:consume-batch:start')
+const consumerCommit = dc.channel('apm:confluentinc-kafka-javascript:consume:commit')
 // librdkafka error codes the KafkaJS-compatible API reports on `error.code`.
 const ERR__STATE = -172
 const ERR__TIMED_OUT = -185
@@ -641,6 +642,12 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
 
           isConnectedValue = false
           globalConfig = { 'bootstrap.servers': 'kafka-1:9092,kafka-2:9092', 'group.id': 'group' }
+          topic = 'topic'
+          offset = 1
+          /** When set, `consume()` delivers the messages only once `deliverPending()` is called. */
+          deferDelivery = false
+          /** @type {Array<() => void>} */
+          pendingDeliveries = []
 
           isConnected () {
             return this.isConnectedValue
@@ -651,8 +658,20 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
            * @param {Function} callback
            */
           consume (numMessages, callback) {
-            callback(null, [{ topic: 'topic', partition: 0, offset: 1, value: Buffer.from('message') }])
+            const message = { topic: this.topic, partition: 0, offset: this.offset, value: Buffer.from('message') }
+            const deliver = () => callback(null, [message])
+            if (this.deferDelivery) {
+              this.pendingDeliveries.push(deliver)
+            } else {
+              deliver()
+            }
           }
+
+          deliverPending () {
+            for (const deliver of this.pendingDeliveries.splice(0)) deliver()
+          }
+
+          commit () {}
         }
         if (clusterId) KafkaConsumer.prototype.clusterId = clusterId
 
@@ -677,6 +696,52 @@ describe('packages/datadog-instrumentations/src/confluentinc-kafka-javascript.js
           { bootstrapServers: 'kafka-1:9092,kafka-2:9092', clusterId: undefined },
           { bootstrapServers: 'kafka-1:9092,kafka-2:9092', clusterId: 'cluster-1' },
         ])
+      })
+
+      it('reports the cluster id of messages delivered after the lookup settled', () => {
+        const clusterIds = recordClusterIds(consumerStart)
+        /** @type {Function} */
+        let answerLookup = () => {}
+        const consumer = stageNativeConsumer((timeout, callback) => { answerLookup = callback })
+        consumer.deferDelivery = true
+
+        consumer.consume(1, () => {})
+        consumer.isConnectedValue = true
+        consumer.emit('ready')
+        answerLookup(null, 'cluster-1')
+        consumer.deliverPending()
+
+        assert.deepStrictEqual(clusterIds, ['cluster-1'])
+      })
+
+      it('commits the offsets of each cluster for the same topic and partition', () => {
+        recordClusterIds(consumerStart)
+        const commits = []
+        const subscriber = (offsets) => commits.push(offsets)
+        clusterIdSubscribers.push({ channel: consumerCommit, subscriber })
+        consumerCommit.subscribe(subscriber)
+
+        const consumers = ['cluster-a', 'cluster-b'].map((clusterId, index) => {
+          const consumer = stageNativeConsumer((timeout, callback) => callback(null, clusterId))
+          consumer.topic = 'shared-topic'
+          consumer.offset = 10 + index
+          consumer.isConnectedValue = true
+          consumer.emit('ready')
+          return consumer
+        })
+        // Drop the offsets of earlier tests.
+        consumers[0].commit()
+        commits.length = 0
+
+        for (const consumer of consumers) consumer.consume(1, () => {})
+        consumers[0].commit()
+
+        assert.deepStrictEqual(commits.map((offsets) => offsets.map(({ topic, partition, offset, clusterId }) => ({
+          topic, partition, offset, clusterId,
+        }))), [[
+          { topic: 'shared-topic', partition: 0, offset: 10, clusterId: 'cluster-a' },
+          { topic: 'shared-topic', partition: 0, offset: 11, clusterId: 'cluster-b' },
+        ]])
       })
     })
   })
