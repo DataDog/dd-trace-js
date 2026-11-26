@@ -645,6 +645,11 @@ function toFiles (lines) {
 
 // Debugging aid: _DD_LINE_COVERAGE_DUMP=<file> writes every line the process covered at exit.
 const dumpPath = getEnvironmentVariable('_DD_LINE_COVERAGE_DUMP')
+// Experiment only: _DD_LINE_COVERAGE_ABLATE=<parts> turns parts of line coverage off, to measure what
+// each costs. transform-discard: instrument every module, then run the module as it was.
+// no-original: tell initialiser code by the compiled code alone. no-collect: instrumented code records
+// lines that nobody reads. no-export: the plugins export no coverage.
+const ablations = new Set((getEnvironmentVariable('_DD_LINE_COVERAGE_ABLATE') ?? '').split(','))
 const testUnion = new LineSet()
 
 function writeDump () {
@@ -980,6 +985,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
       const cached = readCachedCode(cacheDirectory, key)
       if (cached !== undefined) {
         stats.cacheHits++
+        if (ablations.has('transform-discard')) return code
         return cached === '' ? code : cached
       }
     }
@@ -997,7 +1003,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
       }
       // Only oxc-parser reads TypeScript.
       const parseWithOxc = getOxcParse()
-      if (parseWithOxc !== null) {
+      if (parseWithOxc !== null && !ablations.has('no-original')) {
         isSourceInitialiser = createSourceInitialiserCheck(mapper, map.sourcesContent, parseWithOxc)
       }
     }
@@ -1010,7 +1016,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     })
     // The salt is dropped when the parser it names fails to load.
     if (salt !== null && cacheSalt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
-    if (!result) return code
+    if (!result || ablations.has('transform-discard')) return code
     stats.files++
     stats.bytesIn += code.length
     stats.bytesOut += result.code.length
@@ -1070,6 +1076,8 @@ function enableWorker () {
 function startCollecting (root, patchModuleLoader) {
   enabled = true
   const collector = getCollector()
+  // Instrumented code then never touches again, and its lines are never read.
+  if (ablations.has('no-collect')) collector.touch = () => 1
   collector.resolveOwner = resolveOwner
   showOriginalFunctionSource(globalThis)
   scheduleResets(collector)

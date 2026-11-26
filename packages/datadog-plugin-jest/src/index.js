@@ -60,6 +60,10 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const log = require('../../dd-trace/src/log')
 
+// Experiment only: see _DD_LINE_COVERAGE_ABLATE in dd-trace's line-coverage module.
+const isLineCoverageExportAblated =
+  (getEnvironmentVariable('_DD_LINE_COVERAGE_ABLATE') ?? '').split(',').includes('no-export')
+
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
@@ -115,7 +119,7 @@ class JestPlugin extends CiPlugin {
     this.#lineCoverageTests.delete(span)
     this.#openLineCoverageTests.delete(test)
     const files = this.#lineCoverage.finishTest(test.coverage, enclosingDescribeBlocks(test.describeBlock))
-    if (files.length === 0) return
+    if (files.length === 0 || isLineCoverageExportAblated) return
     const context = span.context()
     this.tracer._exporter.exportCoverage({
       sessionId: context._traceId,
@@ -138,7 +142,9 @@ class JestPlugin extends CiPlugin {
     this.#openLineCoverageTests.clear()
     const sessionId = testSuiteSpan.context()._traceId
     for (const { shared, files } of this.#lineCoverage.takeShared()) {
-      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+      if (files.length > 0 && !isLineCoverageExportAblated) {
+        this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+      }
     }
   }
 
