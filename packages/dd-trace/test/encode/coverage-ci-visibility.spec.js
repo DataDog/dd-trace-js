@@ -192,4 +192,22 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file4.js')
     assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'gA==')
   })
+
+  it('should encode a bitmap a test worker sent as base64 as its bytes', () => {
+    encoder.encode({
+      sessionId: id('9'),
+      suiteId: id('10'),
+      testId: id('11'),
+      files: [{ filename: 'file5.js', bitmap: 'AAAAQAFg' }],
+    })
+
+    const form = encoder.makePayload()
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+
+    assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file5.js')
+    assert.deepStrictEqual(
+      Buffer.from(decodedCoverages.coverages[0].files[0].bitmap),
+      Buffer.from([0, 0, 0, 0x40, 0x01, 0x60])
+    )
+  })
 })
