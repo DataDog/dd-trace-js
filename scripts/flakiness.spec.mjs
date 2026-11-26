@@ -48,7 +48,7 @@ describe('flakiness report', () => {
     sinon.restore()
   })
 
-  it('preserves historical failures and excludes allowed failures in the successful attempt', async () => {
+  it('preserves historical failures when another attempt starts during collection', async () => {
     const runs = mockRuns()
     const requests = []
     const checks = nock('https://api.github.com')
@@ -56,23 +56,16 @@ describe('flakiness report', () => {
       .twice()
       .reply(200, (uri, body) => {
         const { query, variables } = body
-        requests.push(variables)
+        requests.push(query)
         assert.doesNotMatch(query, /\bsteps\b/)
         assert.strictEqual(variables.id, 'rerun')
         assert.deepStrictEqual(variables.filter, { checkType: 'ALL', conclusions: ['FAILURE'] })
         const secondPage = variables.after === 'next'
-        const nodes = [{
-          databaseId: secondPage ? 2 : 1,
-          name: secondPage ? 'http (26)' : 'http (24)',
-          detailsUrl: `https://example.com/jobs/${secondPage ? 2 : 1}`,
-        }]
-        if (secondPage) {
-          nodes.push({ databaseId: 3, name: 'allowed failure', detailsUrl: 'https://example.com/jobs/3' })
-        }
+        const nodes = secondPage ? [{ databaseId: 2 }, { databaseId: 3 }, { databaseId: 4 }] : [{ databaseId: 1 }]
         return {
           data: {
             node: {
-              runAttempt: 3,
+              runAttempt: secondPage ? 4 : 3,
               checkSuite: {
                 checkRuns: {
                   nodes,
@@ -84,9 +77,16 @@ describe('flakiness report', () => {
         }
       })
     const attempts = nock('https://api.github.com')
-      .get('/repos/DataDog/dd-trace-js/actions/jobs/1').reply(200, { run_attempt: 1 })
-      .get('/repos/DataDog/dd-trace-js/actions/jobs/2').reply(200, { run_attempt: 2 })
-      .get('/repos/DataDog/dd-trace-js/actions/jobs/3').reply(200, { run_attempt: 3 })
+    const jobs = ['http (24)', 'http (26)', 'allowed failure', 'later failure']
+    for (const [index, name] of jobs.entries()) {
+      const id = index + 1
+      attempts.get(`/repos/DataDog/dd-trace-js/actions/jobs/${id}`).reply(200, {
+        run_attempt: id,
+        workflow_name: id === 1 ? null : 'APM Integrations',
+        name,
+        html_url: `https://example.com/jobs/${id}`,
+      })
+    }
 
     await import('./flakiness.mjs?success')
 
@@ -94,11 +94,13 @@ describe('flakiness report', () => {
     checks.done()
     attempts.done()
     assert.strictEqual(requests.length, 2)
+    assert.ok(requests[0].includes('name @skip(if: $failedOnly)'))
+    assert.ok(requests[0].includes('detailsUrl @skip(if: $failedOnly)'))
     const markdown = log.firstCall.args[0]
     assert.match(markdown, /\* APM Integrations\n {4}\* http /)
     assert.match(markdown, /\[01\]\(https:\/\/example.com\/jobs\/1\)/)
     assert.match(markdown, /\[02\]\(https:\/\/example.com\/jobs\/2\)/)
-    assert.doesNotMatch(markdown, /allowed failure|example.com\/jobs\/3/)
+    assert.doesNotMatch(markdown, /allowed failure|later failure|example.com\/jobs\/[34]/)
     assert.match(markdown, /\* Total runs: 2\n\* Flaky runs: 1\n\* Workflow success rate: 50%/)
   })
 
