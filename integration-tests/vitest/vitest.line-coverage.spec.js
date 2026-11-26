@@ -139,9 +139,10 @@ for (const version of getVitestVersions()) {
         assert.ok(!getLines(subtracts, ARITHMETIC).has(ADD_LINE), testOutput)
         assert.ok(getLines(subtracts, FIXTURE).has(2), testOutput)
         // Reading an export runs a getter Vite's module runner added, not code of the module: no line of
-        // it, nor its initialiser lines, which a test gets only with other code of the file.
+        // it, nor its initialiser lines, which a test gets only with other code of the file. Nor line 1,
+        // which has no code but is where Vite's statements that define the getters map.
         assert.deepStrictEqual([...getLines(subtracts, ANSWER)], [], testOutput)
-        assert.deepStrictEqual([...getLines(adds, ANSWER)].sort((a, b) => a - b), [1, 3, 4], testOutput)
+        assert.deepStrictEqual([...getLines(adds, ANSWER)].sort((a, b) => a - b), [2, 4, 5], testOutput)
 
         // The afterEach hook runs after the test's own callback and is part of its window.
         const multiplies = coverageOf('with a per-test hook multiplies')
