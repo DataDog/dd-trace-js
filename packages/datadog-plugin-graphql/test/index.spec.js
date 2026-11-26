@@ -2034,12 +2034,36 @@ describe('Plugin', () => {
           })
 
           try {
-            graphql.execute(null, document)
+            graphql.execute({ schema: null, document })
           } catch (e) {
             error = e
           }
 
           return assertion
+        })
+
+        it('should record a non-null violation on the field span', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { inner: Inner }
+            type Inner { bad: String! }
+          `)
+          const rootValue = { inner: () => ({ bad: () => null }) }
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: 'query NonNull { inner { bad } }', rootValue }),
+            agent.assertSomeTraces(traces => {
+              const span = traces[0].find(span => span.meta['graphql.field.path'] === 'inner.bad')
+
+              assert.ok(span)
+              assert.strictEqual(span.error, 1)
+            }, { spanResourceMatch: /NonNull/ }),
+          ])
+
+          assert.strictEqual(result.errors.length, 1)
+        })
+
+        it('should not throw from the tracer for a malformed document', () => {
+          assert.throws(() => graphql.execute({ schema, document: {} }))
         })
 
         it('should handle execution errors', () => {
@@ -2636,6 +2660,55 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with variables named like the GraphQL 17 wrapper', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { variables: variables => variables })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        it('should tag the resolve spans with both variables', () => {
+          const variableSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'VariableQuery',
+              fields: {
+                echo: {
+                  type: graphql.GraphQLString,
+                  args: {
+                    a: { type: graphql.GraphQLString },
+                    b: { type: graphql.GraphQLString },
+                  },
+                  resolve: () => 'echo',
+                },
+              },
+            }),
+          })
+          const source = 'query ($sources: String, $coerced: String) { echo(a: $sources, b: $coerced) }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const span = traces[0].find(span => span.name === 'graphql.resolve')
+
+            assert.ok(span, 'expected a graphql.resolve span')
+            assert.strictEqual(span.meta['graphql.variables.sources'], 'one')
+            assert.strictEqual(span.meta['graphql.variables.coerced'], 'two')
+          })
+
+          return Promise.all([assertion, graphql.graphql({
+            schema: variableSchema,
+            source,
+            variableValues: { sources: 'one', coerced: 'two' },
+          })])
+        })
+      })
+
       describe('with an array of variable names', () => {
         before(() => {
           tracer = require('../../dd-trace')
@@ -2670,6 +2743,19 @@ describe('Plugin', () => {
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
+        })
+
+        it('should trace an operation without variables', async () => {
+          const assertion = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'graphql.resolve'))
+          })
+
+          const [, result] = await Promise.all([
+            assertion,
+            graphql.graphql({ schema, source: '{ hello(title: "planet") }' }),
+          ])
+
+          assert.strictEqual(result.errors, undefined)
         })
       })
 
@@ -3314,7 +3400,7 @@ describe('Plugin', () => {
             span.setTag('error', false)
           }
 
-          context.contextValue?.executeHook?.()
+          nestedExecute?.()
         }
 
         /**
@@ -3329,6 +3415,8 @@ describe('Plugin', () => {
         }
 
         let throwingHook
+        /** @type {(() => void) | undefined} */
+        let nestedExecute
 
         /** @param {'execute' | 'parse' | 'resolve' | 'validate'} name */
         function throwHookError (name) {
@@ -3380,7 +3468,7 @@ describe('Plugin', () => {
         after(() => agent.close())
 
         it('should run the execute hook before graphql.execute span is finished', () => {
-          const document = graphql.parse(source)
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
 
           graphql.validate(schema, document)
 
@@ -3393,8 +3481,6 @@ describe('Plugin', () => {
             contextValue: {},
             variableValues: { who: 'world' },
             operationName: 'MyQuery',
-            fieldResolver: (source, args, contextValue, info) => args.name,
-            typeResolver: (value, context, info, abstractType) => 'Query',
           }
 
           let result
@@ -3402,8 +3488,7 @@ describe('Plugin', () => {
           const assertion = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.deepStrictEqual(spans.map(span => span.name), [expectedSchema.server.opName, 'graphql.resolve'])
             sinon.assert.calledOnce(config.hooks.execute)
 
             const span = config.hooks.execute.firstCall.args[0]
@@ -3422,11 +3507,9 @@ describe('Plugin', () => {
               contextValue: params.contextValue,
               variableValues: params.variableValues,
               operationName: params.operationName,
-              typeResolver: params.typeResolver,
             })
-            assert.strictEqual(typeof args.fieldResolver, 'function')
-            assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
             assert.strictEqual(res, result)
+            assert.strictEqual(result.data.hello, 'world')
           }, { spanResourceMatch: /MyQuery/ })
 
           const action = Promise.resolve(graphql.execute(params))
@@ -3443,8 +3526,8 @@ describe('Plugin', () => {
           const nestedDocument = graphql.parse('query Nested { nested }')
           const contextValue = {}
 
-          contextValue.executeHook = () => {
-            contextValue.executeHook = undefined
+          nestedExecute = () => {
+            nestedExecute = undefined
             graphql.execute({
               schema: localSchema,
               document: nestedDocument,
@@ -3565,7 +3648,7 @@ describe('Plugin', () => {
             assert.strictEqual(config.hooks.execute.firstCall.args[2], undefined)
           })
 
-          assert.throws(() => graphql.execute(null, document))
+          assert.throws(() => graphql.execute({ schema: null, document }))
 
           return assertion
         })
@@ -4208,10 +4291,11 @@ describe('Plugin', () => {
         })
 
         it('should preserve GraphQL errors for a missing health-check document', () => {
+          // The error must come from GraphQL itself, not from the health-check detection.
           assert.throws(() => graphql.execute({
             schema: createHealthCheckSchema(),
             operationName: '__ApolloServiceHealthCheck__',
-          }), { message: 'Must provide document.' })
+          }), error => /node_modules[\\/]graphql[\\/]/.test(error.stack.split('\n')[1]))
         })
 
         it('should trace a health-check document changed after parsing', async () => {

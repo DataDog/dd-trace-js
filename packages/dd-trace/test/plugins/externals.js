@@ -352,6 +352,8 @@ module.exports = {
     {
       name: 'graphql',
       dep: true,
+      // graphql-jit compiles against the GraphQL 16 internals and fails on 17.
+      version: '^16.6.0',
     },
   ],
   'apollo-server-core': [

@@ -257,11 +257,12 @@ externals.moleculer = [{ name: 'bluebird', versions: ['3.7.2'], version: '*', de
 
     const sandboxRequire = createRequire(path.join(versionsDir, 'graphql-jit', 'index.js'))
     const dependency = JSON.parse(fs.readFileSync(sandboxRequire.resolve('graphql-jit/package.json'), 'utf8'))
-    const graphql = JSON.parse(fs.readFileSync(sandboxRequire.resolve('graphql/package.json'), 'utf8'))
+    // GraphQL 17 does not export its package.json.
+    const graphqlVersion = sandboxRequire('graphql').version
 
-    assert.ok(semver.satisfies(graphql.version, dependency.peerDependencies.graphql))
+    assert.ok(semver.satisfies(graphqlVersion, dependency.peerDependencies.graphql))
     const latest = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies.graphql
-    assert.ok(semver.lte(graphql.version, latest))
+    assert.ok(semver.lte(graphqlVersion, latest))
     assert.strictEqual(sandboxRequire('graphql').parse('{ field }').definitions[0].operation, 'query')
   })
 

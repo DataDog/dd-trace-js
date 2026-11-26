@@ -1,6 +1,6 @@
 'use strict'
 
-const { addHook, getHooks } = require('./helpers/instrument')
+const { addHook, channel, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
 // - graphql: execute, locatedError, parse, validate (CJS + ESM)
@@ -51,5 +51,17 @@ for (const extension of ['js', 'mjs']) {
     const ddGlobal = globalThis[Symbol.for('dd-trace')]
     if (ddGlobal) ddGlobal.graphql_utilities = utilities
     return utilities
+  })
+}
+
+// GraphQL 17 traces itself through its `graphql:*` tracing channels, which the plugin subscribes to. A require() of
+// its ES module build shows module hooks only the entry, so this hook loads the plugin and hands it the entry, which
+// re-exports the printer, visitor and utilities functions the per-file hooks above capture otherwise.
+const entryLoadCh = channel('apm:graphql:entry:load')
+
+for (const file of ['index.js', 'index.mjs']) {
+  addHook({ name: 'graphql', file, versions: ['>=17'] }, graphql => {
+    entryLoadCh.publish({ graphql })
+    return graphql
   })
 }
