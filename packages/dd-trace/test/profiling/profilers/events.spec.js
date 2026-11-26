@@ -6,6 +6,7 @@ const { constants, performance } = require('node:perf_hooks')
 const { afterEach, describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
 
 require('../../setup/core')
 const { storage } = require('../../../../datadog-core')
@@ -191,21 +192,21 @@ describe('profilers/events', () => {
       timelineSamplingEnabled: false,
       codeHotspotsEnabled: true,
     })
-    // Timeline samples' times are on the clock of performance entries, which needn't agree with Date.now()
-    const performanceNanos = () =>
-      BigInt(Math.round(performance.timeOrigin * 1_000_000)) + BigInt(Math.round(performance.now() * 1_000_000))
+    // Events are timed on the performance clock, which sinon's fake timers don't control for the
+    // perf_hooks performance object that the event plugins hold: the event starts at 100 ms after
+    // performance.timeOrigin, and finishes 5 ms later
+    const now = sinon.stub(performance, 'now')
+    now.onFirstCall().returns(100)
+    now.onSecondCall().returns(105)
     profiler.start()
     let captured
-    let before
-    let after
     try {
       const ctx = { operation: 'gzip' }
-      before = performanceNanos()
       dc.channel('apm:zlib:operation:start').publish(ctx)
       dc.channel('apm:zlib:operation:finish').publish(ctx)
-      after = performanceNanos()
       captured = profiler.profile(true, startDate, endDate)
     } finally {
+      now.restore()
       profiler.stop()
     }
     const profile = toPprof(profiler, captured)
@@ -222,15 +223,35 @@ describe('profilers/events', () => {
     assert.deepStrictEqual(profile.function.map(f => strings[f.name]), [' '])
     // The sample's time is its end_timestamp_ns label
     const labels = collectLabels(profile.sample[0], profile.stringTable)
-    const endTimestamp = BigInt(labels.end_timestamp_ns)
-    // Between the event's start and finish, give or take the rounding of each reading
-    assert.ok(
-      endTimestamp >= before - 1000n && endTimestamp <= after + 1000n,
-      `${endTimestamp} in [${before}, ${after}]`
+    assert.strictEqual(
+      BigInt(labels.end_timestamp_ns),
+      BigInt(Math.round(performance.timeOrigin * 1_000_000)) + 105_000_000n
     )
+    // Its value is the event's duration
+    assert.deepStrictEqual(profile.sample[0].value.map(Number), [5_000_000])
     // A captured profile can be visited again
     assert.deepStrictEqual(toPprof(profiler, captured).sample.length, 1)
   })
+
+  for (const port of [8080, '8080']) {
+    it(`labels net connections with their port as a number, given as a ${typeof port}`, () => {
+      const profile = runOnceAndProfile(
+        dc.channel('apm:net:tcp:start'),
+        dc.channel('apm:net:tcp:finish'),
+        { options: { host: 'localhost', port } }
+      )
+      assert.equal(profile.sample.length, 1)
+      const portKey = profile.stringTable.dedup('port')
+      const label = profile.sample[0].label.find(l => l.key === portKey)
+      assert.ok(label)
+      assert.strictEqual(Number(label.num), 8080)
+      assert.strictEqual(Number(label.str), 0)
+      const labels = collectLabels(profile.sample[0], profile.stringTable)
+      assert.equal(labels.event, 'net')
+      assert.equal(labels.operation, 'connect')
+      assert.equal(labels.host, 'localhost')
+    })
+  }
 
   it('captures async crypto events with per-op labels', () => {
     const profile = runOnceAndProfile(

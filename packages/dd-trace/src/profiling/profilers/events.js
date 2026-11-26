@@ -38,6 +38,18 @@ function stringLabel (key, value) {
   return [key, safeToString(value)]
 }
 
+/**
+ * A port's label, a number however the application gave the port, as net.connect({ port: process.env.PORT }) gives
+ * it as a string. A port that isn't an integer, as of a connection to a path, is 0, as an unset pprof label number.
+ *
+ * @param {unknown} port
+ * @returns {SampleLabel}
+ */
+function portLabel (port) {
+  const num = Number(port)
+  return ['port', Number.isSafeInteger(num) ? num : 0]
+}
+
 // We don't want to invoke toString for objects and functions, rather we'll
 // provide dummy values. These values are not meant to emulate built-in toString
 // behavior.
@@ -156,7 +168,7 @@ class DNSDecorator {
         labels.push(stringLabel('host', detail.hostname))
         break
       case 'lookupService':
-        labels.push(stringLabel('address', detail.host), ['port', /** @type {number} */ (detail.port)])
+        labels.push(stringLabel('address', detail.host), portLabel(detail.port))
         break
       case 'getHostByAddr':
         labels.push(stringLabel('address', detail.host))
@@ -179,7 +191,7 @@ class NetDecorator {
     labels.push(stringLabel('operation', op))
     if (op === 'connect') {
       const detail = item.detail
-      labels.push(stringLabel('host', detail.host), ['port', /** @type {number} */ (detail.port)])
+      labels.push(stringLabel('host', detail.host), portLabel(detail.port))
     }
   }
 }
