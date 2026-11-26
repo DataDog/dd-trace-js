@@ -568,10 +568,9 @@ function wrapBeforeAllHooks (suite) {
   for (let i = 0; i < beforeAllHooks.length; i++) {
     if (wrappedBeforeAllHooks.has(beforeAllHooks[i])) continue
     const wrapped = shimmer.wrapFunction(beforeAllHooks[i], hook => function () {
-      lineCoverageSuiteSetupStartCh.publish({ suite })
       let result
       try {
-        result = hook.apply(this, arguments)
+        result = lineCoverageSuiteSetupStartCh.runStores({ suite }, () => hook.apply(this, arguments))
       } catch (error) {
         lineCoverageSuiteSetupFinishCh.publish()
         throw error
