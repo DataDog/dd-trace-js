@@ -56,9 +56,12 @@ const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'Ar
  *   with its slot table, the first time it runs
  * @property {Array<string | null>} [sources] the file each source stands for, null for a source whose
  *   lines count nowhere; one entry, for the code itself, when there is no `mapPosition`
- * @property {(line: number, column: number) => ({ source: number, line: number } | undefined)} [mapPosition]
+ * @property {(line: number, column: number) => (MappedPosition | undefined)} [mapPosition]
  *   maps a generated position (1-based line, 0-based column) to a source and its 1-based line, or
  *   undefined when the position is not credited
+ *
+ * @typedef {{ source: number, line: number, start?: number, end?: number }} MappedPosition
+ *   `start` and `end` are the columns of the generated line between which every position maps the same
  *
  * @typedef {{ source: number, line: number, init: boolean }} Slot
  */
@@ -90,12 +93,16 @@ class Instrumenter {
     this.sources = sources
     this.mapPosition = mapPosition
     this.prefix = choosePrefix(code)
-    this.lineStarts = getLineStarts(code)
     // Source maps count lines by `\n` alone.
-    this.mapLineStarts = mapPosition ? getNewlineStarts(code) : undefined
+    this.lineStarts = mapPosition ? getNewlineStarts(code) : getLineStarts(code)
 
     /** @type {Map<number, number>} */
     this.slotByKey = new Map()
+    // The offsets between which the last slot found holds, for positions in initialiser code or not.
+    this.lastStart = 0
+    this.lastEnd = 0
+    this.lastInit = false
+    this.lastSlot = 0
     /** @type {Array<Slot & { probed: boolean }>} */
     this.slots = []
     /** @type {object[]} */
@@ -137,7 +144,7 @@ class Instrumenter {
     const { program, code } = this
     const body = program.body
     const directives = countDirectives(body, code)
-    let headerOffset = code.startsWith('#!') ? (this.lineStarts[1] ?? code.length) : 0
+    let headerOffset = code.startsWith('#!') ? getHashbangEnd(code) : 0
     if (directives > 0) headerOffset = body[directives - 1].end
     this.headerOffset = headerOffset
 
@@ -177,16 +184,20 @@ class Instrumenter {
 
   slotAt (offset) {
     const init = this.init
+    // Most positions are on the line of the position before them, and in the same mapped segment.
+    if (offset >= this.lastStart && offset < this.lastEnd && init === this.lastInit) return this.lastSlot
     let source = 0
-    let line
-    if (this.mapLineStarts === undefined) {
-      line = lineAt(this.lineStarts, offset)
-    } else {
-      const generatedLine = lineAt(this.mapLineStarts, offset)
-      const mapped = this.mapPosition(generatedLine, offset - this.mapLineStarts[generatedLine - 1])
+    let line = lineAt(this.lineStarts, offset)
+    let start = this.lineStarts[line - 1]
+    let end = this.lineStarts[line] ?? Infinity
+    if (this.mapPosition) {
+      const column = offset - start
+      const mapped = this.mapPosition(line, column)
       if (mapped === undefined) return UNMAPPED
       source = mapped.source
       line = mapped.line
+      end = Math.min(end, start + (mapped.end ?? column + 1))
+      start += mapped.start ?? column
     }
     const key = (source * 4_194_304 + line) * 2 + (init ? 1 : 0)
     let slot = this.slotByKey.get(key)
@@ -195,6 +206,10 @@ class Instrumenter {
       this.slots.push({ source, line, init, probed: false })
       this.slotByKey.set(key, slot)
     }
+    this.lastStart = start
+    this.lastEnd = end
+    this.lastInit = init
+    this.lastSlot = slot
     return slot
   }
 
@@ -1435,6 +1450,8 @@ function getNewlineStarts (code) {
 }
 
 function getLineStarts (code) {
+  // Most code ends its lines with `\n` alone, which is quicker to find.
+  if (!/[\r\u2028\u2029]/.test(code)) return getNewlineStarts(code)
   const starts = [0]
   for (let i = 0; i < code.length; i++) {
     const c = code.charCodeAt(i)
@@ -1448,6 +1465,14 @@ function getLineStarts (code) {
     }
   }
   return starts
+}
+
+// The offset at which the line of a hashbang comment ends, with its line terminator.
+function getHashbangEnd (code) {
+  const terminator = /[\n\r\u2028\u2029]/.exec(code)
+  if (terminator === null) return code.length
+  const end = terminator.index + 1
+  return code[terminator.index] === '\r' && code[end] === '\n' ? end + 1 : end
 }
 
 // Whether code awaits or yields, not counting nested functions.
