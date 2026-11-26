@@ -5,6 +5,7 @@ const { once } = require('node:events')
 const { exec } = require('node:child_process')
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
+const satisfies = require('semifies')
 
 const { assertObjectContains, sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -16,6 +17,9 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 
 const SUMMARY_TIMEOUT_MS = 30_000
+
+// Jest compiles ECMAScript modules, with Node.js's --experimental-vm-modules, through transformAsync from 27.
+const esModuleIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=27.0.0') ? it : it.skip
 
 /**
  * @param {{ filename: string, bitmap?: Uint8Array }[]} files
@@ -189,6 +193,70 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
     // The body of `double`.
     assert.ok(linesOf('runs code loaded while fs and path functions are replaced').has(4))
     assert.ok(linesOf('runs instrumented code with every timer faked').has(4))
+  })
+
+  esModuleIt('reports the lines each test ran in ECMAScript modules', async () => {
+    const coverageRecords = []
+    const testsByName = new Map()
+    const coveragePromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcov',
+      (payloads) => {
+        coverageRecords.length = 0
+        coverageRecords.push(...payloads
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content: { coverages } }) => coverages))
+        assert.strictEqual(coverageRecords.filter(({ span_id: spanId }) => spanId !== undefined).length, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        testsByName.clear()
+        for (const { payload } of payloads) {
+          for (const { type, content } of payload.events) {
+            if (type === 'test') testsByName.set(content.meta[TEST_NAME], content)
+          }
+        }
+        assert.strictEqual(testsByName.size, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    childProcess = exec('node ./node_modules/jest/bin/jest --config config-jest.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+        DD_TEST_LINE_COVERAGE_ENABLED: '1',
+        CONFIG_TEST_MATCH: '**/ci-visibility/line-coverage-esm/*.test.mjs',
+      },
+    })
+    let testOutput = ''
+    childProcess.stdout.on('data', chunk => { testOutput += chunk })
+    childProcess.stderr.on('data', chunk => { testOutput += chunk })
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+
+    const coverageOf = (name) => {
+      const test = testsByName.get(`es module arithmetic ${name}`)
+      assert.ok(test, `no test named ${name}`)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
+      assert.ok(record, `no record for ${name}`)
+      return record.files
+    }
+    const adds = coverageOf('adds')
+    const multiplies = coverageOf('multiplies')
+    const ARITHMETIC = 'ci-visibility/line-coverage-esm/arithmetic.mjs'
+    const TESTS = 'ci-visibility/line-coverage-esm/arithmetic.test.mjs'
+    // Each test ran its own body and the body of the function it calls, and not the other's.
+    assert.ok(getLines(adds, TESTS).has(7))
+    assert.ok(getLines(adds, ARITHMETIC).has(2))
+    assert.ok(!getLines(adds, ARITHMETIC).has(6))
+    assert.ok(getLines(multiplies, TESTS).has(11))
+    assert.ok(getLines(multiplies, ARITHMETIC).has(6))
+    assert.ok(!getLines(multiplies, ARITHMETIC).has(2))
   })
 
   it('reports no per-test or Shared records when line coverage is not requested', async () => {
