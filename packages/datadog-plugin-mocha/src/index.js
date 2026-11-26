@@ -53,6 +53,7 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   MOCHA_IS_PARALLEL,
+  MOCHA_WORKER_LINE_COVERAGE_ENV,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -117,6 +118,7 @@ const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
+const isLineCoverageWorker = getEnvironmentVariable(MOCHA_WORKER_LINE_COVERAGE_ENV) === '1'
 const shouldRecordWebdriverioVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/
@@ -314,6 +316,9 @@ class MochaPlugin extends CiPlugin {
     this._webdriverioVideos = new Map()
     this._pendingWebdriverioMediaUploads = 0
     this._webdriverioMediaUploadCallbacks = []
+
+    // Published before any required module or test file loads, when the settings ask for code coverage.
+    if (isLineCoverageRequested) this.addSub('ci:mocha:line-coverage:start', () => this.#startLineCoverage())
 
     this.addSub('ci:webdriverio:screenshot:capabilities', (ctx) => {
       ctx.enabled = Boolean(
@@ -630,7 +635,8 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.libraryConfig?.isCodeCoverageEnabled) {
+      // Per-test line coverage takes the place of per-suite coverage.
+      if (!this.libraryConfig?.isCodeCoverageEnabled || this.#lineCoverage?.isActive()) {
         return
       }
       const testSuite = getTestSuitePath(suiteFile, this.sourceRoot)
@@ -1165,11 +1171,14 @@ class MochaPlugin extends CiPlugin {
 
   configure (config, shouldGetEnvironmentData) {
     super.configure(config, shouldGetEnvironmentData)
+    // A worker starts before it loads any test file; the main process decided for it.
+    if (this._enabled && isLineCoverageRequested && isLineCoverageWorker) this.#startLineCoverage()
+  }
+
+  #startLineCoverage () {
+    this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
     // Coverage files are relative to the repository root, which is known only once configured.
-    if (this._enabled && isLineCoverageRequested) {
-      this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
-      this.#lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
-    }
+    this.#lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
   }
 
   /**
