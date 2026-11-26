@@ -21,6 +21,7 @@
   "license": "ISC",
   "dependencies": {
     "@apollo/server": "5.5.2",
+    "@aws-sdk/client-sqs": "3.1171.0",
     "@koa/router": "15.7.1",
     "@langchain/core": "1.4.2",
     "@langchain/langgraph": "1.7.5",
