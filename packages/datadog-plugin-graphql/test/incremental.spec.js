@@ -2,7 +2,10 @@
 
 const assert = require('node:assert/strict')
 const { AsyncResource } = require('node:async_hooks')
+const { execFile } = require('node:child_process')
+const { join } = require('node:path')
 const { setImmediate: immediate } = require('node:timers/promises')
+const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
@@ -10,13 +13,39 @@ const { after, before, describe, it } = require('mocha')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const assertSubscriptionDelivery = require('./helpers/subscription')
 const { expectedSchema } = require('./naming')
+
+const execFileAsync = promisify(execFile)
+
+for (const format of ['cjs', 'esm']) {
+  it(`checks GraphQL.js 17 native execution in a fresh ${format} process`, async () => {
+    const args = format === 'esm' ? ['--import', join(__dirname, '../../../register.mjs')] : []
+    args.push(
+      join(__dirname, '../../../scripts/mocha-run-file.js'),
+      join(__dirname, 'fixtures/native-execution.js')
+    )
+    try {
+      await execFileAsync(process.execPath, args, {
+        env: {
+          ...process.env,
+          DD_TRACE_STARTUP_LOGS: 'false',
+          GRAPHQL_NATIVE_TEST_FORMAT: format,
+          MOCHA_RUN_FILE_CONFIG: JSON.stringify({ reporter: 'dot' }),
+        },
+      })
+    } catch (error) {
+      throw new Error(error.stdout || error.message, { cause: error })
+    }
+  })
+}
 
 describe('GraphQL incremental execution', () => {
   withVersions('graphql', '@graphql-tools/executor', '>=0.0.14', version => {
     let execute
     let graphql
     let normalizedExecutor
+    let subscribe
 
     before(async () => {
       await agent.load('graphql')
@@ -26,9 +55,41 @@ describe('GraphQL incremental execution', () => {
       const implementation = executor.get()
       execute = implementation.execute
       normalizedExecutor = implementation.normalizedExecutor
+      subscribe = implementation.subscribe
     })
 
     after(() => agent.close())
+
+    it('reads direct subscription options once', async () => {
+      let documentReads = 0
+      let variableReads = 0
+      await assertSubscriptionDelivery(graphql, execute, ({ document, variableValues, ...options }) => {
+        const result = subscribe({
+          ...options,
+          get document () {
+            documentReads++
+            return document
+          },
+          get variableValues () {
+            variableReads++
+            return variableValues
+          },
+        })
+        assert.strictEqual(documentReads, 1)
+        assert.strictEqual(variableReads, 1)
+        return result
+      }, false)
+    })
+
+    for (const asyncSetup of [false, true]) {
+      const setup = asyncSetup ? 'asynchronous' : 'synchronous'
+      it(`checks each GraphQL Tools subscribe delivery after ${setup} setup`, () => {
+        return assertSubscriptionDelivery(graphql, execute, subscribe, asyncSetup)
+      })
+      it(`checks each GraphQL Tools normalizedExecutor delivery after ${setup} setup`, () => {
+        return assertSubscriptionDelivery(graphql, execute, normalizedExecutor, asyncSetup)
+      })
+    }
 
     /**
      * @param {string} operationName

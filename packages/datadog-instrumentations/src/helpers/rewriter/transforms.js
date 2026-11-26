@@ -25,15 +25,18 @@ module.exports = {
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
   configureGraphqlFastPath,
+  configureGraphqlRootExecution,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
   publishGraphqlExecutionContext,
   publishTrpcRequestInfo,
+  traceGraphqlExecuteSync,
+  traceGraphqlSubscriptionEvent,
   waitForAsyncEnd,
 }
 
 /**
- * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {{ channelName: string, module: { name: string }, transforms: { tracingChannelDeclaration: Function } }} state
  * @param {import('estree').FunctionDeclaration} node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
@@ -42,28 +45,163 @@ function publishGraphqlExecutionContext (state, node, _parent, ancestry) {
   const statements = node.body.body
   const success = statements.at(-1)
   assert.strictEqual(success?.type, 'ReturnStatement', 'expected a final GraphQL context return')
-  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
-  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}.end`
-  // Executor v2 uses the v17 variable container with both GraphQL.js 16 and 17.
-  const usesVariableContainer = query(node,
-    'Property[key.name="variableValues"] > ' +
-    'MemberExpression[object.name="coercedVariableValues"][property.name="variableValues"]'
-  ).length > 0
-  const alias = usesVariableContainer ? 'legacyVariableValues: variableValues.coerced,' : ''
+  const channel = declareGraphqlChannel(state, ancestry.at(-1)) + '.end'
+  const alias = usesGraphqlVariableContainer(node) ? 'legacyExecutionKey: variableValues.coerced,' : ''
+  const subscription = state.module.name === '@graphql-tools/executor'
+    ? 'subscription: __apm$executionContext.operation.operation === "subscription"' +
+      ' ? __apm$executionContext : undefined, document, rawVariableValues,'
+    : ''
   const [context, publish] = parse(`
     const __apm$executionContext = undefined
     if (${channel}.hasSubscribers) {
-      const { fieldResolver, variableValues, resolveInfoVariableValues } = __apm$executionContext
+      const { fieldResolver, getAbortSignal, variableValues, resolveInfoVariableValues } = __apm$executionContext
       ${channel}.publish({
         fieldResolver,
-        variableValues: resolveInfoVariableValues ?? variableValues,
+        executionKey: getAbortSignal ?? resolveInfoVariableValues ?? variableValues,
         ${alias}
+        ${subscription}
       })
     }
   `).body
   context.declarations[0].init = success.argument
   success.argument = { type: 'Identifier', name: '__apm$executionContext' }
   statements.splice(-1, 0, context, publish)
+}
+
+/**
+ * @param {import('estree').Node} node
+ */
+function usesGraphqlVariableContainer (node) {
+  // Executor v2 uses the v17 variable container with both GraphQL.js 16 and 17.
+  return query(node,
+    'Property[key.name="variableValues"] > ' +
+    'MemberExpression[object.name="coercedVariableValues"][property.name="variableValues"]'
+  ).length > 0
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').Program} program
+ */
+function declareGraphqlChannel (state, program) {
+  state.transforms.tracingChannelDeclaration(state, program)
+  return `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function traceGraphqlExecuteSync (state, node, _parent, ancestry) {
+  const program = ancestry.at(-1)
+  const channel = declareGraphqlChannel(state, program)
+  const syncCall = queryOne(program,
+    'FunctionDeclaration[id.name="executeSync"] CallExpression[callee.name="executeImpl"]'
+  )
+  const statements = node.body.body
+  const index = statements.findIndex(statement =>
+    statement.type === 'VariableDeclaration' && statement.declarations[0].init?.callee?.name === 'executeOperation'
+  )
+  assert(index !== -1)
+
+  // GraphQL.js 15 normalizes and validates arguments inside executeImpl.
+  syncCall.arguments.push({ type: 'Literal', value: true })
+  node.params.push({ type: 'Identifier', name: '__apm$fromExecuteSync' })
+  const [template] = parse(`
+    function trace () {
+      if (__apm$fromExecuteSync && ${channel}.hasSubscribers) {
+        const context = {
+          ddNativeArgs: exeContext,
+          ddExecutionKey: exeContext.variableValues,
+          ddInput: { document, variableValues },
+        }
+        return ${channel}.traceSync(() => {
+          if (context.ddFieldResolver !== undefined) exeContext.fieldResolver = context.ddFieldResolver
+        }, context)
+      }
+    }
+  `).body
+  const [guard] = template.body.body
+  const callback = queryOne(guard, 'ArrowFunctionExpression')
+  callback.body.body.push(...clone(statements.slice(index)))
+  statements.splice(index, 0, guard)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlRootExecution (_state, node, _parent, ancestry) {
+  const program = ancestry.at(-1)
+  const classNode = ancestry.find(ancestor => ancestor.type === 'ClassDeclaration')
+  const statement = ancestry.find(ancestor => program.body.includes(ancestor))
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const [symbol, override, bindings] = parse(`
+    const __apm$graphqlFieldResolver = Symbol()
+    if (__apm$ctx.ddFieldResolver !== undefined) {
+      this.sharedExecutionContext[__apm$graphqlFieldResolver] = __apm$ctx.ddFieldResolver
+    }
+    ({
+      ddNativeArgs: this.validatedExecutionArgs,
+      ddExecutionKey: this.getAbortSignal,
+    })
+  `).body
+
+  // Deferred executors share this native context. User hooks still receive the original validated arguments.
+  const resolver = queryOne(classNode,
+    'MethodDefinition[key.name="executeField"] ' +
+    'VariableDeclarator[id.name="resolveFn"] > LogicalExpression[operator="??"]'
+  )
+  const [fallback] = parse('this.sharedExecutionContext[__apm$graphqlFieldResolver] ?? undefined').body
+  fallback.expression.right = resolver.right
+  resolver.right = fallback.expression
+  assert(insertBeforeStatement(program, statement, [symbol]))
+  context.properties.push(...bindings.expression.properties)
+  configureGraphqlTraceFastPath(
+    node, program, statement, '__apm$original_executeRootSelectionSet', 'configureGraphqlRootExecution'
+  )
+  const active = queryOne(node, 'CallExpression[callee.property.name="runStores"] > ArrowFunctionExpression')
+  queryOne(active, 'TryStatement').block.body.unshift(override)
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').CallExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function traceGraphqlSubscriptionEvent (state, node, _parent, ancestry) {
+  const program = ancestry.at(-1)
+  const channel = declareGraphqlChannel(state, program)
+  const builder = queryOne(program, 'FunctionDeclaration[id.name="buildExecutionContext"]')
+  const alias = usesGraphqlVariableContainer(builder)
+    ? 'ddLegacyExecutionKey: variableValues.coerced,'
+    : ''
+  const [executeEvent] = parse(`
+    function __apm$executeSubscriptionEvent (subscription, payload) {
+      const executionContext = buildPerEventExecutionContext(subscription, payload)
+      if (!${channel}.hasSubscribers) return executeImpl(executionContext)
+
+      const { getAbortSignal, resolveInfoVariableValues, variableValues } = executionContext
+      const context = {
+        ddNativeArgs: executionContext,
+        ddSubscription: subscription,
+        ddExecutionKey: getAbortSignal ?? resolveInfoVariableValues ?? variableValues,
+        ${alias}
+      }
+      return ${channel}.traceSync(() => {
+        if (context.ddFieldResolver !== undefined) executionContext.fieldResolver = context.ddFieldResolver
+        return executeImpl(executionContext)
+      }, context)
+    }
+  `).body
+  node.callee = executeEvent.id
+  node.arguments = node.arguments[0].arguments
+  program.body.push(executeEvent)
 }
 
 /**

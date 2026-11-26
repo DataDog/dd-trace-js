@@ -29,7 +29,8 @@ const {
  *   contextValue?: unknown,
  *   variableValues?: Record<string, unknown>,
  *   operationName?: string | null,
- *   fieldResolver?: GraphQLFieldResolver
+ *   fieldResolver?: GraphQLFieldResolver,
+ *   typeResolver?: import('graphql').GraphQLTypeResolver<unknown, unknown>
  * }} ExecutionArguments
  * @typedef {(value: unknown) => unknown} ThenableCallback
  * @typedef {{ then: (onFulfilled?: ThenableCallback, onRejected?: ThenableCallback) => unknown }} Thenable
@@ -46,6 +47,7 @@ const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 
 const contexts = new WeakMap()
+const subscriptionInputs = new WeakMap()
 
 const patchedResolvers = new WeakSet()
 const jitResolvers = new WeakMap()
@@ -111,12 +113,12 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
   const rootCtx = {
     source,
     requestSource,
-    contextValue,
+    contextValue: contextValue && typeof contextValue === 'object' ? contextValue : undefined,
+    contextReference: undefined,
     preparedArgs,
-    coercedVariables: undefined,
-    legacyVariableValues: undefined,
+    executionKey: undefined,
+    legacyExecutionKey: undefined,
     executionStore: undefined,
-    weakReference: undefined,
     config: plugin.config,
     abortController,
     executeSpan,
@@ -207,6 +209,21 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @returns {ExecutionArguments | undefined}
    */
   readExecutionArgs (ctx, requestStore) {
+    const nativeArgs = ctx.ddNativeArgs
+    if (nativeArgs) {
+      const input = ctx.ddInput ?? subscriptionInputs.get(ctx.ddSubscription)
+      return {
+        schema: nativeArgs.schema,
+        document: nativeArgs.document ?? input?.document,
+        rootValue: nativeArgs.rootValue,
+        contextValue: nativeArgs.contextValue,
+        variableValues: input ? input.variableValues : nativeArgs.rawVariableValues,
+        operationName: nativeArgs.operation.name?.value,
+        fieldResolver: nativeArgs.fieldResolver,
+        typeResolver: nativeArgs.typeResolver,
+      }
+    }
+
     const rawArgs = ctx.arguments
     const activeRoot = requestStore?.graphqlRootCtx
     const preparedArgs = activeRoot?.preparedArgs
@@ -226,8 +243,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {ExecutionArguments} args
    */
   wrapExecutionResolvers (ctx, args) {
-    const rawArgs = ctx.arguments
-    ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, isObjectForm(rawArgs), defaultFieldResolver)
+    if (ctx.ddNativeArgs) {
+      ctx.ddArgs = args
+      ctx.ddFieldResolver = wrapResolve(args.fieldResolver)
+    } else {
+      const rawArgs = ctx.arguments
+      ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, isObjectForm(rawArgs), defaultFieldResolver)
+    }
 
     const { schema } = args
     if (schema) {
@@ -242,13 +264,26 @@ class GraphQLExecutePlugin extends TracingPlugin {
    */
   bindStart (ctx) {
     const requestStore = /** @type {GraphQLRequestStore | undefined} */ (legacyStorage.getStore())
+    const activeRootCtx = requestStore?.graphqlRootCtx
+    const nativeArgs = ctx.ddNativeArgs
+    if (nativeArgs && activeRootCtx && ctx.ddSubscription === undefined) {
+      const preparedResolver = activeRootCtx.preparedArgs?.fieldResolver
+      if (typeof preparedResolver === 'function' && nativeArgs.fieldResolver === preparedResolver &&
+          activeRootCtx.executionKey === undefined) {
+        registerExecutionContext(activeRootCtx, requestStore, ctx.ddExecutionKey)
+        ctx.ddSkipped = true
+        ctx.currentStore = requestStore
+        return requestStore
+      }
+    }
+
     const args = this.readExecutionArgs(ctx, requestStore)
     if (!args) return ctx.currentStore
 
     const { contextValue } = args
     const document = args.document
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
-    const operation = getOperation(document, args.operationName)
+    const operation = nativeArgs?.operation ?? getOperation(document, args.operationName)
 
     const type = operation?.operation
     const name = operation?.name?.value ?? args.operationName ?? undefined
@@ -265,17 +300,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
-    const activeRootCtx = requestStore?.graphqlRootCtx
-    const parentCtx = contextValue && typeof contextValue === 'object' && activeRootCtx?.contextValue === contextValue
+    const activeContext = activeRootCtx?.contextValue ?? activeRootCtx?.contextReference?.deref()
+    const parentCtx = activeContext !== undefined && activeContext === contextValue
       ? activeRootCtx
       : undefined
     if (type !== undefined) {
-      signature = getSignature(
-        /** @type {import('graphql').DocumentNode} */ (document),
-        name,
-        type,
-        this.config.signature
-      )
+      if (document) signature = getSignature(document, name, type, this.config.signature)
       if (!parentCtx) {
         refineRequestSpanMetadata(requestStore?.graphqlRequestSpan, signature, type, name)
       }
@@ -306,10 +336,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const rootCtx = createRootContext(
       this, span, docSource, abortController, ctx.ddPlan, args.variableValues,
-      contextValue, requestSource === docSource ? undefined : requestSource, ctx.ddArgs
+      contextValue, requestSource === docSource ? undefined : requestSource, nativeArgs ? undefined : ctx.ddArgs
     )
     ctx.ddRootCtx = rootCtx
     ctx.currentStore.graphqlRootCtx = rootCtx
+    if (ctx.ddExecutionKey !== undefined) {
+      registerExecutionContext(rootCtx, ctx.currentStore, ctx.ddExecutionKey, ctx.ddLegacyExecutionKey)
+    }
 
     return ctx.currentStore
   }
@@ -369,7 +402,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
    */
   #finishSpan (ctx, span, res, error, incrementalComplete = false, finishPendingFields = false) {
     const rootCtx = ctx.ddRootCtx
-    if (!incrementalComplete && error === undefined && ctx.ddOperationType !== 'subscription') {
+    if (!incrementalComplete && error === undefined && (ctx.ddNativeArgs || ctx.ddOperationType !== 'subscription')) {
       const iterator = getIncrementalIterator(res)
       if (iterator) {
         weakenExecutionContext(rootCtx)
@@ -392,10 +425,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
       tagExecutionErrors(this.config, span, res.errors)
     }
 
-    if (rootCtx?.coercedVariables) {
-      contexts.delete(rootCtx.coercedVariables)
-      if (rootCtx.legacyVariableValues) {
-        contexts.delete(rootCtx.legacyVariableValues)
+    if (rootCtx?.executionKey) {
+      contexts.delete(rootCtx.executionKey)
+      if (rootCtx.legacyExecutionKey) {
+        contexts.delete(rootCtx.legacyExecutionKey)
       }
     }
 
@@ -578,7 +611,10 @@ function wrapResolve (resolve, isJit = false) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
-    let rootCtx = isJit ? legacyStorage.getStore()?.graphqlRootCtx : contexts.get(info?.variableValues)
+    // Executor v2 creates a new getAbortSignal function for each resolver.
+    let rootCtx = isJit
+      ? legacyStorage.getStore()?.graphqlRootCtx
+      : contexts.get(info?.getAbortSignal ?? info?.variableValues) ?? contexts.get(info?.variableValues)
     let config = rootCtx?.config
     if (!config) {
       rootCtx = rootCtx?.deref?.()
@@ -1439,21 +1475,40 @@ function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolve
 }
 
 /**
- * @param {{ fieldResolver: GraphQLFieldResolver, variableValues: object, legacyVariableValues?: object }} context
+ * @param {{
+ *   fieldResolver: GraphQLFieldResolver,
+ *   executionKey: object,
+ *   legacyExecutionKey?: object,
+ *   subscription?: object,
+ *   document?: import('graphql').DocumentNode,
+ *   rawVariableValues?: ExecutionArguments['variableValues']
+ * }} context
  */
-function rememberExecutionContext ({ fieldResolver, variableValues, legacyVariableValues }) {
+function rememberExecutionContext (context) {
+  const { fieldResolver, executionKey, legacyExecutionKey, subscription, document, rawVariableValues } = context
+  if (subscription) subscriptionInputs.set(subscription, { document, variableValues: rawVariableValues })
   const store = legacyStorage.getStore()
   const rootCtx = store?.graphqlRootCtx
   const preparedResolver = rootCtx?.preparedArgs?.fieldResolver
   if (typeof preparedResolver !== 'function' || preparedResolver !== fieldResolver) {
     return
   }
+  registerExecutionContext(rootCtx, store, executionKey, legacyExecutionKey)
+}
+
+/**
+ * @param {ReturnType<typeof createRootContext>} rootCtx
+ * @param {GraphQLRequestStore} store
+ * @param {object} executionKey
+ * @param {object} [legacyExecutionKey]
+ */
+function registerExecutionContext (rootCtx, store, executionKey, legacyExecutionKey) {
   rootCtx.executionStore = store
-  rootCtx.coercedVariables = variableValues
-  contexts.set(variableValues, rootCtx)
-  if (legacyVariableValues) {
-    rootCtx.legacyVariableValues = legacyVariableValues
-    contexts.set(legacyVariableValues, rootCtx)
+  rootCtx.executionKey = executionKey
+  contexts.set(executionKey, rootCtx)
+  if (legacyExecutionKey) {
+    rootCtx.legacyExecutionKey = legacyExecutionKey
+    contexts.set(legacyExecutionKey, rootCtx)
   }
 }
 
@@ -1461,15 +1516,20 @@ function rememberExecutionContext ({ fieldResolver, variableValues, legacyVariab
  * @param {ReturnType<typeof createRootContext> | undefined} rootCtx
  */
 function weakenExecutionContext (rootCtx) {
-  if (!rootCtx?.coercedVariables || rootCtx.weakReference) {
-    return
+  // A resolver's async resources can retain the frame after its result is discarded.
+  if (rootCtx?.contextValue !== undefined) {
+    rootCtx.contextReference = new WeakRef(rootCtx.contextValue)
+    rootCtx.contextValue = undefined
   }
+  if (!rootCtx?.executionKey) return
+
   // The completion callbacks keep the frame live while the result is reachable.
   const reference = new WeakRef(rootCtx)
-  rootCtx.weakReference = reference
-  contexts.set(rootCtx.coercedVariables, reference)
-  if (rootCtx.legacyVariableValues) {
-    contexts.set(rootCtx.legacyVariableValues, reference)
+  contexts.set(rootCtx.executionKey, reference)
+  rootCtx.executionKey = undefined
+  if (rootCtx.legacyExecutionKey) {
+    contexts.set(rootCtx.legacyExecutionKey, reference)
+    rootCtx.legacyExecutionKey = undefined
   }
 }
 
