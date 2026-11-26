@@ -43,6 +43,7 @@ const { addChildProcessEnv } = require('../../child-process-env')
 const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
+const { showOriginalFunctionSource } = require('./function-source')
 const { instrument } = require('./instrument')
 const { createPositionMapper, getSourceMappingUrl, readSourceMapUrl } = require('./source-map')
 const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
@@ -980,12 +981,14 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
 }
 
 /**
- * Makes the collector reachable from code that runs with `globalObject` as its global.
+ * Makes the collector reachable from code that runs with `globalObject` as its global, and keeps the
+ * probes out of the source its functions give.
  *
  * @param {object} globalObject
  */
 function installGlobal (globalObject) {
   getCollector().install(globalObject)
+  showOriginalFunctionSource(globalObject)
 }
 
 /**
@@ -1024,6 +1027,7 @@ function startCollecting (root, patchModuleLoader) {
   enabled = true
   const collector = getCollector()
   collector.resolveOwner = resolveOwner
+  showOriginalFunctionSource(globalThis)
   scheduleResets(collector)
   let realRoot = root
   try {
