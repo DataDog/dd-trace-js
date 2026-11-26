@@ -1,6 +1,7 @@
 import * as Module from 'module'
 
 const require = Module.createRequire(import.meta.url)
+const { getScaRewriteTarget } = require('./sca-targets.js')
 const { getRewriteTarget } = require('./targets.js')
 let rewriter
 
@@ -30,7 +31,7 @@ function rewriteResult (result, url, context) {
 
   if (result.source) {
     const target = getRewriteTarget(url)
-    if (target) {
+    if (target || getScaRewriteTarget(url)) {
       if (!rewriter) {
         rewriter = require('./index.js')
       }

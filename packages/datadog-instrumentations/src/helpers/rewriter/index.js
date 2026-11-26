@@ -4,9 +4,11 @@ const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 
+const satisfies = require('../../../../../vendor/dist/semifies')
 const log = require('../../../../dd-trace/src/log')
 const { getDisabledInstrumentations } = require('../instrumentation-utils')
 const instrumentations = require('./instrumentations')
+const { getScaRewriteTarget, instrumentations: scaInstrumentations } = require('./sca-targets')
 const { getRewriteTarget } = require('./targets')
 
 /**
@@ -39,11 +41,22 @@ const disabled = getDisabledInstrumentations()
 let matcherCjs
 /** @type {InstrumentationMatcher|undefined} */
 let matcherEsm
+/** @type {InstrumentationMatcher|undefined} */
+let scaMatcherCjs
+/** @type {InstrumentationMatcher|undefined} */
+let scaMatcherEsm
+
+// Published on the application thread by a Runtime SCA target whose vulnerable functions were not all rewritten.
+const SCA_REWRITE_FAILED_CHANNEL = 'dd-trace:sca:rewrite:failed'
+/** @type {Set<string>} channel names of the entry points instrumented by the running SCA rewrite */
+const instrumentedEntries = new Set()
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
 // eslint-disable-next-line unicorn/no-useless-concat -- Keep the source-map marker non-contiguous.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
+// Published on the application thread when an activated target is evaluated, with its compatibility.
+const ORCHESTRION_LOAD_CHANNEL = 'dd-trace:instrumentation:load:orchestrion'
 
 /**
  * Loader hooks hand `file://` URLs to the rewriter while CommonJS and bundler
@@ -72,7 +85,7 @@ function rewrite (content, filename, format, target) {
   try {
     filename = normalizeFilename(filename)
     target ||= getRewriteTarget(filename)
-    if (!target) return content
+    if (!target) return rewriteSca(content, filename, format)
 
     const moduleType = format === 'module' ? 'esm' : 'cjs'
     const { moduleName, filePath, activate, sourceMatch } = target
@@ -91,40 +104,106 @@ function rewrite (content, filename, format, target) {
     const source = matchedSource ?? getSourceText(content)
 
     if (!transformer) {
-      return appendOrchestrionLoad(
+      return appendPublish(
         source,
+        ORCHESTRION_LOAD_CHANNEL,
         { moduleName, version, result: 'unsupported' },
         moduleType
       )
     }
 
-    // TODO: pass existing sourcemap as input for remapping
-    let { code, map } = transformer.transform(source, moduleType)
-
-    if (source.startsWith('#!') && !code.startsWith('#!')) {
-      // A shebang must be the entire first line, and JavaScript recognizes
-      // exactly four line terminators: \n, \r, \u2028 (line separator), and
-      // \u2029 (paragraph separator). Any of the four can end the shebang line.
-      const shebangEnd = source.search(/[\r\n\u2028\u2029]/)
-      code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
-      map = shiftSourceMapLine(map)
-    }
+    let { code, map } = transformSource(transformer, source, moduleType)
 
     if (activate) {
       const result = code === source ? 'matched' : 'rewritten'
-      code = appendOrchestrionLoad(code, { moduleName, version, result }, moduleType)
+      code = appendPublish(code, ORCHESTRION_LOAD_CHANNEL, { moduleName, version, result }, moduleType)
     }
 
-    if (!map) return code
-
-    const inlineMap = Buffer.from(typeof map === 'string' ? map : JSON.stringify(map)).toString('base64')
-
-    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
+    return inlineSourceMap(code, map)
   } catch (e) {
     log.error(e)
   }
 
   return content
+}
+
+/**
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @returns {string|Buffer|ArrayBuffer|Uint8Array}
+ */
+function rewriteSca (content, filename, format) {
+  const target = getScaRewriteTarget(filename)
+  if (!target) return content
+
+  const { moduleName, filePath } = target
+  const version = getVersion(filename, filePath)
+  if (!version) return content
+
+  const configs = scaInstrumentations.filter(({ module }) =>
+    module.name === moduleName && module.filePath === filePath && satisfies(version, module.versionRange)
+  )
+  if (configs.length === 0) return content
+
+  const moduleType = format === 'module' ? 'esm' : 'cjs'
+  const source = getSourceText(content)
+  /** @type {{ code: string, map?: string|object }} */
+  let rewritten = { code: source }
+
+  instrumentedEntries.clear()
+  try {
+    const transformer = getScaMatcher(moduleType).getTransformer(moduleName, version, filePath)
+    rewritten = transformSource(transformer, source, moduleType)
+  } catch (error) {
+    instrumentedEntries.clear()
+    log.error('Error rewriting %s for Runtime SCA', filename, error)
+  }
+
+  let { code, map } = rewritten
+  const channelNames = []
+  for (const { channelName } of configs) {
+    if (!instrumentedEntries.has(channelName)) channelNames.push(channelName)
+  }
+  if (channelNames.length > 0) {
+    code = appendPublish(code, SCA_REWRITE_FAILED_CHANNEL, { moduleName, version, filePath, channelNames }, moduleType)
+  }
+
+  return inlineSourceMap(code, map)
+}
+
+/**
+ * @param {Transformer} transformer
+ * @param {string} source
+ * @param {'cjs'|'esm'} moduleType
+ * @returns {{ code: string, map?: string|object }}
+ */
+function transformSource (transformer, source, moduleType) {
+  // TODO: pass existing sourcemap as input for remapping
+  let { code, map } = transformer.transform(source, moduleType)
+
+  if (source.startsWith('#!') && !code.startsWith('#!')) {
+    // A shebang must be the entire first line, and JavaScript recognizes
+    // exactly four line terminators: \n, \r, \u2028 (line separator), and
+    // \u2029 (paragraph separator). Any of the four can end the shebang line.
+    const shebangEnd = source.search(/[\r\n\u2028\u2029]/)
+    code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
+    map = shiftSourceMapLine(map)
+  }
+
+  return { code, map }
+}
+
+/**
+ * @param {string} code
+ * @param {string|object|undefined} map
+ */
+function inlineSourceMap (code, map) {
+  if (!map) return code
+
+  const inlineMap = Buffer.from(typeof map === 'string' ? map : JSON.stringify(map)).toString('base64')
+
+  return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
 }
 
 /**
@@ -178,6 +257,38 @@ function getMatcher (moduleType) {
   matcherCjs ??= createMatcher(getDcPolyfillSpecifier(moduleType))
 
   return matcherCjs
+}
+
+/**
+ * @param {'cjs'|'esm'} moduleType
+ * @returns {InstrumentationMatcher}
+ */
+function getScaMatcher (moduleType) {
+  if (moduleType === 'esm') {
+    scaMatcherEsm ??= createScaMatcher(getDcPolyfillSpecifier(moduleType))
+
+    return scaMatcherEsm
+  }
+
+  scaMatcherCjs ??= createScaMatcher(getDcPolyfillSpecifier(moduleType))
+
+  return scaMatcherCjs
+}
+
+/**
+ * @param {string|undefined} dcModule
+ * @returns {InstrumentationMatcher}
+ */
+function createScaMatcher (dcModule) {
+  const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+  const { publishEntry } = require('./transforms/entry')
+
+  // Every SCA target only reports that it ran, whatever its descriptor says.
+  const transform = (state, node, parent, ancestry) => {
+    if (publishEntry(state, node, parent, ancestry)) instrumentedEntries.add(state.channelName)
+  }
+
+  return create(scaInstrumentations.map(config => ({ ...config, transform })), dcModule)
 }
 
 /**
@@ -270,15 +381,16 @@ function getSourceText (source) {
 }
 
 /**
- * Publish target-level compatibility on the application thread when a pure target is evaluated.
+ * Publish on the application thread when the module is evaluated, since loader workers cannot reach its channels.
  *
  * @param {string} source
- * @param {{ moduleName: string, version: string,
- *   result: 'unsupported'|'matched'|'rewritten' }} payload
+ * @param {string} channelName
+ * @param {object} payload
  * @param {'cjs'|'esm'} moduleType
  */
-function appendOrchestrionLoad (source, payload, moduleType) {
+function appendPublish (source, channelName, payload, moduleType) {
   const dcModule = JSON.stringify(getDcPolyfillSpecifier(moduleType) ?? 'diagnostics_channel')
+  const channel = `'${channelName}'`
   const message = JSON.stringify(payload)
 
   if (moduleType === 'esm') {
@@ -286,11 +398,10 @@ function appendOrchestrionLoad (source, payload, moduleType) {
     let suffix = 0
     while (source.includes(binding)) binding = `ddTraceOrchestrionDc${++suffix}`
 
-    return `${source};import ${binding} from ${dcModule};` +
-      `${binding}.channel('dd-trace:instrumentation:load:orchestrion').publish(${message});`
+    return `${source};import ${binding} from ${dcModule};${binding}.channel(${channel}).publish(${message});`
   }
 
-  return `${source};require(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message});`
+  return `${source};require(${dcModule}).channel(${channel}).publish(${message});`
 }
 
 /**
