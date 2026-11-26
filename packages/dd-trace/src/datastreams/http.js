@@ -43,10 +43,10 @@ function setHttpServerCheckpoint (tracer, span, headers) {
  * the aws-sdk plugin's span is the parent of v2 and v3 requests.
  *
  * @param {import('../opentracing/span') | null | undefined} parentSpan
- * @param {unknown} invocationId The request's `amz-sdk-invocation-id` header value.
+ * @param {Record<string, unknown>} headers Outgoing request headers, with lowercase names.
  */
-function isAwsSdkRequest (parentSpan, invocationId) {
-  return invocationId !== undefined || parentSpan?._integrationName === 'aws-sdk'
+function isAwsSdkRequest (parentSpan, headers) {
+  return headers['amz-sdk-invocation-id'] !== undefined || parentSpan?._integrationName === 'aws-sdk'
 }
 
 module.exports = {
