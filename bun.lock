@@ -78,7 +78,7 @@
         "@datadog/native-appsec": "12.0.0",
         "@datadog/native-iast-taint-tracking": "4.2.2",
         "@datadog/native-metrics": "4.0.0",
-        "@datadog/pprof": "5.20.1",
+        "@datadog/pprof": "5.21.0",
         "@datadog/wasm-js-rewriter": "5.0.4",
         "@opentelemetry/api": ">=1.4.1 <1.11.0",
         "@opentelemetry/api-logs": "<1.0.0",
@@ -158,7 +158,7 @@
 
     "@datadog/openfeature-node-server": ["@datadog/openfeature-node-server@2.8.0", "", { "dependencies": { "@datadog/flagging-core": "3.5.0" } }, "sha512-8TDX4Coc81Qg2VFkk9IpHT7gH9f9a8JBtaKh4NdyfEmKIDKzI1EYa1Q8LN7NamDaCtxpOjXVk1j6sDIl6skIOQ=="],
 
-    "@datadog/pprof": ["@datadog/pprof@5.20.1", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.3.2", "source-map": "^0.8.0" } }, "sha512-0mUaO8gSsX84cjWJ4VvJIDNj6tka5NnqQysg8emetQPYv5ClKdfiRFHWm2DzPBEhVnj4yWXzaOGMO1UNl9Av/Q=="],
+    "@datadog/pprof": ["@datadog/pprof@5.21.0", "", { "dependencies": { "node-gyp-build": "^4.8.4", "pprof-format": "^2.4.0", "source-map": "^0.8.0" } }, "sha512-7Gw5P0QFrgA9ncWjD1+lue1EQkvJOpmJpYGLJcZmn0PsNhcrcmh5/aIJcNeU59GNaN15lZotYJH1HxRFacACkA=="],
 
     "@datadog/wasm-js-rewriter": ["@datadog/wasm-js-rewriter@5.0.4", "", { "dependencies": { "js-yaml": "^4.3.1", "lru-cache": "^7.14.0", "module-details-from-path": "^1.0.4", "node-gyp-build": "^4.8.4" } }, "sha512-tSjbk51dkNzFMM3P/7y82tyrBj/9CWnPzcVb1JB8TUea/PIholdXSPuGC5F975YvvGB8KDujfmJIacN+EmuXMg=="],
 
@@ -1020,7 +1020,7 @@
 
     "pluralize": ["pluralize@8.0.0", "", {}, "sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA=="],
 
-    "pprof-format": ["pprof-format@2.3.2", "", {}, "sha512-fcMM+sgKMOveSurz7i0BMHfy1hHNnI9+VWjd4kdclqQjSTuiHWaP69DGwvkw3zcLkM/F76LhVIKvPyrxmp6iiw=="],
+    "pprof-format": ["pprof-format@2.4.1", "", {}, "sha512-p3ngTT9NuBp1kzky3rNXUKWrgsh2EfAwyDjbjbx/49pdQhfh2aEcPgfWxLYXPwvXRzhPUcgW0Uecn9ixJIm4xQ=="],
 
     "prelude-ls": ["prelude-ls@1.2.1", "", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
 

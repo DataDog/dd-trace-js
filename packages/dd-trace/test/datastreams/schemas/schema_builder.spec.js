@@ -56,4 +56,20 @@ describe('SchemaBuilder', () => {
     assert.strictEqual(shouldExtractPerson2, false)
     assert.strictEqual(shouldExtractTooDeep, false)
   })
+
+  it('should preserve the serialized definition and ID of an array of enum values', () => {
+    const builder = new SchemaBuilder({
+      iterateOverSchema (builder) {
+        builder.shouldExtractSchema('order', 0)
+        builder.addProperty('order', 'states', true, 'string', null, null, null, ['received', 'shipped'])
+      },
+    })
+
+    const schema = SchemaBuilder.getSchemaDefinition(builder.build())
+
+    assert.strictEqual(schema.definition,
+      '{"openapi": "3.0.0", "components": {"schemas": {"order": {"type": "object", "properties": ' +
+      '{"states": {"type": "array", "items": {"type": "string", "enum": ["received", "shipped"]}}}}}}}')
+    assert.strictEqual(schema.id, '9591836314204358705')
+  })
 })

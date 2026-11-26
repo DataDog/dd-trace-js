@@ -5,6 +5,7 @@ const http = require('node:http')
 const https = require('node:https')
 const { format, inspect } = require('node:util')
 
+const msgpack = require('@msgpack/msgpack')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -14,8 +15,10 @@ require('../setup/core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
+const { AgentEncoder } = require('../../src/encode/0.4')
 const id = require('../../src/id')
 const log = require('../../src/log')
+const { MAX_SIZE, MsgpackChunk, OverflowError } = require('../../src/msgpack')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
@@ -388,7 +391,7 @@ describe('OpenTelemetry Traces', () => {
       })
     })
 
-    it('encodes meta_struct values as base64 bytesValue attributes', () => {
+    it('encodes meta_struct entries as base64 MessagePack bytes', () => {
       const transformer = new OtlpTraceTransformer({}, 'http/json')
       const span = createMockSpan({
         meta_struct: {
@@ -400,17 +403,142 @@ describe('OpenTelemetry Traces', () => {
       const decoded = decodePayload(transformer.transformSpans([span]))
       const attrs = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
 
-      const stackAttr = attrs.find(a => a.key === '_dd.stack')
-      assert.ok(stackAttr, '_dd.stack attribute should be present')
-      assert.notStrictEqual(stackAttr.value.bytesValue, undefined, '_dd.stack should have bytesValue')
-      const stackDecoded = JSON.parse(Buffer.from(stackAttr.value.bytesValue, 'base64').toString())
-      assert.deepStrictEqual(stackDecoded, { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] })
+      for (const [key, expected] of Object.entries(span.meta_struct)) {
+        const attr = attrs.find(a => a.key === key)
+        assert.equal(typeof attr?.value.bytesValue, 'string', key)
+        assert.deepStrictEqual(msgpack.decode(Buffer.from(attr.value.bytesValue, 'base64')), expected)
+      }
+    })
 
-      const bodyAttr = attrs.find(a => a.key === 'http.request.body')
-      assert.ok(bodyAttr, 'http.request.body attribute should be present')
-      assert.notStrictEqual(bodyAttr.value.bytesValue, undefined, 'http.request.body should have bytesValue')
-      const bodyDecoded = JSON.parse(Buffer.from(bodyAttr.value.bytesValue, 'base64').toString())
-      assert.deepStrictEqual(bodyDecoded, { key: 'value' })
+    it('matches the v0.4 agent encoder for meta_struct edge cases', () => {
+      const circular = { keep: 'ok' }
+      circular.self = circular
+
+      const metaStruct = {
+        '_dd.stack': {
+          exploit: [{
+            id: 'stack-1',
+            language: 'nodejs',
+            frames: [{
+              id: 0,
+              file: 'app.js',
+              line: 42,
+              function: null,
+              class_name: undefined,
+              isNative: false,
+            }],
+          }],
+        },
+        'http.request.body': {
+          maxInt64Plus: 2 ** 63,
+          uint64Overflow: 2 ** 64,
+          hugePositive: 1e20,
+          minInt64Minus: -(2 ** 63) - 2048,
+          hugeNegative: -1e20,
+          notANumber: Number.NaN,
+          items: [1, null, undefined, 'two', 1, 'two'],
+          circular,
+        },
+        droppedNull: null,
+        droppedUndefined: undefined,
+      }
+
+      const span = createMockSpan({ meta_struct: metaStruct })
+
+      const agentEncoder = new AgentEncoder({ flush: () => {} })
+      agentEncoder.encode([span])
+      const agentSpan = msgpack.decode(agentEncoder.makePayload())[0][0]
+
+      const jsonTransformer = new OtlpTraceTransformer({}, 'http/json')
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const jsonAttrs = decodePayload(jsonTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+      const protoAttrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      for (const attrs of [jsonAttrs, protoAttrs]) {
+        assert.strictEqual(attrs.find(a => a.key === 'droppedNull'), undefined)
+        assert.strictEqual(attrs.find(a => a.key === 'droppedUndefined'), undefined)
+      }
+
+      for (const key of ['_dd.stack', 'http.request.body']) {
+        const expectedBytes = Buffer.from(agentSpan.meta_struct[key])
+        const jsonBytes = Buffer.from(jsonAttrs.find(a => a.key === key).value.bytesValue, 'base64')
+        const protoBytes = Buffer.from(protoAttrs.find(a => a.key === key).value.bytesValue)
+
+        assert.deepStrictEqual(jsonBytes, expectedBytes, `http/json byte parity for ${key}`)
+        assert.deepStrictEqual(protoBytes, expectedBytes, `http/protobuf byte parity for ${key}`)
+      }
+
+      const decodedBody = msgpack.decode(protoAttrs.find(a => a.key === 'http.request.body').value.bytesValue)
+      assert.strictEqual(decodedBody.maxInt64Plus, 2 ** 63)
+      assert.strictEqual(decodedBody.uint64Overflow, 2 ** 64)
+      assert.strictEqual(decodedBody.hugePositive, 1e20)
+      assert.strictEqual(decodedBody.minInt64Minus, -(2 ** 63) - 2048)
+      assert.strictEqual(decodedBody.hugeNegative, -1e20)
+      assert.ok(Number.isNaN(decodedBody.notANumber))
+      assert.deepStrictEqual(decodedBody.items, [1, 'two', 1, 'two'])
+      assert.deepStrictEqual(decodedBody.circular, { keep: 'ok' })
+
+      const decodedStack = msgpack.decode(protoAttrs.find(a => a.key === '_dd.stack').value.bytesValue)
+      assert.deepStrictEqual(decodedStack.exploit[0].frames[0], {
+        id: 0,
+        file: 'app.js',
+        line: 42,
+        isNative: false,
+      })
+    })
+
+    it('ignores array meta_struct like the v0.4 agent encoder', () => {
+      const span = createMockSpan({ meta_struct: ['ignored'] })
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const protoAttrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      assert.strictEqual(protoAttrs.find(a => a.key === '0'), undefined)
+    })
+
+    it('drops oversized meta_struct entries on ERR_MSGPACK_CHUNK_OVERFLOW and logs an error', () => {
+      const logError = sinon.stub(log, 'error')
+      const originalReserve = MsgpackChunk.prototype.reserve
+      let triggered = false
+      sinon.stub(MsgpackChunk.prototype, 'reserve').callsFake(function (size) {
+        if (!triggered) {
+          triggered = true
+          throw new OverflowError(MAX_SIZE + 1)
+        }
+        return originalReserve.call(this, size)
+      })
+
+      const span = createMockSpan({
+        meta_struct: {
+          oversized: { data: 'too big' },
+          '_dd.stack': { nodejs: [{ id: 1, file: 'a.js', line: 10 }] },
+        },
+      })
+
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const attrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      assert.strictEqual(attrs.find(a => a.key === 'oversized'), undefined)
+      const stackAttr = attrs.find(a => a.key === '_dd.stack')
+      assert.ok(stackAttr, 'remaining meta_struct entries should still be encoded')
+      assert.deepStrictEqual(msgpack.decode(stackAttr.value.bytesValue), span.meta_struct['_dd.stack'])
+
+      sinon.assert.calledOnce(logError)
+      assert.match(logError.firstCall.args[0], /chunk cap/)
+      assert.strictEqual(logError.firstCall.args[1], 'oversized')
+      assert.strictEqual(logError.firstCall.args[2], MAX_SIZE)
+    })
+
+    it('rethrows non-overflow errors when encoding meta_struct', () => {
+      sinon.stub(MsgpackChunk.prototype, 'reserve').throws(new Error('unexpected failure'))
+
+      const span = createMockSpan({ meta_struct: { '_dd.stack': { nodejs: [] } } })
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+
+      assert.throws(() => protoTransformer.transformSpans([span]), { message: 'unexpected failure' })
     })
 
     it('excludes _dd.span_links and span.kind from attributes', () => {
@@ -999,7 +1127,7 @@ describe('OpenTelemetry Traces', () => {
         ])
       })
 
-      it('encodes meta_struct values as their JSON bytes without base64', () => {
+      it('encodes meta_struct entries as raw MessagePack bytes', () => {
         const stack = { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] }
         const span = createMockSpan({ meta_struct: { '_dd.stack': stack } })
 
@@ -1007,7 +1135,7 @@ describe('OpenTelemetry Traces', () => {
         const stackAttr = attributes.find(attribute => attribute.key === '_dd.stack')
 
         assert.ok(stackAttr, '_dd.stack attribute should be present')
-        assert.deepStrictEqual(JSON.parse(Buffer.from(stackAttr.value.bytesValue).toString()), stack)
+        assert.deepStrictEqual(msgpack.decode(stackAttr.value.bytesValue), stack)
       })
     })
   })
