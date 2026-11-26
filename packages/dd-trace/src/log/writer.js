@@ -55,6 +55,17 @@ function info (log) {
   withNoop(() => logger.info ? logger.info(log) : logger.debug(log))
 }
 
+/**
+ * @param {string} message
+ */
+function infoStderr (message) {
+  if (logger === defaultLogger) {
+    withNoop(() => logger.warn(JSON.stringify({ status: 'info', message })))
+  } else {
+    info(message)
+  }
+}
+
 function debug (log) {
   withNoop(() => logger.debug(log))
 }
@@ -70,4 +81,4 @@ function getLogLevel () {
   return logChannel.getLevel()
 }
 
-module.exports = { configure, error, warn, info, debug, trace, getLogLevel }
+module.exports = { configure, error, warn, info, infoStderr, debug, trace, getLogLevel }

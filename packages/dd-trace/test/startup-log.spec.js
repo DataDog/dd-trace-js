@@ -1,6 +1,7 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const os = require('node:os')
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
@@ -240,6 +241,162 @@ describe('startup log guards', () => {
   })
 })
 
+describe('startup log output', () => {
+  let warnStub
+  let infoStub
+  let startup
+  const writer = require('../src/log/writer')
+
+  beforeEach(() => {
+    warnStub = sinon.stub(console, 'warn')
+    infoStub = sinon.stub(console, 'info')
+    writer.configure(false)
+    delete require.cache[require.resolve('../src/startup-log')]
+    startup = require('../src/startup-log')
+    const pluginManager = /** @type {Partial<import('../src/plugin_manager')>} */ ({ _pluginsByName: { http: {} } })
+    startup.setStartupLogPluginManager(/** @type {import('../src/plugin_manager')} */ (pluginManager))
+  })
+
+  afterEach(() => {
+    writer.configure(false)
+    warnStub.restore()
+    infoStub.restore()
+  })
+
+  for (const output of ['stderr', 'stdout', 'stderr-json']) {
+    it(`writes summaries to ${output} once and keeps diagnostics at warning level`, () => {
+      startup.setStartupLogConfig(getConfigFresh({ startupLogs: true, startupLogsOutput: output }))
+      startup.startupLog()
+      startup.startupLog()
+      startup.logIntegrations()
+      startup.logIntegrations()
+
+      const summaryStub = output === 'stdout' ? infoStub : warnStub
+      const otherStub = output === 'stdout' ? warnStub : infoStub
+      sinon.assert.notCalled(otherStub)
+      assert.strictEqual(summaryStub.callCount, 2)
+      let configuration = summaryStub.firstCall.args[0]
+      let integrations = summaryStub.secondCall.args[0]
+      if (output === 'stderr-json') {
+        const configurationRecord = JSON.parse(configuration)
+        const integrationsRecord = JSON.parse(integrations)
+        assert.strictEqual(configurationRecord.status, 'info')
+        assert.strictEqual(integrationsRecord.status, 'info')
+        configuration = configurationRecord.message
+        integrations = integrationsRecord.message
+      }
+      assert.match(configuration, /^DATADOG TRACER CONFIGURATION - /)
+      assert.strictEqual(integrations, 'DATADOG TRACER INTEGRATIONS LOADED - ["http"]')
+
+      warnStub.resetHistory()
+      infoStub.resetHistory()
+      startup.logAgentError({ status: 500, message: 'unavailable' })
+      startup.logGenericError('preloaded module')
+      sinon.assert.notCalled(infoStub)
+      assert.strictEqual(warnStub.callCount, 2)
+      assert.strictEqual(warnStub.firstCall.args[0], 'DATADOG TRACER DIAGNOSTIC - Agent Error: unavailable')
+      assert.strictEqual(warnStub.secondCall.args[0], 'DATADOG TRACER DIAGNOSTIC - Generic Error: preloaded module')
+    })
+
+    it(`respects startupLogs: false with ${output}`, () => {
+      startup.setStartupLogConfig(getConfigFresh({ startupLogs: false, startupLogsOutput: output }))
+      startup.startupLog()
+      startup.logIntegrations()
+      startup.logAgentError({ status: 500, message: 'unavailable' })
+      startup.logGenericError('preloaded module')
+      sinon.assert.notCalled(warnStub)
+      sinon.assert.notCalled(infoStub)
+    })
+
+    it(`uses the custom logger with ${output} even when debug logging is disabled`, () => {
+      const logger = { debug: sinon.spy(), info: sinon.spy(), warn: sinon.spy(), error: sinon.spy() }
+      startup.setStartupLogConfig(getConfigFresh({ startupLogs: true, startupLogsOutput: output }))
+      writer.configure(false, 'error', logger)
+      startup.startupLog()
+      startup.logIntegrations()
+      sinon.assert.notCalled(warnStub)
+      sinon.assert.notCalled(infoStub)
+      const messages = logger[output === 'stderr' ? 'warn' : 'info']
+      assert.strictEqual(messages.callCount, 2)
+      assert.match(messages.firstCall.args[0], /^DATADOG TRACER CONFIGURATION - /)
+      assert.strictEqual(messages.secondCall.args[0], 'DATADOG TRACER INTEGRATIONS LOADED - ["http"]')
+      sinon.assert.notCalled(logger[output === 'stderr' ? 'info' : 'warn'])
+    })
+  }
+
+  for (const output of ['stdout', 'stderr-json']) {
+    it(`falls back to custom logger.debug when info is unavailable with ${output}`, () => {
+      const logger = { debug: sinon.spy(), error: sinon.spy() }
+      startup.setStartupLogConfig(getConfigFresh({ startupLogs: true, startupLogsOutput: output }))
+      writer.configure(false, 'error', logger)
+      startup.startupLog()
+      startup.logIntegrations()
+      sinon.assert.notCalled(warnStub)
+      sinon.assert.notCalled(infoStub)
+      assert.strictEqual(logger.debug.callCount, 2)
+    })
+
+    it(`contains custom logger failures with ${output}`, () => {
+      const logger = { debug () {}, info: sinon.stub().throws(new Error('logger failed')), error () {} }
+      startup.setStartupLogConfig(getConfigFresh({ startupLogs: true, startupLogsOutput: output }))
+      writer.configure(false, 'error', logger)
+      startup.startupLog()
+      startup.logIntegrations()
+      assert.strictEqual(logger.info.callCount, 2)
+    })
+  }
+
+  for (const { output, options, stream } of [
+    { stream: 'stderr' },
+    { output: 'stderr', stream: 'stderr' },
+    { output: 'stdout', stream: 'stdout' },
+    { output: 'stderr-json', stream: 'stderr' },
+    { output: 'stderr-json', options: { tags: { custom: 'check"out\nnext' } }, stream: 'stderr' },
+    { output: 'stdout', options: { startupLogsOutput: 'stderr-json' }, stream: 'stderr' },
+    { output: 'stderr', options: { startupLogsOutput: 'stdout' }, stream: 'stdout' },
+    { options: { startupLogs: false } },
+    { output: 'stdout', options: { startupLogs: false } },
+    { output: 'stderr-json', options: { startupLogs: false } },
+  ]) {
+    it(`routes public init output: ${JSON.stringify({ output, options, stream })}`, () => {
+      const script = `
+        require(${JSON.stringify(require.resolve('../../../'))}).init(JSON.parse(process.argv[1]))
+        process.stdout.write('application output\\n')
+        process.exit(0)
+      `
+      const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+      const result = spawnSync(process.execPath, ['-e', script, JSON.stringify({
+        appsec: false,
+        iast: false,
+        plugins: false,
+        remoteConfig: { enabled: false },
+        runtimeMetrics: false,
+        ...options,
+      })], {
+        encoding: 'utf8',
+        env: { ...env, DD_TRACE_STARTUP_LOGS: 'true', DD_TRACE_STARTUP_LOGS_OUTPUT: output },
+        timeout: 15000,
+      })
+
+      assert.ifError(result.error)
+      assert.strictEqual(result.status, 0, result.stderr)
+      for (const destination of ['stdout', 'stderr']) {
+        assert.strictEqual(result[destination].includes('DATADOG TRACER CONFIGURATION - '), destination === stream)
+      }
+      assert.match(result.stdout, /application output\n$/)
+      if ((options?.startupLogsOutput ?? output ?? 'stderr-json') === 'stderr-json' && stream) {
+        assert.strictEqual(result.stdout, 'application output\n')
+        const record = JSON.parse(result.stderr)
+        assert.strictEqual(record.status, 'info')
+        assert.match(record.message, /^DATADOG TRACER CONFIGURATION - /)
+        const configuration = JSON.parse(record.message.slice('DATADOG TRACER CONFIGURATION - '.length))
+        assert.strictEqual(configuration.lang, 'nodejs')
+        if (options?.tags) assert.strictEqual(configuration.tags.custom, options.tags.custom)
+      }
+    })
+  }
+})
+
 describe('data_streams_enabled', () => {
   afterEach(() => {
     delete process.env.DD_DATA_STREAMS_ENABLED
@@ -258,7 +415,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
@@ -276,7 +434,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, true)
   })
@@ -294,7 +453,8 @@ describe('data_streams_enabled', () => {
     startupLog()
     /* eslint-disable-next-line no-console */
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const { message } = JSON.parse(warnStub.firstCall.args[0])
+    const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
     warnStub.restore()
     assert.strictEqual(logObj.data_streams_enabled, false)
   })
@@ -321,7 +481,8 @@ describe('profiling_enabled', () => {
       startupLog()
       /* eslint-disable-next-line no-console */
       const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-      const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const { message } = JSON.parse(warnStub.firstCall.args[0])
+      const logObj = JSON.parse(message.replace('DATADOG TRACER CONFIGURATION - ', ''))
       warnStub.restore()
       assert.strictEqual(logObj.profiling_enabled, expected)
     })
