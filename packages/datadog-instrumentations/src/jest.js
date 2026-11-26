@@ -420,9 +420,11 @@ function getTransformedSourceMap (code, sourceMapPath) {
 const lineCoverageTransformers = new WeakSet()
 
 /**
- * Hands the code of every CommonJS module of the repository that `transformer` returns to the
- * line-coverage collector. This is the one place every Jest version passes module code through
- * with its source map: from 30.4 the runtime compiles it in a class that is not exported.
+ * Hands the code of every module of the repository that `transformer` returns to the line-coverage
+ * collector. This is the one place every Jest version passes module code through with its source
+ * map: from 30.4 the runtime compiles it in a class that is not exported. ECMAScript modules, which
+ * Jest compiles as source text modules, come through `transformAsync` when a transformer is
+ * asynchronous.
  *
  * @param {object} transformer Jest's ScriptTransformer
  * @returns {object}
@@ -434,24 +436,40 @@ function instrumentScriptTransformer (transformer) {
   }
   lineCoverageTransformers.add(transformer)
   transformer.transform = shimmer.wrapFunction(transformer.transform, transform => function (filename, options) {
-    const result = transform.apply(this, arguments)
-    // ECMAScript modules (compiled as source text modules) are not instrumented yet.
-    if (!lineCoverage?.isActive() || options?.supportsStaticESM || options?.isInternalModule ||
-        typeof result?.code !== 'string' || !lineCoverage.shouldInstrument(filename)) {
-      return result
-    }
-    // The result is Jest's cached object: leave it as it is.
-    return {
-      ...result,
-      code: lineCoverage.instrumentSource(result.code, filename, {
-        reuse: true,
-        sourceMap: () => getTransformedSourceMap(result.code, result.sourceMapPath),
-        // Instrumented code is cached where Jest caches transformed code, and only when Jest does.
-        cacheDirectory: this?._config?.cache === false ? undefined : this?._config?.cacheDirectory,
-      }),
-    }
+    return instrumentTransformResult(this, filename, options, transform.apply(this, arguments))
   })
+  if (typeof transformer.transformAsync === 'function') {
+    transformer.transformAsync = shimmer.wrapFunction(transformer.transformAsync, transformAsync =>
+      function (filename, options) {
+        return transformAsync.apply(this, arguments)
+          .then(result => instrumentTransformResult(this, filename, options, result))
+      })
+  }
   return transformer
+}
+
+/**
+ * @param {object} transformer Jest's ScriptTransformer
+ * @param {string} filename
+ * @param {{ supportsStaticESM?: boolean, isInternalModule?: boolean } | undefined} options
+ * @param {{ code?: string, sourceMapPath?: string | null } | undefined} result
+ */
+function instrumentTransformResult (transformer, filename, options, result) {
+  if (!lineCoverage?.isActive() || options?.isInternalModule || typeof result?.code !== 'string' ||
+      !lineCoverage.shouldInstrument(filename)) {
+    return result
+  }
+  // The result is Jest's cached object: leave it as it is.
+  return {
+    ...result,
+    code: lineCoverage.instrumentSource(result.code, filename, {
+      isModule: options?.supportsStaticESM === true,
+      reuse: true,
+      sourceMap: () => getTransformedSourceMap(result.code, result.sourceMapPath),
+      // Instrumented code is cached where Jest caches transformed code, and only when Jest does.
+      cacheDirectory: transformer?._config?.cache === false ? undefined : transformer?._config?.cacheDirectory,
+    }),
+  }
 }
 
 function getTestEnvironmentOptions (config) {
