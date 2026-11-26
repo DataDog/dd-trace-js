@@ -219,25 +219,18 @@ function wrapQuery (query) {
       ctx.poolWaitTime = waitTime
     }
 
-    const finish = (error, res) => {
-      if (error) {
-        ctx.error = error
-        errorCh.publish(ctx)
-      }
-      ctx.result = res?.rows
-      return finishCh.publish(ctx)
-    }
+    const submittable = typeof pgQuery.submit === 'function'
+
     return startCh.runStores(ctx, () => {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
-        const reusingQuery = typeof pgQuery.submit === 'function'
         const callback = args.at(-1)
 
-        finish(error)
+        finishQuery(ctx, error)
 
-        if (reusingQuery) {
+        if (submittable) {
           if (!pgQuery.callback && typeof callback === 'function') {
             pgQuery.callback = callback
           }
@@ -280,45 +273,106 @@ function wrapQuery (query) {
 
       args[0] = pgQuery
 
+      if (submittable) {
+        return submitQuery(this, query, args, pgQuery, ctx)
+      }
+
+      const [, values, callback = values] = args
+
+      // pg can call the callback before `client.query` returns, such as on query timeout, so it is wrapped up front.
+      // A child of the config carries it, as older pg versions write the callback onto the config they are given.
+      const queryCallback = typeof callback === 'function' ? callback : pgQuery.callback
+      if (typeof queryCallback === 'function') {
+        const queryValues = typeof values === 'function' ? undefined : values
+        return query.call(this, { __proto__: pgQuery, callback: wrapCallback(ctx, queryCallback) }, queryValues)
+      }
+
       const retval = query.apply(this, args)
 
-      const deperecated = Object.hasOwn(this, '_activeQuery')
-      const queryQueue = deperecated ? this._queryQueue : this.queryQueue
-      const activeQuery = deperecated ? this._activeQuery : this.activeQuery
-
-      // In pipeline mode, _sentQueryQueue contains submitted queries waiting behind activeQuery.
-      const newQuery = queryQueue.at(-1) || this._sentQueryQueue?.at(-1) || activeQuery
-
-      if (!newQuery) {
-        return retval
+      // Without a callback, pg resolves the promise it returns instead.
+      if (typeof retval?.then === 'function') {
+        retval.then(result => finishQuery(ctx, null, result), error => finishQuery(ctx, error))
       }
 
-      if (newQuery.callback) {
-        const originalCallback = newQuery.callback
-        newQuery.callback = function (err, ...args) {
-          finish(err, ...args)
-          return finishCh.runStores(ctx, originalCallback, this, err, ...args)
-        }
-      } else if (newQuery.once) {
-        newQuery
-          .once(errorMonitor, finish)
-          .once('end', (res) => finish(null, res))
-      } else {
-        // TODO: This code is never reached in our tests.
-        // Internally, pg always uses callbacks or streams, even for promise based queries.
-        // Investigate if this code should just be removed.
-        newQuery.then((res) => finish(null, res), finish)
-      }
-
-      try {
-        return retval
-      } catch (error) {
-        ctx.error = error
-        errorCh.publish(ctx)
-      }
+      return retval
     })
   }
 }
+
+/**
+ * @typedef {{ query: object, error?: unknown, result?: unknown[] }} QueryContext
+ * @typedef {{ rows?: unknown[] }} QueryResult
+ * @typedef {(error: unknown, result?: QueryResult) => unknown} QueryCallback
+ * @typedef {import('node:events').EventEmitter & { callback?: QueryCallback }} SubmittableQuery
+ */
+
+/**
+ * Submits a query object the caller created, such as a `pg.Query` or a pg-cursor.
+ *
+ * @param {object} client
+ * @param {Function} query the original `client.query`
+ * @param {unknown[]} args
+ * @param {SubmittableQuery} pgQuery `args[0]`
+ * @param {QueryContext} ctx
+ * @returns {unknown}
+ */
+function submitQuery (client, query, args, pgQuery, ctx) {
+  const callback = args[1]
+  let callbackWrapped = false
+
+  // pg keeps a callback already on the query, while pg-native prefers the one passed with it.
+  if (typeof pgQuery.callback === 'function') {
+    pgQuery.callback = wrapCallback(ctx, pgQuery.callback, pgQuery)
+    callbackWrapped = true
+  }
+  if (typeof callback === 'function') {
+    args[1] = wrapCallback(ctx, /** @type {QueryCallback} */ (callback), pgQuery)
+    callbackWrapped = true
+  }
+
+  // Streams such as pg-cursor and pg-query-stream report through events instead.
+  if (!callbackWrapped && typeof pgQuery.once === 'function') {
+    pgQuery
+      .once(errorMonitor, error => finishQuery(ctx, error))
+      .once('end', result => finishQuery(ctx, null, result))
+  }
+
+  return query.apply(client, args)
+}
+
+/**
+ * @param {QueryContext} ctx
+ * @param {QueryCallback} callback
+ * @param {SubmittableQuery} [pgQuery] query object the caller may submit again
+ * @returns {QueryCallback}
+ */
+function wrapCallback (ctx, callback, pgQuery) {
+  const wrapped = function (error, result) {
+    // pg leaves the callback on the query object. Give the caller's own back for its next submission.
+    if (pgQuery?.callback === wrapped) {
+      pgQuery.callback = callback
+    }
+
+    finishQuery(ctx, error, result)
+    return finishCh.runStores(ctx, callback, this, error, result)
+  }
+  return wrapped
+}
+
+/**
+ * @param {QueryContext} ctx
+ * @param {unknown} error
+ * @param {QueryResult} [result]
+ */
+function finishQuery (ctx, error, result) {
+  if (error) {
+    ctx.error = error
+    errorCh.publish(ctx)
+  }
+  ctx.result = result?.rows
+  finishCh.publish(ctx)
+}
+
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
