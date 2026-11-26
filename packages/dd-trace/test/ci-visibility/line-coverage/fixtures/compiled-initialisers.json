@@ -1,0 +1,125 @@
+{
+  "sources": {
+    "shape.ts": [
+      "export class Shape {",
+      "  size: number",
+      "",
+      "  constructor (size: number) {",
+      "    this.size = size",
+      "  }",
+      "",
+      "  area () {",
+      "    return this.size * this.size",
+      "  }",
+      "}"
+    ],
+    "color.ts": [
+      "export enum Color {",
+      "  Red,",
+      "  Green = 'green',",
+      "}",
+      "",
+      "export function isRed (color: Color) {",
+      "  return color === Color.Red",
+      "}"
+    ],
+    "noop.ts": [
+      "export default function noop() {}"
+    ]
+  },
+  "compilers": {
+    "typescript 6.0.3": {
+      "options": "typescript transpileModule: module CommonJS, target ES5",
+      "modules": {
+        "shape.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", { value: true });",
+            "exports.Shape = void 0;",
+            "var Shape = /** @class */ (function () {",
+            "    function Shape(size) {",
+            "        this.size = size;",
+            "    }",
+            "    Shape.prototype.area = function () {",
+            "        return this.size * this.size;",
+            "    };",
+            "    return Shape;",
+            "}());",
+            "exports.Shape = Shape;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "shape.ts"
+            ],
+            "names": [],
+            "mappings": ";;;AAAA;IAGE,eAAa,IAAY;QACvB,IAAI,CAAC,IAAI,GAAG,IAAI,CAAA;IAClB,CAAC;IAED,oBAAI,GAAJ;QACE,OAAO,IAAI,CAAC,IAAI,GAAG,IAAI,CAAC,IAAI,CAAA;IAC9B,CAAC;IACH,YAAC;AAAD,CAAC,AAVD,IAUC;AAVY,sBAAK",
+            "sourcesContent": [
+              "export class Shape {\n  size: number\n\n  constructor (size: number) {\n    this.size = size\n  }\n\n  area () {\n    return this.size * this.size\n  }\n}\n"
+            ]
+          }
+        },
+        "color.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", { value: true });",
+            "exports.Color = void 0;",
+            "exports.isRed = isRed;",
+            "var Color;",
+            "(function (Color) {",
+            "    Color[Color[\"Red\"] = 0] = \"Red\";",
+            "    Color[\"Green\"] = \"green\";",
+            "})(Color || (exports.Color = Color = {}));",
+            "function isRed(color) {",
+            "    return color === Color.Red;",
+            "}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "color.ts"
+            ],
+            "names": [],
+            "mappings": ";;;AAKA,sBAEC;AAPD,IAAY,KAGX;AAHD,WAAY,KAAK;IACf,+BAAG,CAAA;IACH,wBAAe,CAAA;AACjB,CAAC,EAHW,KAAK,qBAAL,KAAK,QAGhB;AAED,SAAgB,KAAK,CAAE,KAAY;IACjC,OAAO,KAAK,KAAK,KAAK,CAAC,GAAG,CAAA;AAC5B,CAAC",
+            "sourcesContent": [
+              "export enum Color {\n  Red,\n  Green = 'green',\n}\n\nexport function isRed (color: Color) {\n  return color === Color.Red\n}\n"
+            ]
+          }
+        }
+      }
+    },
+    "swc 1.15.41": {
+      "options": "@swc/core transformSync: jsc.parser typescript, jsc.target es2018, module commonjs",
+      "modules": {
+        "noop.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "Object.defineProperty(exports, \"default\", {",
+            "    enumerable: true,",
+            "    get: function() {",
+            "        return noop;",
+            "    }",
+            "});",
+            "function noop() {}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "noop.ts"
+            ],
+            "names": [
+              "noop"
+            ],
+            "mappings": ";;;;+BAAA;;;eAAwBA;;;AAAT,SAASA,QAAQ",
+            "sourcesContent": [
+              "export default function noop() {}\n"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
