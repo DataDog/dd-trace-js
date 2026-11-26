@@ -94,6 +94,9 @@ let heartbeatFailedDependencies = []
 const sentIntegrations = new Set()
 
 function getRetryData () {
+  if (retryData?.reqType === 'app-dependencies-loaded') {
+    retryData.payload = dependencies.refreshPayload(retryData.payload)
+  }
   return retryData
 }
 
@@ -201,6 +204,7 @@ function appClosing () {
   }
   // Give chance to listeners to update metrics before shutting down.
   telemetryAppClosingChannel.publish()
+  dependencies.flush()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
   flush()
@@ -310,9 +314,10 @@ function extendedHeartbeat (config) {
       appPayload.integrations = heartbeatFailedIntegrations
       heartbeatFailedIntegrations = []
     }
-    if (heartbeatFailedDependencies.length > 0) {
-      appPayload.dependencies = heartbeatFailedDependencies
-      heartbeatFailedDependencies = []
+    const extendedHeartbeatDependencies = dependencies.getExtendedHeartbeatDependencies(heartbeatFailedDependencies)
+    heartbeatFailedDependencies = []
+    if (extendedHeartbeatDependencies.length > 0) {
+      appPayload.dependencies = extendedHeartbeatDependencies
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
   }, config.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL).unref?.()
