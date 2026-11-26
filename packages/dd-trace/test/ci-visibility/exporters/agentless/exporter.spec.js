@@ -276,14 +276,38 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   describe('coverage requests', () => {
-    it('sends coverage gzipped to the coverage intake', async () => {
-      const request = sinon.stub().yieldsAsync(null, 'OK', 200)
+    function createExporter (request) {
       const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
         './coverage-writer': proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer', {
           '../request': request,
         }),
       })
-      const exporter = new Exporter({ site: 'd4tad0g.com', tags: {}, testOptimization: {} })
+      return new Exporter({ site: 'd4tad0g.com', tags: {}, testOptimization: {} })
+    }
+
+    it('sends coverage before any flush once more than 1 MiB is queued', async () => {
+      let resolveSent
+      const sent = new Promise(resolve => { resolveSent = resolve })
+      const request = sinon.stub().callsFake((body, options, callback) => {
+        callback(null, 'OK', 200)
+        resolveSent()
+      })
+      const exporter = createExporter(request)
+
+      exporter._coverageWriter.append({
+        sessionId: id('1'),
+        suiteId: id('2'),
+        files: [{ filename: 'file.js', bitmap: Buffer.alloc(1024 * 1024) }],
+      })
+      await sent
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(exporter._coverageWriter._encoder.count(), 0)
+    })
+
+    it('sends coverage gzipped to the coverage intake', async () => {
+      const request = sinon.stub().yieldsAsync(null, 'OK', 200)
+      const exporter = createExporter(request)
 
       exporter._coverageWriter.append({ sessionId: id('1'), suiteId: id('2'), files: ['file.js'] })
       await new Promise(resolve => exporter._coverageWriter.flush(resolve))

@@ -12,6 +12,9 @@ const { AgentEncoder } = require('./0.4')
 
 const COVERAGE_PAYLOAD_VERSION = 2
 const COVERAGE_KEYS_LENGTH = 2
+// Writers flush on a timer, so without a size limit a short test run sends all of its coverage at exit, in one
+// request the run waits for.
+const SOFT_LIMIT = 1024 * 1024 // 1 MiB
 
 function getBitmapBuffer (bitmap) {
   if (!bitmap) return
@@ -27,8 +30,11 @@ function getBitmapBuffer (bitmap) {
 }
 
 class CoverageCIVisibilityEncoder extends AgentEncoder {
-  constructor () {
+  #writer
+
+  constructor (writer) {
     super(...arguments)
+    this.#writer = writer
     this._coverageBytes = new MsgpackChunk()
     this.form = new FormData()
     this._coveragesCount = 0
@@ -67,6 +73,10 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       { endpoint: 'code_coverage' },
       Date.now() - startTime
     )
+
+    if (this._coverageBytes.length > SOFT_LIMIT) {
+      this.#writer.flush()
+    }
   }
 
   encodeCodeCoverage (bytes, coverage) {
