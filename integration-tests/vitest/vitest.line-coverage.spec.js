@@ -69,9 +69,10 @@ for (const version of getVitestVersions()) {
      *
      * @param {boolean} isLineCoverageEnabled
      * @param {string} pool
+     * @param {boolean} [isCodeCoverageEnabled] whether the settings ask for coverage, which line coverage needs
      */
-    async function runFixtureSuite (isLineCoverageEnabled, pool) {
-      receiver.setSettings({ itr_enabled: false, code_coverage: false, tests_skipping: false })
+    async function runFixtureSuite (isLineCoverageEnabled, pool, isCodeCoverageEnabled = true) {
+      receiver.setSettings({ itr_enabled: true, code_coverage: isCodeCoverageEnabled, tests_skipping: false })
       childProcess = exec('./node_modules/.bin/vitest run', {
         cwd,
         env: {
@@ -140,7 +141,6 @@ for (const version of getVitestVersions()) {
         assert.ok(getLines(multiplies, FIXTURE).has(6), testOutput)
         assert.ok(!getLines(multiplies, FIXTURE).has(2), testOutput)
 
-        // Concurrent tests run, and what ran while their windows overlapped is not credited to either.
         const sharedLines = (part, filename) => {
           const lines = new Set()
           for (const coverage of coverages.filter(coverage => coverage.shared === part)) {
@@ -151,10 +151,14 @@ for (const version of getVitestVersions()) {
         assert.ok(sharedLines('suiteSetup', FIXTURE).has(2), testOutput)
         assert.ok(!sharedLines('suiteSetup', FIXTURE).has(6), testOutput)
         assert.ok(sharedLines('init', TEST_FILE).size > 0, testOutput)
-        const divides = tests.find(test => test.meta[TEST_NAME].endsWith('divides concurrently'))
-        const dividesFiles = coverages.find(coverage => coverage.span_id === Number(divides.span_id))?.files ?? []
-        const concurrentLines = new Set([...getLines(dividesFiles, ARITHMETIC), ...sharedLines('unowned', ARITHMETIC)])
-        assert.ok(concurrentLines.has(DIVIDE_LINE), testOutput)
+
+        // Concurrent tests are covered per test: each gets what it ran, and not what the other ran.
+        const divides = coverageOf('divides concurrently')
+        assert.ok(getLines(divides, ARITHMETIC).has(DIVIDE_LINE), testOutput)
+        assert.ok(!getLines(divides, ARITHMETIC).has(MULTIPLY_LINE), testOutput)
+        const multipliesConcurrently = coverageOf('multiplies concurrently')
+        assert.ok(getLines(multipliesConcurrently, ARITHMETIC).has(MULTIPLY_LINE), testOutput)
+        assert.ok(!getLines(multipliesConcurrently, ARITHMETIC).has(DIVIDE_LINE), testOutput)
       })
 
       it(`reports the same tests whether or not line coverage is on (${pool})`, async () => {
@@ -165,9 +169,22 @@ for (const version of getVitestVersions()) {
           .map(test => `${test.meta[TEST_NAME]}: ${test.meta[TEST_STATUS]}`)
           .sort()
         assert.deepStrictEqual(outcomes(on), outcomes(off))
+        // Line coverage takes the place of the per-suite coverage.
+        assert.ok(off.coverages.length > 0, testOutput)
         assert.ok(off.coverages.every(coverage => coverage.span_id === undefined), testOutput)
         assert.ok(on.coverages.some(coverage => coverage.span_id !== undefined), testOutput)
+        assert.ok(
+          on.coverages.every(coverage => coverage.span_id !== undefined || coverage.shared !== undefined),
+          testOutput
+        )
       })
     }
+
+    it('collects no coverage when the settings do not ask for coverage', async () => {
+      const { tests, coverages } = await runFixtureSuite(true, 'forks', false)
+
+      assert.strictEqual(tests.length, 5, testOutput)
+      assert.deepStrictEqual(coverages, [], testOutput)
+    })
   })
 }
