@@ -72,9 +72,10 @@ function isWhitespace (c) {
  * @param {object} map a parsed source map with a `sources` array
  * @param {string} filename the file of the code the map describes, which relative sources resolve against
  * @returns {{ sources: string[], mapPosition: (line: number, column: number) =>
- *   ({ source: number, line: number, start: number, end: number } | undefined) }} the absolute path
- *   of each source, and the lookup of a generated position (1-based line, 0-based column) as a source
- *   index and 1-based line, with the columns of the line between which every position maps the same
+ *   ({ source: number, line: number, column: number, start: number, end: number } | undefined) }} the
+ *   absolute path of each source, and the lookup of a generated position (1-based line, 0-based column)
+ *   as a source index, 1-based line and 0-based column, with the columns of the generated line between
+ *   which every position maps the same
  */
 function createPositionMapper (map, filename) {
   const directory = dirname(filename)
@@ -87,19 +88,17 @@ function createPositionMapper (map, filename) {
     mapPosition (line, column) {
       const segments = lines[line - 1]
       if (segments === undefined) return
-      if (unsortedLines.has(segments)) {
-        const found = scan(segments, column)
-        if (found === -1) return
-        return { source: segments[found * 3 + 1], line: segments[found * 3 + 2] + 1, start: column, end: column + 1 }
-      }
-      const found = search(segments, column)
+      const unsorted = unsortedLines.has(segments)
+      const found = unsorted ? scan(segments, column) : search(segments, column)
       if (found === -1) return
-      const next = found * 3 + 3
+      const at = found * 4
+      const next = at + 4
       return {
-        source: segments[found * 3 + 1],
-        line: segments[found * 3 + 2] + 1,
-        start: segments[found * 3],
-        end: next < segments.length ? segments[next] : Infinity,
+        source: segments[at + 1],
+        line: segments[at + 2] + 1,
+        column: segments[at + 3],
+        start: unsorted ? column : segments[at],
+        end: unsorted ? column + 1 : (next < segments.length ? segments[next] : Infinity),
       }
     },
   }
@@ -107,9 +106,9 @@ function createPositionMapper (map, filename) {
 
 /**
  * @param {string} mappings
- * @returns {{ lines: number[][], unsortedLines: Set<number[]> }} for each generated line, triples of
- *   generated column, source index and 0-based original line, for segments that have a source; and
- *   the lines whose triples are not ordered by generated column
+ * @returns {{ lines: number[][], unsortedLines: Set<number[]> }} for each generated line, quadruples of
+ *   generated column, source index, 0-based original line and original column, for segments that have
+ *   a source; and the lines whose quadruples are not ordered by generated column
  */
 function decodeMappings (mappings) {
   const lines = []
@@ -118,10 +117,12 @@ function decodeMappings (mappings) {
   let generatedColumn = 0
   let source = 0
   let originalLine = 0
-  // The fields of the current segment read so far, and the source and line deltas among them.
+  let originalColumn = 0
+  // The fields of the current segment read so far, and the source, line and column deltas among them.
   let fields = 0
   let sourceDelta = 0
   let lineDelta = 0
+  let columnDelta = 0
   let value = 0
   let shift = 0
   for (let i = 0; i <= mappings.length; i++) {
@@ -131,8 +132,9 @@ function decodeMappings (mappings) {
       if (fields >= 4) {
         source += sourceDelta
         originalLine += lineDelta
-        if (segments.length > 0 && generatedColumn < segments.at(-3)) unsortedLines.add(segments)
-        segments.push(generatedColumn, source, originalLine)
+        originalColumn += columnDelta
+        if (segments.length > 0 && generatedColumn < segments.at(-4)) unsortedLines.add(segments)
+        segments.push(generatedColumn, source, originalLine, originalColumn)
       }
       fields = 0
       if (c === 59) {
@@ -154,6 +156,7 @@ function decodeMappings (mappings) {
     if (fields === 0) generatedColumn += decoded
     else if (fields === 1) sourceDelta = decoded
     else if (fields === 2) lineDelta = decoded
+    else if (fields === 3) columnDelta = decoded
     fields++
     value = 0
     shift = 0
@@ -164,16 +167,16 @@ function decodeMappings (mappings) {
 /**
  * The index of the last segment at or before `column`, or -1, in a line ordered by generated column.
  *
- * @param {number[]} segments triples of generated column, source and original line
+ * @param {number[]} segments quadruples of generated column, source, original line and column
  * @param {number} column
  */
 function search (segments, column) {
   let found = -1
   let low = 0
-  let high = segments.length / 3 - 1
+  let high = segments.length / 4 - 1
   while (low <= high) {
     const middle = (low + high) >> 1
-    if (segments[middle * 3] <= column) {
+    if (segments[middle * 4] <= column) {
       found = middle
       low = middle + 1
     } else {
@@ -187,14 +190,14 @@ function search (segments, column) {
  * In a line that is not ordered, the index of the last segment before the first one past `column`,
  * or -1, as a reader that walks the line in order finds it.
  *
- * @param {number[]} segments triples of generated column, source and original line
+ * @param {number[]} segments quadruples of generated column, source, original line and column
  * @param {number} column
  */
 function scan (segments, column) {
   let found = -1
-  for (let i = 0; i < segments.length; i += 3) {
+  for (let i = 0; i < segments.length; i += 4) {
     if (segments[i] > column) break
-    found = i / 3
+    found = i / 4
   }
   return found
 }

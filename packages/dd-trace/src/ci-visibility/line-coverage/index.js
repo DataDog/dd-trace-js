@@ -47,6 +47,7 @@ const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
 const { showOriginalFunctionSource } = require('./function-source')
 const { instrument } = require('./instrument')
+const { createPositionTable, isOriginalInitialiser } = require('./original-positions')
 const { createPositionMapper, getSourceMappingUrl, readSourceMapUrl } = require('./source-map')
 const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
 
@@ -695,8 +696,8 @@ function getRepositoryFile (filename) {
 }
 
 /**
- * @typedef {(code: string, options: { sourceType: string, preserveParens: boolean }) => object} OxcParse
- *   returns an ESTree Program, and throws on a syntax error
+ * @typedef {(code: string, options: { sourceType: string, preserveParens: boolean, lang?: string }) => object}
+ *   OxcParse returns an ESTree Program, and throws on a syntax error
  */
 
 /** @type {OxcParse | null | undefined} */
@@ -779,6 +780,28 @@ function loadOxcPackage () {
 }
 
 /**
+ * @param {ReturnType<typeof createPositionMapper>} mapper
+ * @param {unknown} sourcesContent the source map's texts of its sources
+ * @param {OxcParse} parseWithOxc
+ * @returns {NonNullable<import('./instrument').InstrumentOptions['isSourceInitialiser']>}
+ */
+function createSourceInitialiserCheck (mapper, sourcesContent, parseWithOxc) {
+  /** @type {import('./original-positions').ParseOriginal} */
+  const parseOriginal = (code, lang, sourceType) => parseWithOxc(code, { lang, sourceType, preserveParens: false })
+  const contents = Array.isArray(sourcesContent) ? sourcesContent : []
+  /** @type {Array<import('./original-positions').PositionTable | null>} */
+  const tables = []
+  return (source, line, column, isInitialiser) => {
+    let table = tables[source]
+    if (table === undefined) {
+      table = createPositionTable(mapper.sources[source], contents[source], parseOriginal)
+      tables[source] = table
+    }
+    return table === null ? undefined : isOriginalInitialiser(table, line, column, isInitialiser)
+  }
+}
+
+/**
  * @param {string} code
  * @param {boolean} isModule
  * @returns {object} an ESTree Program
@@ -821,7 +844,7 @@ function getCacheSalt () {
   if (cacheSalt !== undefined) return cacheSalt
   try {
     const hash = createHash('sha1')
-    for (const file of ['./index', './collector', './instrument', './source-map']) {
+    for (const file of ['./index', './collector', './instrument', './original-positions', './source-map']) {
       hash.update(readFileSync(require.resolve(file)))
     }
     // The parser is named from its package rather than loaded: when every module comes from the
@@ -964,6 +987,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     const map = toSourceMap(sourceMap)
     let sources = [filename]
     let mapPosition
+    let isSourceInitialiser
     if (map !== undefined) {
       const mapper = createPositionMapper(map, filename)
       sources = mapper.sources.map(source => getRepositoryFile(source) ?? null)
@@ -971,12 +995,18 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
         const original = mapper.mapPosition(line, column)
         return original === undefined || sources[original.source] === null ? undefined : original
       }
+      // Only oxc-parser reads TypeScript.
+      const parseWithOxc = getOxcParse()
+      if (parseWithOxc !== null) {
+        isSourceInitialiser = createSourceInitialiserCheck(mapper, map.sourcesContent, parseWithOxc)
+      }
     }
     const result = instrument(code, {
       parse: source => parse(source, isModule),
       moduleKey: key,
       sources,
       mapPosition,
+      isSourceInitialiser,
     })
     // The salt is dropped when the parser it names fails to load.
     if (salt !== null && cacheSalt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
