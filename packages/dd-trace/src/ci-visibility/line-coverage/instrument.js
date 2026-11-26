@@ -384,11 +384,25 @@ class Instrumenter {
       const statement = list[i]
       if (isProgram && isModuleDeclaration(statement)) {
         this.moduleDeclaration(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) })
-      } else if (statement.type !== 'FunctionDeclaration' && !(isProgram && isExportDefinition(statement))) {
+      } else if (statement.type !== 'FunctionDeclaration' && !(isProgram && this.isExportDefinition(statement))) {
         this.statement(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) }, LIST)
       }
       floor = statement.end
     }
+  }
+
+  /**
+   * Whether a statement of the program only defines exports through getters that a compiler added. The
+   * getters return a binding of the module, and an importer runs one each time it reads the export, but
+   * reading an export runs no code of the source. The statement itself runs no code of the source
+   * either: its line counts where the declaration or the import it stands for runs.
+   *
+   * @param {object} statement
+   */
+  isExportDefinition (statement) {
+    // Code with no source map is its own source, so a getter in it is code of that file.
+    return isViteExportDefinition(statement) ||
+      (this.mapPosition !== undefined && isCommonJsExportDefinition(statement))
   }
 
   // An import or export declaration of a module. Imports, re-exports and export lists run no code, and
@@ -1316,13 +1330,141 @@ class Instrumenter {
  *
  * @param {object} statement a statement of the program
  */
-function isExportDefinition (statement) {
+function isViteExportDefinition (statement) {
   if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'CallExpression') return false
   const { callee, arguments: args } = statement.expression
   if (callee.type === 'Identifier') return callee.name === '__vite_ssr_exportName__'
-  return callee.type === 'MemberExpression' && !callee.computed && callee.object.type === 'Identifier' &&
-    callee.object.name === 'Object' && callee.property.name === 'defineProperty' &&
+  return isObjectMethod(callee, 'defineProperty') &&
     args[0]?.type === 'Identifier' && args[0].name === '__vite_ssr_exports__'
+}
+
+/**
+ * Whether a statement is one that a compiler to CommonJS emits to define exports through getters that
+ * return a binding:
+ * - `Object.defineProperty(exports, "name", { enumerable: true, get: function () { return binding } })`,
+ *   from SWC, TypeScript and Babel;
+ * - `_export(exports, { get name () { return binding } })`, from SWC, which before 1.4 passes
+ *   `name: function () { return binding }`;
+ * - `__export(module_exports, { name: () => binding })`, from esbuild;
+ * - for `export *`, `Object.keys(module).forEach(function (key) { if (...) return; ...;
+ *   Object.defineProperty(exports, key, { enumerable: true, get: function () { return module[key] } }) })`,
+ *   from Babel.
+ *
+ * @param {object} statement a statement of the program
+ */
+function isCommonJsExportDefinition (statement) {
+  if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'CallExpression') return false
+  const call = statement.expression
+  const { callee, arguments: args } = call
+  if (callee.type === 'Identifier') {
+    return (callee.name === '_export' || callee.name === '__export') && args.length === 2 &&
+      args[0].type === 'Identifier' && args[1].type === 'ObjectExpression' && args[1].properties.length > 0 &&
+      args[1].properties.every(isGetterProperty)
+  }
+  if (isGetterDefinition(call)) return true
+  // Babel's `export *`
+  if (callee.type !== 'MemberExpression' || callee.computed || callee.property.name !== 'forEach') return false
+  const keys = callee.object
+  if (keys.type !== 'CallExpression' || !isObjectMethod(keys.callee, 'keys') || keys.arguments.length !== 1 ||
+      keys.arguments[0].type !== 'Identifier' || args.length !== 1) {
+    return false
+  }
+  const callback = args[0]
+  if (callback.type !== 'FunctionExpression' || callback.params.length !== 1 ||
+      callback.params[0].type !== 'Identifier') {
+    return false
+  }
+  const body = callback.body.body
+  for (let i = 0; i < body.length - 1; i++) {
+    const guard = body[i]
+    if (guard.type !== 'IfStatement' || guard.alternate || guard.consequent.type !== 'ReturnStatement' ||
+        guard.consequent.argument) {
+      return false
+    }
+  }
+  const last = body.at(-1)
+  return last?.type === 'ExpressionStatement' && last.expression.type === 'CallExpression' &&
+    isGetterDefinition(last.expression, callback.params[0].name)
+}
+
+/**
+ * Whether a call is `Object.defineProperty(exports, name, { enumerable: true, get })` with a getter that
+ * returns a binding.
+ *
+ * @param {object} call
+ * @param {string} [key] the variable that holds the name; without it, the name is a string literal
+ */
+function isGetterDefinition (call, key) {
+  if (!isObjectMethod(call.callee, 'defineProperty') || call.arguments.length !== 3) return false
+  const [target, name, descriptor] = call.arguments
+  if (target.type !== 'Identifier' || target.name !== 'exports' || descriptor.type !== 'ObjectExpression') return false
+  const isName = key === undefined
+    ? name.type === 'Literal' && typeof name.value === 'string'
+    : name.type === 'Identifier' && name.name === key
+  if (!isName) return false
+  let getters = 0
+  for (const property of descriptor.properties) {
+    if (property.type !== 'Property' || property.kind !== 'init' || property.computed || property.method) return false
+    const propertyName = property.key.type === 'Identifier' ? property.key.name : property.key.value
+    if (propertyName === 'get' && isFunctionNode(property.value) && returnsBinding(property.value)) {
+      getters++
+    } else if (propertyName !== 'enumerable' || property.value.type !== 'Literal' || property.value.value !== true) {
+      return false
+    }
+  }
+  return getters === 1
+}
+
+/**
+ * Whether an object literal property is a getter that returns a binding, as `get name () { ... }` or as a
+ * function value.
+ *
+ * @param {object} property
+ */
+function isGetterProperty (property) {
+  if (property.type !== 'Property' || property.computed || property.method) return false
+  if (property.kind === 'get') return returnsBinding(property.value)
+  return property.kind === 'init' && isFunctionNode(property.value) && returnsBinding(property.value)
+}
+
+/**
+ * @param {object} node
+ */
+function isFunctionNode (node) {
+  return node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'
+}
+
+/**
+ * Whether a function takes no parameters and only returns a binding, `binding.name` or `binding[key]`.
+ *
+ * @param {object} node a function or arrow expression
+ */
+function returnsBinding (node) {
+  if (node.params.length !== 0 || node.async || node.generator) return false
+  const body = node.body
+  if (body.type !== 'BlockStatement') return isBinding(body)
+  return body.body.length === 1 && body.body[0].type === 'ReturnStatement' && body.body[0].argument !== null &&
+    isBinding(body.body[0].argument)
+}
+
+/**
+ * @param {object} node
+ */
+function isBinding (node) {
+  if (node.type === 'Identifier') return true
+  return node.type === 'MemberExpression' && !node.optional && node.object.type === 'Identifier' &&
+    (!node.computed || node.property.type === 'Identifier' || node.property.type === 'Literal')
+}
+
+/**
+ * Whether a node is `Object.name`.
+ *
+ * @param {object} node
+ * @param {string} name
+ */
+function isObjectMethod (node, name) {
+  return node.type === 'MemberExpression' && !node.computed && node.object.type === 'Identifier' &&
+    node.object.name === 'Object' && node.property.name === name
 }
 
 /**
