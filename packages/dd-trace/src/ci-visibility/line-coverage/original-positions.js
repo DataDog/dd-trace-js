@@ -47,14 +47,75 @@ const EXPRESSIONS = new Set([
   'JSXFragment',
 ])
 
+// How the children of a node are visited.
+const GENERIC = 0
+const NONE = 1
+const FUNCTION = 2
+const CLASS = 3
+const PROPERTY = 4
+const MEMBER = 5
+const DECLARATOR = 6
+const ASSIGNMENT_PATTERN = 7
+const ASSIGNMENT = 8
+const ARRAY_PATTERN = 9
+const OBJECT_PATTERN = 10
+const REST = 11
+const FOR_IN_OF = 12
+const CATCH = 13
+const LABELED = 14
+const EXPORT = 15
 // TypeScript nodes whose expression is code: the type part is not.
-const TYPESCRIPT_WRAPPERS = new Set([
-  'TSAsExpression',
-  'TSSatisfiesExpression',
-  'TSNonNullExpression',
-  'TSTypeAssertion',
-  'TSInstantiationExpression',
+const TYPESCRIPT_WRAPPER = 16
+const TYPESCRIPT_PARAMETER_PROPERTY = 17
+const TYPESCRIPT_ENUM = 18
+const TYPESCRIPT_MODULE = 19
+const TYPESCRIPT_MODULE_BLOCK = 20
+const TYPESCRIPT_EXPORT_ASSIGNMENT = 21
+const TYPESCRIPT_IMPORT_EQUALS = 22
+
+/** @type {Map<string, number>} other TypeScript types are not code, and other types are GENERIC */
+const CHILDREN = new Map([
+  ['Identifier', NONE],
+  ['PrivateIdentifier', NONE],
+  ['FunctionDeclaration', FUNCTION],
+  ['FunctionExpression', FUNCTION],
+  ['ArrowFunctionExpression', FUNCTION],
+  ['ClassDeclaration', CLASS],
+  ['ClassExpression', CLASS],
+  ['Property', PROPERTY],
+  ['MemberExpression', MEMBER],
+  ['VariableDeclarator', DECLARATOR],
+  ['AssignmentPattern', ASSIGNMENT_PATTERN],
+  ['AssignmentExpression', ASSIGNMENT],
+  ['ArrayPattern', ARRAY_PATTERN],
+  ['ObjectPattern', OBJECT_PATTERN],
+  ['RestElement', REST],
+  ['ForInStatement', FOR_IN_OF],
+  ['ForOfStatement', FOR_IN_OF],
+  ['CatchClause', CATCH],
+  ['LabeledStatement', LABELED],
+  ['BreakStatement', NONE],
+  ['ContinueStatement', NONE],
+  ['MetaProperty', NONE],
+  ['TemplateElement', NONE],
+  ['ImportDeclaration', NONE],
+  ['ExportAllDeclaration', NONE],
+  ['ExportNamedDeclaration', EXPORT],
+  ['ExportDefaultDeclaration', EXPORT],
+  ['TSAsExpression', TYPESCRIPT_WRAPPER],
+  ['TSSatisfiesExpression', TYPESCRIPT_WRAPPER],
+  ['TSNonNullExpression', TYPESCRIPT_WRAPPER],
+  ['TSTypeAssertion', TYPESCRIPT_WRAPPER],
+  ['TSInstantiationExpression', TYPESCRIPT_WRAPPER],
+  ['TSParameterProperty', TYPESCRIPT_PARAMETER_PROPERTY],
+  ['TSEnumDeclaration', TYPESCRIPT_ENUM],
+  ['TSModuleDeclaration', TYPESCRIPT_MODULE],
+  ['TSModuleBlock', TYPESCRIPT_MODULE_BLOCK],
+  ['TSExportAssignment', TYPESCRIPT_EXPORT_ASSIGNMENT],
+  ['TSImportEqualsDeclaration', TYPESCRIPT_IMPORT_EQUALS],
 ])
+
+const SKIPPED_KEYS = new Set(['type', 'start', 'end', 'range', 'loc'])
 
 /**
  * @typedef {(code: string, lang: 'jsx' | 'ts' | 'tsx', sourceType: 'module' | 'commonjs') => object} ParseOriginal
@@ -134,24 +195,76 @@ function buildTable (source, program) {
   const offsets = []
   /** @type {number[]} */
   const flags = []
+  let isSorted = true
   collectPositions(program, (offset, isInitialiser) => {
+    if (isSorted && offsets.length > 0 && offset < offsets.at(-1)) isSorted = false
     offsets.push(offset)
     flags.push(isInitialiser ? 1 : 0)
   })
-  const order = [...offsets.keys()].sort((a, b) => offsets[a] - offsets[b])
+  // Positions come mostly in source order. The sort is stable, so equal offsets keep the order they came in.
+  const order = isSorted ? undefined : [...offsets.keys()].sort((a, b) => offsets[a] - offsets[b])
   // Source maps count lines by `\n` alone.
   const lineOffsets = [0]
   for (let i = source.indexOf('\n'); i !== -1; i = source.indexOf('\n', i + 1)) lineOffsets.push(i + 1)
   const lineStarts = new Int32Array(lineOffsets.length + 2)
-  const entries = new Int32Array(order.length)
+  const entries = new Int32Array(offsets.length)
   let line = 1
-  for (let i = 0; i < order.length; i++) {
-    const offset = offsets[order[i]]
+  for (let i = 0; i < offsets.length; i++) {
+    const index = order === undefined ? i : order[i]
+    const offset = offsets[index]
     while (line < lineOffsets.length && lineOffsets[line] <= offset) lineStarts[++line] = i
-    entries[i] = (offset - lineOffsets[line - 1]) * 2 + flags[order[i]]
+    entries[i] = (offset - lineOffsets[line - 1]) * 2 + flags[index]
   }
-  while (line < lineStarts.length - 1) lineStarts[++line] = order.length
+  while (line < lineStarts.length - 1) lineStarts[++line] = offsets.length
   return { lineStarts, entries }
+}
+
+/**
+ * @typedef {object} NodeKind what visiting a node of one type does
+ * @property {number} children how its children are visited
+ * @property {number} recordedRoles bit `1 << role` is set for each role in which its start is recorded
+ * @property {boolean} canDeclare whether it has a `declare` field
+ * @property {boolean} canBeType whether it has an `importKind` or `exportKind` field
+ * @property {string[]} keys the fields that can hold a node, for GENERIC children
+ */
+
+/**
+ * A program gives every node of a type the same fields, apart from fields that never hold a node, such
+ * as a literal's `regex`: the first node of a type describes them all.
+ *
+ * @param {object} node
+ * @returns {NodeKind}
+ */
+function createNodeKind (node) {
+  const type = node.type
+  const isTypeScript = type.startsWith('TS')
+  const isIdentifier = type === 'Identifier' || type === 'PrivateIdentifier'
+  const children = CHILDREN.get(type) ?? (isTypeScript ? NONE : GENERIC)
+  let recordedRoles = 0
+  if (isIdentifier) {
+    recordedRoles = 1 << EXPRESSION
+  } else if (!isTypeScript && (isStatement(type) || EXPRESSIONS.has(type))) {
+    recordedRoles = (1 << EXPRESSION) | (1 << PATTERN)
+  }
+  const fields = Object.keys(node)
+  /** @type {string[]} */
+  const keys = []
+  if (children === GENERIC) {
+    for (const key of fields) {
+      if (SKIPPED_KEYS.has(key)) continue
+      // A field that holds a string, a number or a boolean holds one in every node of the type.
+      const value = node[key]
+      const isPrimitive = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+      if (!isPrimitive) keys.push(key)
+    }
+  }
+  return {
+    children,
+    recordedRoles,
+    canDeclare: fields.includes('declare'),
+    canBeType: !isTypeScript && !isIdentifier && (fields.includes('importKind') || fields.includes('exportKind')),
+    keys,
+  }
 }
 
 /**
@@ -162,33 +275,42 @@ function buildTable (source, program) {
  * @param {(offset: number, isInitialiser: boolean) => void} record
  */
 function collectPositions (program, record) {
+  /** @type {Map<string, NodeKind>} */
+  const kinds = new Map()
+
   /**
    * @param {object | null | undefined} node
    * @param {number} role
    * @param {boolean} isInitialiser
    */
   const visit = (node, role, isInitialiser) => {
-    if (!node || typeof node.type !== 'string' || node.declare === true) return
+    if (!node) return
     const type = node.type
-    if (type.startsWith('TS')) {
-      visitTypeScript(node, role, isInitialiser)
-      return
+    if (typeof type !== 'string') return
+    let kind = kinds.get(type)
+    if (kind === undefined) {
+      kind = createNodeKind(node)
+      kinds.set(type, kind)
     }
-    if (type === 'Identifier' || type === 'PrivateIdentifier') {
-      if (role === EXPRESSION) record(node.start, isInitialiser)
-      return
-    }
-    if (node.importKind === 'type' || node.exportKind === 'type') return
-    if (role !== NAME && (isStatement(type) || EXPRESSIONS.has(type))) record(node.start, isInitialiser)
-    switch (type) {
-      case 'FunctionDeclaration':
-      case 'FunctionExpression':
-      case 'ArrowFunctionExpression':
+    if (kind.canDeclare && node.declare === true) return
+    if (kind.canBeType && (node.importKind === 'type' || node.exportKind === 'type')) return
+    if ((kind.recordedRoles >> role) & 1) record(node.start, isInitialiser)
+    switch (kind.children) {
+      case GENERIC:
+        for (const key of kind.keys) {
+          const value = node[key]
+          if (Array.isArray(value)) {
+            for (const child of value) visit(child, EXPRESSION, isInitialiser)
+          } else if (value !== null && typeof value === 'object') {
+            visit(value, EXPRESSION, isInitialiser)
+          }
+        }
+        return
+      case FUNCTION:
         for (const parameter of node.params) visit(parameter, PATTERN, false)
         visit(node.body, EXPRESSION, false)
         return
-      case 'ClassDeclaration':
-      case 'ClassExpression':
+      case CLASS:
         visitDecorators(node, isInitialiser)
         visit(node.superClass, EXPRESSION, isInitialiser)
         for (const element of node.body.body) {
@@ -208,87 +330,57 @@ function collectPositions (program, record) {
           visit(element.value, EXPRESSION, !isInstanceField && isInitialiser)
         }
         return
-      case 'Property':
+      case PROPERTY:
         visit(node.key, node.computed ? EXPRESSION : NAME, isInitialiser)
         visit(node.value, role === PATTERN ? PATTERN : EXPRESSION, isInitialiser)
         return
-      case 'MemberExpression':
+      case MEMBER:
         visit(node.object, EXPRESSION, isInitialiser)
         visit(node.property, EXPRESSION, isInitialiser)
         return
-      case 'VariableDeclarator':
+      case DECLARATOR:
         visit(node.id, PATTERN, isInitialiser)
         visit(node.init, EXPRESSION, isInitialiser)
         return
-      case 'AssignmentPattern':
+      case ASSIGNMENT_PATTERN:
         visit(node.left, PATTERN, isInitialiser)
         visit(node.right, EXPRESSION, isInitialiser)
         return
-      case 'AssignmentExpression':
+      case ASSIGNMENT:
         visit(node.left, node.left.type === 'MemberExpression' ? EXPRESSION : PATTERN, isInitialiser)
         visit(node.right, EXPRESSION, isInitialiser)
         return
-      case 'ArrayPattern':
+      case ARRAY_PATTERN:
         for (const element of node.elements) visit(element, PATTERN, isInitialiser)
         return
-      case 'ObjectPattern':
+      case OBJECT_PATTERN:
         for (const property of node.properties) visit(property, PATTERN, isInitialiser)
         return
-      case 'RestElement':
+      case REST:
         visit(node.argument, PATTERN, isInitialiser)
         return
-      case 'ForInStatement':
-      case 'ForOfStatement':
+      case FOR_IN_OF:
         visit(node.left, node.left.type === 'VariableDeclaration' ? EXPRESSION : PATTERN, isInitialiser)
         visit(node.right, EXPRESSION, isInitialiser)
         visit(node.body, EXPRESSION, isInitialiser)
         return
-      case 'CatchClause':
+      case CATCH:
         visit(node.param, PATTERN, isInitialiser)
         visit(node.body, EXPRESSION, isInitialiser)
         return
-      case 'LabeledStatement':
+      case LABELED:
         visit(node.body, EXPRESSION, isInitialiser)
         return
-      case 'BreakStatement':
-      case 'ContinueStatement':
-      case 'MetaProperty':
-      case 'TemplateElement':
-      case 'ImportDeclaration':
-      case 'ExportAllDeclaration':
-        return
-      case 'ExportNamedDeclaration':
-      case 'ExportDefaultDeclaration':
+      case EXPORT:
         visit(node.declaration, EXPRESSION, isInitialiser)
         return
-      default:
-        for (const key of Object.keys(node)) {
-          if (key === 'type' || key === 'start' || key === 'end' || key === 'range' || key === 'loc') continue
-          const value = node[key]
-          if (Array.isArray(value)) {
-            for (const child of value) visit(child, EXPRESSION, isInitialiser)
-          } else if (value !== null && typeof value === 'object') {
-            visit(value, EXPRESSION, isInitialiser)
-          }
-        }
-    }
-  }
-
-  /**
-   * @param {object} node
-   * @param {number} role
-   * @param {boolean} isInitialiser
-   */
-  const visitTypeScript = (node, role, isInitialiser) => {
-    if (TYPESCRIPT_WRAPPERS.has(node.type)) {
-      visit(node.expression, role, isInitialiser)
-      return
-    }
-    switch (node.type) {
-      case 'TSParameterProperty':
+      case TYPESCRIPT_WRAPPER:
+        visit(node.expression, role, isInitialiser)
+        return
+      case TYPESCRIPT_PARAMETER_PROPERTY:
         visit(node.parameter, role, isInitialiser)
         return
-      case 'TSEnumDeclaration': {
+      case TYPESCRIPT_ENUM: {
         record(node.start, isInitialiser)
         const members = node.body?.members ?? node.members
         if (!Array.isArray(members)) return
@@ -299,18 +391,18 @@ function collectPositions (program, record) {
         }
         return
       }
-      case 'TSModuleDeclaration':
+      case TYPESCRIPT_MODULE:
         record(node.start, isInitialiser)
         visit(node.body, EXPRESSION, isInitialiser)
         return
-      case 'TSModuleBlock':
+      case TYPESCRIPT_MODULE_BLOCK:
         for (const statement of node.body) visit(statement, EXPRESSION, isInitialiser)
         return
-      case 'TSExportAssignment':
+      case TYPESCRIPT_EXPORT_ASSIGNMENT:
         record(node.start, isInitialiser)
         visit(node.expression, EXPRESSION, isInitialiser)
         return
-      case 'TSImportEqualsDeclaration':
+      case TYPESCRIPT_IMPORT_EQUALS:
         if (node.importKind !== 'type') record(node.start, isInitialiser)
     }
   }
