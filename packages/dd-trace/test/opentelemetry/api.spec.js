@@ -3,7 +3,7 @@
 const { execFile } = require('node:child_process')
 const { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
-const { dirname, join, relative, resolve } = require('node:path')
+const { dirname, extname, join, relative, resolve } = require('node:path')
 const { promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -195,8 +195,9 @@ describe('OpenTelemetry application API selection', () => {
     const packageFile = join(dependencyApi, 'package.json')
     const metadata = JSON.parse(await readFile(packageFile, 'utf8'))
     await writeFile(packageFile, JSON.stringify({ ...metadata, version: '2.0.0' }))
-    for (const filename of ['version.cjs', 'internal/global-utils.cjs']) {
-      const versionFile = join(dependencyApi, dirname(apiEntrypoint), filename)
+    const extension = extname(apiEntrypoint)
+    for (const filename of ['version', 'internal/global-utils']) {
+      const versionFile = join(dependencyApi, dirname(apiEntrypoint), `${filename}${extension}`)
       const versionSource = await readFile(versionFile, 'utf8')
       await writeFile(versionFile, versionSource.replaceAll(metadata.version, '2.0.0'))
     }
