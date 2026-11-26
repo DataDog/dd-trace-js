@@ -17,7 +17,13 @@ const { satisfies } = require('semver')
 const { version: semverVersion } = require('semver/package.json')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
-const { assertObjectContains, sandboxCwd, stopProc, useSandbox } = require('../../../integration-tests/helpers')
+const {
+  assertObjectContains,
+  FakeAgent,
+  sandboxCwd,
+  stopProc,
+  useSandbox,
+} = require('../../../integration-tests/helpers')
 const { BUN } = require('../../../integration-tests/helpers/bun')
 
 const { storage } = require('../../datadog-core')
@@ -1010,6 +1016,189 @@ describe('Plugin', function () {
           }
         })
       }
+
+      describe('endpoint collection', () => {
+        const pageEndpoints = [
+          '/error/get_server_side_props', '/error/not_found', '/hello', '/hello/[name]', '/hello/other',
+          '/appDir/[name]', '/appDir/page-error', '/appPageTraceShape/[name]', '/cached',
+        ].flatMap(path => [`GET ${path}`, `HEAD ${path}`])
+        const pagesApiEndpoints = [
+          '/api/error/[name]', '/api/hello', '/api/hello/[name]', '/api/hello/downstream', '/api/hello/other',
+          '/api/image', '/api/invalid/[...catchAll]',
+        ].map(path => `* ${path}`)
+        // A route handler that Next.js loads lazily (16.x) is `*` until its first request refines it.
+        const routeHandlerMethods = new Map([
+          ['/api/appDir/[name]', ['GET', 'HEAD']],
+          ['/api/appDir/error', ['GET', 'HEAD']],
+          ['/api/appDir/throw', ['GET', 'HEAD']],
+          ['/api/appRouteTrace/[name]', ['GET', 'HEAD']],
+          ['/api/endpoints', ['GET', 'HEAD', 'POST']],
+        ])
+
+        let fakeAgent
+        let proc
+        let serverPort
+        let endpointMessages
+        let heartbeats
+
+        function collectTelemetry ({ payload }) {
+          const messages = payload.request_type === 'message-batch' ? payload.payload : [payload]
+          for (const message of messages) {
+            if (message.request_type === 'app-endpoints') endpointMessages.push(message.payload)
+            if (message.request_type === 'app-heartbeat') heartbeats++
+          }
+        }
+
+        function getEndpoints () {
+          return endpointMessages.flatMap(payload => payload.endpoints)
+        }
+
+        function getResources () {
+          return new Set(getEndpoints().map(endpoint => endpoint.resource_name))
+        }
+
+        /**
+         * @param {() => boolean} predicate
+         */
+        function waitForTelemetry (predicate) {
+          return new Promise((resolve, reject) => {
+            const check = () => {
+              if (!predicate()) return
+              cleanup()
+              resolve()
+            }
+            const timer = setTimeout(() => {
+              cleanup()
+              reject(new Error(`Timed out, received endpoints: ${JSON.stringify([...getResources()])}`))
+            }, 20_000)
+            const cleanup = () => {
+              clearTimeout(timer)
+              fakeAgent.off('telemetry', check)
+            }
+            fakeAgent.on('telemetry', check)
+            check()
+          })
+        }
+
+        /**
+         * @param {Record<string, string>} env
+         */
+        async function launch (env = {}) {
+          endpointMessages = []
+          heartbeats = 0
+          fakeAgent = await new FakeAgent().start()
+          fakeAgent.on('telemetry', collectTelemetry)
+
+          proc = spawn('node', ['server'], {
+            cwd: sandboxCwd(),
+            env: {
+              ...process.env,
+              VERSION: version,
+              PORT: 0,
+              HOSTNAME: '127.0.0.1',
+              DOWNSTREAM_URL: `http://127.0.0.1:${downstreamPort}/downstream`,
+              DD_TRACE_AGENT_PORT: fakeAgent.port,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+              NODE_OPTIONS: `--require "${path.join(sandboxCwd(), 'datadog.js')}"`,
+              TIMES_HOOK_CALLED: 0,
+              ...env,
+            },
+          })
+          proc.stderr.on('data', chunk => process.stderr.write(chunk))
+
+          await new Promise((resolve, reject) => {
+            proc.once('error', reject)
+            proc.stdout.on('data', function waitUntilServerStarted (chunk) {
+              const match = chunk.toString().match(/port:? (\d+)/)
+              if (!match) return
+              serverPort = Number(match[1])
+              proc.stdout.off('data', waitUntilServerStarted)
+              resolve()
+            })
+          })
+        }
+
+        afterEach(async function () {
+          this.timeout(30 * 1000)
+          await stopProc(proc)
+          await fakeAgent?.stop()
+        })
+
+        if (satisfies(realVersion, '>=15')) {
+          it('reports the routes of the build and refines the route handler methods', async function () {
+            this.timeout(60 * 1000)
+            await launch()
+
+            const bootEndpoints = [...pageEndpoints, ...pagesApiEndpoints]
+            await waitForTelemetry(() => {
+              const resources = getResources()
+              return bootEndpoints.every(resource => resources.has(resource)) &&
+                [...routeHandlerMethods.keys()].every(path => [...resources].some(r => r.endsWith(` ${path}`)))
+            })
+
+            const response = await httpRequest.get(`http://127.0.0.1:${serverPort}/api/endpoints`)
+            assert.deepStrictEqual(response.data, { method: 'GET' })
+            await waitForTelemetry(() => getResources().has('POST /api/endpoints'))
+
+            const endpoints = getEndpoints()
+            for (const endpoint of endpoints) {
+              assertObjectContains(endpoint, {
+                type: 'REST',
+                operation_name: 'next.request',
+                resource_name: `${endpoint.method} ${endpoint.path}`,
+              })
+            }
+            assert.strictEqual(endpointMessages.filter(payload => payload.is_first === true).length, 1)
+
+            const resources = getResources()
+            assert.strictEqual(resources.size, endpoints.length, 'each endpoint is reported once')
+
+            const handlerResources = [...resources].filter(resource =>
+              routeHandlerMethods.has(resource.slice(resource.indexOf(' ') + 1)))
+            assert.deepStrictEqual(
+              [...resources].filter(resource => !handlerResources.includes(resource)).sort(),
+              bootEndpoints.sort()
+            )
+
+            for (const [path, methods] of routeHandlerMethods) {
+              const reported = handlerResources
+                .filter(resource => resource.endsWith(` ${path}`))
+                .map(resource => resource.slice(0, resource.indexOf(' ')))
+              const refined = reported.filter(method => method !== '*')
+              assert.ok(reported.length > 0, `${path} is reported`)
+              if (refined.length > 0) assert.deepStrictEqual(refined, methods, `${path} methods`)
+            }
+
+            const endpointsMethods = handlerResources
+              .filter(resource => resource.endsWith(' /api/endpoints'))
+              .map(resource => resource.slice(0, resource.indexOf(' ')))
+            assert.deepStrictEqual(endpointsMethods.filter(method => method !== '*'), ['GET', 'HEAD', 'POST'])
+          })
+
+          it('reports nothing when endpoint collection is disabled', async function () {
+            this.timeout(60 * 1000)
+            await launch({ DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: 'false' })
+
+            await httpRequest.get(`http://127.0.0.1:${serverPort}/api/hello/world`)
+            const seen = heartbeats
+            await waitForTelemetry(() => heartbeats > seen)
+
+            assert.deepStrictEqual(endpointMessages, [])
+          })
+        } else {
+          it('reports nothing before Next.js 15', async function () {
+            this.timeout(60 * 1000)
+            await launch()
+
+            await httpRequest.get(`http://127.0.0.1:${serverPort}/api/hello/world`)
+            const seen = heartbeats
+            await waitForTelemetry(() => heartbeats > seen)
+
+            assert.deepStrictEqual(endpointMessages, [])
+          })
+        }
+      })
 
       describe('with configured HTTP server error statuses', () => {
         startServer({

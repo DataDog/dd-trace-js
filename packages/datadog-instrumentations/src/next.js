@@ -22,6 +22,7 @@ const bodyParsedChannel = channel('apm:next:body-parsed')
 const responseJsonChannel = channel('apm:next:response:json')
 const queryParsedChannel = channel('apm:next:query-parsed')
 const backgroundRevalidationChannel = channel('apm:next:request:background-revalidation')
+const routeAddedChannel = channel('apm:next:route:added')
 
 /**
  * @typedef {import('node:http').IncomingMessage & {
@@ -555,11 +556,42 @@ function instrumentRouteModule (RouteModule, wrappers, handleErrors) {
   }
 }
 
+// loadComponents runs on every request, so each page is published once rather than chaining every load.
+const publishedPages = new Set()
+
+/** @param {{ page?: string, isAppPath?: boolean, routeModule?: { definition?: object } } | undefined} components */
+function publishLoadedRoute (components) {
+  const routeModule = components?.routeModule
+  publishedPages.add(components?.page)
+  routeAddedChannel.publish({
+    page: components?.page,
+    isAppPath: components?.isAppPath,
+    kind: routeModule?.definition?.kind,
+    pathname: routeModule?.definition?.pathname,
+    // Next.js 16 loads route handlers lazily behind a getter, which must not run here.
+    userland: routeModule && Object.getOwnPropertyDescriptor(routeModule, 'userland')?.value,
+  })
+  return components
+}
+
+/** @param {(userland: object) => unknown} onUserlandLoaded */
+function wrapOnUserlandLoaded (onUserlandLoaded) {
+  return function (userland) {
+    const result = onUserlandLoaded.apply(this, arguments)
+    if (routeAddedChannel.hasSubscribers && !this.isDev) {
+      const { kind, pathname } = this.definition ?? {}
+      routeAddedChannel.publish({ isAppPath: true, kind, pathname, userland })
+    }
+    return result
+  }
+}
+
 function instrumentAppRouteRuntime (runtime) {
   instrumentRouteModule(runtime.AppRouteRouteModule, [
     ['prepare', wrapPrepare],
     ['handleResponse', wrapAppRouteHandleResponse],
     ['handle', wrapAppRouteHandle],
+    ['_onUserlandLoaded', wrapOnUserlandLoaded],
   ], true)
   return runtime
 }
@@ -699,6 +731,14 @@ addHook({
   versions: ['>=11.1'],
   file: 'dist/server/serve-static.js',
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, { replaceGetter: true }))
+
+// Production servers load every page and route module at startup (`preloadEntriesOnStart`, on by default from 15).
+addHook({ name: 'next', versions: ['>=15'], file: 'dist/server/load-components.js' }, loadComponents =>
+  shimmer.wrap(loadComponents, 'loadComponents', load => function (options) {
+    const components = load.apply(this, arguments)
+    if (!routeAddedChannel.hasSubscribers || options?.isDev || publishedPages.has(options?.page)) return components
+    return components.then(publishLoadedRoute)
+  }, { replaceGetter: true }))
 
 addHook({
   name: 'next',
