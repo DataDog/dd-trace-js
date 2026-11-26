@@ -295,9 +295,12 @@ function installGlobal (globalObject) {
 /**
  * Starts collecting: instruments CommonJS modules under `root` as they are compiled.
  *
- * @param {{ root: string }} options
+ * @param {{ root: string, patchModuleLoader?: boolean }} options
+ *   `patchModuleLoader: false` leaves Node's loader alone, for frameworks that compile repo modules
+ *   themselves and call instrumentSource: code they load through Node's own loader (transformers,
+ *   configuration files) is not what the tests cover.
  */
-function enable ({ root }) {
+function enable ({ root, patchModuleLoader = true }) {
   if (enabled) return
   enabled = true
   getCollector()
@@ -306,12 +309,14 @@ function enable ({ root }) {
     realRoot = fs.realpathSync(root)
   } catch {}
   rootPrefix = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep
-  const compile = Module.prototype._compile
-  Module.prototype._compile = function (content, filename, ...rest) {
-    if (typeof content === 'string' && shouldInstrument(filename)) {
-      content = instrumentSource(content, filename)
+  if (patchModuleLoader) {
+    const compile = Module.prototype._compile
+    Module.prototype._compile = function (content, filename, ...rest) {
+      if (typeof content === 'string' && shouldInstrument(filename)) {
+        content = instrumentSource(content, filename)
+      }
+      return compile.call(this, content, filename, ...rest)
     }
-    return compile.call(this, content, filename, ...rest)
   }
   if (dumpPath) process.once('exit', writeDump)
   if (getEnvironmentVariable('_DD_LINE_COVERAGE_STATS')) {
