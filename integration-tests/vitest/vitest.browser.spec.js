@@ -669,6 +669,55 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('reports the lines of Node project tests when browser projects disable Test Impact Analysis', async () => {
+    const nodeSuite = 'ci-visibility/vitest-browser-tests/mixed-node.mjs'
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: true,
+      coverage_report_upload_enabled: false,
+      tests_skipping: true,
+    })
+
+    const runPromise = runVitest(undefined, {
+      VITEST_BROWSER_MODE: undefined,
+      VITEST_MIXED_BROWSER_MODE: '1',
+      DD_TEST_LINE_COVERAGE_ENABLED: '1',
+    })
+    const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) =>
+        url === '/api/v2/citestcycle' ||
+        url === '/api/v2/citestcov' ||
+        url === '/api/v2/ci/tests/skippable',
+      payloads => {
+        assert.strictEqual(payloads.some(({ url }) => url === '/api/v2/ci/tests/skippable'), false)
+
+        const events = getEvents(payloads.filter(({ url }) => url === '/api/v2/citestcycle'))
+        const tests = getEventContents(events, 'test')
+        const nodeTest = getTestByName(tests, 'keeps Node worker instrumentation active')
+        const browserTest = getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+
+        const coverages = payloads
+          .filter(({ url }) => url === '/api/v2/citestcov')
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content }) => content.coverages)
+        const nodeCoverages = coverages.filter(coverage => coverage.span_id === Number(nodeTest.span_id))
+        assert.strictEqual(nodeCoverages.length, 1, testOutput)
+        assert.ok(nodeCoverages[0].files.some(file => file.filename === nodeSuite), inspect(nodeCoverages[0].files))
+        assert.ok(!coverages.some(coverage => coverage.span_id === Number(browserTest.span_id)))
+
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+        assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+      },
+      { hardTimeout: 60_000 }
+    )
+
+    const [exitCode] = await Promise.all([runPromise, payloadsPromise])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
   it('applies Auto Test Retries to browser tests', async () => {
     receiver.setSettings({
       flaky_test_retries_enabled: true,
