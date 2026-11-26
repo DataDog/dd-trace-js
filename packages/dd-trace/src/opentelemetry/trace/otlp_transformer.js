@@ -6,9 +6,11 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
-const id = require('../../id')
 const { encodeMetaStructValue, isEncodableMetaStructValue } = require('../../encode/meta-struct')
 const { eventTimeNano } = require('../../encode/tags-processors')
+const id = require('../../id')
+const log = require('../../log')
+const { MAX_SIZE: MAX_CHUNK_SIZE } = require('../../msgpack')
 
 const { protoSpanKind, protoTraceService } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -52,7 +54,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  * @property {number} error - Error flag (0 or 1)
  * @property {{[key: string]: string}} meta - String key-value tags
  * @property {{[key: string]: number}} metrics - Numeric key-value tags
- * @property {{[key: string]: object}} [meta_struct] - Structured tags (one MessagePack value per key)
+ * @property {Record<string, unknown>} [meta_struct] - Structured tags (one MessagePack value per key)
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds
  * @property {DDSpanEvent[]} [span_events] - Span events
@@ -263,8 +265,19 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (span.meta_struct && !Array.isArray(span.meta_struct)) {
       for (const [key, value] of Object.entries(span.meta_struct)) {
         if (!isEncodableMetaStructValue(value)) continue
-        // Protobuf holds one buffer per attribute until the batch is serialized; start small.
-        const bytes = encodeMetaStructValue(value, 1024)
+        let bytes
+        try {
+          // Protobuf holds one buffer per attribute until the batch is serialized; start small.
+          bytes = encodeMetaStructValue(value, 1024)
+        } catch (error) {
+          if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+          log.error(
+            'OtlpTraceTransformer dropped meta_struct entry %s that exceeded the %d byte chunk cap',
+            key,
+            MAX_CHUNK_SIZE
+          )
+          continue
+        }
         attributes.push({ key, value: { bytesValue: this.#isJson ? bytes.toString('base64') : bytes } })
       }
     }

@@ -18,6 +18,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { AgentEncoder } = require('../../src/encode/0.4')
 const id = require('../../src/id')
 const log = require('../../src/log')
+const { MAX_SIZE, MsgpackChunk, OverflowError } = require('../../src/msgpack')
 const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
@@ -495,6 +496,49 @@ describe('OpenTelemetry Traces', () => {
         .resourceSpans[0].scopeSpans[0].spans[0].attributes
 
       assert.strictEqual(protoAttrs.find(a => a.key === '0'), undefined)
+    })
+
+    it('drops oversized meta_struct entries on ERR_MSGPACK_CHUNK_OVERFLOW and logs an error', () => {
+      const logError = sinon.stub(log, 'error')
+      const originalReserve = MsgpackChunk.prototype.reserve
+      let triggered = false
+      sinon.stub(MsgpackChunk.prototype, 'reserve').callsFake(function (size) {
+        if (!triggered) {
+          triggered = true
+          throw new OverflowError(MAX_SIZE + 1)
+        }
+        return originalReserve.call(this, size)
+      })
+
+      const span = createMockSpan({
+        meta_struct: {
+          oversized: { data: 'too big' },
+          '_dd.stack': { nodejs: [{ id: 1, file: 'a.js', line: 10 }] },
+        },
+      })
+
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+      const attrs = decodeProtobufPayload(protoTransformer.transformSpans([span]))
+        .resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      assert.strictEqual(attrs.find(a => a.key === 'oversized'), undefined)
+      const stackAttr = attrs.find(a => a.key === '_dd.stack')
+      assert.ok(stackAttr, 'remaining meta_struct entries should still be encoded')
+      assert.deepStrictEqual(msgpack.decode(stackAttr.value.bytesValue), span.meta_struct['_dd.stack'])
+
+      sinon.assert.calledOnce(logError)
+      assert.match(logError.firstCall.args[0], /chunk cap/)
+      assert.strictEqual(logError.firstCall.args[1], 'oversized')
+      assert.strictEqual(logError.firstCall.args[2], MAX_SIZE)
+    })
+
+    it('rethrows non-overflow errors when encoding meta_struct', () => {
+      sinon.stub(MsgpackChunk.prototype, 'reserve').throws(new Error('unexpected failure'))
+
+      const span = createMockSpan({ meta_struct: { '_dd.stack': { nodejs: [] } } })
+      const protoTransformer = new OtlpTraceTransformer({}, 'http/protobuf')
+
+      assert.throws(() => protoTransformer.transformSpans([span]), { message: 'unexpected failure' })
     })
 
     it('excludes _dd.span_links and span.kind from attributes', () => {
