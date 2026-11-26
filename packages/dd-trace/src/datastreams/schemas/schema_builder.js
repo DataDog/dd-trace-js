@@ -92,8 +92,6 @@ class OpenApiComponents {
 // This adds a single whitespace between entries without adding newlines.
 // This differs from JSON.stringify and is used to align with the output
 // in other platforms.
-// TODO: Add tests to verify this behavior. A couple of cases are not
-// covered by the existing tests.
 function toJSON (value) {
   if (typeof value !== 'object') {
     return JSON.stringify(value)

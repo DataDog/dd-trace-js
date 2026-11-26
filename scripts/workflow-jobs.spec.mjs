@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'mocha'
 import sinon from 'sinon'
 
-import { getCheckRuns, getRestJobs } from './workflow-jobs.mjs'
+import { getCheckRuns, getFailedJobIds, getRestJobs } from './workflow-jobs.mjs'
 
 const run = { id: 42, node_id: 'workflow-42', run_attempt: 1 }
 
@@ -37,7 +37,6 @@ describe('workflow jobs', () => {
       const jobs = await getCheckRuns({ graphql }, run)
 
       assert.deepStrictEqual(jobs[0], {
-        id: undefined,
         name: 'unit',
         html_url: check.detailsUrl,
         conclusion: 'success',
@@ -60,28 +59,23 @@ describe('workflow jobs', () => {
 
     it('filters failures across all attempts and retains each failure occurrence', async () => {
       const graphql = sinon.stub()
-      const check = { databaseId: 1, name: 'unit', detailsUrl: 'https://example.com/jobs/1' }
-      graphql.onFirstCall().resolves(checksResponse([check], {
+      graphql.onFirstCall().resolves(checksResponse([{ databaseId: 1 }], {
         hasNextPage: true, endCursor: 'next', runAttempt: 3,
       }))
-      graphql.onSecondCall().resolves(checksResponse([
-        { ...check, databaseId: 2, detailsUrl: 'https://example.com/jobs/2' },
-      ], { runAttempt: 3 }))
+      graphql.onSecondCall().resolves(checksResponse([{ databaseId: 2 }], { runAttempt: 3 }))
 
-      const jobs = await getCheckRuns({ graphql }, { ...run, run_attempt: 3 }, true)
+      const ids = await getFailedJobIds({ graphql }, { ...run, run_attempt: 3 })
 
-      assert.deepStrictEqual(jobs.map(job => job.html_url), [check.detailsUrl, 'https://example.com/jobs/2'])
-      assert.deepStrictEqual(jobs.map(job => job.conclusion), ['failure', 'failure'])
-      assert.deepStrictEqual(jobs.map(job => job.id), [1, 2])
+      assert.deepStrictEqual(ids, [1, 2])
       assert.deepStrictEqual(graphql.firstCall.args[1].filter, { checkType: 'ALL', conclusions: ['FAILURE'] })
       assert.strictEqual(graphql.firstCall.args[1].failedOnly, true)
       assert.match(graphql.firstCall.args[0], /startedAt @skip\(if: \$failedOnly\)/)
     })
 
     it('rejects failed checks without an ID for attempt verification', async () => {
-      const graphql = sinon.stub().resolves(checksResponse([{ name: 'unit', detailsUrl: 'https://example.com/jobs/1' }]))
+      const graphql = sinon.stub().resolves(checksResponse([{}]))
 
-      await assert.rejects(getCheckRuns({ graphql }, run, true), {
+      await assert.rejects(getFailedJobIds({ graphql }, run), {
         name: 'TypeError', message: 'Missing failed job ID for workflow run 42.',
       })
     })
@@ -106,11 +100,27 @@ describe('workflow jobs', () => {
       })
     }
 
-    it('rejects a workflow that was rerun since it was selected', async () => {
-      const graphql = sinon.stub().resolves(checksResponse([], { runAttempt: 2 }))
+    it('uses only the selected attempt when a rerun starts during summary pagination', async () => {
+      const graphql = sinon.stub()
+      graphql.onFirstCall().resolves(checksResponse([{ name: 'discarded' }], {
+        hasNextPage: true, endCursor: 'next',
+      }))
+      graphql.onSecondCall().resolves(checksResponse([], { runAttempt: 2 }))
+      const jobs = [{ name: 'selected attempt', html_url: 'https://example.com/jobs/1' }]
+      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { total_count: jobs.length, jobs } })
+      const rest = { actions: { listJobsForWorkflowRunAttempt } }
 
-      await assert.rejects(getCheckRuns({ graphql }, run), {
-        message: 'Workflow run 42 was rerun while collecting jobs.',
+      assert.deepStrictEqual(await getCheckRuns({ graphql, rest }, run), jobs)
+      assert.strictEqual(graphql.callCount, 2)
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
+      assert.strictEqual(listJobsForWorkflowRunAttempt.firstCall.args[0].attempt_number, 1)
+    })
+
+    it('rejects a GraphQL snapshot older than the selected attempt', async () => {
+      const graphql = sinon.stub().resolves(checksResponse([], { runAttempt: 1 }))
+
+      await assert.rejects(getCheckRuns({ graphql }, { ...run, run_attempt: 2 }), {
+        message: 'Unexpected attempt for workflow run 42.',
       })
     })
 
@@ -137,7 +147,7 @@ describe('workflow jobs', () => {
   describe('REST jobs', () => {
     it('keeps steps and requests the exact workflow attempt', async () => {
       const jobs = [{ name: 'system', steps: [{ name: 'Run TEST scenario' }] }]
-      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { jobs } })
+      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { total_count: jobs.length, jobs } })
       const api = { rest: { actions: { listJobsForWorkflowRunAttempt } } }
 
       assert.deepStrictEqual(await getRestJobs(api, { ...run, run_attempt: 2 }), jobs)
@@ -149,7 +159,9 @@ describe('workflow jobs', () => {
     it('paginates jobs at a fixed page size', async () => {
       const jobs = Array.from({ length: 101 }, (_, id) => ({ id }))
       const listJobsForWorkflowRunAttempt = sinon.stub().callsFake(({ per_page: perPage, page }) => {
-        return Promise.resolve({ data: { jobs: jobs.slice((page - 1) * perPage, page * perPage) } })
+        return Promise.resolve({
+          data: { total_count: jobs.length, jobs: jobs.slice((page - 1) * perPage, page * perPage) },
+        })
       })
 
       const actual = await getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run)
@@ -159,9 +171,54 @@ describe('workflow jobs', () => {
       assert.deepStrictEqual(requests, [[100, 1], [100, 2]])
     })
 
+    it('does not request another page after a full final page', async () => {
+      const jobs = Array.from({ length: 100 }, (_, id) => ({ id }))
+      const listJobsForWorkflowRunAttempt = sinon.stub().rejects(new Error('Unexpected request'))
+      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ data: { total_count: jobs.length, jobs } })
+
+      assert.deepStrictEqual(await getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), jobs)
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
+    })
+
+    it('rejects a short final page that does not reach the reported total', async () => {
+      const jobs = Array.from({ length: 100 }, (_, id) => ({ id }))
+      const listJobsForWorkflowRunAttempt = sinon.stub()
+      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ data: { total_count: 102, jobs } })
+      listJobsForWorkflowRunAttempt.onSecondCall().resolves({ data: { total_count: 102, jobs: [{ id: 100 }] } })
+
+      await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
+        message: 'Expected 102 jobs for workflow run 42, attempt 1, but received 101 by page 2.',
+      })
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 2)
+    })
+
+    it('rejects a total that changes between pages', async () => {
+      const jobs = Array.from({ length: 100 }, (_, id) => ({ id }))
+      const listJobsForWorkflowRunAttempt = sinon.stub()
+      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ status: 200, data: { total_count: 101, jobs } })
+      listJobsForWorkflowRunAttempt.onSecondCall().resolves({ status: 200, data: { total_count: 100, jobs: [] } })
+
+      await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
+        name: 'TypeError',
+        message: 'Unexpected jobs response for workflow run 42, attempt 1, page 2, per_page 100 (HTTP 200).',
+      })
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 2)
+    })
+
+    it('rejects a page with more jobs than the reported total', async () => {
+      const data = { total_count: 0, jobs: [{ id: 1 }] }
+      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data })
+
+      await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
+        message: 'Expected 0 jobs for workflow run 42, attempt 1, but received 1 by page 1.',
+      })
+      assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
+    })
+
     it('fails on an empty later response instead of returning partial jobs or restarting', async () => {
       const listJobsForWorkflowRunAttempt = sinon.stub()
-      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ data: { jobs: Array.from({ length: 100 }, () => ({})) } })
+      const jobs = Array.from({ length: 100 }, (_, id) => ({ id }))
+      listJobsForWorkflowRunAttempt.onFirstCall().resolves({ data: { total_count: 101, jobs } })
       listJobsForWorkflowRunAttempt.onSecondCall().resolves({ status: 200, data: '' })
 
       await assert.rejects(getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), {
@@ -183,7 +240,7 @@ describe('workflow jobs', () => {
       })
     }
 
-    for (const data of ['', {}, { jobs: {} }]) {
+    for (const data of ['', {}, { jobs: {}, total_count: 0 }, { jobs: [] }, { jobs: [], total_count: -1 }]) {
       it(`rejects malformed responses: ${JSON.stringify(data)}`, async () => {
         const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ status: 200, data })
 
@@ -196,7 +253,7 @@ describe('workflow jobs', () => {
     }
 
     it('accepts a valid empty array without retrying', async () => {
-      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { jobs: [] } })
+      const listJobsForWorkflowRunAttempt = sinon.stub().resolves({ data: { total_count: 0, jobs: [] } })
 
       assert.deepStrictEqual(await getRestJobs({ rest: { actions: { listJobsForWorkflowRunAttempt } } }, run), [])
       assert.strictEqual(listJobsForWorkflowRunAttempt.callCount, 1)
