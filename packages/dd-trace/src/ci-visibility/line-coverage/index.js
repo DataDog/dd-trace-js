@@ -703,14 +703,67 @@ function getRepositoryFile (filename) {
 /** @type {OxcParse | null | undefined} */
 let oxcParse
 
+// Loading raw transfer costs about 10 ms more than the binding alone, and it then parses in about 60% of
+// the time: a process switches to it once it has parsed this many characters.
+const RAW_TRANSFER_AFTER_LENGTH = 256 * 1024
+
 /** @returns {OxcParse | null} null when oxc-parser cannot be loaded */
 function getOxcParse () {
   if (oxcParse === undefined) {
-    oxcParse = loadOxcBinding() ?? loadOxcPackage() ?? null
+    const parseWithJson = loadOxcBinding() ?? loadOxcPackage()
+    oxcParse = parseWithJson === undefined ? null : createSwitchingParse(parseWithJson)
     // What meriyah parses instead is not cached under a salt that names oxc.
     if (oxcParse === null && isOxcInCacheSalt) cacheSalt = null
   }
   return oxcParse
+}
+
+/**
+ * @param {OxcParse} parseWithJson
+ * @returns {OxcParse} parses with `parseWithJson` until it has parsed `RAW_TRANSFER_AFTER_LENGTH`
+ *   characters, and then with raw transfer where it loads
+ */
+function createSwitchingParse (parseWithJson) {
+  let parsedLength = 0
+  /** @type {OxcParse | null | undefined} */
+  let parseWithRawTransfer
+  return (code, options) => {
+    if (parseWithRawTransfer === undefined && parsedLength > RAW_TRANSFER_AFTER_LENGTH) {
+      parseWithRawTransfer = loadOxcRawTransfer() ?? null
+    }
+    if (parseWithRawTransfer) return parseWithRawTransfer(code, options)
+    parsedLength += code.length
+    return parseWithJson(code, options)
+  }
+}
+
+/**
+ * Raw transfer hands the AST over in memory the native parser writes it to, instead of as JSON, and
+ * gives the same AST. It needs a 64-bit little-endian system, Node.js 22, `require` of the package's
+ * ES module entry, and a 6 GiB ArrayBuffer, which a system can refuse.
+ *
+ * @returns {OxcParse | undefined}
+ */
+function loadOxcRawTransfer () {
+  let oxc
+  try {
+    oxc = require('oxc-parser')
+    if (!oxc.rawTransferSupported()) return
+  } catch {
+    return
+  }
+  /** @type {OxcParse} */
+  const parseWithRawTransfer = (code, options) => {
+    const { program, errors } = oxc.parseSync('index.js', code, { ...options, experimentalRawTransfer: true })
+    if (errors.length > 0) throw new Error(errors[0].message)
+    return program
+  }
+  // The first parse allocates the buffer.
+  try {
+    if (parseWithRawTransfer('0', { sourceType: 'commonjs', preserveParens: false }).type === 'Program') {
+      return parseWithRawTransfer
+    }
+  } catch {}
 }
 
 /**
