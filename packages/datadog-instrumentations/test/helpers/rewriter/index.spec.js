@@ -1881,6 +1881,43 @@ describe('check-require-cache', () => {
   })
 })
 
+describe('rewriter router parameter selection', () => {
+  let directory
+  let filename
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-router-params-'))
+    filename = join(directory, 'index.js')
+    writeFileSync(join(directory, 'package.json'), '{"name":"router","version":"2.3.0"}')
+  })
+
+  afterEach(() => {
+    rmSync(directory, { force: true, recursive: true })
+  })
+
+  for (const [description, source] of [
+    ['a callback defined outside the call site', `function next (req, res, route, layer, done) {
+      const hasMethod = route._handlesMethod(req.method)
+      processParams(self.params, layer, match.keys, called, req, res, done)
+    }`],
+    ['no native method check', `function next (req, res, route, layer, done) {
+      processParams(self.params, layer, match.keys, called, req, res, function () { done() })
+    }`],
+    ['ambiguous native method checks', `function next (req, res, route, layer, done) {
+      const hasMethod = route._handlesMethod(req.method)
+      const hasHead = route._handlesMethod('HEAD')
+      processParams(self.params, layer, match.keys, called, req, res, function () { done() })
+    }`],
+  ]) {
+    it(`does not instrument ${description}`, () => {
+      const { rewrite } = require('../../../src/helpers/rewriter')
+      const rewritten = rewrite(source, filename, 'commonjs', { moduleName: 'router', filePath: 'index.js' })
+      assert.doesNotMatch(rewritten, /routeParams/)
+      assert.ok(rewritten.includes(SOURCE_MAP_MARKER))
+    })
+  }
+})
+
 describe('rewriter source-map trailer', () => {
   const rewriterPath = require.resolve('../../../src/helpers/rewriter')
 

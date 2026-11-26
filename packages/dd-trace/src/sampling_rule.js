@@ -1,6 +1,7 @@
 'use strict'
 
 const { globMatch } = require('../src/util')
+const { getSamplingResource } = require('./http-resource')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 
@@ -166,8 +167,7 @@ function serviceLocator (span) {
  */
 function resourceLocator (span) {
   const context = span.context()
-  return context.getTag('resource') ||
-    context.getTag('resource.name')
+  return context.getTag('resource') || getSamplingResource(context)
 }
 
 /**

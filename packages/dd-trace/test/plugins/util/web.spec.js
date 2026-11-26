@@ -785,6 +785,14 @@ describe('plugins/util/web', () => {
       assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
+  })
+
+  describe('HTTP resource naming', () => {
+    let context
+
+    beforeEach(() => {
+      req.url = '/users/123'
+    })
 
     it('updates the OTel instrumentation resource when the route resolves', () => {
       config = web.normalizeConfig({

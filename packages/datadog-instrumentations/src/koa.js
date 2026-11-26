@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
+const { routerMiddleware, middlewareRoute } = require('./helpers/koa-router-metadata')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const exitChannel = channel('apm:koa:middleware:exit')
@@ -11,8 +12,6 @@ const finishChannel = channel('apm:koa:middleware:finish')
 const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
 const publishError = createErrorPublisher(errorChannel)
-
-const originals = new WeakMap()
 
 function wrapCallback (callback) {
   return function callbackWithTrace (...args) {
@@ -70,13 +69,11 @@ function wrapStack (layer) {
   layer.stack = layer.stack.map(middleware => {
     if (typeof middleware !== 'function') return middleware
 
-    const original = originals.get(middleware)
-
-    middleware = original || middleware
+    middleware = routerMiddleware.get(middleware)?.original ?? middleware
 
     const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
 
-    originals.set(handler, middleware)
+    routerMiddleware.set(handler, { original: middleware, layer })
 
     return handler
   })
@@ -87,16 +84,12 @@ function wrapMiddleware (fn, layer) {
 
   const name = fn.name
 
-  return shimmer.wrapFunction(fn, fn => function (ctx, next) {
+  const handler = shimmer.wrapFunction(fn, fn => function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
     const req = ctx.req
 
-    const path = layer && layer.path
-    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') &&
-      !path.includes('(?:') && path
-
-    enterChannel.publish({ req, name, route })
+    enterChannel.publish({ req, name, route: middlewareRoute(layer), context: ctx, middleware: handler })
 
     if (typeof next === 'function') {
       arguments[1] = wrapNext(req, next)
@@ -126,6 +119,8 @@ function wrapMiddleware (fn, layer) {
       exitChannel.publish({ req })
     }
   })
+
+  return handler
 }
 
 function fulfill (ctx, error) {

@@ -11,6 +11,7 @@ const express = require('express')
 const msgpack = require('@msgpack/msgpack')
 const semifies = require('semifies')
 
+const { USER_REJECT } = require('../../../../ext/priority')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { decodeOtlpTraceRequest } = require('../../../../integration-tests/helpers/otlp')
 const { storage } = require('../../../datadog-core')
@@ -934,6 +935,19 @@ module.exports = {
         return callbackOrExpected(span)
       }
     }, options, traceHandlers)
+  },
+
+  /**
+   * @param {string} resource
+   */
+  assertUserRejectedTrace (resource) {
+    const createConfig = require('../../src/config')
+    if (usesOtlpTraceExporter(createConfig())) {
+      return this.assertNoTraces(() => {
+        assert.fail('Unexpected OTLP trace while ' + resource + ' was rejected')
+      })
+    }
+    return this.assertFirstTraceSpan({ resource, metrics: { _sampling_priority_v1: USER_REJECT } })
   },
 
   /**

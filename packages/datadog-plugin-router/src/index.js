@@ -5,6 +5,12 @@ const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const { joinRoute, normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
+
+/**
+ * @typedef {{ req: import('node:http').IncomingMessage, layer: { path?: string },
+ *   pattern?: string | RegExp, active: boolean }} RouteSelection
+ */
 
 class RouterPlugin extends WebPlugin {
   static id = 'router'
@@ -14,7 +20,25 @@ class RouterPlugin extends WebPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
+    const id = this.constructor.id
+    if (id === 'express' || id === 'router') {
+      const { getLayerMeta, resolveLayerRoute } = require('../../datadog-instrumentations/src/helpers/router-helper')
+      this.addSub(`tracing:orchestrion:${id}:routeParams:start`, /** @param {RouteSelection} selection */ selection => {
+        const { req, layer, pattern } = selection
+        const meta = getLayerMeta(layer)
+        if (!meta || (meta.needMultiMatch && pattern === undefined)) return
+
+        const context = this.#contexts.get(req)
+        const prefix = context && joinRoute(context.stack)
+        const path = normalizeRouteSegment(resolveLayerRoute(meta, layer, pattern))
+        const template = prefix ? prefix + path : path
+        if (context && context.route !== template && !isMoreSpecificThan(template, context.route)) return
+
+        web.scopeSamplingRoute(req, template, selection)
+      })
+    }
+
+    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route, layer }) => {
       // One ALS hop covers both the parent-span fallback (when no
       // per-request context exists yet) and the `storeStack` push below.
       // The previous shape paid an ALS read inside `#getStoreSpan` and a
@@ -31,7 +55,8 @@ class RouterPlugin extends WebPlugin {
       if (!childOf) return
 
       const span = this.#getMiddlewareSpan(name, childOf)
-      context = this.#updateContext(req, context, route, childOf)
+      const matched = Boolean(layer?.route)
+      context = this.#updateContext(req, context, route, childOf, matched)
 
       if (childOf !== span) {
         context.middleware.push(span)
@@ -41,7 +66,8 @@ class RouterPlugin extends WebPlugin {
       this.enter(span, store)
 
       web.patch(req)
-      web.setRoute(req, context.route)
+      const samplingRoute = matched && context.matchedPath === context.route ? context.route : false
+      web.setRoute(req, context.route, samplingRoute)
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
@@ -50,6 +76,10 @@ class RouterPlugin extends WebPlugin {
       if (!context) return
 
       context.stack.pop()
+      if (context.stack.length < context.matchDepth) {
+        context.matchDepth = 0
+        web.setSamplingRoute(req)
+      }
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {
@@ -122,15 +152,18 @@ class RouterPlugin extends WebPlugin {
     return span
   }
 
-  #updateContext (req, context, route, span) {
-    if (!route || route === '/' || route === '*') {
-      route = ''
-    }
+  #updateContext (req, context, route, span, matched) {
+    route = normalizeRouteSegment(route)
 
     if (context) {
       context.stack.push(route)
 
       route = context.stack.join('')
+
+      if (matched) {
+        context.matchedPath = route
+        context.matchDepth = context.stack.length
+      }
 
       // Longer route is more likely to be the actual route handler route.
       if (isMoreSpecificThan(route, context.route)) {
@@ -139,12 +172,12 @@ class RouterPlugin extends WebPlugin {
       return context
     }
 
-    // Five-property shape pinned at allocation so every request shares the
-    // same hidden class — no per-field transitions after construction.
     context = {
       span,
       stack: [route],
       route,
+      matchedPath: matched ? route : undefined,
+      matchDepth: matched ? 1 : 0,
       middleware: [],
       storeStack: [],
     }
