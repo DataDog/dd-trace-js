@@ -5,7 +5,7 @@ import { inspect } from 'util'
 import { Octokit } from 'octokit'
 import pLimit from 'p-limit'
 
-import { getCheckRuns } from './workflow-jobs.mjs'
+import { getFailedJobIds } from './workflow-jobs.mjs'
 
 const {
   BRANCH,
@@ -96,23 +96,23 @@ async function checkWorkflowRuns (id, page = 1) {
 }
 
 async function checkWorkflowJobs (run) {
-  const jobs = await limit(() => getCheckRuns(octokit, run, true))
+  const jobIds = await limit(() => getFailedJobIds(octokit, run))
   // GraphQL cannot filter by attempt. Successful runs can still contain allowed failures.
-  const earlierJobs = await Promise.all(jobs.map(async job => {
-    const { data } = await limit(() => octokit.rest.actions.getJobForWorkflowRun({
+  const earlierJobs = await Promise.all(jobIds.map(async jobId => {
+    const { data: job } = await limit(() => octokit.rest.actions.getJobForWorkflowRun({
       owner: 'DataDog',
       repo: 'dd-trace-js',
-      job_id: job.id,
+      job_id: jobId,
     }))
-    if (!Number.isSafeInteger(data.run_attempt)) {
-      throw new TypeError(`Missing attempt for workflow job ${job.id}.`)
+    if (!Number.isSafeInteger(job?.run_attempt)) {
+      throw new TypeError(`Missing attempt for workflow job ${jobId}.`)
     }
-    return data.run_attempt < run.run_attempt ? job : undefined
+    return job.run_attempt < run.run_attempt ? job : undefined
   }))
 
   for (const job of earlierJobs) {
     if (!job) continue
-    const workflow = run.name
+    const workflow = job.workflow_name ?? run.name
     // Merge matrix runs of same job together.
     const name = MERGE === 'true' ? job.name.split(' ', 1)[0] : job.name
 

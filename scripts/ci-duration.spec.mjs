@@ -235,7 +235,7 @@ describe('CI duration report', () => {
         },
         listJobsForWorkflowRunAttempt: options => {
           jobRequests.push(options.run_id)
-          return Promise.resolve({ data: { jobs: [job({ id: 4, name: 'slow', end: 590 })] } })
+          return Promise.resolve({ data: { total_count: 1, jobs: [job({ id: 4, name: 'slow', end: 590 })] } })
         },
       },
     }
@@ -305,6 +305,7 @@ describe('CI duration report', () => {
             restRequests.push([options.run_id, options.attempt_number])
             return Promise.resolve({
               data: {
+                total_count: 1,
                 jobs: [job({
                   id: options.run_id,
                   name: 'system job',
