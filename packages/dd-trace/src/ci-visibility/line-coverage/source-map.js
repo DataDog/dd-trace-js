@@ -15,28 +15,23 @@ for (let i = 0; i < BASE64.length; i++) BASE64_VALUES[BASE64.charCodeAt(i)] = i
 const MARKER = 'sourceMappingURL='
 
 /**
- * The source map a script names in a `//# sourceMappingURL=` comment at its very end: an inline
- * data URL, or a file relative to the script.
+ * The text of the source map at `url`, which a script names in a `//# sourceMappingURL=` comment: an
+ * inline data URL, or a file relative to the script.
  *
- * @param {string} code
- * @param {string} filename
- * @returns {object | undefined} undefined when there is none, it cannot be read, or it has no sources
+ * @param {string} url
+ * @param {string} filename the script
+ * @returns {string | undefined} undefined when it cannot be read
  */
-function readSourceMap (code, filename) {
-  const url = getSourceMappingUrl(code)
-  if (url === undefined) return
+function readSourceMapUrl (url, filename) {
   try {
-    let map
     if (url.startsWith('data:')) {
       const comma = url.indexOf(',')
       const payload = url.slice(comma + 1)
-      map = JSON.parse(url.slice(0, comma).includes(';base64')
+      return url.slice(0, comma).includes(';base64')
         ? Buffer.from(payload, 'base64').toString('utf8')
-        : decodeURIComponent(payload))
-    } else {
-      map = JSON.parse(fs.readFileSync(path.resolve(path.dirname(filename), url), 'utf8'))
+        : decodeURIComponent(payload)
     }
-    return Array.isArray(map?.sources) ? map : undefined
+    return fs.readFileSync(path.resolve(path.dirname(filename), url), 'utf8')
   } catch {}
 }
 
@@ -200,4 +195,4 @@ function scan (segments, column) {
   return found
 }
 
-module.exports = { createPositionMapper, readSourceMap }
+module.exports = { createPositionMapper, getSourceMappingUrl, readSourceMapUrl }
