@@ -25,11 +25,9 @@ const path = require('node:path')
 
 const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
-const compiler = require('../../../../datadog-instrumentations/src/helpers/rewriter/compiler')
 const { getCollector, LineSet } = require('./collector')
 const { instrument } = require('./instrument')
-
-const EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.jsx', '.ts', '.cts', '.mts', '.tsx'])
+const { createPositionMapper, readSourceMap } = require('./source-map')
 
 /**
  * @typedef {{ filename: string, bitmap: Buffer }} FileCoverage
@@ -216,16 +214,78 @@ function writeDump () {
 }
 
 /**
- * @param {string} filename
+ * Whether `filename` is a file of the repository: under the root, outside `node_modules` and
+ * outside directories whose name starts with a dot.
+ *
+ * @param {string} filename an absolute path
  */
 function shouldInstrument (filename) {
   if (!filename.startsWith(rootPrefix)) return false
-  const relative = filename.slice(rootPrefix.length)
-  if (relative.startsWith('.') || relative.includes(`${path.sep}.`) ||
-    relative.startsWith(`node_modules${path.sep}`) || relative.includes(`${path.sep}node_modules${path.sep}`)) {
-    return false
+  const parts = filename.slice(rootPrefix.length).split(path.sep)
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i] === 'node_modules' || (i < parts.length - 1 && parts[i].startsWith('.'))) return false
   }
-  return EXTENSIONS.has(path.extname(filename))
+  return true
+}
+
+/**
+ * @param {string} filename an absolute path, which may go through symbolic links
+ * @returns {string | undefined} the real path, when it is a file of the repository
+ */
+function getRepositoryFile (filename) {
+  let real
+  try {
+    real = fs.realpathSync(filename)
+  } catch {
+    real = path.resolve(filename)
+  }
+  return shouldInstrument(real) ? real : undefined
+}
+
+let oxc
+
+/**
+ * @param {string} code
+ * @param {boolean} isModule
+ * @returns {object} an ESTree Program
+ */
+function parse (code, isModule) {
+  if (oxc === undefined) {
+    try {
+      oxc = require('oxc-parser')
+    } catch {
+      oxc = null
+    }
+  }
+  if (oxc) {
+    const { program, errors } = oxc.parseSync('index.js', code, {
+      // CommonJS allows a top-level `return`.
+      sourceType: isModule ? 'module' : 'commonjs',
+      preserveParens: false,
+    })
+    if (errors.length > 0) throw new Error(errors[0].message)
+    return program
+  }
+  return require('../../../../../vendor/dist/meriyah').parse(code, {
+    module: isModule,
+    globalReturn: !isModule,
+    ranges: true,
+  })
+}
+
+/**
+ * @param {object | string | undefined} sourceMap
+ * @returns {object | undefined}
+ */
+function toSourceMap (sourceMap) {
+  if (typeof sourceMap === 'string') {
+    try {
+      sourceMap = JSON.parse(sourceMap)
+    } catch {
+      return
+    }
+  }
+  return Array.isArray(sourceMap?.sources) ? sourceMap : undefined
 }
 
 /**
@@ -235,8 +295,10 @@ function shouldInstrument (filename) {
  * @param {string} filename
  * @param {{ isModule?: boolean, reuse?: boolean, sourceMap?: object | string }} [options]
  *   `reuse` keeps the result for the next call with the same filename and code, for frameworks that
- *   compile a module once per test file. `sourceMap` maps `code` back to the file on disk: lines are
- *   reported in the original file, and code mapped to no line of it is not probed.
+ *   compile a module once per test file. `sourceMap` maps `code` back to the files it was compiled
+ *   from; without it, a source map the code names in a `sourceMappingURL` comment does. Lines are
+ *   then reported in the original files, and code mapped to no line of a repository file is not
+ *   probed.
  */
 function instrumentSource (code, filename, { isModule = false, reuse = false, sourceMap } = {}) {
   if (reuse) {
@@ -248,13 +310,35 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
   }
   const start = process.hrtime.bigint()
   try {
-    const result = instrument(code, {
-      parse: (source, sourceIsModule) => compiler.parse(source, { isModule: sourceIsModule, range: true }),
-      isModule,
-      fileIndex: getCollector().fileIndex(filename),
-      originalLine: sourceMap ? getOriginalLine(sourceMap) : undefined,
-    })
+    const collector = getCollector()
+    const map = toSourceMap(sourceMap) ?? readSourceMap(code, filename)
+    let mapPosition
+    /** @type {number[]} the collector's file index of each source, -1 outside the repository */
+    let sourceFiles
+    if (map === undefined) {
+      sourceFiles = [collector.fileIndex(filename)]
+    } else {
+      const mapper = createPositionMapper(map, filename)
+      sourceFiles = mapper.sources.map(source => {
+        const file = getRepositoryFile(source)
+        return file === undefined ? -1 : collector.fileIndex(file)
+      })
+      mapPosition = (line, column) => {
+        const original = mapper.mapPosition(line, column)
+        return original === undefined || sourceFiles[original.source] === -1 ? undefined : original
+      }
+    }
+    const moduleId = collector.reserveModule()
+    const result = instrument(code, { parse: source => parse(source, isModule), moduleId, mapPosition })
     if (!result) return code
+    const { slots } = result
+    const files = new Int32Array(slots.length)
+    const lines = new Int32Array(slots.length)
+    for (let i = 0; i < slots.length; i++) {
+      files[i] = sourceFiles[slots[i].source]
+      lines[i] = slots[i].init ? -slots[i].line : slots[i].line
+    }
+    collector.defineModule(moduleId, files, lines)
     stats.files++
     stats.bytesIn += code.length
     stats.bytesOut += result.code.length
@@ -265,21 +349,6 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     return code
   } finally {
     stats.instrumentNs += process.hrtime.bigint() - start
-  }
-}
-
-/**
- * @param {object | string} sourceMap
- * @returns {(line: number, column: number) => number}
- */
-function getOriginalLine (sourceMap) {
-  const { SourceMapConsumer } = require('../../../../../vendor/dist/@datadog/source-map')
-  const consumer = new SourceMapConsumer(typeof sourceMap === 'string' ? JSON.parse(sourceMap) : sourceMap)
-  // A file transformed on its own maps to a single source; lines of other sources are not this file's.
-  const source = consumer.sources.length === 1 ? consumer.sources[0] : null
-  return (line, column) => {
-    const position = consumer.originalPositionFor({ line, column })
-    return position.line !== null && position.source === source ? position.line : 0
   }
 }
 

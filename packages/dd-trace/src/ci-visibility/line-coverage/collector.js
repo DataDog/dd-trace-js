@@ -8,11 +8,15 @@
 // boundary: a function that was still running when a boundary happened (it called the code that
 // ended the window) keeps recording lines without queueing itself again.
 //
-// Readers report initialiser lines as negative numbers. Those never belong to a window: they go to
-// the per-file initialiser set, which the API adds to every test that ran other code of the file,
-// and to the initialiser part of Shared.
+// A reader reports the slots of its module that ran, as bits of 30-slot words. The module's table,
+// given when it was instrumented, says which file and line each slot stands for, and whether the
+// line is initialiser code. Initialiser lines never belong to a window: they go to the per-file
+// initialiser set, which the API adds to every test that ran other code of the file, and to the
+// initialiser part of Shared.
 
 const GLOBAL_KEY = Symbol.for('dd-trace.line-coverage')
+
+const SLOTS_PER_WORD = 30
 
 /**
  * Lines per file, as bitmaps keyed by the collector's file index: bit `1 << (line & 7)` of byte
@@ -94,6 +98,9 @@ class LineCoverageCollector {
   /** @type {Function[]} */
   #previous = []
 
+  /** @type {Array<{ files: Int32Array, lines: Int32Array } | undefined>} slot tables by module id */
+  #modules = []
+
   /** @type {number[]} */
   #scratch = []
 
@@ -119,6 +126,22 @@ class LineCoverageCollector {
    */
   filename (index) {
     return this.#filenames[index]
+  }
+
+  /**
+   * Returns the id of a module about to be instrumented. Its slots are given by `defineModule`.
+   */
+  reserveModule () {
+    return this.#modules.push(undefined) - 1
+  }
+
+  /**
+   * @param {number} id
+   * @param {Int32Array} files the file index of each slot, or -1 for a slot that counts nowhere
+   * @param {Int32Array} lines the line of each slot, negated for initialiser lines
+   */
+  defineModule (id, files, lines) {
+    this.#modules[id] = { files, lines }
   }
 
   /**
@@ -158,17 +181,28 @@ class LineCoverageCollector {
         const count = readers[r](scratch, generation)
         if (count === 0) continue
         readerCalls++
-        const file = scratch[0]
-        for (let i = 1; i < count; i++) {
-          const line = scratch[i]
-          if (line > 0) {
-            target.add(file, line)
-          } else {
-            init.add(file, -line)
-            sharedInit.add(file, -line)
+        const module = this.#modules[scratch[0]]
+        if (module === undefined) continue
+        const { files, lines } = module
+        for (let i = 1; i < count; i += 2) {
+          const base = scratch[i] * SLOTS_PER_WORD
+          let bits = scratch[i + 1]
+          while (bits !== 0) {
+            const lowest = bits & -bits
+            bits ^= lowest
+            const slot = base + 31 - Math.clz32(lowest)
+            const file = files[slot]
+            if (file === -1) continue
+            const line = lines[slot]
+            if (line > 0) {
+              target.add(file, line)
+            } else {
+              init.add(file, -line)
+              sharedInit.add(file, -line)
+            }
+            lineCount++
           }
         }
-        lineCount += count - 1
       }
     }
 
