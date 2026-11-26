@@ -15,6 +15,24 @@
     ],
     "all.ts": [
       "export * from './math'"
+    ],
+    "reexport.ts": [
+      "import { add } from './math'",
+      "",
+      "export function twice (a: number) {",
+      "  return add(a, a)",
+      "}",
+      "",
+      "export * from './math'"
+    ],
+    "list.ts": [
+      "const base = 40",
+      "",
+      "function plus (a: number) {",
+      "  return base + a",
+      "}",
+      "",
+      "export { base, plus }"
     ]
   },
   "compilers": {
@@ -81,6 +99,87 @@
               "b"
             ],
             "mappings": ";;;;;;;;;;;QAAgBA;eAAAA;;QAIHC;eAAAA;;;AAJN,SAASD,IAAKE,CAAS,EAAEC,CAAS;IACvC,OAAOD,IAAIC;AACb;AAEO,MAAMF,SAAS"
+          }
+        },
+        "reexport.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "Object.defineProperty(exports, \"twice\", {",
+            "    enumerable: true,",
+            "    get: function() {",
+            "        return twice;",
+            "    }",
+            "});",
+            "const _math = _export_star(require(\"./math\"), exports);",
+            "function _export_star(from, to) {",
+            "    Object.keys(from).forEach(function(k) {",
+            "        if (k !== \"default\" && !Object.prototype.hasOwnProperty.call(to, k)) {",
+            "            Object.defineProperty(to, k, {",
+            "                enumerable: true,",
+            "                get: function() {",
+            "                    return from[k];",
+            "                }",
+            "            });",
+            "        }",
+            "    });",
+            "    return from;",
+            "}",
+            "function twice(a) {",
+            "    return (0, _math.add)(a, a);",
+            "}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "reexport.ts"
+            ],
+            "names": [
+              "twice",
+              "a",
+              "add"
+            ],
+            "mappings": ";;;;+BAEgBA;;;eAAAA;;;mCAFI;;;;;;;;;;;;;;AAEb,SAASA,MAAOC,CAAS;IAC9B,OAAOC,IAAAA,SAAG,EAACD,GAAGA;AAChB"
+          }
+        },
+        "list.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "function _export(target, all) {",
+            "    for(var name in all)Object.defineProperty(target, name, {",
+            "        enumerable: true,",
+            "        get: Object.getOwnPropertyDescriptor(all, name).get",
+            "    });",
+            "}",
+            "_export(exports, {",
+            "    get base () {",
+            "        return base;",
+            "    },",
+            "    get plus () {",
+            "        return plus;",
+            "    }",
+            "});",
+            "const base = 40;",
+            "function plus(a) {",
+            "    return base + a;",
+            "}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "list.ts"
+            ],
+            "names": [
+              "base",
+              "plus",
+              "a"
+            ],
+            "mappings": ";;;;;;;;;;;QAMSA;eAAAA;;QAAMC;eAAAA;;;AANf,MAAMD,OAAO;AAEb,SAASC,KAAMC,CAAS;IACtB,OAAOF,OAAOE;AAChB"
           }
         }
       }
@@ -226,6 +325,60 @@
             ],
             "mappings": ";;;;;AAAA,IAAAA,KAAA,GAAAC,OAAA;AAAAC,MAAA,CAAAC,IAAA,CAAAH,KAAA,EAAAI,OAAA,WAAAC,GAAA;EAAA,IAAAA,GAAA,kBAAAA,GAAA;EAAA,IAAAA,GAAA,IAAAC,OAAA,IAAAA,OAAA,CAAAD,GAAA,MAAAL,KAAA,CAAAK,GAAA;EAAAH,MAAA,CAAAK,cAAA,CAAAD,OAAA,EAAAD,GAAA;IAAAG,UAAA;IAAAC,GAAA,WAAAA,CAAA;MAAA,OAAAT,KAAA,CAAAK,GAAA;IAAA;EAAA;AAAA"
           }
+        },
+        "reexport.ts": {
+          "code": [
+            "\"use strict\";",
+            "",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "  value: true",
+            "});",
+            "var _exportNames = {",
+            "  twice: true",
+            "};",
+            "exports.twice = twice;",
+            "var _math = require(\"./math\");",
+            "Object.keys(_math).forEach(function (key) {",
+            "  if (key === \"default\" || key === \"__esModule\") return;",
+            "  if (Object.prototype.hasOwnProperty.call(_exportNames, key)) return;",
+            "  if (key in exports && exports[key] === _math[key]) return;",
+            "  Object.defineProperty(exports, key, {",
+            "    enumerable: true,",
+            "    get: function () {",
+            "      return _math[key];",
+            "    }",
+            "  });",
+            "});",
+            "function twice(a) {",
+            "  return (0, _math.add)(a, a);",
+            "}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "reexport.ts"
+            ],
+            "names": [
+              "_math",
+              "require",
+              "Object",
+              "keys",
+              "forEach",
+              "key",
+              "prototype",
+              "hasOwnProperty",
+              "call",
+              "_exportNames",
+              "exports",
+              "defineProperty",
+              "enumerable",
+              "get",
+              "twice",
+              "a",
+              "add"
+            ],
+            "mappings": ";;;;;;;;;AAAA,IAAAA,KAAA,GAAAC,OAAA;AAMAC,MAAA,CAAAC,IAAA,CAAAH,KAAA,EAAAI,OAAA,WAAAC,GAAA;EAAA,IAAAA,GAAA,kBAAAA,GAAA;EAAA,IAAAH,MAAA,CAAAI,SAAA,CAAAC,cAAA,CAAAC,IAAA,CAAAC,YAAA,EAAAJ,GAAA;EAAA,IAAAA,GAAA,IAAAK,OAAA,IAAAA,OAAA,CAAAL,GAAA,MAAAL,KAAA,CAAAK,GAAA;EAAAH,MAAA,CAAAS,cAAA,CAAAD,OAAA,EAAAL,GAAA;IAAAO,UAAA;IAAAC,GAAA,WAAAA,CAAA;MAAA,OAAAb,KAAA,CAAAK,GAAA;IAAA;EAAA;AAAA;AAJO,SAASS,KAAKA,CAAEC,CAAS,EAAE;EAChC,OAAO,IAAAC,SAAG,EAACD,CAAC,EAAEA,CAAC,CAAC;AAClB"
+          }
         }
       }
     },
@@ -340,6 +493,45 @@
             ],
             "names": [],
             "mappings": ";;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAO,SAAS,IAAK,GAAW,GAAW;AACzC,SAAO,IAAI;AACb;AAEO,MAAM,SAAS;"
+          }
+        },
+        "list.ts": {
+          "code": [
+            "var __defProp = Object.defineProperty;",
+            "var __getOwnPropDesc = Object.getOwnPropertyDescriptor;",
+            "var __getOwnPropNames = Object.getOwnPropertyNames;",
+            "var __hasOwnProp = Object.prototype.hasOwnProperty;",
+            "var __export = (target, all) => {",
+            "  for (var name in all)",
+            "    __defProp(target, name, { get: all[name], enumerable: true });",
+            "};",
+            "var __copyProps = (to, from, except, desc) => {",
+            "  if (from && typeof from === \"object\" || typeof from === \"function\") {",
+            "    for (let key of __getOwnPropNames(from))",
+            "      if (!__hasOwnProp.call(to, key) && key !== except)",
+            "        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });",
+            "  }",
+            "  return to;",
+            "};",
+            "var __toCommonJS = (mod) => __copyProps(__defProp({}, \"__esModule\", { value: true }), mod);",
+            "var list_exports = {};",
+            "__export(list_exports, {",
+            "  base: () => base,",
+            "  plus: () => plus",
+            "});",
+            "module.exports = __toCommonJS(list_exports);",
+            "const base = 40;",
+            "function plus(a) {",
+            "  return base + a;",
+            "}"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "list.ts"
+            ],
+            "names": [],
+            "mappings": ";;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,MAAM,OAAO;AAEb,SAAS,KAAM,GAAW;AACxB,SAAO,OAAO;AAChB;"
           }
         }
       }
