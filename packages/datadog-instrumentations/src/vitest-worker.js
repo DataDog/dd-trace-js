@@ -605,11 +605,13 @@ function wrapBeforeAllHooks (suite) {
 
 /**
  * Closes the line-coverage window of the attempt that ran last for the task. Closing twice is harmless.
+ * The window of a test that skipped itself stays open: the test is reported with a span of its own once
+ * the file has run, and that report closes it.
  *
  * @param {object} task a Vitest test
  */
 function finishLineCoverageTest (task) {
-  if (!lineCoverageTestFinishCh.hasSubscribers) return
+  if (!lineCoverageTestFinishCh.hasSubscribers || task.result?.state === 'skip') return
   const ctx = taskToCtx.get(task)
   if (ctx?.currentStore) lineCoverageTestFinishCh.publish({ task, ...ctx.currentStore })
 }
@@ -1301,6 +1303,8 @@ function getStartTestsWrapper (frameworkVersion) {
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
             ...getReportedProperties(task),
+            task,
+            startedSpan: testCtx?.currentStore?.span,
           })
         } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
           // Attempt-to-fix can pass its last attempt while an earlier failure still fails the suite.

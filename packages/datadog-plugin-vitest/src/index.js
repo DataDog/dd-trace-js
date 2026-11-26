@@ -390,6 +390,8 @@ class VitestPlugin extends CiPlugin {
       testStartLine,
       startTime,
       duration,
+      task,
+      startedSpan,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const extraTags = {
@@ -421,6 +423,8 @@ class VitestPlugin extends CiPlugin {
         testExecutionId,
         startTime
       )
+      // A test that skipped itself after it started gets what ran until then.
+      if (startedSpan) this.#exportLineCoverage(startedSpan, testSpan, task)
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish(Number.isFinite(duration) && duration >= 0 ? testSpan._startTime + duration : undefined)
     })
@@ -713,18 +717,29 @@ class VitestPlugin extends CiPlugin {
 
     // Fires after the afterEach hooks, once per attempt.
     this.addSub('ci:vitest:line-coverage:test:finish', ({ span, task }) => {
-      const test = this.#lineCoverageTests.get(span)
-      if (test === undefined) return
-      this.#lineCoverageTests.delete(span)
-      const files = this.#lineCoverage.finishTest(test, enclosingSuites(task))
-      if (files.length === 0) return
-      const context = span.context()
-      this.tracer._exporter.exportCoverage({
-        sessionId: context._traceId,
-        suiteId: context._parentId,
-        testId: context._spanId,
-        files,
-      })
+      this.#exportLineCoverage(span, span, task)
+    })
+  }
+
+  /**
+   * Closes the line-coverage window a test attempt opened, and exports its lines for the reported test.
+   *
+   * @param {import('../../dd-trace/src/opentracing/span')} startedSpan the span the attempt started with
+   * @param {import('../../dd-trace/src/opentracing/span')} reportedSpan the span the test is reported with
+   * @param {object} task the Vitest test
+   */
+  #exportLineCoverage (startedSpan, reportedSpan, task) {
+    const test = this.#lineCoverageTests.get(startedSpan)
+    if (test === undefined) return
+    this.#lineCoverageTests.delete(startedSpan)
+    const files = this.#lineCoverage.finishTest(test, enclosingSuites(task))
+    if (files.length === 0) return
+    const context = reportedSpan.context()
+    this.tracer._exporter.exportCoverage({
+      sessionId: context._traceId,
+      suiteId: context._parentId,
+      testId: context._spanId,
+      files,
     })
   }
 
