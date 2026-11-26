@@ -19,12 +19,21 @@ const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
 const ANSWER = 'ci-visibility/vitest-line-coverage/src/answer.mjs'
+const FILE_HOOKS_TEST_FILES = 'ci-visibility/vitest-line-coverage/*file-hooks.test.ts'
+const HOOKS = 'ci-visibility/vitest-line-coverage/src/hooks.mjs'
 
 // Lines of the function bodies in src/arithmetic.ts
 const ADD_LINE = 2
 const SUBTRACT_LINE = 6
 const MULTIPLY_LINE = 10
 const DIVIDE_LINE = 14
+
+// Lines of the function bodies in src/hooks.mjs, one per hook of file-hooks.test.ts and one for its tests
+const BEFORE_ALL_LINE = 2
+const BEFORE_EACH_LINE = 6
+const AFTER_EACH_LINE = 10
+const AFTER_ALL_LINE = 14
+const IN_TEST_LINE = 18
 
 /**
  * @param {{ filename: string, bitmap?: Uint8Array }[]} files
@@ -38,6 +47,20 @@ function getLines (files, filename) {
     for (let bit = 0; bit < 8; bit++) {
       if (byte & (1 << bit)) lines.add(index * 8 + bit)
     }
+  }
+  return lines
+}
+
+/**
+ * @param {{ shared?: string, files: { filename: string, bitmap?: Uint8Array }[] }[]} coverages
+ * @param {string} part the part of Shared: init, suiteSetup or unowned
+ * @param {string} filename
+ * @returns {Set<number>}
+ */
+function getSharedLines (coverages, part, filename) {
+  const lines = new Set()
+  for (const coverage of coverages.filter(coverage => coverage.shared === part)) {
+    for (const line of getLines(coverage.files, filename)) lines.add(line)
   }
   return lines
 }
@@ -153,16 +176,9 @@ for (const version of getVitestVersions()) {
         assert.ok(getLines(multiplies, FIXTURE).has(6), testOutput)
         assert.ok(!getLines(multiplies, FIXTURE).has(2), testOutput)
 
-        const sharedLines = (part, filename) => {
-          const lines = new Set()
-          for (const coverage of coverages.filter(coverage => coverage.shared === part)) {
-            for (const line of getLines(coverage.files, filename)) lines.add(line)
-          }
-          return lines
-        }
-        assert.ok(sharedLines('suiteSetup', FIXTURE).has(2), testOutput)
-        assert.ok(!sharedLines('suiteSetup', FIXTURE).has(6), testOutput)
-        assert.ok(sharedLines('init', TEST_FILE).size > 0, testOutput)
+        assert.ok(getSharedLines(coverages, 'suiteSetup', FIXTURE).has(2), testOutput)
+        assert.ok(!getSharedLines(coverages, 'suiteSetup', FIXTURE).has(6), testOutput)
+        assert.ok(getSharedLines(coverages, 'init', TEST_FILE).size > 0, testOutput)
 
         // Concurrent tests are covered per test: each gets what it ran, and not what the other ran.
         const divides = coverageOf('divides concurrently')
@@ -177,6 +193,40 @@ for (const version of getVitestVersions()) {
         const skippedBeforeStart = tests.find(test => test.meta[TEST_NAME].endsWith('is skipped before it starts'))
         assert.ok(skippedBeforeStart, testOutput)
         assert.ok(!coverages.some(coverage => coverage.span_id === Number(skippedBeforeStart.span_id)), testOutput)
+      })
+
+      it(`reports the lines of hooks declared at a file's top level (${pool})`, async () => {
+        const { tests, coverages } = await runFixtureSuite(true, pool, true, FILE_HOOKS_TEST_FILES)
+
+        assert.strictEqual(tests.length, 3, testOutput)
+        const linesOf = name => {
+          const test = tests.find(test => test.meta[TEST_NAME].endsWith(name))
+          assert.ok(test, `no test named ${name}`)
+          assert.strictEqual(test.meta[TEST_STATUS], 'pass', testOutput)
+          const matching = coverages.filter(coverage => coverage.span_id === Number(test.span_id))
+          assert.strictEqual(matching.length, 1, `${name}: ${matching.length} records\n${testOutput}`)
+          return getLines(matching[0].files, HOOKS)
+        }
+
+        // A test of the file gets its own lines, the file's beforeEach and afterEach, which are part of its
+        // window, and the file's beforeAll, as suite setup. Its own lines must survive the beforeEach running
+        // the same module first.
+        for (const name of ['runs inside a describe block', 'runs at the top level']) {
+          const lines = linesOf(name)
+          for (const line of [IN_TEST_LINE, BEFORE_EACH_LINE, AFTER_EACH_LINE, BEFORE_ALL_LINE]) {
+            assert.ok(lines.has(line), `${name}: no line ${line} of src/hooks.mjs\n${testOutput}`)
+          }
+          assert.ok(!lines.has(AFTER_ALL_LINE), testOutput)
+        }
+        const withoutHooks = linesOf('runs in a file without hooks')
+        assert.ok(withoutHooks.has(IN_TEST_LINE), testOutput)
+        for (const line of [BEFORE_ALL_LINE, BEFORE_EACH_LINE, AFTER_EACH_LINE, AFTER_ALL_LINE]) {
+          assert.ok(!withoutHooks.has(line), `line ${line} of src/hooks.mjs\n${testOutput}`)
+        }
+
+        // The file's afterAll runs after its tests, in no test's window: only Shared has it.
+        assert.ok(getSharedLines(coverages, 'unowned', HOOKS).has(AFTER_ALL_LINE), testOutput)
+        assert.ok(getSharedLines(coverages, 'suiteSetup', HOOKS).has(BEFORE_ALL_LINE), testOutput)
       })
 
       it(`reports the lines of tests that replace fs, path and timers (${pool})`, async () => {
