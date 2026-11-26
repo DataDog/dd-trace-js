@@ -22,6 +22,7 @@ const {
   resolveCoverageRoot,
 } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { pluginRuntimeOptions } = require('../bun/plugin-runtime')
 const FakeAgent = require('./fake-agent')
 const { BUN, BUN_CONFIG, withBun } = require('./bun')
 
@@ -531,7 +532,7 @@ function waitForProcExit (proc, timeoutMs) {
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
   // When stdio is 'pipe', stdout/stderr are guaranteed non-null.
   const proc = /** @type {SpawnedProcess} */ (fork(filename, {
-    ...options,
+    ...pluginRuntimeOptions(options),
     stdio: 'pipe',
   }))
 

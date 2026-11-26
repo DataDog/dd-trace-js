@@ -21,6 +21,50 @@ env:
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
+  bun-plugin-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plugins: express|http|fetch
+            grep: ''
+            invert: ''
+          - plugins: pino|winston
+            grep: ''
+            invert: ''
+          - plugins: crypto|dns
+            grep: ''
+            invert: ''
+          - plugins: openai
+            grep: 'is instrumented (default|default-as-named)$'
+            invert: ''
+          - plugins: openai
+            grep: 'is instrumented (default|default-as-named)$'
+            invert: --invert
+    env:
+      PLUGINS: ${{ matrix.plugins }}
+      BUN_TEST_GREP: ${{ matrix.grep }}
+      BUN_TEST_INVERT: ${{ matrix.invert }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: npm run services
+      - run: npm run test:integration:bun:harness
+      - run: |
+          args=(--grep "$BUN_TEST_GREP")
+          if [[ -n "$BUN_TEST_INVERT" ]]; then
+            args+=("$BUN_TEST_INVERT")
+          fi
+          npm run test:integration:plugins:bun -- "${args[@]}"
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: bun-${{ strategy.job-index }}
+
   esbuild:
     runs-on: ubuntu-latest
     permissions:

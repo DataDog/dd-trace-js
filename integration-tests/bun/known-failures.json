@@ -1,0 +1,1000 @@
+{
+  "packages/datadog-plugin-http/test/integration-test/client.spec.js": {
+    "esm http is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-http/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm http is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-http/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm http is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-http/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm http is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-http/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm http is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-http/test/integration-test/client.spec.js)"
+      }
+    }
+  },
+  "packages/datadog-plugin-openai/test/integration-test/client.spec.js": {
+    "esm with openai >=4 <5 (4.104.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4 <5 (4.104.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4 <5 (4.104.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4 <5 (4.104.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4 <5 (4.104.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.0.0 <4.17.1 (4.17.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.0.0 <4.17.1 (4.17.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.0.0 <4.17.1 (4.17.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.0.0 <4.17.1 (4.17.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.0.0 <4.17.1 (4.17.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.1.0 <4.34.0 (4.33.1) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.1.0 <4.34.0 (4.33.1) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.1.0 <4.34.0 (4.33.1) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.1.0 <4.34.0 (4.33.1) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.1.0 <4.34.0 (4.33.1) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.17.1 (4.17.1) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.17.1 (4.17.1) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.17.1 (4.17.1) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.17.1 (4.17.1) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.17.1 (4.17.1) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.34.0 (4.34.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.34.0 (4.34.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.34.0 (4.34.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.34.0 (4.34.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.34.0 (4.34.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.85.0 (4.85.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.85.0 (4.85.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.85.0 (4.85.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.85.0 (4.85.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.85.0 (4.85.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.87.0 (4.87.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.87.0 (4.87.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.87.0 (4.87.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.87.0 (4.87.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=4.87.0 (4.87.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.0.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.0.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.0.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.0.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.0.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.23.2) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.23.2) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.23.2) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.23.2) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (5.23.2) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (6.49.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (6.49.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (6.49.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (6.49.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (6.49.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (7.54.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (7.54.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (7.54.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (7.54.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5 (7.54.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5.17.0 (5.17.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5.17.0 (5.17.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5.17.0 (5.17.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5.17.0 (5.17.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=5.17.0 (5.17.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=7.30.0 (7.30.0) is instrumented default": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=7.30.0 (7.30.0) is instrumented default-as-named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=7.30.0 (7.30.0) is instrumented default-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=7.30.0 (7.30.0) is instrumented named": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    },
+    "esm with openai >=7.30.0 (7.30.0) is instrumented named-from-namespace": {
+      "reason": "test timed out under Bun",
+      "signature": {
+        "name": "Error",
+        "code": "ERR_MOCHA_TIMEOUT",
+        "message": "Timeout of 20000ms exceeded. For async tests and hooks, ensure \"done()\" is called; if returning a Promise, ensure it resolves. (<root>/packages/datadog-plugin-openai/test/integration-test/client.spec.js)"
+      }
+    }
+  },
+  "packages/datadog-plugin-pino/test/integration-test/client.spec.js": {
+    "esm with pino >=5 <6.8.0 (5.0.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (5.0.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (5.0.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (5.17.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (5.17.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (5.17.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (6.7.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (6.7.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=5 <6.8.0 (6.7.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (10.4.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (10.4.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (10.4.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (10.4.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (10.4.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.14.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.14.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.14.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.14.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.14.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.8.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.8.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.8.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.8.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (6.8.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (7.11.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (7.11.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (7.11.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (7.11.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (7.11.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (8.21.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (8.21.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (8.21.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (8.21.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (8.21.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (9.14.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (9.14.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (9.14.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (9.14.0) is instrumented loaded with named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino >=6.8.0 (9.14.0) is instrumented loaded with named-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'pid', 'hostname', 'name', 'msg' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.0.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'msg', 'time', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.0.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'msg', 'time', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.0.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'msg', 'time', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.16.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.16.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (2.16.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (3.4.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (3.4.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 2 - 3 (3.4.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.0.0) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.0.0) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.0.0) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'pid', 'hostname', 'name', 'level', 'time', 'msg', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.17.6) is instrumented loaded with default": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.17.6) is instrumented loaded with default-as-named": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    },
+    "esm with pino 4 (4.17.6) is instrumented loaded with default-from-namespace": {
+      "reason": "test assertion failed under Bun",
+      "signature": {
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION",
+        "message": "Available keys: [ 'level', 'time', 'msg', 'pid', 'hostname', 'name', 'v' ]"
+      }
+    }
+  }
+}
