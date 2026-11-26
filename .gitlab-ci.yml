@@ -38,6 +38,19 @@ include:
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
     ref: "main"
+  # Manual, allowed-to-fail Speedlab macrobenchmarks measuring this pipeline's commit.
+  - project: "DataDog/apm-reliability/speedlab"
+    file: ".gitlab/ci-sdk-node-express-realworld.yml"
+    ref: "fayssal/sdk-ci-dd-trace-js"
+    inputs:
+      stage: benchmarks
+      speedlab_ref: "fayssal/sdk-ci-dd-trace-js"
+  - project: "DataDog/apm-reliability/speedlab"
+    file: ".gitlab/ci-sdk-node-hapi-redis.yml"
+    ref: "fayssal/sdk-ci-dd-trace-js"
+    inputs:
+      stage: benchmarks
+      speedlab_ref: "fayssal/sdk-ci-dd-trace-js"
 
 workflow:
   auto_cancel:
