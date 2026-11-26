@@ -157,6 +157,38 @@ describe('line coverage of exports that compilers define through getters', () =>
     assert.deepStrictEqual(lines, {})
   })
 
+  it('keeps the line of an export * that Babel turns into a loop as an initialiser line of the module', () => {
+    // reexport.ts imports `add` on line 1, declares `twice` on lines 3-5, and has `export *` on line 7. Babel
+    // puts the import's require on line 1 and the loop on line 7.
+    const read = runTest('babel 7.28.5', {
+      loadFirst: ['reexport.ts'],
+      test: load => load('reexport.ts').answer,
+    })
+    const called = runTest('babel 7.28.5', {
+      loadFirst: ['reexport.ts'],
+      test: load => load('reexport.ts').twice(2),
+    })
+
+    assert.deepStrictEqual(read, {})
+    assert.deepStrictEqual(called, { 'reexport.ts': [1, 3, 4, 7], ...ADD_LINES })
+  })
+
+  it('keeps the line of an export list that SWC turns into getters as an initialiser line of the module', () => {
+    // list.ts declares `base` on line 1 and `plus` on lines 3-5, and exports both on line 7, where SWC's
+    // source map puts its _export call.
+    const read = runTest('swc 1.15.41', {
+      loadFirst: ['list.ts'],
+      test: load => load('list.ts').base,
+    })
+    const called = runTest('swc 1.15.41', {
+      loadFirst: ['list.ts'],
+      test: load => load('list.ts').plus(1),
+    })
+
+    assert.deepStrictEqual(read, {})
+    assert.deepStrictEqual(called, { 'list.ts': [1, 3, 4, 7] })
+  })
+
   it('gives no line of the re-exporting module for an export TypeScript re-exports with Object.defineProperty', () => {
     const read = runTest('typescript 6.0.3', {
       loadFirst: ['index.ts'],
