@@ -2570,6 +2570,43 @@ describe('Plugin', () => {
           graphql = require(`../../../versions/graphql@${version}`).get()
         })
 
+        it('keeps the resolver frame when a scalar executes a query during coercion', async function () {
+          if (typeof graphql.executeSync !== 'function') this.skip()
+
+          const schema = graphql.buildSchema(
+            'scalar Input type Query { hold: String, inner: String, main(input: Input): String }'
+          )
+          const contextValue = Object.freeze({})
+          const document = graphql.parse('query Outer($input: Input) { main(input: $input) }')
+          const innerDocument = graphql.parse('{ inner }')
+          let finishPeer
+          const pending = new Promise(resolve => { finishPeer = resolve })
+          const fields = schema.getQueryType().getFields()
+          fields.hold.resolve = () => pending
+          fields.inner.resolve = () => 'inner'
+          let resource
+          fields.main.resolve = (source, args) => {
+            resource = tracer.scope().active()?.context().getTag('resource.name')
+            return args.input
+          }
+          schema.getType('Input').parseValue = value => {
+            const result = graphql.executeSync({ schema, document: innerDocument, contextValue })
+            assert.strictEqual(result.data.inner, 'inner')
+            return value
+          }
+
+          const peer = graphql.execute({ schema, document: graphql.parse('{ hold }'), contextValue })
+          try {
+            const result = await graphql.execute({ schema, document, contextValue, variableValues: { input: 'value' } })
+            assert.strictEqual(result.errors, undefined)
+            assert.strictEqual(result.data.main, 'value')
+            assert.strictEqual(resource, 'main:String')
+          } finally {
+            finishPeer('peer')
+            await peer
+          }
+        })
+
         it('tags each resolve span with its own operation variables', () => {
           const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
           const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')

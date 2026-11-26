@@ -84,15 +84,6 @@ class GraphQLJitExecutePlugin extends GraphQLExecutePlugin {
     }
     ctx.ddArgs = args
   }
-
-  /**
-   * @param {JitExecutionContext} ctx
-   * @param {unknown} _contextValue
-   * @param {object} rootCtx
-   */
-  storeRootContext (ctx, _contextValue, rootCtx) {
-    ctx.currentStore.graphqlRootCtx = rootCtx
-  }
 }
 
 /**

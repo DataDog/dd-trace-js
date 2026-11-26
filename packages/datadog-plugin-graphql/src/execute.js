@@ -46,7 +46,6 @@ const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 
 const contexts = new WeakMap()
-const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
 const jitResolvers = new WeakMap()
@@ -97,9 +96,10 @@ class AbortError extends Error {
  * @param {Record<string, unknown> | undefined} variableValues
  * @param {unknown} contextValue
  * @param {string | undefined} requestSource
+ * @param {ExecutionArguments | undefined} preparedArgs
  */
 function createRootContext (plugin, executeSpan, source, abortController, jitPlan, variableValues,
-  contextValue, requestSource) {
+  contextValue, requestSource, preparedArgs) {
   const hasIastSub = iastResolveCh.hasSubscribers
   const hasResolverSub = abortController !== undefined
   const traceResolvers = plugin.config.depth !== 0
@@ -112,6 +112,11 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
     source,
     requestSource,
     contextValue,
+    preparedArgs,
+    coercedVariables: undefined,
+    legacyVariableValues: undefined,
+    executionStore: undefined,
+    weakReference: undefined,
     config: plugin.config,
     abortController,
     executeSpan,
@@ -169,6 +174,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
   addTraceSubs () {
     super.addTraceSubs()
 
+    if (this.constructor === GraphQLExecutePlugin) {
+      this.addSub('tracing:orchestrion:graphql:apm:graphql:execution-context:end', rememberExecutionContext)
+      this.addSub(
+        'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execution-context:end',
+        rememberExecutionContext
+      )
+    }
+
     for (const prefix of this.constructor.extraPrefixes) {
       const events = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
 
@@ -190,16 +203,18 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
   /**
    * @param {object} ctx
+   * @param {GraphQLRequestStore | undefined} requestStore
    * @returns {ExecutionArguments | undefined}
    */
-  readExecutionArgs (ctx) {
+  readExecutionArgs (ctx, requestStore) {
     const rawArgs = ctx.arguments
+    const activeRoot = requestStore?.graphqlRootCtx
+    const preparedArgs = activeRoot?.preparedArgs
 
-    // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
-    // execute internally with the same arguments object — without this we'd double-span).
-    if (instrumentedArgs.has(rawArgs?.[0])) {
+    // normalizedExecutor forwards the prepared argument object synchronously.
+    if (preparedArgs && rawArgs?.[0] === preparedArgs) {
       ctx.ddSkipped = true
-      ctx.currentStore = legacyStorage.getStore()
+      ctx.currentStore = requestStore
       return
     }
 
@@ -213,10 +228,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
   wrapExecutionResolvers (ctx, args) {
     const rawArgs = ctx.arguments
     ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, isObjectForm(rawArgs), defaultFieldResolver)
-    if (ctx.ddArgs && typeof ctx.ddArgs === 'object') {
-      instrumentedArgs.add(ctx.ddArgs)
-      ctx.ddInstrumentedArgs = ctx.ddArgs
-    }
 
     const { schema } = args
     if (schema) {
@@ -228,40 +239,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
   /**
    * @param {object} ctx
-   * @param {unknown} contextValue
-   * @param {object} rootCtx
-   */
-  storeRootContext (ctx, contextValue, rootCtx) {
-    ctx.currentStore.graphqlRootCtx = rootCtx
-    if (isWeakMapKey(contextValue)) {
-      const active = contexts.get(contextValue)
-      if (active === undefined) {
-        contexts.set(contextValue, rootCtx)
-      } else {
-        const reference = rootCtx.contextReference ??= new WeakRef(rootCtx)
-        if (active.owners) {
-          active.owners.add(reference)
-          if (--active.registrationsUntilSweep === 0) {
-            pruneContextOwners(contextValue, active)
-          }
-        } else {
-          const previous = active.contextReference ??= new WeakRef(active)
-          contexts.set(contextValue, {
-            owners: new Set([previous, reference]),
-            sweepSize: 2,
-            registrationsUntilSweep: 2,
-          })
-        }
-      }
-      ctx.ddContextValue = contextValue
-    }
-  }
-
-  /**
-   * @param {object} ctx
    */
   bindStart (ctx) {
-    const args = this.readExecutionArgs(ctx)
+    const requestStore = /** @type {GraphQLRequestStore | undefined} */ (legacyStorage.getStore())
+    const args = this.readExecutionArgs(ctx, requestStore)
     if (!args) return ctx.currentStore
 
     const { contextValue } = args
@@ -284,7 +265,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
-    const requestStore = /** @type {GraphQLRequestStore | undefined} */ (legacyStorage.getStore())
     const activeRootCtx = requestStore?.graphqlRootCtx
     const parentCtx = contextValue && typeof contextValue === 'object' && activeRootCtx?.contextValue === contextValue
       ? activeRootCtx
@@ -326,10 +306,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const rootCtx = createRootContext(
       this, span, docSource, abortController, ctx.ddPlan, args.variableValues,
-      contextValue, requestSource === docSource ? undefined : requestSource
+      contextValue, requestSource === docSource ? undefined : requestSource, ctx.ddArgs
     )
     ctx.ddRootCtx = rootCtx
-    this.storeRootContext(ctx, contextValue, rootCtx)
+    ctx.currentStore.graphqlRootCtx = rootCtx
 
     return ctx.currentStore
   }
@@ -340,8 +320,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
 
-    if (ctx.ddRootCtx && legacyStorage.getStore() !== ctx.currentStore) {
-      legacyStorage.enterWith(ctx.currentStore)
+    const rootCtx = ctx.ddRootCtx
+    if (rootCtx) {
+      rootCtx.preparedArgs = undefined
+      if (legacyStorage.getStore() !== ctx.currentStore) {
+        legacyStorage.enterWith(ctx.currentStore)
+      }
     }
 
     // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
@@ -354,6 +338,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const result = ctx.result
 
     if (typeof result?.then === 'function') {
+      weakenExecutionContext(rootCtx)
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
         (error) => this.#finishSpan(ctx, span, undefined, error)
@@ -383,9 +368,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {boolean} [finishPendingFields]
    */
   #finishSpan (ctx, span, res, error, incrementalComplete = false, finishPendingFields = false) {
+    const rootCtx = ctx.ddRootCtx
     if (!incrementalComplete && error === undefined && ctx.ddOperationType !== 'subscription') {
       const iterator = getIncrementalIterator(res)
       if (iterator) {
+        weakenExecutionContext(rootCtx)
         tagIncrementalResult(this.config, span, res?.initialResult)
         observeIncrementalIterator(iterator, (result, iteratorError, iteratorCancelled, complete) => {
           tagIncrementalResult(this.config, span, result)
@@ -405,24 +392,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
       tagExecutionErrors(this.config, span, res.errors)
     }
 
-    if (ctx.ddContextValue) {
-      const contextValue = ctx.ddContextValue
-      const active = contexts.get(contextValue)
-      if (active?.owners) {
-        active.owners.delete(ctx.ddRootCtx.contextReference)
-        if (active.owners.size <= 1 || active.owners.size * 2 <= active.sweepSize) {
-          pruneContextOwners(contextValue, active)
-        }
-      } else {
-        contexts.delete(contextValue)
+    if (rootCtx?.coercedVariables) {
+      contexts.delete(rootCtx.coercedVariables)
+      if (rootCtx.legacyVariableValues) {
+        contexts.delete(rootCtx.legacyVariableValues)
       }
-      ctx.ddContextValue = undefined
-    }
-    if (ctx.ddInstrumentedArgs) {
-      instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
-    const rootCtx = ctx.ddRootCtx
     const releaseBeforeExecuteHook = rootCtx?.resolveHooksPending === true
     if (releaseBeforeExecuteHook) {
       releaseRootContext(rootCtx, finishPendingFields)
@@ -583,7 +559,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
  */
 function wrapResolve (resolve, isJit = false) {
   /* istanbul ignore next: future GraphQL versions may expose a non-callable resolver entry. */
-  if (typeof resolve !== 'function' || (!isJit && patchedResolvers.has(resolve))) return resolve
+  if (typeof resolve !== 'function') return resolve
 
   // Replace a schema wrapper with the execution-local JIT variant instead of nesting both.
   resolve = unwrapResolve(resolve)
@@ -602,19 +578,17 @@ function wrapResolve (resolve, isJit = false) {
       return invokeResolver(resolve, this, arguments, isJit)
     }
 
-    const remembered = isJit ? undefined : contexts.get(contextValue)
-    let rootCtx = remembered
+    let rootCtx = isJit ? legacyStorage.getStore()?.graphqlRootCtx : contexts.get(info?.variableValues)
     let config = rootCtx?.config
     if (!config) {
-      rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+      rootCtx = rootCtx?.deref?.()
       config = rootCtx?.config
-      if (!config && remembered?.owners) {
-        rootCtx = pruneContextOwners(contextValue, remembered, true)
-        config = rootCtx?.config
-      }
     }
     if (!config) return invokeResolver(resolve, this, arguments, isJit)
 
+    if ((hasIastSub || hasResolverSub) && !isJit && legacyStorage.getStore()?.graphqlRootCtx !== rootCtx) {
+      return legacyStorage.run(rootCtx.executionStore, invokeResolver, resolveAsync, this, arguments, false)
+    }
     const infoPath = info?.path
     const traceResolver = !depthDisabled && shouldInstrumentNode(config, infoPath)
 
@@ -1103,8 +1077,10 @@ function markWalked (schema, type) {
 }
 
 function wrapFieldResolve (field) {
-  if (!field?.resolve) return
-  field.resolve = wrapResolve(field.resolve)
+  const resolve = field?.resolve
+  if (resolve && !patchedResolvers.has(resolve)) {
+    field.resolve = wrapResolve(resolve)
+  }
 }
 
 function wrapFieldType (field, schema) {
@@ -1462,36 +1438,38 @@ function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolve
   return args
 }
 
-function isWeakMapKey (value) {
-  return value !== null && (typeof value === 'object' || typeof value === 'function')
+/**
+ * @param {{ fieldResolver: GraphQLFieldResolver, variableValues: object, legacyVariableValues?: object }} context
+ */
+function rememberExecutionContext ({ fieldResolver, variableValues, legacyVariableValues }) {
+  const store = legacyStorage.getStore()
+  const rootCtx = store?.graphqlRootCtx
+  const preparedResolver = rootCtx?.preparedArgs?.fieldResolver
+  if (typeof preparedResolver !== 'function' || preparedResolver !== fieldResolver) {
+    return
+  }
+  rootCtx.executionStore = store
+  rootCtx.coercedVariables = variableValues
+  contexts.set(variableValues, rootCtx)
+  if (legacyVariableValues) {
+    rootCtx.legacyVariableValues = legacyVariableValues
+    contexts.set(legacyVariableValues, rootCtx)
+  }
 }
 
 /**
- * @param {object} contextValue
- * @param {{ owners: Set<WeakRef<object>>, sweepSize: number, registrationsUntilSweep: number }} overlap
- * @param {boolean} [findOnly]
+ * @param {ReturnType<typeof createRootContext> | undefined} rootCtx
  */
-function pruneContextOwners (contextValue, overlap, findOnly = false) {
-  const { owners } = overlap
-  let remaining
-  for (const reference of owners) {
-    const owner = reference.deref()
-    if (owner === undefined) {
-      owners.delete(reference)
-    } else if (findOnly && remaining !== undefined) {
-      return
-    } else {
-      remaining = owner
-    }
+function weakenExecutionContext (rootCtx) {
+  if (!rootCtx?.coercedVariables || rootCtx.weakReference) {
+    return
   }
-  if (remaining === undefined) {
-    contexts.delete(contextValue)
-  } else if (owners.size === 1) {
-    contexts.set(contextValue, remaining)
-    return remaining
-  } else {
-    overlap.sweepSize = owners.size
-    overlap.registrationsUntilSweep = owners.size
+  // The completion callbacks keep the frame live while the result is reachable.
+  const reference = new WeakRef(rootCtx)
+  rootCtx.weakReference = reference
+  contexts.set(rootCtx.coercedVariables, reference)
+  if (rootCtx.legacyVariableValues) {
+    contexts.set(rootCtx.legacyVariableValues, reference)
   }
 }
 

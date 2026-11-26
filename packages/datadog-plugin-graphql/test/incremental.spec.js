@@ -306,112 +306,173 @@ describe('GraphQL incremental execution', () => {
       }
     })
 
-    it('does not borrow a frame for a detached resolver during overlap', async () => {
-      const tracer = require('../../dd-trace')
-      const schema = graphql.buildSchema('type Query { node: Item, waiting: String } type Item { value: String }')
-      const contextValue = Object.freeze({})
-      const resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
-      let finishWaiting
-      const waiting = new Promise(resolve => { finishWaiting = resolve })
-      const fields = schema.getQueryType().getFields()
-      fields.waiting.resolve = () => waiting
-      fields.node.resolve = () => Object.defineProperty({}, 'then', {
-        value (onFulfilled, onRejected) {
-          return Promise.resolve().then(() => {
-            try {
-              return resource.runInAsyncScope(onFulfilled, undefined, {})
-            } finally {
-              finishWaiting('waited')
-            }
-          }).catch(onRejected)
-        },
-      })
-      const activeSpans = []
-      schema.getType('Item').getFields().value.resolve = () => {
-        activeSpans.push(tracer.scope().active())
-        return 'value'
-      }
-
-      try {
-        const [sibling, result] = await Promise.all([
-          graphql.execute({ schema, document: graphql.parse('{ waiting }'), contextValue }),
-          graphql.execute({ schema, document: graphql.parse('{ node { value } }'), contextValue }),
-        ])
-        assert.strictEqual(sibling.data.waiting, 'waited')
-        assert.strictEqual(result.errors, undefined)
-        assert.strictEqual(result.data.node.value, 'value')
-        assert.strictEqual(activeSpans.length, 1)
-        assert.ok(!activeSpans[0])
-      } finally {
-        resource.emitDestroy()
-      }
-    })
-
-    it('releases discarded incremental executions sharing a context', async function () {
-      if (!global.gc) this.skip()
-
-      const schema = graphql.buildSchema('type Query { immediate: String, delayed: String }')
-      const document = graphql.parse('{ immediate ... @defer { delayed } }')
-      const contextValue = Object.freeze({})
-      const references = []
-      const channel = dc.channel('apm:graphql:resolve:start')
-      const record = ({ rootCtx }) => {
-        if (!references.some(reference => reference.deref() === rootCtx)) {
-          references.push(new WeakRef(rootCtx))
+    for (const scope of ['no execution scope', 'a different context', 'another execution with the same context']) {
+      const useForeignScope = scope !== 'no execution scope'
+      it(`keeps a detached resolver on its execution in ${scope}`, async () => {
+        const tracer = require('../../dd-trace')
+        const schema = graphql.buildSchema(
+          'type Query { node: Item, waiting: String, foreign: String } type Item { value: String }'
+        )
+        const contextValue = Object.freeze({})
+        let resource
+        let foreignSpan
+        let nodeSpan
+        let finishWaiting
+        const waiting = new Promise(resolve => { finishWaiting = resolve })
+        const fields = schema.getQueryType().getFields()
+        fields.waiting.resolve = () => waiting
+        fields.foreign.resolve = () => {
+          resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
+          foreignSpan = tracer.scope().active()
+          return waiting
         }
-      }
-      const run = args => {
-        const resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
-        try {
-          return resource.runInAsyncScope(execute, undefined, args)
-        } finally {
-          resource.emitDestroy()
+        fields.node.resolve = () => {
+          nodeSpan = tracer.scope().active()
+          return Object.defineProperty({}, 'then', {
+            value (onFulfilled, onRejected) {
+              return Promise.resolve().then(() => {
+                try {
+                  return resource.runInAsyncScope(onFulfilled, undefined, {})
+                } finally {
+                  finishWaiting('waited')
+                }
+              }).catch(onRejected)
+            },
+          })
         }
-      }
-      const cancel = () => {
-        const controller = new AbortController()
-        const abandoned = run({
-          schema,
-          document,
-          rootValue: { immediate: 'initial', delayed: 'deferred' },
-          contextValue,
-          signal: controller.signal,
-        })
-        assert.strictEqual(abandoned.initialResult.data.immediate, 'initial')
-        assert.ok(abandoned.subsequentResults)
-        controller.abort()
-      }
-      let finishActive
-      const active = new Promise(resolve => { finishActive = resolve })
-      const activeArgs = {
-        schema,
-        document: graphql.parse('{ immediate }'),
-        rootValue: { immediate: () => active },
-        contextValue,
-      }
-      const activeResults = Promise.all([run(activeArgs), run(activeArgs)])
+        const activeSpans = []
+        schema.getType('Item').getFields().value.resolve = () => {
+          activeSpans.push(tracer.scope().active())
+          return 'value'
+        }
 
-      const [, results] = await Promise.all([(async () => {
+        const checks = []
+        const channel = dc.channel('datadog:graphql:resolver:start')
+        const record = ({ info, abortController }) => {
+          if (info.fieldName === 'node' || info.fieldName === 'value') {
+            checks.push([abortController, tracer.scope().active()?.context().toTraceId()])
+          }
+        }
         channel.subscribe(record)
         try {
-          for (let index = 0; index < 2; index++) {
-            cancel()
+          let foreignResult
+          if (useForeignScope) {
+            foreignResult = graphql.execute({
+              schema,
+              document: graphql.parse('{ foreign }'),
+              contextValue: scope === 'a different context' ? Object.freeze({}) : contextValue,
+            })
+          } else {
+            resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
           }
-          assert.strictEqual(references.length, 2)
-          for (let index = 0; index < 5; index++) {
-            await immediate()
-            global.gc()
+          const [sibling, result, foreign] = await Promise.all([
+            graphql.execute({ schema, document: graphql.parse('{ waiting }'), contextValue }),
+            graphql.execute({ schema, document: graphql.parse('{ node { value } }'), contextValue }),
+            foreignResult,
+          ])
+          assert.strictEqual(sibling.data.waiting, 'waited')
+          assert.strictEqual(result.errors, undefined)
+          assert.strictEqual(result.data.node.value, 'value')
+          if (useForeignScope) {
+            assert.ok(foreignSpan)
+            assert.strictEqual(foreign.data.foreign, 'waited')
           }
-          assert.ok(references.every(reference => reference.deref() === undefined))
+          assert.strictEqual(activeSpans.length, 1)
+          assert.ok(nodeSpan)
+          assert.strictEqual(activeSpans[0]?.context().getTag('resource.name'), 'value:String')
+          assert.strictEqual(activeSpans[0].context().toTraceId(), nodeSpan.context().toTraceId())
+          assert.strictEqual(checks.length, 2)
+          assert.ok(checks[0][0])
+          assert.deepStrictEqual(checks[1], checks[0])
         } finally {
           channel.unsubscribe(record)
-          finishActive('active')
+          finishWaiting('waited')
+          resource?.emitDestroy()
         }
-      })(), activeResults])
-      for (const result of results) {
-        assert.strictEqual(result.data.immediate, 'active')
-      }
-    })
+      })
+    }
+
+    for (const finishSibling of [false, true]) {
+      const timing = finishSibling ? 'after' : 'before'
+      it(`releases discarded incremental executions ${timing} the sibling finishes`, async function () {
+        if (!global.gc) this.skip()
+
+        const schema = graphql.buildSchema('type Query { immediate: String, delayed: String }')
+        const document = graphql.parse('{ immediate ... @defer { delayed } }')
+        const contextValue = Object.freeze({})
+        const references = []
+        const retainedVariables = []
+        const channel = dc.channel('apm:graphql:resolve:start')
+        const record = ({ rootCtx }) => {
+          if (!references.some(reference => reference.deref() === rootCtx)) {
+            references.push(new WeakRef(rootCtx))
+          }
+        }
+        const run = args => {
+          const resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
+          try {
+            return resource.runInAsyncScope(execute, undefined, args)
+          } finally {
+            resource.emitDestroy()
+          }
+        }
+        const cancel = () => {
+          const controller = new AbortController()
+          const abandoned = run({
+            schema,
+            document,
+            rootValue: {
+              immediate (args, contextValue, info) {
+                retainedVariables.push(info.variableValues)
+                return 'initial'
+              },
+              delayed: 'deferred',
+            },
+            contextValue,
+            signal: controller.signal,
+          })
+          assert.strictEqual(abandoned.initialResult.data.immediate, 'initial')
+          assert.ok(abandoned.subsequentResults)
+          controller.abort()
+        }
+        let finishActive
+        const active = new Promise(resolve => { finishActive = resolve })
+        const activeArgs = {
+          schema,
+          document: graphql.parse('{ immediate }'),
+          rootValue: { immediate: () => active },
+          contextValue,
+        }
+        const activeResults = Promise.all(finishSibling ? [run(activeArgs)] : [run(activeArgs), run(activeArgs)])
+        const collect = async () => {
+          channel.subscribe(record)
+          try {
+            cancel()
+            if (finishSibling) {
+              finishActive('active')
+              await activeResults
+            } else {
+              cancel()
+            }
+            assert.strictEqual(references.length, finishSibling ? 1 : 2)
+            for (let index = 0; index < 5; index++) {
+              await immediate()
+              global.gc()
+            }
+            assert.ok(references.every(reference => reference.deref() === undefined))
+            assert.strictEqual(retainedVariables.length, references.length)
+          } finally {
+            channel.unsubscribe(record)
+            finishActive('active')
+          }
+        }
+
+        const [, results] = await Promise.all([collect(), activeResults])
+        for (const result of results) {
+          assert.strictEqual(result.data.immediate, 'active')
+        }
+      })
+    }
 
     it('records reused resolver errors from the GraphQL Tools executor', async () => {
       const operationName = 'ReusedResolverError'

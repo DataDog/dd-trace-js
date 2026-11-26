@@ -246,4 +246,22 @@ for (const instrumentation of instrumentations) {
   })
 }
 
+const graphqlExecutionFiles = ['execution/execute.js', 'execution/execute.mjs']
+const toolsExecutionFiles = ['cjs/execution/execute.js', 'esm/execution/execute.js']
+const buildExecutionContext = 'FunctionDeclaration[id.name="buildExecutionContext"]'
+const validateExecutionArgs = 'FunctionDeclaration[id.name="validateExecutionArgs"]'
+for (const [name, files, versionRange, astQuery] of [
+  ['graphql', graphqlExecutionFiles, '>=0.10', `${buildExecutionContext}, ${validateExecutionArgs}`],
+  ['@graphql-tools/executor', toolsExecutionFiles, '>=0.0.14', buildExecutionContext],
+]) {
+  for (const filePath of files) {
+    instrumentations.push({
+      module: { name, versionRange, filePath },
+      astQuery,
+      transform: 'publishGraphqlExecutionContext',
+      channelName: 'apm:graphql:execution-context',
+    })
+  }
+}
+
 module.exports = [...instrumentations, ...fastPathInstrumentations]

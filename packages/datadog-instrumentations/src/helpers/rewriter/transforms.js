@@ -27,8 +27,43 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishGraphqlExecutionContext,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishGraphqlExecutionContext (state, node, _parent, ancestry) {
+  const statements = node.body.body
+  const success = statements.at(-1)
+  assert.strictEqual(success?.type, 'ReturnStatement', 'expected a final GraphQL context return')
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}.end`
+  // Executor v2 uses the v17 variable container with both GraphQL.js 16 and 17.
+  const usesVariableContainer = query(node,
+    'Property[key.name="variableValues"] > ' +
+    'MemberExpression[object.name="coercedVariableValues"][property.name="variableValues"]'
+  ).length > 0
+  const alias = usesVariableContainer ? 'legacyVariableValues: variableValues.coerced,' : ''
+  const [context, publish] = parse(`
+    const __apm$executionContext = undefined
+    if (${channel}.hasSubscribers) {
+      const { fieldResolver, variableValues, resolveInfoVariableValues } = __apm$executionContext
+      ${channel}.publish({
+        fieldResolver,
+        variableValues: resolveInfoVariableValues ?? variableValues,
+        ${alias}
+      })
+    }
+  `).body
+  context.declarations[0].init = success.argument
+  success.argument = { type: 'Identifier', name: '__apm$executionContext' }
+  statements.splice(-1, 0, context, publish)
 }
 
 /**
