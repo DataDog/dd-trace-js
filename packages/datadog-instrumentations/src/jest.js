@@ -435,7 +435,6 @@ function instrumentScriptTransformer (transformer) {
   lineCoverageTransformers.add(transformer)
   transformer.transform = shimmer.wrapFunction(transformer.transform, transform => function (filename, options) {
     const result = transform.apply(this, arguments)
-    const lineCoverage = getLineCoverage()
     // ECMAScript modules (compiled as source text modules) are not instrumented yet.
     if (!lineCoverage?.isActive() || options?.supportsStaticESM || options?.isInternalModule ||
         typeof result?.code !== 'string' || !lineCoverage.shouldInstrument(filename)) {
@@ -790,6 +789,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #restoreSnapshotState
     /** @type {Set<string>|undefined} */
     #snapshotTestNames
+    /** Whether per-test line coverage runs for this test file. */
+    #isLineCoverageEnabled = false
 
     constructor (config, context) {
       super(config, context)
@@ -797,7 +798,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.rootDir = rootDir
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
-      getLineCoverage()?.installGlobal(this.global)
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
       activeTestSuiteAbsolutePath = this.testSuiteAbsolutePath
@@ -807,6 +807,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this.displayName = config.projectConfig?.displayName?.name || config.displayName
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
+      this.#isLineCoverageEnabled = this.testEnvironmentOptions._ddLineCoverageEnabled === true
+      if (this.#isLineCoverageEnabled) getLineCoverage()?.installGlobal(this.global)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
@@ -2447,7 +2449,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
-      if (isLineCoverageRequested) {
+      if (this.#isLineCoverageEnabled) {
         // A beforeAll hook is suite-scope setup, and its lines belong to every test of the block. The
         // block's own afterAll hooks, like its tests, are not part of it.
         if (event.name === 'hook_start' && event.hook.type === 'beforeAll') {
@@ -2980,7 +2982,13 @@ function shouldCollectJestCoverageForTia () {
 }
 
 function shouldReportJestSuiteCoverageForTia () {
-  return isItrEnabled && isCodeCoverageEnabled
+  return isItrEnabled && isCodeCoverageEnabled && !isLineCoverageRequested
+}
+
+// Requested per-test line coverage takes the place of the per-suite coverage Test Impact Analysis
+// collects, and runs when that would.
+function shouldCollectLineCoverage () {
+  return isLineCoverageRequested && isItrEnabled && isCodeCoverageEnabled
 }
 
 function hasJestCoverageMap () {
@@ -4057,6 +4065,7 @@ function configureTestEnvironment (readConfigsResult) {
     const testEnvironmentOptions = config.testEnvironmentOptions || {}
     testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
     testEnvironmentOptions._ddTestCodeCoverageEnabled = shouldReportJestSuiteCoverageForTia()
+    testEnvironmentOptions._ddLineCoverageEnabled = shouldCollectLineCoverage()
 
     return {
       ...config,
@@ -4114,6 +4123,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddEarlyFlakeDetectionRetryPolicy',
   '_ddRepositoryRoot',
   '_ddTestCodeCoverageEnabled',
+  '_ddLineCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
   '_ddIsDynamicAtrEnabled',

@@ -73,6 +73,14 @@ const lineCoverageInstrumentCh = channel('ci:vitest:line-coverage:instrument')
 const lineCoverageSuiteSetupStartCh = channel('ci:vitest:line-coverage:suite-setup:start')
 const lineCoverageSuiteSetupFinishCh = channel('ci:vitest:line-coverage:suite-setup:finish')
 const lineCoverageTestFinishCh = channel('ci:vitest:line-coverage:test:finish')
+
+/**
+ * The repository root while per-test line coverage runs in this worker: when it is requested and
+ * Test Impact Analysis would collect coverage, whose place it takes.
+ *
+ * @type {string | undefined}
+ */
+let lineCoverageRoot
 const wrappedTestRunners = new WeakSet()
 const wrappedBeforeAllHooks = new WeakSet()
 const taskToCtx = new WeakMap()
@@ -1156,13 +1164,13 @@ addHook({
  * @param {string | undefined} sourceMap the map as JSON, when the runner hands it over apart from the code
  */
 function instrumentForLineCoverage (code, filename, vm, sourceMap) {
-  if (typeof filename !== 'string') return code
+  if (typeof filename !== 'string' || lineCoverageRoot === undefined) return code
   const ctx = {
     code,
     filename,
     sourceMap,
     realm: vm?.context,
-    repositoryRoot: getProvidedContext().repositoryRoot || process.cwd(),
+    repositoryRoot: lineCoverageRoot,
   }
   lineCoverageInstrumentCh.publish(ctx)
   return ctx.code
@@ -1239,7 +1247,10 @@ function getStartTestsWrapper (frameworkVersion) {
     const shouldUseVitestCoverage = usesVitestV8CoverageSnapshot(coverageOptions)
     const coverageLibrary = 'v8'
     vitestCoverageSnapshot = undefined
-    if (providedContext.isCodeCoverageEnabled) {
+    const isLineCoverageEnabled = providedContext.isCodeCoverageEnabled && lineCoverageInstrumentCh.hasSubscribers
+    lineCoverageRoot = isLineCoverageEnabled ? repositoryRoot : undefined
+    const isSuiteCoverageEnabled = providedContext.isCodeCoverageEnabled && !isLineCoverageEnabled
+    if (isSuiteCoverageEnabled) {
       if (shouldUseVitestCoverage) {
         wrapVitestCoverageRpc()
       } else {
@@ -1255,7 +1266,7 @@ function getStartTestsWrapper (frameworkVersion) {
       testCommand: providedContext.testCommand,
       repositoryRoot,
       codeOwnersEntries: providedContext.codeOwnersEntries,
-      isCodeCoverageEnabled: providedContext.isCodeCoverageEnabled,
+      isCodeCoverageEnabled: isSuiteCoverageEnabled,
       coverageLibrary,
       itrCorrelationId: providedContext.itrCorrelationId,
       isUnskippable: providedContext.unskippableSuites?.[testSuite] === true,
@@ -1420,7 +1431,7 @@ function getStartTestsWrapper (frameworkVersion) {
     }
 
     let coverageFiles
-    if (providedContext.isCodeCoverageEnabled) {
+    if (isSuiteCoverageEnabled) {
       const currentCoverageFiles = shouldUseVitestCoverage
         ? getVitestCoverageFiles(repositoryRoot)
         : await getPreciseCoverageFiles(repositoryRoot)
