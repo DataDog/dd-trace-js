@@ -1085,13 +1085,13 @@ function startCollecting (root, patchModuleLoader) {
 
 /**
  * Instruments ECMAScript modules under the root as Node.js loads them, through module hooks that run
- * in the thread that loads them. Node.js versions without such hooks load them as they are.
+ * in the thread that loads them. Node.js versions without usable hooks load them as they are.
  */
 function instrumentModulesOnLoad () {
   // Node.js 22.15 and 23.5 added in-thread hooks.
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
   const { registerHooks } = Module
-  if (typeof registerHooks !== 'function') return
+  if (typeof registerHooks !== 'function' || !acceptsNullCommonJsSource()) return
   registerHooks({
     load (url, context, nextLoad) {
       const result = nextLoad(url, context)
@@ -1111,6 +1111,19 @@ function instrumentModulesOnLoad () {
       return instrumented === code ? result : { ...result, source: instrumented }
     },
   })
+}
+
+/**
+ * Whether in-thread module hooks accept the null source that Node.js gives some CommonJS modules. Until
+ * nodejs/node#59929 (22.22.3, 24.11.1, 25.1.0 and 26.0.0) they rejected it, so registering a load hook could
+ * make loading those modules throw, as it did under Vitest's module mocks.
+ */
+function acceptsNullCommonJsSource () {
+  try {
+    return require('import-in-the-middle/supports-sync-hooks.mjs').supportsSyncHooks()
+  } catch {
+    return false
+  }
 }
 
 /**

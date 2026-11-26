@@ -20,9 +20,11 @@ const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecif
 const SUMMARY_TIMEOUT_MS = 30_000
 
 // Mocha loads test files as ECMAScript modules from 9. Node.js runs module hooks in the thread that loads
-// modules from 22.15 and 23.5, and loads ECMAScript modules as they are before.
+// modules from 22.15 and 23.5, and loads ECMAScript modules as they are before, and where those hooks reject the
+// null source of CommonJS modules (before 22.22.3, 24.11.1 and 25.1.0).
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
-const hasModuleHooks = typeof Module.registerHooks === 'function'
+const hasModuleHooks = typeof Module.registerHooks === 'function' &&
+  require('import-in-the-middle/supports-sync-hooks.mjs').supportsSyncHooks()
 const esModuleIt = hasModuleHooks && (MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=9.0.0'))
   ? it
   : it.skip
