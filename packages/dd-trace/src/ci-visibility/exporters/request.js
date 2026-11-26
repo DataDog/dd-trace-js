@@ -1,6 +1,7 @@
 'use strict'
 
 const { Readable } = require('node:stream')
+const { constants: { Z_BEST_SPEED }, gzipSync } = require('node:zlib')
 
 const commonRequest = require('../../exporters/common/request')
 const {
@@ -14,10 +15,19 @@ const { FINAL_FLUSH_TIMEOUT_CODE } = require('../final-flush')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 const { MAX_REQUEST_BUFFERED_BYTES } = require('./limits')
 
+// Capture the real scheduler at module load time, before any test can install fake timers.
+const realQueueMicrotask = queueMicrotask
+
 const BACKPRESSURE_RETRY_MS = 50
+const QUEUE_PRESSURE_BYTES = 48 * 1024 * 1024
 const REQUEST_BUFFER_FULL_CODE = 'ERR_DD_REQUEST_BUFFER_FULL'
 
 let bufferedBytes = 0
+/** @type {number | undefined} Queued bytes when the current synchronous run submitted its first payload. */
+let runStartBufferedBytes
+const resetRunStart = () => {
+  runStartBufferedBytes = undefined
+}
 let backpressureTimer
 let backpressureTimerDue
 let ownedBackpressureWaiters = 0
@@ -212,6 +222,16 @@ function createQueueFullError () {
 /**
  * @returns {Error & { code: string }}
  */
+function createBurstTooLargeError () {
+  return Object.assign(
+    new Error('Test Optimization payloads submitted together exceeded the request queue limit'),
+    { code: 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE' }
+  )
+}
+
+/**
+ * @returns {Error & { code: string }}
+ */
 function createBackpressureTimeoutError () {
   const error = new Error('Test Optimization request remained blocked by exporter backpressure')
   error.code = 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT'
@@ -311,7 +331,8 @@ function bufferReadable (data, signal, callback) {
 
 /**
  * Sends Test Optimization exporter data through the common single-attempt transport while
- * keeping retry and finalization policy scoped to Test Optimization.
+ * keeping retry and finalization policy scoped to Test Optimization. Returns true when the body
+ * was compressed because the request queue was under pressure.
  *
  * @param {Buffer|string|Readable|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -320,21 +341,25 @@ function bufferReadable (data, signal, callback) {
  */
 function request (data, options, callback) {
   const { signal } = options
-  if (signal?.aborted) return callback(getAbortError(signal))
+  if (signal?.aborted) {
+    callback(getAbortError(signal))
+    return false
+  }
 
   if (data instanceof Readable) {
     bufferReadable(data, signal, (error, bufferedData, payloadSize) => {
       if (error) return callback(error)
       requestBuffered(bufferedData, options, callback, payloadSize)
     })
-    return
+    return false
   }
 
-  requestBuffered(data, options, callback)
+  return requestBuffered(data, options, callback)
 }
 
 /**
- * Applies the Test Optimization retry policy to replayable request data.
+ * Applies the Test Optimization retry policy to replayable request data. Returns true when the body
+ * was compressed because the request queue was under pressure.
  *
  * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -346,7 +371,28 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   const { signal } = options
   const transport = options.transport || commonRequest
   const timeout = options.timeout || 2000
-  const payloadSize = reservedPayloadSize ?? getPayloadSize(data)
+  const availableBytes = MAX_REQUEST_BUFFERED_BYTES - bufferedBytes
+  let payloadSize = reservedPayloadSize ?? getPayloadSize(data)
+  let gzipped = false
+
+  // Reserve space for bursts before incoming payloads hit the hard queue cap.
+  if (options.gzipOnQueuePressure && bufferedBytes + payloadSize > QUEUE_PRESSURE_BYTES &&
+      Buffer.isBuffer(data)) {
+    const maxOutputLength = Math.min(availableBytes, payloadSize - 1)
+    if (maxOutputLength > 0) {
+      try {
+        const compressed = gzipSync(data, { level: Z_BEST_SPEED, maxOutputLength })
+        const { buffer, byteOffset, length } = compressed
+        // zlib can return a view over a larger allocation; charge the queue for the bytes the body retains.
+        data = buffer.byteLength === length ? compressed : Buffer.from(buffer.slice(byteOffset, byteOffset + length))
+        payloadSize = length
+        gzipped = true
+      } catch {
+        // Gzip stops early if the output cannot save space or fit in the queue.
+      }
+    }
+  }
+
   let retryTimer
   let attemptTimer
   let attemptTimerImmediate
@@ -365,9 +411,15 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   if (reservedPayloadSize === undefined) {
-    if (payloadSize > MAX_REQUEST_BUFFERED_BYTES - bufferedBytes) {
-      callback(createQueueFullError())
-      return
+    if (runStartBufferedBytes === undefined) {
+      runStartBufferedBytes = bufferedBytes
+      realQueueMicrotask(resetRunStart)
+    }
+    if (payloadSize > availableBytes) {
+      // It is a burst when this run, including the rejected payload, would hold more than earlier requests do.
+      const runBytes = bufferedBytes - runStartBufferedBytes + payloadSize
+      callback(runBytes > runStartBufferedBytes ? createBurstTooLargeError() : createQueueFullError())
+      return gzipped
     }
     bufferedBytes += payloadSize
   }
@@ -402,7 +454,10 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   signal?.addEventListener('abort', onAbort, { once: true })
-  if (signal?.aborted) return onAbort()
+  if (signal?.aborted) {
+    onAbort()
+    return gzipped
+  }
 
   /**
    * @param {number} attemptIndex
@@ -452,10 +507,12 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
       slots.active++
     }
 
+    const headers = options.headers || gzipped ? { ...options.headers } : undefined
+    if (gzipped) headers['Content-Encoding'] = 'gzip'
     const attemptOptions = {
       ...options,
       deferTimeoutAbort: true,
-      headers: options.headers ? { ...options.headers } : undefined,
+      headers,
       retry: false,
     }
     delete attemptOptions.transport
@@ -565,6 +622,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   attempt(1)
+  return gzipped
 }
 
 module.exports = request

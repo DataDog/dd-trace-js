@@ -20,11 +20,16 @@ const { getAgent } = require('../agents')
 const request = require('../request')
 const TestOptimizationRequestTracker = require('./request-tracker')
 
+const REQUEST_TAGS = { endpoint: 'test_cycle' }
+const COMPRESSED_REQUEST_TAGS = { endpoint: 'test_cycle', rq_compressed: 'true' }
+
 class Writer extends BaseWriter {
+  #isGzipCompatible
   #requestTracker
 
-  constructor ({ url, tags, evpProxyPrefix = '' }) {
+  constructor ({ url, tags, evpProxyPrefix = '', isGzipCompatible = evpProxyPrefix === '' }) {
     super({ ...arguments[0], retainOnBackpressure: true })
+    this.#isGzipCompatible = isGzipCompatible
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
@@ -53,6 +58,7 @@ class Writer extends BaseWriter {
       url: this._url,
       agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
+      gzipOnQueuePressure: this.#isGzipCompatible,
     }
 
     if (this._evpProxyPrefix) {
@@ -66,10 +72,15 @@ class Writer extends BaseWriter {
 
     const startRequestTime = Date.now()
 
-    incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
-    this.#requestTracker.send(request, data, options, (err, res, statusCode) => {
+    // The request layer decides synchronously whether queue pressure requires compression.
+    let compressed = false
+    const send = (body, requestOptions, callback) => {
+      compressed = request(body, requestOptions, callback)
+    }
+
+    this.#requestTracker.send(send, data, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
@@ -91,6 +102,7 @@ class Writer extends BaseWriter {
       log.debug('Response from the intake:', res)
       done()
     })
+    incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, compressed ? COMPRESSED_REQUEST_TAGS : REQUEST_TAGS)
   }
 
   addMetadataTags (tags) {

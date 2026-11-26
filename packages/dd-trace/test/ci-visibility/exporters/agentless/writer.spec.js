@@ -126,6 +126,22 @@ describe('CI Visibility Writer', () => {
       })
     })
 
+    for (const compressed of [false, true]) {
+      it(`counts ${compressed ? 'a compressed' : 'an uncompressed'} request with its compression tag`, done => {
+        request.returns(compressed)
+        encoder.count.returns(1)
+
+        writer.flush(() => {
+          sinon.assert.calledOnceWithExactly(
+            incrementCountMetric.withArgs('endpoint_payload.requests'),
+            'endpoint_payload.requests',
+            compressed ? { endpoint: 'test_cycle', rq_compressed: 'true' } : { endpoint: 'test_cycle' }
+          )
+          done()
+        })
+      })
+    }
+
     describe('when request fails', function () {
       it('should log request errors', done => {
         const error = Object.assign(new Error('boom'), { code: 'ECONNRESET' })
