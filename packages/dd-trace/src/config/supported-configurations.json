@@ -4748,7 +4748,7 @@
     ],
     "OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
         "allowed": "http/protobuf",
