@@ -15,6 +15,7 @@ const {
   BASE_SERVICE,
 } = require('../../../ext/tags')
 const { fetchAgentInfo } = require('./agent/info')
+const { createAgents } = require('./exporters/common/agents')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
 const log = require('./log')
@@ -28,18 +29,41 @@ const BASE_SERVICE_PEER_TAG_KEYS = [BASE_SERVICE]
 const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
 // Distinct peer tag combinations per bucket, the default of libdatadog's span concentrator.
 const PEER_TAGS_CARDINALITY_LIMIT = 512
-// Span kinds the Agent computes stats for even when a span is neither top-level nor measured.
-const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
+// Span kinds the Agent computes stats for even when a span is neither top-level nor measured, unless its `/info`
+// says otherwise in `span_kinds_stats_computed`.
+const DEFAULT_STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
+/** @type {Set<string>} */
+const NO_STATS_SPAN_KINDS = new Set()
+// The `/info` reads get their own connection, so they never hold the one the trace and stats exporters share.
+const agentInfoAgents = createAgents(1)
 
 /**
  * Whether stats are computed for spans of this kind even when they are neither top-level nor measured. Most spans
  * that get here carry no or an already lowercase kind, so only others pay for lowercasing.
  *
- * @param {string | undefined} spanKind
+ * @param {unknown} spanKind
+ * @param {Set<string>} statsSpanKinds Lowercase span kinds stats are computed for.
  */
-function isStatsSpanKind (spanKind) {
-  if (spanKind === undefined) return false
-  return STATS_SPAN_KINDS.has(spanKind) || STATS_SPAN_KINDS.has(spanKind.toLowerCase())
+function isStatsSpanKind (spanKind, statsSpanKinds) {
+  if (typeof spanKind !== 'string' || statsSpanKinds.size === 0) return false
+  return statsSpanKinds.has(spanKind) || statsSpanKinds.has(spanKind.toLowerCase())
+}
+
+/**
+ * The span kinds of the Agent `/info` field `span_kinds_stats_computed`. Agents that predate it omit it and compute
+ * stats by span kind; an Agent with `compute_stats_by_span_kind` disabled sends `null`.
+ *
+ * @param {unknown} spanKinds
+ * @returns {Set<string>}
+ */
+function toStatsSpanKinds (spanKinds) {
+  if (spanKinds === undefined) return DEFAULT_STATS_SPAN_KINDS
+  if (!Array.isArray(spanKinds)) return NO_STATS_SPAN_KINDS
+  const kinds = new Set()
+  for (const kind of spanKinds) {
+    if (typeof kind === 'string') kinds.add(kind.toLowerCase())
+  }
+  return kinds
 }
 const ZERO_ID = id('0')
 const { version } = require('./pkg')
@@ -176,7 +200,8 @@ function getPeerTags (span, peerTagKeys) {
   let peerTags
   for (const key of keys) {
     const value = meta[key]
-    if (value) {
+    // A key such as `constructor` resolves to an inherited property of `meta`, not to a tag.
+    if (typeof value === 'string' && value !== '') {
       peerTags ??= []
       peerTags.push(`${key}:${quantizePeerIpAddresses(value)}`)
     }
@@ -321,6 +346,8 @@ class SpanStatsProcessor {
   #config
   /** @type {string[]} Peer tag keys from the Agent's `/info`; none until it answered. */
   #peerTagKeys = NO_PEER_TAGS
+  /** @type {Set<string>} Span kinds from the Agent's `/info`; the Agent's defaults until it answered. */
+  #statsSpanKinds = DEFAULT_STATS_SPAN_KINDS
   #fetchingAgentInfo = false
 
   /**
@@ -373,8 +400,9 @@ class SpanStatsProcessor {
   }
 
   /**
-   * Read the peer tag keys the Agent aggregates on from its `/info`, which the Agent information client caches.
-   * Stats computed before the first answer, or while the Agent does not answer, carry no peer tags.
+   * Read the peer tag keys the Agent aggregates on and the span kinds it computes stats for from its `/info`, which
+   * the Agent information client caches. Stats computed before the first answer carry no peer tags and use the
+   * default span kinds; while the Agent does not answer, the last answer applies.
    */
   #refreshPeerTagKeys () {
     const { url } = this.#config
@@ -382,7 +410,9 @@ class SpanStatsProcessor {
     if (!this.enabled || this.otlpExporter || this.#fetchingAgentInfo || !url) return
 
     this.#fetchingAgentInfo = true
-    fetchAgentInfo(/** @type {URL} */ (url), (error, agentInfo) => {
+    const agentUrl = /** @type {URL} */ (url)
+    const agent = agentUrl.protocol === 'https:' ? agentInfoAgents.httpsAgent : agentInfoAgents.httpAgent
+    fetchAgentInfo(agentUrl, (error, agentInfo) => {
       this.#fetchingAgentInfo = false
       if (error) {
         log.debug('Could not read the peer tags from the Agent /info: %s', error.message)
@@ -390,7 +420,8 @@ class SpanStatsProcessor {
       }
       const peerTags = agentInfo?.peer_tags
       this.#peerTagKeys = Array.isArray(peerTags) ? peerTags.filter(key => typeof key === 'string') : NO_PEER_TAGS
-    }, { retry: false })
+      this.#statsSpanKinds = toStatsSpanKinds(agentInfo?.span_kinds_stats_computed)
+    }, { agent, retry: false })
   }
 
   /**
@@ -447,7 +478,13 @@ class SpanStatsProcessor {
 
   onSpanFinished (span) {
     if (!this.enabled && !this.otlpExporter) return
-    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED] && !isStatsSpanKind(span.meta[SPAN_KIND])) return
+    if (
+      !span.metrics[TOP_LEVEL_KEY] &&
+      !span.metrics[MEASURED] &&
+      !isStatsSpanKind(span.meta[SPAN_KIND], this.#statsSpanKinds)
+    ) {
+      return
+    }
 
     const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)

@@ -117,11 +117,23 @@ function getIpEnd (value) {
   for (let i = 0; i < value.length; i++) {
     const char = value[i]
     if (char === '.' || char === '_' || char === '-') return getIpv4End(value, char)
-    if (char === ':') return isIPv6(value) ? value.length : -1
+    if (char === ':') return isIPv6WithOptionalZone(value) ? value.length : -1
     // An IPv6 zone specifier without an address.
     if (char === '%') return -1
   }
   return -1
+}
+
+/**
+ * Whether `value` is an IPv6 address, optionally followed by a non-empty `%zone`, as `netip.ParseAddr` accepts it.
+ * `net.isIPv6` rejects zones with characters such as '_'.
+ *
+ * @param {string} value
+ */
+function isIPv6WithOptionalZone (value) {
+  const zone = value.indexOf('%')
+  if (zone === -1) return isIPv6(value)
+  return zone !== value.length - 1 && isIPv6(value.slice(0, zone))
 }
 
 /**

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 const { hostname } = require('os')
 
 const { channel } = require('dc-polyfill')
@@ -14,6 +15,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@data
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('../src/constants')
+const sharedAgents = require('../src/exporters/common/agents')
 
 const {
   MEASURED,
@@ -402,6 +404,15 @@ describe('SpanAggKey', () => {
         assert.deepStrictEqual(new SpanAggKey(spanWith({ ...meta, '_dd.base_service': '' }), peerTagKeys).peerTags, [])
       })
     }
+
+    it('should skip peer tag keys that resolve to inherited properties of the span tags', () => {
+      const key = new SpanAggKey(
+        spanWith({ [SPAN_KIND]: 'client', 'peer.service': 'billing' }),
+        ['constructor', '__proto__', 'hasOwnProperty', 'peer.service', 'toString']
+      )
+
+      assert.deepStrictEqual(key.peerTags, ['peer.service:billing'])
+    })
 
     it('should not aggregate on peer tags without configured keys', () => {
       const key = new SpanAggKey(spanWith({ [SPAN_KIND]: 'client', 'out.host': 'db.local' }))
@@ -1093,7 +1104,10 @@ describe('SpanStatsProcessor', () => {
 
       const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
-      sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { retry: false })
+      sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, {
+        agent: sinon.match.instanceOf(http.Agent),
+        retry: false,
+      })
 
       p.onSpanFinished(clientSpan)
       assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
@@ -1145,6 +1159,26 @@ describe('SpanStatsProcessor', () => {
       assert.deepStrictEqual(exportedPeerTags(p), [[]])
     })
 
+    it('should read /info over its own connection, not the one shared by the exporters', () => {
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+
+      const { agent } = fetchAgentInfo.lastCall.args[2]
+      assert.notStrictEqual(agent, sharedAgents.httpAgent)
+      assert.notStrictEqual(agent, sharedAgents.httpsAgent)
+      assert.strictEqual(agent.maxSockets, 1)
+    })
+
+    it('should skip peer tag keys such as constructor that the span does not carry', () => {
+      fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['constructor', 'peer.service'] }))
+
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
+
+      assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
+    })
+
     it('should collapse peer tags beyond 512 combinations per bucket', () => {
       fetchAgentInfo.callsFake((url, callback) => callback(null, { peer_tags: ['peer.service'] }))
 
@@ -1167,6 +1201,59 @@ describe('SpanStatsProcessor', () => {
 
       sinon.assert.notCalled(fetchAgentInfo)
       assert.deepStrictEqual(exportedPeerTags(p), [[]])
+    })
+
+    describe('span kinds', () => {
+      const kinds = ['server', 'client', 'producer', 'consumer', 'internal']
+
+      /**
+       * @param {object} [agentInfo] The Agent /info answer; none when omitted.
+       * @returns {string[]} The span kinds of the recorded spans that are neither top-level nor measured.
+       */
+      function recordedSpanKinds (agentInfo) {
+        if (agentInfo) fetchAgentInfo.callsFake((url, callback) => callback(null, agentInfo))
+
+        const p = new SpanStatsProcessor(config)
+        clearTimeout(p.timer)
+        for (const spanKind of kinds) {
+          p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: spanKind } })
+        }
+        return [...p.buckets.values()].flatMap(bucket => [...bucket.values()].map(stats => stats.aggKey.spanKind))
+      }
+
+      it('should compute stats for the default span kinds until the Agent /info answered', () => {
+        assert.deepStrictEqual(recordedSpanKinds(), ['server', 'client', 'producer', 'consumer'])
+      })
+
+      it('should compute stats for the default span kinds for an Agent without span_kinds_stats_computed', () => {
+        assert.deepStrictEqual(
+          recordedSpanKinds({ peer_tags: [] }),
+          ['server', 'client', 'producer', 'consumer']
+        )
+      })
+
+      it('should compute stats for the span kinds of the Agent /info', () => {
+        assert.deepStrictEqual(
+          recordedSpanKinds({ span_kinds_stats_computed: ['CLIENT', 'consumer', 42] }),
+          ['client', 'consumer']
+        )
+      })
+
+      for (const spanKinds of [null, []]) {
+        it(`should compute no stats by span kind for span_kinds_stats_computed ${JSON.stringify(spanKinds)}`, () => {
+          assert.deepStrictEqual(recordedSpanKinds({ span_kinds_stats_computed: spanKinds }), [])
+        })
+      }
+
+      it('should still compute stats for top-level spans without span kinds', () => {
+        fetchAgentInfo.callsFake((url, callback) => callback(null, { span_kinds_stats_computed: null }))
+
+        const p = new SpanStatsProcessor(config)
+        clearTimeout(p.timer)
+        p.onSpanFinished(topLevelSpan)
+
+        assert.strictEqual(p.buckets.size, 1)
+      })
     })
 
     it('should not read /info when agent stats are disabled', () => {

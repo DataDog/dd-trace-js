@@ -54,6 +54,14 @@ const cases = [
   ['1-2-3-999-foo', '1-2-3-999-foo'],
   ['1-2-3-4-foo', 'blocked-ip-address-foo'],
   ['7-55-2-app.agent.datadoghq.com', '7-55-2-app.agent.datadoghq.com'],
+  // IPv6 zones, which `netip.ParseAddr` accepts with any non-empty name.
+  ['fe80::1%eth0', 'blocked-ip-address'],
+  ['fe80::1%eth_0', 'blocked-ip-address'],
+  ['fe80::1%eth%0', 'blocked-ip-address'],
+  ['[fe80::1%eth_0]:8080', 'blocked-ip-address:8080'],
+  ['::1%lo0', 'blocked-ip-address'],
+  ['fe80::1%', 'fe80::1%'],
+  ['fe80::1%eth_0,10.0.0.1', 'blocked-ip-address'],
 ]
 
 describe('quantizePeerIpAddresses', () => {
