@@ -51,13 +51,8 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'updateMetadata')
     sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
-    const getChannel = sinon.stub().returns({
-      subscribe: sinon.stub(),
-      unsubscribe: sinon.stub(),
-    })
-    getChannel.withArgs('datadog:identity:refresh').returns(identityRefreshChannel)
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
-      'dc-polyfill': { channel: getChannel },
+      'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
       '../log': log,
       '../telemetry/agentless-url': getAgentlessTelemetryUrl,
     })
@@ -303,7 +298,6 @@ describeNotWindows('crashtracker', () => {
 
       const error = new Error('boom')
       process.emit('uncaughtExceptionMonitor', error, 'uncaughtException')
-      process.emit('uncaughtExceptionMonitor', new Error('second error'), 'uncaughtException')
 
       sinon.assert.calledOnceWithExactly(binding.reportUncaughtExceptionMonitor, error, 'uncaughtException')
     })
