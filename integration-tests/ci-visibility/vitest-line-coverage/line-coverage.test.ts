@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest'
 
 import { add, subtract, multiply, divide } from './src/arithmetic.ts'
 import { prepare, cleanUp } from './src/fixture.mjs'
+import { ANSWER, describeAnswer } from './src/answer.mjs'
 
 describe('with a suite setup', () => {
   let state: string
@@ -13,10 +14,12 @@ describe('with a suite setup', () => {
   it('adds', () => {
     expect(add(1, 2)).toBe(3)
     expect(state).toBe('prepared')
+    expect(describeAnswer()).toBe('the answer is 42')
   })
 
   it('subtracts', () => {
     expect(subtract(3, 1)).toBe(2)
+    expect(ANSWER).toBe(42)
   })
 })
 

@@ -18,6 +18,7 @@ const PATCHED_GLOBALS_TEST_FILE = 'ci-visibility/vitest-line-coverage/patched-gl
 const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
+const ANSWER = 'ci-visibility/vitest-line-coverage/src/answer.mjs'
 
 // Lines of the function bodies in src/arithmetic.ts
 const ADD_LINE = 2
@@ -137,6 +138,10 @@ for (const version of getVitestVersions()) {
         assert.ok(getLines(subtracts, ARITHMETIC).has(SUBTRACT_LINE), testOutput)
         assert.ok(!getLines(subtracts, ARITHMETIC).has(ADD_LINE), testOutput)
         assert.ok(getLines(subtracts, FIXTURE).has(2), testOutput)
+        // Reading an export runs a getter Vite's module runner added, not code of the module: no line of
+        // it, nor its initialiser lines, which a test gets only with other code of the file.
+        assert.deepStrictEqual([...getLines(subtracts, ANSWER)], [], testOutput)
+        assert.deepStrictEqual([...getLines(adds, ANSWER)].sort((a, b) => a - b), [1, 3, 4], testOutput)
 
         // The afterEach hook runs after the test's own callback and is part of its window.
         const multiplies = coverageOf('with a per-test hook multiplies')
