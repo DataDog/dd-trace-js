@@ -1,0 +1,1 @@
+SELECT 23 as n

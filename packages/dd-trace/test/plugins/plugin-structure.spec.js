@@ -54,6 +54,7 @@ const missingInstrumentationHooks = [
   'aws-lambda', // AWS Lambda is activated by the serverless bootstrap rather than a module load
   'azure-cosmos',
   'bullmq',
+  'bun-sql',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
   'langchain',
   'langgraph',

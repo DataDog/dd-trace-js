@@ -307,6 +307,7 @@ interface Plugins {
   "azure-durable-functions": tracer.plugins.azure_durable_functions
   "browser-bunyan": tracer.plugins.browser_bunyan;
   "bullmq": tracer.plugins.bullmq;
+  "bun-sql": tracer.plugins.bun_sql;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -2653,6 +2654,13 @@ declare namespace tracer {
      * on the tracer.
      */
     interface browser_bunyan extends Integration {}
+
+    /** Instruments Bun's built-in SQL client on the Bun runtime. */
+    interface bun_sql extends DatabaseInstrumentation {
+      service?: string;
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      appendComment?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
