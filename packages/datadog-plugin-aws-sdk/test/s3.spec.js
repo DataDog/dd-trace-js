@@ -28,12 +28,12 @@ describe('Plugin', () => {
   describe('aws-sdk (s3)', function () {
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-s3', (version, moduleName) => {
       let AWS
       let s3
       let tracer
 
-      const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
+      const s3ClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-s3' : 'aws-sdk'
       describe('with configuration', () => {
         before(() => {
           tracer = require('../../dd-trace')

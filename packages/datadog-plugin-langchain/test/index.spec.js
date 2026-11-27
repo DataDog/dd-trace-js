@@ -81,6 +81,53 @@ describe('Plugin', () => {
     throw new Error(`Invalid type: ${type}`)
   }
 
+  describe('@langchain/google-genai', () => {
+    withVersions('langchain', '@langchain/google-genai', (version) => {
+      before(() => agent.load('langchain'))
+      after(() => agent.close())
+      beforeEach(() => {
+        langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
+      })
+
+      describe('@langchain/google-genai', () => {
+        it('instruments a langchain google-genai embedQuery call', async function () {
+          const embeddings = getLangChainGoogleGenAIClient('embedding', {
+            model: 'text-embedding-004',
+            taskType: 'RETRIEVAL_DOCUMENT',
+            title: 'Document title',
+          })
+
+          if (version === '0.1.0') {
+            // This version does not forward baseUrl to the Google client.
+            embeddings.client.requestOptions = { baseUrl: 'http://127.0.0.1:9126/vcr/genai' }
+          }
+
+          const checkTraces = agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0].length, 1)
+
+              const span = traces[0][0]
+              assertObjectContains(span, {
+                name: 'langchain.request',
+                resource: 'langchain.embeddings.GoogleGenerativeAIEmbeddings',
+                meta: {
+                  'langchain.request.provider': 'googlegenerativeai',
+                  'langchain.request.model': 'text-embedding-004',
+                  'langchain.request.type': 'embedding',
+                },
+              })
+            })
+
+          const query = 'Hello, world!'
+          const result = await embeddings.embedQuery(query)
+          assert.strictEqual(result.length, 768)
+
+          await checkTraces
+        })
+      })
+    })
+  })
+
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], (version, _, realVersion) => {
       before(() => {
@@ -103,11 +150,6 @@ describe('Plugin', () => {
         langchainOpenai = require(`../../../versions/langchain@${version}`)
           .get('@langchain/openai')
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
-        if (version !== '0.1.0') {
-          // version mismatching otherwise
-          // can probably scaffold `withVersions` better to make this a bit cleaner
-          langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
-        }
 
         langchainAnthropicVersion = require(`../../../versions/@langchain/anthropic@${version}`).version()
 
@@ -655,40 +697,6 @@ describe('Plugin', () => {
             assert.strictEqual(result.length, 2)
             assert.strictEqual(result[0].length, 1536)
             assert.strictEqual(result[1].length, 1536)
-
-            await checkTraces
-          })
-        })
-
-        describe('@langchain/google-genai', () => {
-          it('instruments a langchain google-genai embedQuery call', async function () {
-            if (!langchainGoogleGenAI) this.skip()
-
-            const embeddings = getLangChainGoogleGenAIClient('embedding', {
-              model: 'text-embedding-004',
-              taskType: 'RETRIEVAL_DOCUMENT',
-              title: 'Document title',
-            })
-
-            const checkTraces = agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0].length, 1)
-
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: 'langchain.request',
-                  resource: 'langchain.embeddings.GoogleGenerativeAIEmbeddings',
-                  meta: {
-                    'langchain.request.provider': 'googlegenerativeai',
-                    'langchain.request.model': 'text-embedding-004',
-                    'langchain.request.type': 'embedding',
-                  },
-                })
-              })
-
-            const query = 'Hello, world!'
-            const result = await embeddings.embedQuery(query)
-            assert.strictEqual(result.length, 768)
 
             await checkTraces
           })

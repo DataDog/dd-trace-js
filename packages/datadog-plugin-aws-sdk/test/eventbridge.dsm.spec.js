@@ -19,12 +19,12 @@ describe('EventBridge', function () {
   this.timeout(10000)
   setup()
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-eventbridge', (version, moduleName) => {
     let eventbridge
     let expectedHashes
     let producerHashes
 
-    const eventbridgeClientName = moduleName === '@aws-sdk/smithy-client'
+    const eventbridgeClientName = moduleName !== 'aws-sdk'
       ? '@aws-sdk/client-eventbridge'
       : 'aws-sdk'
 
@@ -214,7 +214,7 @@ describe('EventBridge', function () {
       }
 
       function getSqsClient () {
-        const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+        const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
         const lib = require(`../../../versions/${sqsClientName}@${version}`).get()
         return lib.SQS ? new lib.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }) : undefined
       }
@@ -243,7 +243,7 @@ describe('EventBridge', function () {
       const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
       const lib = require(`../../../versions/${eventbridgeClientName}@${version}`).get()
 
-      if (moduleName === '@aws-sdk/smithy-client') {
+      if (moduleName !== 'aws-sdk') {
         const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
 
         params.requestHandler = new NodeHttpHandler()

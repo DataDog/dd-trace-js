@@ -16,7 +16,7 @@ describe('Plugin', () => {
     this.timeout(15000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-s3', (version, moduleName) => {
       let AWS
 
       before(async () => {
@@ -34,7 +34,7 @@ describe('Plugin', () => {
       describe('DynamoDB-Serverless', () => {
         let dynamo
         const tableName = 'PeerServiceTestTable'
-        const dynamoClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-dynamodb' : 'aws-sdk'
+        const dynamoClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-dynamodb' : 'aws-sdk'
 
         function getCreateTableParams () {
           return {
@@ -129,7 +129,7 @@ describe('Plugin', () => {
       describe('Kinesis-Serverless', () => {
         let kinesis
         const streamName = 'PeerStream'
-        const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+        const kinesisClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
         function createStream (cb) {
           AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
@@ -139,7 +139,7 @@ describe('Plugin', () => {
             region: 'us-east-1',
           }
 
-          if (moduleName === '@aws-sdk/smithy-client') {
+          if (moduleName !== 'aws-sdk') {
             const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
 
             params.requestHandler = new NodeHttpHandler()
@@ -192,8 +192,8 @@ describe('Plugin', () => {
         const queueName = 'PeerQueue'
         const topicName = 'PeerTopic'
 
-        const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
-        const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+        const snsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sns' : 'aws-sdk'
+        const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
         function createTopicAndQueue (cb) {
           const { SNS } = require(`../../../versions/${snsClientName}@${version}`).get()
@@ -272,7 +272,7 @@ describe('Plugin', () => {
         const queueOptions = getQueueParams(queueName)
         const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
 
-        const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+        const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
         before(done => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
@@ -306,7 +306,7 @@ describe('Plugin', () => {
       describe('EventBridge-Serverless', () => {
         let eventbridge
 
-        const eventbridgeClientName = moduleName === '@aws-sdk/smithy-client'
+        const eventbridgeClientName = moduleName !== 'aws-sdk'
           ? '@aws-sdk/client-eventbridge'
           : 'aws-sdk'
 
@@ -341,7 +341,7 @@ describe('Plugin', () => {
         let s3
         const bucketName = 's3-bucket-name-test'
 
-        const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
+        const s3ClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-s3' : 'aws-sdk'
 
         before(done => {
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()

@@ -1,9 +1,6 @@
 'use strict'
 
-const { DD_MAJOR } = require('../../../../version')
-
 module.exports = {
-  elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
       name: '@aws/durable-execution-sdk-js-testing',
@@ -235,7 +232,7 @@ module.exports = {
     },
     {
       name: 'fastify',
-      versions: ['2.15.0', '3.0.0', '3.9.2', '4.0.0'],
+      versions: ['2.15.0', '3.9.2', '4.0.0'],
     },
     {
       name: 'middie',
@@ -301,12 +298,6 @@ module.exports = {
       forced: true,
     },
   ],
-  genai: [
-    {
-      name: '@google/genai',
-      versions: ['>=1.19.0'],
-    },
-  ],
   graphql: [
     {
       name: 'apollo-server-core',
@@ -342,10 +333,7 @@ module.exports = {
     },
     {
       name: 'graphql-jit',
-      versions: [
-        '>=0.8.0 <0.8.5',
-        '>=0.8.5 <0.8.7',
-      ],
+      versions: ['>=0.8.0 <0.8.5'],
     },
   ],
   'graphql-jit': [
@@ -379,10 +367,6 @@ module.exports = {
   'apollo-server': [
     {
       name: 'express',
-      versions: ['>=4'],
-    },
-    {
-      name: '@apollo/server',
       versions: ['>=4'],
     },
     {
@@ -499,32 +483,21 @@ module.exports = {
       forced: true,
     },
   ],
-  langgraph: [
-    {
-      name: '@langchain/langgraph',
-      versions: ['>=1.1.2'],
-    },
-    {
-      name: '@langchain/core',
-      versions: ['>=1.1.16'],
-      dep: true,
-    },
-    {
-      name: 'zod',
-      versions: ['>=3.25.32'],
-      dep: true,
-    },
-    {
-      name: 'zod-to-json-schema',
-      versions: ['>=3.0.0'],
-      dep: true,
-    },
+  '@langchain/anthropic': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/cohere': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/google-genai': [
+    { name: '@langchain/core', dep: true },
+  ],
+  '@langchain/langgraph': [
+    { name: '@langchain/core', dep: true },
+    { name: 'zod', dep: true },
+    { name: 'zod-to-json-schema', dep: true },
   ],
   ldapjs: [
-    {
-      name: 'ldapjs',
-      versions: ['>= 2'],
-    },
     {
       // TODO: ldapjs-promise 4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet.
       name: 'ldapjs-promise',
@@ -546,7 +519,7 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.1.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
+      versions: ['2.5.6', '3.1.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
     },
     {
       name: 'mariadb',
@@ -572,18 +545,8 @@ module.exports = {
   ],
   mocha: [
     {
-      name: 'mocha',
-      versions: DD_MAJOR >= 6 ? ['>=8.0.0'] : ['>=5.2.0', '>=8.0.0'],
-    },
-    {
       name: 'mocha-each',
       versions: ['>=2.0.1'],
-    },
-  ],
-  modelcontextprotocol_sdk: [
-    {
-      name: '@modelcontextprotocol/sdk',
-      versions: ['>=1.27.1'],
     },
   ],
   'modelcontextprotocol-sdk': [
@@ -792,10 +755,6 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
-    },
-    {
-      name: 'q',
-      versions: ['2'],
     },
   ],
   'react-router': [

@@ -200,14 +200,14 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions('@aws-sdk/client-s3', (version, moduleName) => {
       let AWS
       let s3
       let sqs
       let tracer
 
-      const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
-      const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      const s3ClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-s3' : 'aws-sdk'
+      const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
       describe('without configuration', () => {
         before(() => {
@@ -762,10 +762,10 @@ describe('Plugin', () => {
       })
     }
 
-    withAwsSdkV3Versions(testDefaultService)
+    withAwsSdkV3Versions('@aws-sdk/smithy-client', testDefaultService)
     withVersions('aws-sdk', ['@smithy/smithy-client'], '>=1.0.3', testDefaultService)
 
-    withAwsSdkV3Versions((version, moduleName) => {
+    withAwsSdkV3Versions('@aws-sdk/smithy-client', (version, moduleName) => {
       describe('disabled fallback service', () => {
         let client
         let tracer

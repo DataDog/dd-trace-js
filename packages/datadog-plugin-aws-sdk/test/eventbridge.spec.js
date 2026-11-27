@@ -33,7 +33,7 @@ function makeEventDetailForInjectedSize (size) {
 
 describe('EventBridge', () => {
   let span
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-eventbridge', (version, moduleName) => {
     before(() => {
       tracer.init()
       // A hand-rolled span context cannot satisfy the propagators, which silently drop the whole
