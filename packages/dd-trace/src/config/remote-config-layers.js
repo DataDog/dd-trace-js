@@ -5,7 +5,8 @@ const { getEnvironmentVariables } = require('./helper')
 /**
  * @typedef {ReturnType<import('./index')>} Config
  * @typedef {'APM_TRACING' | 'APM_PROFILING'} Product
- * @typedef {Partial<Record<import('./helper').SupportedEnvKey, string>>} Settings
+ * @typedef {import('./helper').SupportedEnvKey} SupportedEnvKey
+ * @typedef {Partial<Record<SupportedEnvKey, string>>} Settings
  */
 
 /** @type {WeakMap<Config, Record<Product, Settings | null>>} */
@@ -26,13 +27,18 @@ module.exports = function applyRemoteConfig (config, product, settings) {
     layers = { APM_TRACING: null, APM_PROFILING: null }
     layersByConfig.set(config, layers)
   }
+  const previous = layers[product]
   layers[product] = settings
 
   const { APM_TRACING: tracing, APM_PROFILING: profiling } = layers
-  if (tracing === null || profiling === null) {
-    config.setRemoteConfig(tracing ?? profiling)
-    return
-  }
   // Resolve aliases first, so that each setting has a single key across products.
-  config.setRemoteConfig({ ...getEnvironmentVariables(tracing, true), ...getEnvironmentVariables(profiling, true) })
+  const merged = tracing === null || profiling === null
+    ? tracing ?? profiling
+    : { ...getEnvironmentVariables(tracing, true), ...getEnvironmentVariables(profiling, true) }
+  if (product === 'APM_PROFILING') {
+    const profilingKeys = /** @type {SupportedEnvKey[]} */ (Object.keys({ ...previous, ...settings }))
+    config.setRemoteConfig(merged, profilingKeys)
+  } else {
+    config.setRemoteConfig(merged)
+  }
 }

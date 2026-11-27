@@ -129,9 +129,10 @@ const changeTracker = {
 /**
  * @param {Config} config
  * @param {RevertibleTelemetrySource} source
+ * @param {Set<ConfigPath>} [paths]
  */
-function undo (config, source) {
-  for (const name of changeTracker[source]) {
+function undo (config, source, paths = changeTracker[source]) {
+  for (const name of paths) {
     if (trackedConfigOrigins.get(name) !== source) continue
 
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
@@ -287,14 +288,20 @@ class Config extends ConfigBase {
   /**
    * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
+   * @param {Set<ConfigPath>} [paths]
    */
-  #applyEnvs (envs, source) {
+  #applyEnvs (envs, source, paths) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
+      const path = entry.property ?? name
+      if (paths && !paths.has(path)) {
+        continue
+      }
+
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
-      setAndTrack(this, entry.property ?? name, transformed, rawValue, source)
+      setAndTrack(this, path, transformed, rawValue, source)
     }
   }
 
@@ -360,20 +367,22 @@ class Config extends ConfigBase {
    *
    * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
+   * @param {import('./helper').SupportedEnvKey[]} [profilingKeys] - Keys from the previous and new profiling settings
    */
-  setRemoteConfig (options) {
-    // Replace the complete RC layer so omitted fields fall back to their previous source.
+  setRemoteConfig (options, profilingKeys) {
+    const paths = profilingKeys && new Set(profilingKeys.map(name => configurationsTable[name].property ?? name))
+    // Restore omitted fields to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
-    undo(this, 'remote_config')
+    undo(this, 'remote_config', paths)
 
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config', paths)
     }
 
-    this.#publishUpdate()
+    this.#publishUpdate(profilingKeys === undefined)
   }
 
   /**
@@ -396,9 +405,12 @@ class Config extends ConfigBase {
     this.#updateHandler = handler
   }
 
-  #publishUpdate () {
+  /** @param {boolean} [updateTracer] */
+  #publishUpdate (updateTracer = true) {
     this.#applyCalculated()
-    this.#updateHandler?.(this)
+    if (updateTracer) {
+      this.#updateHandler?.(this)
+    }
     configUpdateChannel.publish(this)
   }
 
