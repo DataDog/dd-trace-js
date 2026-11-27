@@ -177,7 +177,28 @@ function collectPackages (moduleNames) {
 
   for (const name of Object.keys(externals)) {
     if (!moduleNames.includes(name)) continue
-    addInstrumentations(externals[name], true, name)
+    const declarations = externals[name]
+    addInstrumentations(declarations.filter(declaration => !declaration.integrationOnly), true, name)
+
+    if (process.env.DD_TEST_PLUGIN_INTEGRATION === '0') {
+      continue
+    }
+
+    const integrationDependencies = declarations.filter(declaration => declaration.integrationOnly)
+    if (integrationDependencies.length === 0) {
+      continue
+    }
+
+    const { globSync } = require('glob')
+    const spec = process.env.SPEC || '*'
+    const pattern = `packages/datadog-plugin-${name}/test/integration-test/**/${spec}*.spec.js`
+    const specs = globSync(pattern, { cwd: join(__dirname, '..'), nodir: true, windowsPathsNoEscape: true })
+    if (specs.length > 0) {
+      // These dependencies are shared by the selected SDK versions.
+      for (const { name, version } of integrationDependencies) {
+        addFolder(name, null, version)
+      }
+    }
   }
 
   return packages

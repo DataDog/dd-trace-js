@@ -15,13 +15,13 @@ const {
   curlAndAssertMessage,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
+const { getFuncPath } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
-      'azure-functions-core-tools@4',
     ],
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/local.settings.json',
@@ -35,9 +35,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        })
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFuncPath(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -94,14 +92,13 @@ describe('esm', () => {
             extensions: { http: { routePrefix: configuredPrefix } },
           }))
           agent = await new FakeAgent().start()
-          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFuncPath(), ['start'], agent.port, undefined, {
             DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
             DD_TRACE_SAMPLING_RULES: JSON.stringify([
               { resource: `GET ${routeRoot}/httptest2/{id}`, sample_rate: 0.5 },
             ]),
             AzureFunctionsJobHost__extensions__http__routePrefix: envPrefix,
             OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
-            PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
           })
         })
 
@@ -189,6 +186,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   const env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
+    PATH: process.env.PATH,
     ...additionalEnvArgs,
   }
   return spawnProc(command, args, { cwd, env }, stdioHandler)

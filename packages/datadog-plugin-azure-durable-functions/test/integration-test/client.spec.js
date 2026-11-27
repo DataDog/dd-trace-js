@@ -14,6 +14,7 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../../../../integration-tests/helpers')
+const { getFuncPath } = require('../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
@@ -24,7 +25,6 @@ describe('esm', () => {
     useSandbox([
       `durable-functions@${version}`,
       '@azure/functions',
-      'azure-functions-core-tools@4',
     ],
     false,
     ['./packages/datadog-plugin-azure-durable-functions/test/integration-test/*',
@@ -42,7 +42,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(agent.port)
+      proc = await spawnPluginIntegrationTestProc(getFuncPath(), agent.port)
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         const durableSpan = durableSpanLookup(payload)
@@ -84,7 +84,7 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('namespaces spans under aca in an Azure Container App', async () => {
-      proc = await spawnPluginIntegrationTestProc(agent.port, { CONTAINER_APP_NAME: 'my-container-app' })
+      proc = await spawnPluginIntegrationTestProc(getFuncPath(), agent.port, { CONTAINER_APP_NAME: 'my-container-app' })
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         const durableSpan = durableSpanLookup(payload)
@@ -157,19 +157,20 @@ function durableSpanLookup (payload) {
  * - connects to azurite (running in container)
  *    then runs the durable function locally
  *
+ * @param {string} func path to Azure Functions Core Tools
  * @param {number} agentPort port the fake agent listens on
  * @param {Record<string, string>} [additionalEnvArgs] extra environment variables for the worker
  */
-async function spawnPluginIntegrationTestProc (agentPort, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (func, agentPort, additionalEnvArgs = {}) {
   const cwd = sandboxCwd()
   const env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
-    PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+    PATH: process.env.PATH,
     ...additionalEnvArgs,
   }
-  return spawnProc('func', ['start'], { cwd, env })
+  return spawnProc(func, ['start'], { cwd, env })
 }
 
 function spawnProc (command, args, options = {}) {
