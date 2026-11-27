@@ -27,8 +27,25 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishHapiRoute,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').IfStatement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishHapiRoute (state, node, parent, ancestry) {
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  parent.body.splice(parent.body.indexOf(node) + 1, 0, ...parse(`
+    if (${channel}.end.hasSubscribers) {
+      ${channel}.end.publish({ req: this.raw.req, route: this.route.path })
+    }
+  `).body)
 }
 
 /**

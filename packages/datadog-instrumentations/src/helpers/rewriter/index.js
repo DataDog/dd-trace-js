@@ -195,6 +195,7 @@ function createMatcher (dcModule) {
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
     publishDurableOrchestrationFailure,
+    publishHapiRoute,
     publishTrpcRequestInfo,
     waitForAsyncEnd,
   } = require('./transforms')
@@ -226,6 +227,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('postgresNativePreparation', postgresNativePreparation)
   matcher.addTransform('postgresNativeTransactionEnd', postgresNativeTransactionEnd)
   matcher.addTransform('postgresQueryAcquire', postgresQueryAcquire)
+  matcher.addTransform('publishHapiRoute', publishHapiRoute)
   matcher.addTransform('publishTrpcRequestInfo', publishTrpcRequestInfo)
   matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
   matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
