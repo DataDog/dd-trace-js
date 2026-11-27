@@ -9,14 +9,14 @@ const semver = require('semver')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
   this.timeout(20000)
 
-  withAwsSdkVersions('@aws-sdk/client-sns', (version, moduleName) => {
+  withAwsSdkVersions('@aws-sdk/client-sns', (version, moduleName, resolvedVersion) => {
     let sns
     let sqs
     let subParams
@@ -31,8 +31,7 @@ describe('Sns', function () {
     const snsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName !== 'aws-sdk' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
-    let childSpansFound = 0
-    const assertPropagation = (done, childSpans = 1) => {
+    const assertPropagation = done => {
       agent.assertSomeTraces(traces => {
         const span = traces[0][0]
 
@@ -44,9 +43,6 @@ describe('Sns', function () {
 
         assert.notStrictEqual(parentId, '0')
         assert.strictEqual(parentId, spanId)
-        childSpansFound += 1
-        assert.strictEqual(childSpansFound, childSpans)
-        childSpansFound = 0
       }, { timeoutMs: 20000 }).then(done, done)
     }
 
@@ -326,6 +322,84 @@ describe('Sns', function () {
       })
     })
 
+    const describePublishBatch = moduleName !== 'aws-sdk' && semver.gte(resolvedVersion, '3.374.0')
+      ? describe
+      : describe.skip
+
+    describePublishBatch('publishBatch', () => {
+      before(async () => {
+        await agent.load('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
+      })
+
+      before(done => {
+        createResources('TestPublishBatchQueue', 'TestPublishBatchTopic', done)
+      })
+
+      before(() => callViaCallback(sns, 'subscribe', subParams))
+
+      after(async () => {
+        try {
+          await Promise.all([
+            callViaCallback(sns, 'deleteTopic', { TopicArn }),
+            callViaCallback(sqs, 'deleteQueue', { QueueUrl }),
+          ])
+        } finally {
+          await agent.close()
+        }
+      })
+
+      /** @param {number} batchSize */
+      function assertBatchPropagation (batchSize) {
+        const consumers = new Map()
+        let producer
+
+        return agent.assertSomeTraces(traces => {
+          for (const span of traces.flat()) {
+            if (span.resource === `publishBatch ${TopicArn}`) {
+              producer = span
+            } else if (span.name === 'aws.response') {
+              consumers.set(span.span_id.toString(), span)
+            }
+          }
+
+          assert.ok(producer)
+          const parentId = producer.span_id.toString()
+          const linked = [...consumers.values()].filter(span => span.parent_id.toString() === parentId)
+          assert.strictEqual(linked.length, batchSize)
+        }, {
+          timeoutMs: 20000,
+          async operation () {
+            const entries = Array.from({ length: batchSize }, (_, index) => ({
+              Id: String(index),
+              Message: `batch message ${index}`,
+            }))
+            await callViaCallback(sns, 'publishBatch', { TopicArn, PublishBatchRequestEntries: entries })
+
+            const received = new Set()
+            // The tracer creates one consumer span for each receive operation.
+            for (let index = 0; index < batchSize; index++) {
+              const { Messages } = await callViaCallback(sqs, 'receiveMessage', receiveParams)
+              assert.strictEqual(Messages?.length, 1)
+              const notification = JSON.parse(Messages[0].Body)
+              const carrier = notification.MessageAttributes?._datadog
+              assert.ok(carrier)
+              const attributes = JSON.parse(Buffer.from(carrier.Value, 'base64'))
+              assert.ok(Object.hasOwn(attributes, 'x-datadog-trace-id'))
+              received.add(notification.Message)
+              await callViaCallback(sqs, 'deleteMessage', { QueueUrl, ReceiptHandle: Messages[0].ReceiptHandle })
+            }
+            assert.deepStrictEqual(received, new Set(entries.map(entry => entry.Message)))
+          },
+        })
+      }
+
+      it('injects trace context to SNS publishBatch', () => assertBatchPropagation(2))
+
+      it('injects trace context to each message SNS publishBatch with batch propagation enabled', () => {
+        return assertBatchPropagation(3)
+      })
+    })
+
     describe('no configuration', () => {
       before(() => {
         parentId = '0'
@@ -398,61 +472,6 @@ describe('Sns', function () {
           })
         })
       })
-
-      // There is a bug in 3.x (but not 3.0.0) that will be fixed in 3.261
-      // https://github.com/aws/aws-sdk-js-v3/issues/2861
-      if (!semver.intersects(version, '<3 || >3.0.0')) {
-        it('injects trace context to SNS publishBatch', done => {
-          assertPropagation(done)
-
-          sns.subscribe(subParams, (err, data) => {
-            if (err) return done(err)
-
-            sqs.receiveMessage(receiveParams, e => e && done(e))
-            sns.publishBatch({
-              TopicArn,
-              PublishBatchRequestEntries: [
-                { Id: '1', Message: 'message 1' },
-                { Id: '2', Message: 'message 2' },
-              ],
-            }, e => e && done(e))
-          })
-        })
-
-        it('injects trace context to each message SNS publishBatch with batch propagation enabled', done => {
-          assertPropagation(done, 3)
-
-          sns.subscribe(subParams, (err, data) => {
-            if (err) return done(err)
-
-            sqs.receiveMessage(receiveParams, (err, data) => {
-              if (err) done(err)
-
-              for (const message in data.Messages) {
-                const recordData = JSON.parse(data.Messages[message].Body)
-                assert.ok(
-                  Object.hasOwn(recordData.MessageAttributes, '_datadog'),
-                  `Available keys: ${inspect(Object.keys(recordData.MessageAttributes))}`
-                )
-
-                const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
-                assert.ok(
-                  Object.hasOwn(attributes, 'x-datadog-trace-id'),
-                  `Available keys: ${inspect(Object.keys(attributes))}`
-                )
-              }
-            })
-            sns.publishBatch({
-              TopicArn,
-              PublishBatchRequestEntries: [
-                { Id: '1', Message: 'message 1' },
-                { Id: '2', Message: 'message 2' },
-                { Id: '3', Message: 'message 3' },
-              ],
-            }, e => e && done(e))
-          })
-        })
-      }
 
       // TODO: Figure out why this fails only in 3.0.0
       if (version !== '3.0.0') {
