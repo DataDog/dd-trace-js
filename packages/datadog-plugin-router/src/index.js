@@ -1,6 +1,6 @@
 'use strict'
 
-const { normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
+const { PUBLISHED_ROUTE, joinRoute, normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
 const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
@@ -11,11 +11,14 @@ class RouterPlugin extends WebPlugin {
   static id = 'router'
 
   #contexts = new WeakMap()
+  #delegatedRoutes
 
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
+    const id = this.constructor.id
+    const tracksSelection = id === 'router' || id === 'express'
+    this.addSub(`apm:${id}:middleware:enter`, ({ req, name, route, layer }) => {
       // One ALS hop covers both the parent-span fallback (when no
       // per-request context exists yet) and the `storeStack` push below.
       // The previous shape paid an ALS read inside `#getStoreSpan` and a
@@ -32,6 +35,7 @@ class RouterPlugin extends WebPlugin {
       if (!childOf) return
 
       const span = this.#getMiddlewareSpan(name, childOf)
+      const previousRoute = context?.route
       context = this.#updateContext(req, context, route, childOf)
 
       if (childOf !== span) {
@@ -41,8 +45,38 @@ class RouterPlugin extends WebPlugin {
       context.storeStack.push(store)
       this.enter(span, store)
 
-      web.patch(req)
+      const request = web.patch(req)
+      if (tracksSelection) {
+        if (request.samplingRoute === false && context.route === '') return
+        if (request.samplingRoute === PUBLISHED_ROUTE) {
+          if (!layer?.route) {
+            if (context.stack.at(-1) === '') return
+            const paths = request.paths
+            const reader = request.samplingRouteReader
+            web.setRoute(req, joinRoute(context.stack))
+            this.#delegatedRoutes ??= new WeakMap()
+            this.#delegatedRoutes.set(context, {
+              paths,
+              reader,
+              previousRoute,
+              middlewarePaths: request.paths,
+              depth: context.stack.length,
+            })
+            return
+          }
+          if (context.route === '') {
+            if (route === '/' || layer.route.path === '/') {
+              web.replacePublishedRouteWithRoot(req)
+              return
+            }
+            web.setSamplingRoute(req)
+          }
+        }
+      }
+      const delegated = tracksSelection && !layer?.route && this.#delegatedRoutes?.get(context)
+      const tracksMiddleware = delegated && request.paths === delegated.middlewarePaths
       web.setRoute(req, context.route)
+      if (tracksMiddleware) delegated.middlewarePaths = request.paths
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
@@ -51,6 +85,16 @@ class RouterPlugin extends WebPlugin {
       if (!context) return
 
       context.stack.pop()
+      const delegated = this.#delegatedRoutes?.get(context)
+      if (delegated && context.stack.length < delegated.depth) {
+        this.#delegatedRoutes.delete(context)
+        const request = web.getContext(req)
+        if (request?.paths === delegated.middlewarePaths) {
+          web.setRoute(req, joinRoute(delegated.paths), true, delegated.reader)
+          request.paths = delegated.paths
+          context.route = delegated.previousRoute ?? ''
+        }
+      }
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {

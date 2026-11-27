@@ -8,10 +8,17 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
-const { httpResourceName, joinRoute, trackSamplingContext } = require('../../http-resource')
+const { PUBLISHED_ROUTE, httpResourceName, joinRoute, trackSamplingContext } = require('../../http-resource')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
+
+/** @type {import('../../http-resource').RouteReader} */
+const publishedRouteReader = {
+  readSamplingRoute (displayedRoute, context) {
+    return context.samplingRoute === PUBLISHED_ROUTE ? displayedRoute ?? '' : context.samplingRoute
+  },
+}
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { getServerStatusValidator } = require('./status-validator')
@@ -154,14 +161,55 @@ const web = {
    * @param {import('../../http-resource').RouteReader} reader
    */
   setSamplingRouteReader (context, reader) {
+    if (!context.samplingRouteReader) trackSamplingContext(context.span.context(), context)
     context.samplingRouteReader = reader
-    trackSamplingContext(context.span.context(), context)
   },
 
-  setRoute (req, path) {
+  /**
+   * @param {object} req
+   * @param {import('../../http-resource').SamplingRoute} [route]
+   * @param {import('../../http-resource').RouteReader} [reader]
+   */
+  setSamplingRoute (req, route = false, reader = publishedRouteReader) {
+    const context = contexts.get(req)
+    if (!context?.span) return
+    context.samplingRoute = route
+    web.setSamplingRouteReader(context, reader)
+  },
+
+  /**
+   * @param {object} req
+   * @param {import('../../http-resource').RouteReader} [reader]
+   */
+  beginRouteLookup (req, reader) {
+    const context = contexts.get(req)
+    if (context?.span && context.samplingRoute === undefined) web.setSamplingRoute(req, false, reader)
+  },
+
+  /** @param {object} req */
+  replacePublishedRouteWithRoot (req) {
+    const context = contexts.get(req)
+    if (context?.samplingRoute === PUBLISHED_ROUTE) {
+      web.setRoute(req, context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? '/' : '', true)
+    }
+  },
+
+  /**
+   * @param {object} req
+   * @param {string} path
+   * @param {boolean} [routeSelected]
+   * @param {import('../../http-resource').RouteReader} [reader]
+   */
+  setRoute (req, path, routeSelected = false, reader = publishedRouteReader) {
     const context = contexts.get(req)
 
     if (!context?.span) return
+    if (routeSelected) {
+      context.samplingRoute = PUBLISHED_ROUTE
+      web.setSamplingRouteReader(context, reader)
+    } else if (context.samplingRoute === PUBLISHED_ROUTE) {
+      context.samplingRoute = undefined
+    }
 
     if (!path || !context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       context.paths = [path]

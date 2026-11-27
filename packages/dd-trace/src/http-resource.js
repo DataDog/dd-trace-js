@@ -7,15 +7,21 @@ const {
   otelHttpResourceName,
 } = require('./plugins/util/http-otel-semantics')
 
+const PUBLISHED_ROUTE = Symbol('published route')
+
 /** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
-/** @typedef {{ readSamplingRoute: (displayedRoute: string | undefined) => string | false | undefined }} RouteReader */
 /**
+ * @typedef {'' | false | typeof PUBLISHED_ROUTE} SamplingRoute
+ * @typedef {(displayedRoute: string | undefined, source: HttpResourceSource) => string | false | undefined}
+ *   ReadSamplingRoute
+ * @typedef {{ readSamplingRoute: ReadSamplingRoute }} RouteReader
  * @typedef {{
  *   req: { method: string },
  *   config: { DD_TRACE_OTEL_SEMANTICS_ENABLED?: boolean },
  *   paths: string[],
- *   generatedRoute?: string,
+ *   samplingRoute?: SamplingRoute,
  *   samplingRouteReader?: RouteReader,
+ *   generatedRoute?: string,
  * }} HttpResourceSource
  */
 
@@ -55,20 +61,30 @@ function getSamplingResource (context) {
   const source = sources?.get(context)?.deref()
   if (!source?.samplingRouteReader) return resource
 
-  const { config, generatedRoute, paths, req, samplingRouteReader } = source
+  const { paths, req, config, generatedRoute, samplingRoute, samplingRouteReader } = source
   const otel = config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   if (resource && (!otel || !isInstrumentationOwnedResource(resource, context.getTag(INSTRUMENTATION_HTTP_RESOURCE)))) {
     return resource
   }
 
   const taggedRoute = context.getTag(HTTP_ROUTE)
+  const displayedRoute = samplingRoute !== undefined && (otel || context.hasTag(HTTP_ROUTE))
+    ? taggedRoute
+    : joinRoute(paths)
   const route = typeof taggedRoute === 'string' && taggedRoute !== generatedRoute
     ? taggedRoute
-    : samplingRouteReader.readSamplingRoute(joinRoute(paths))
+    : samplingRouteReader.readSamplingRoute(displayedRoute, source)
 
   if (route === false) return
   if (route === undefined) return resource
   return otel ? otelHttpResourceName(req.method, route) : httpResourceName(req.method, route)
 }
 
-module.exports = { getSamplingResource, httpResourceName, joinRoute, normalizeRouteSegment, trackSamplingContext }
+module.exports = {
+  PUBLISHED_ROUTE,
+  getSamplingResource,
+  httpResourceName,
+  joinRoute,
+  normalizeRouteSegment,
+  trackSamplingContext,
+}

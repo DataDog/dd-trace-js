@@ -195,6 +195,8 @@ function createMatcher (dcModule) {
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
     publishDurableOrchestrationFailure,
+    publishRoutingStart,
+    scopeRoutingSelection,
     publishTrpcRequestInfo,
     waitForAsyncEnd,
   } = require('./transforms')
@@ -222,6 +224,8 @@ function createMatcher (dcModule) {
   matcher.addTransform('publishKoaCallback', publishKoaCallback)
   matcher.addTransform('publishKoaRouterDispatch', publishKoaRouterDispatch)
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('publishRoutingStart', publishRoutingStart)
+  matcher.addTransform('scopeRoutingSelection', scopeRoutingSelection)
   matcher.addTransform('postgresNativeCopy', postgresNativeCopy)
   matcher.addTransform('postgresNativePreparation', postgresNativePreparation)
   matcher.addTransform('postgresNativeTransactionEnd', postgresNativeTransactionEnd)
