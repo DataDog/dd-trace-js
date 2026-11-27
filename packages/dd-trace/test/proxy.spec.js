@@ -2010,11 +2010,12 @@ describe('TracerProxy', () => {
 
       sinon.assert.notCalled(log.error)
 
+      const publishConfig = sinon.spy(configUpdateChannel, 'publish')
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      sinon.assert.calledTwice(channelMock.publish)
-      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(publishConfig, config)
       sinon.assert.calledOnceWithExactly(storeConfig, config)
     })
 

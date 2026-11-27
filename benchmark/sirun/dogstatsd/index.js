@@ -54,7 +54,7 @@ const options = {
   lookup,
 }
 const client = new BenchClient(options, WITH_AGGREGATION)
-const aggregationClient = new MetricsAggregationClient(client)
+const aggregationClient = new MetricsAggregationClient(client, options)
 
 const NAME = 'runtime.node.event_loop.delay.max'
 const FEW_TAGS = ['lang:javascript', 'lang_version:20.0.0']
