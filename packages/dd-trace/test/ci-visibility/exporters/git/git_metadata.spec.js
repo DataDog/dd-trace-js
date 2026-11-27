@@ -30,6 +30,7 @@ describe('git_metadata', () => {
   const secondTemporaryPackFile = `${os.tmpdir()}/1111-cc424c261da5e261b76d982d5d361a023556e2aa.pack`
 
   let getLatestCommitsStub
+  let getRepositoryRootStub
   let getRepositoryUrlStub
   let getCommitsRevListStub
   let generatePackFilesForCommitsStub
@@ -54,6 +55,7 @@ describe('git_metadata', () => {
 
   beforeEach(() => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
+    getRepositoryRootStub = sinon.stub().returns(process.cwd())
     getCommitsRevListStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
     isShallowRepositoryStub = sinon.stub().returns(false)
@@ -72,6 +74,7 @@ describe('git_metadata', () => {
 
     const gitStubs = {
       getLatestCommits: getLatestCommitsStub,
+      getRepositoryRoot: getRepositoryRootStub,
       getRepositoryUrl: getRepositoryUrlStub,
       generatePackFilesForCommits: generatePackFilesForCommitsStub,
       getCommitsRevList: getCommitsRevListStub,
@@ -510,6 +513,29 @@ describe('git_metadata', () => {
       process.env.PATH = oldPath
       done()
     })
+  })
+
+  it('returns ERR_GIT_COMMIT_UNAVAILABLE immediately when gitRoot is not a git repository', (done) => {
+    getRepositoryRootStub.returns('')
+
+    gitMetadata.sendGitMetadata(
+      new URL('https://api.test.com'),
+      { isEvpProxy: false },
+      'https://github.com/DataDog/dd-trace-js.git',
+      (err) => {
+        assert.strictEqual(err?.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+        sinon.assert.calledOnceWithExactly(getRepositoryRootStub, '/non-git-dir')
+        sinon.assert.notCalled(getRepositoryUrlStub)
+        sinon.assert.notCalled(getLatestCommitsStub)
+        sinon.assert.notCalled(isShallowRepositoryStub)
+        sinon.assert.notCalled(unshallowRepositoryStub)
+        sinon.assert.notCalled(fetchHeadCommitShaStub)
+        sinon.assert.notCalled(requestStub)
+        done()
+      },
+      'a'.repeat(40),
+      '/non-git-dir'
+    )
   })
 
   it('should retry if backend temporarily fails', (done) => {

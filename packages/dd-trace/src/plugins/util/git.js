@@ -98,7 +98,7 @@ function sanitizedExec (
       }
       return result
     } catch (err) {
-      if (errorMetric) {
+      if (errorMetric && !executionOptions?.expectedFailure) {
         incrementCountMetric(errorMetric.name, {
           ...errorMetric.tags,
           errorType: err.code,
@@ -202,26 +202,34 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.warn(() => `Git unshallow failed: ${flags.join(' ')}`)
-    incrementCountMetric(
-      TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
-    )
     if (targetedRecovery) {
       const timeout = 5000 - (Date.now() - start)
       if (timeout > 0 && !hasLocalGitObject(revParseHead, cwd)) {
-        sanitizedExec(
-          ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
-          null, null,
-          { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } },
-          true,
-          { uncached: true, timeout, expectedFailure: true, cwd }
+        try {
+          sanitizedExec(
+            ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
+            null, null, null,
+            true,
+            { uncached: true, timeout, expectedFailure: true, throwOnError: true, cwd }
+          )
+        } catch (fallbackErr) {
+          incrementCountMetric(
+            TELEMETRY_GIT_COMMAND_ERRORS,
+            { command: 'unshallow', errorType: fallbackErr.code, exitCode: fallbackErr.status || fallbackErr.errno }
+          )
+        }
+      } else {
+        incrementCountMetric(
+          TELEMETRY_GIT_COMMAND_ERRORS,
+          { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
         )
       }
+      distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
       return
     }
     const upstreamRemote = sanitizedExec(
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-      null, null, null, true, { uncached: true, cwd }
+      null, null, null, true, { expectedFailure: true, uncached: true, cwd }
     )
     flags = [
       ...baseGitOptions,
@@ -229,14 +237,10 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
     ]
     try {
       execFileSync('git', flags, fetchOptions)
-    } catch (err) {
+    } catch {
       // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.warn(() => `Git unshallow failed again: ${flags.join(' ')}`)
-      incrementCountMetric(
-        TELEMETRY_GIT_COMMAND_ERRORS,
-        { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
-      )
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
         baseGitOptions,
@@ -294,7 +298,7 @@ function getLatestCommits (commitSha, cwd) {
     log.error('Get latest commits failed', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'get_local_commits', errorType: err.status }
+      { command: 'get_local_commits', errorType: err.code, exitCode: err.status || err.errno }
     )
     return []
   }
@@ -323,63 +327,69 @@ function getGitDiff (baseCommit, targetCommit, cwd) {
 }
 
 function getGitRemoteName (cwd) {
-  const branchRef = sanitizedExec(
-    ['symbolic-ref', '--quiet', 'HEAD'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    true,
-    { expectedFailure: true, uncached: true, cwd } // Detached HEADs use the checkout-local fallback.
-  )
+  incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_remote_name' })
+  const startTime = Date.now()
+  try {
+    const branchRef = sanitizedExec(
+      ['symbolic-ref', '--quiet', 'HEAD'],
+      null,
+      null,
+      null,
+      true,
+      { expectedFailure: true, uncached: true, cwd } // Detached HEADs use the checkout-local fallback.
+    )
 
-  const remotes = sanitizedExec(
-    ['remote'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    false,
-    { uncached: true, cwd }
-  )
-
-  if (!remotes) return 'origin'
-
-  const remoteNames = remotes.trim().split(/\r?\n/)
-  const branch = branchRef.replace(/^refs\/heads\//, '')
-  if (branch) {
-    // Read the configured remote: custom fetch refspecs can use any ref namespace.
-    const branchRemote = sanitizedExec(
-      ['config', '--get', `branch.${branch}.remote`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    const remotes = sanitizedExec(
+      ['remote'],
+      null,
+      null,
       { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+      false,
+      { uncached: true, cwd }
+    )
+
+    if (!remotes) return 'origin'
+
+    const remoteNames = remotes.trim().split(/\r?\n/)
+    const branch = branchRef.replace(/^refs\/heads\//, '')
+    if (branch) {
+      // Read the configured remote: custom fetch refspecs can use any ref namespace.
+      const branchRemote = sanitizedExec(
+        ['config', '--get', `branch.${branch}.remote`],
+        null,
+        null,
+        null,
+        true,
+        { expectedFailure: true, uncached: true, cwd }
+      )
+      if (branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
+    }
+    const configuredRemote = sanitizedExec(
+      ['config', '--local', '--get', 'clone.defaultRemoteName'],
+      null,
+      null,
+      null,
       true,
       { expectedFailure: true, uncached: true, cwd }
     )
-    if (branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
-  }
-  const configuredRemote = sanitizedExec(
-    ['config', '--local', '--get', 'clone.defaultRemoteName'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    true,
-    { expectedFailure: true, uncached: true, cwd }
-  )
 
-  if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
-  // Clone -o overrides remain in local branch tracking after HEAD is detached.
-  const trackingConfiguration = sanitizedExec(
-    ['config', '--local', '--get-regexp', String.raw`^branch\..*\.remote$`],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    false,
-    { expectedFailure: true, uncached: true, cwd }
-  )
-  const trackingRemotes = new Set(trackingConfiguration.split(/\r?\n/)
-    .map(line => getSegment(line, ' ', 1)).filter(remote => remote && remoteNames.includes(remote)))
-  if (trackingRemotes.size === 1) return trackingRemotes.values().next().value
-  return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
+    if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
+    // Clone -o overrides remain in local branch tracking after HEAD is detached.
+    const trackingConfiguration = sanitizedExec(
+      ['config', '--local', '--get-regexp', String.raw`^branch\..*\.remote$`],
+      null,
+      null,
+      null,
+      false,
+      { expectedFailure: true, uncached: true, cwd }
+    )
+    const trackingRemotes = new Set(trackingConfiguration.split(/\r?\n/)
+      .map(line => getSegment(line, ' ', 1)).filter(remote => remote && remoteNames.includes(remote)))
+    if (trackingRemotes.size === 1) return trackingRemotes.values().next().value
+    return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
+  } finally {
+    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_remote_name' }, Date.now() - startTime)
+  }
 }
 
 function getSourceBranch (cwd) {
@@ -577,10 +587,6 @@ function generatePackFilesForCommits (commitsToUpload, cwd) {
     result = execGitPackObjects(temporaryPath)
   } catch (err) {
     log.debug('Git plugin error executing git pack-objects command, trying the working directory', err)
-    incrementCountMetric(
-      TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
-    )
     /**
      * The generation of pack files in the temporary folder (from `os.tmpdir()`)
      * sometimes fails in certain CI setups with the error message
@@ -608,10 +614,29 @@ function generatePackFilesForCommits (commitsToUpload, cwd) {
   return result
 }
 
+/**
+ * Probes the Git repository root without logging errors when Git is unavailable
+ * or `cwd` is outside a readable Git checkout.
+ *
+ * @param {string=} cwd
+ */
+function probeRepositoryRoot (cwd) {
+  try {
+    return sanitizedExec(
+      ['rev-parse', '--show-toplevel'],
+      null,
+      null,
+      null,
+      true,
+      { expectedFailure: true, throwOnError: true, uncached: true, cwd }
+    )
+  } catch {
+    // Missing Git binary or non-repository directory; callers handle undefined.
+  }
+}
+
 function getRepositoryRoot (cwd) {
-  return sanitizedExec(
-    ['rev-parse', '--show-toplevel'], null, null, null, true, { uncached: true, cwd }
-  )
+  return probeRepositoryRoot(cwd) ?? ''
 }
 
 /**
@@ -637,7 +662,30 @@ function getGitMetadata (ciMetadata) {
     headCommitSha,
     pullRequestBaseBranchSha,
   } = ciMetadata
-  const gitRoot = getRepositoryRoot()
+  const gitRoot = probeRepositoryRoot()
+  if (gitRoot === undefined) {
+    const tags = {
+      [GIT_COMMIT_MESSAGE]: commitMessage || '',
+      [GIT_BRANCH]: branch || '',
+      [GIT_COMMIT_SHA]: commitSHA || '',
+      [CI_WORKSPACE_PATH]: ciWorkspacePath || '',
+    }
+    if (tags[GIT_BRANCH] === 'HEAD') delete tags[GIT_BRANCH]
+
+    const entries = [
+      GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(repositoryUrl || ''),
+      GIT_COMMIT_AUTHOR_NAME, ciAuthorName,
+      GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail,
+      GIT_TAG, tag,
+    ]
+    for (let i = 0; i < entries.length; i += 2) {
+      const value = entries[i + 1]
+      if (value) {
+        tags[entries[i]] = value
+      }
+    }
+    return tags
+  }
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
   // so if `git` is not present in the env, we won't show a warning to the user.
@@ -752,6 +800,10 @@ function getGitMetadata (ciMetadata) {
 }
 
 function getGitInformationDiscrepancy (cwd) {
+  if (probeRepositoryRoot(cwd) === undefined) {
+    return { gitRepositoryUrl: '', gitCommitSHA: '' }
+  }
+
   const gitRepositoryUrl = getRepositoryUrl(cwd)
 
   const gitCommitSHA = sanitizedExec(
@@ -792,7 +844,9 @@ function fetchHeadCommitSha (headSha, useDepth = true, cwd) {
   const remoteName = getGitRemoteName(cwd)
   // Existing heads retain the original repair/history behavior; a failed bounded fetch also retries that path.
   const depths = useDepth && !hasLocalGitObject(headSha, cwd) ? [true, false] : [false]
-  for (const shallow of depths) {
+  for (let i = 0; i < depths.length; i++) {
+    const shallow = depths[i]
+    const isLastAttempt = i === depths.length - 1
     try {
       sanitizedExec(
         [
@@ -807,7 +861,7 @@ function fetchHeadCommitSha (headSha, useDepth = true, cwd) {
         ],
         { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
         { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
-        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } },
+        isLastAttempt ? { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } } : null,
         true,
         { uncached: true, throwOnError: true, timeout: 5000, cwd }
       )

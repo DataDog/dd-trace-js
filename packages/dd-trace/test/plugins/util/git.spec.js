@@ -1101,6 +1101,7 @@ describe('getGitInformationDiscrepancy', () => {
   )
 
   it('returns git repository URL and commit SHA', () => {
+    cachedExecStub.withArgs('git', ['rev-parse', '--show-toplevel']).returns('/repo')
     cachedExecStub.withArgs('git', ['remote']).returns('origin')
     cachedExecStub.withArgs('git', ['remote', 'get-url', 'origin'])
       .returns('https://github.com/datadog/safe-repository.git')
@@ -2371,4 +2372,307 @@ current
       assert.strictEqual(fetchedCommits.length, 2)
     })
   }
+})
+
+describe('git telemetry and repository gating', () => {
+  const {
+    TELEMETRY_GIT_COMMAND,
+    TELEMETRY_GIT_COMMAND_MS,
+    TELEMETRY_GIT_COMMAND_ERRORS,
+  } = require('../../../src/ci-visibility/telemetry')
+
+  function createGitModule (overrides = {}) {
+    const execStub = sinon.stub()
+    const incrementCountMetric = sinon.spy()
+    const distributionMetric = sinon.spy()
+    const logError = sinon.spy()
+    const logDebug = sinon.spy()
+    const logWarn = sinon.spy()
+
+    const gitUtils = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execStub },
+      './git-cache': { cachedExec: execStub },
+      '../../log': { error: logError, debug: logDebug, warn: logWarn },
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric,
+        distributionMetric,
+        TELEMETRY_GIT_COMMAND,
+        TELEMETRY_GIT_COMMAND_MS,
+        TELEMETRY_GIT_COMMAND_ERRORS,
+      },
+      ...overrides,
+    })
+
+    return { gitUtils, execStub, incrementCountMetric, distributionMetric, logError, logDebug, logWarn }
+  }
+
+  it('does not count expected probe failures in getGitRemoteName and emits one command metric', () => {
+    const { gitUtils, execStub, incrementCountMetric, distributionMetric, logError } = createGitModule()
+    execStub.withArgs('git', ['symbolic-ref', '--quiet', 'HEAD'])
+      .throws(Object.assign(new Error('detached HEAD'), { status: 1 }))
+    execStub.withArgs('git', ['remote']).returns('origin\n')
+    execStub.withArgs('git', ['config', '--local', '--get', 'clone.defaultRemoteName'])
+      .throws(Object.assign(new Error('unset'), { status: 1 }))
+    execStub.withArgs('git', ['config', '--local', '--get-regexp', String.raw`^branch\..*\.remote$`])
+      .throws(Object.assign(new Error('unset'), { status: 1 }))
+
+    assert.strictEqual(gitUtils.getGitRemoteName(), 'origin')
+
+    sinon.assert.notCalled(logError)
+    sinon.assert.calledOnceWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND, { command: 'get_remote_name' })
+    sinon.assert.calledOnceWithMatch(distributionMetric, TELEMETRY_GIT_COMMAND_MS, { command: 'get_remote_name' })
+  })
+
+  it('records one get_remote_name error metric when git remote fails', () => {
+    const { gitUtils, execStub, incrementCountMetric, distributionMetric, logError } = createGitModule()
+    execStub.withArgs('git', ['symbolic-ref', '--quiet', 'HEAD'])
+      .throws(Object.assign(new Error('detached HEAD'), { status: 1 }))
+    execStub.withArgs('git', ['remote'])
+      .throws(Object.assign(new Error('not a git repository'), { status: 128 }))
+
+    assert.strictEqual(gitUtils.getGitRemoteName(), 'origin')
+
+    sinon.assert.calledOnce(logError)
+    sinon.assert.calledTwice(incrementCountMetric)
+    sinon.assert.calledWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND, { command: 'get_remote_name' })
+    sinon.assert.calledWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS, {
+      command: 'get_remote_name',
+      errorType: undefined,
+      exitCode: 128,
+    })
+    sinon.assert.calledOnceWithMatch(distributionMetric, TELEMETRY_GIT_COMMAND_MS, { command: 'get_remote_name' })
+  })
+
+  it('short-circuits getGitMetadata without errors when outside a git repository', () => {
+    const { gitUtils, execStub, incrementCountMetric, logError } = createGitModule()
+    execStub.throws(Object.assign(new Error('not a git repository'), { status: 128 }))
+
+    const metadata = gitUtils.getGitMetadata({
+      commitSHA: 'a'.repeat(40),
+      branch: 'HEAD',
+      repositoryUrl: 'https://user:secret@github.com/org/repo.git',
+      tag: 'v1.0.0',
+      commitMessage: 'release',
+      authorName: 'Author',
+      authorEmail: 'author@example.com',
+      ciWorkspacePath: '/workspace',
+      headCommitSha: 'b'.repeat(40),
+    })
+
+    assert.deepStrictEqual(metadata, {
+      [GIT_COMMIT_MESSAGE]: 'release',
+      [GIT_COMMIT_SHA]: 'a'.repeat(40),
+      [CI_WORKSPACE_PATH]: '/workspace',
+      [GIT_REPOSITORY_URL]: 'https://github.com/org/repo.git',
+      [GIT_COMMIT_AUTHOR_NAME]: 'Author',
+      [GIT_COMMIT_AUTHOR_EMAIL]: 'author@example.com',
+      [GIT_TAG]: 'v1.0.0',
+    })
+    sinon.assert.calledOnceWithMatch(execStub, 'git', ['rev-parse', '--show-toplevel'])
+    sinon.assert.notCalled(logError)
+    sinon.assert.notCalled(incrementCountMetric)
+  })
+
+  it('short-circuits getGitInformationDiscrepancy and getRepositoryRoot cleanly outside a git repository', () => {
+    const { gitUtils, execStub, incrementCountMetric, logError } = createGitModule()
+    execStub.throws(Object.assign(new Error('spawnSync git ENOENT'), { code: 'ENOENT', errno: -2 }))
+
+    assert.strictEqual(gitUtils.getRepositoryRoot('/workspace'), '')
+    assert.deepStrictEqual(gitUtils.getGitInformationDiscrepancy('/workspace'), {
+      gitRepositoryUrl: '',
+      gitCommitSHA: '',
+    })
+
+    sinon.assert.calledTwice(execStub)
+    sinon.assert.notCalled(logError)
+    sinon.assert.notCalled(incrementCountMetric)
+  })
+
+  it('records exitCode and errorType when getLatestCommits fails', () => {
+    const { gitUtils, execStub, incrementCountMetric, logError } = createGitModule()
+    execStub.throws(Object.assign(new Error('git log failed'), { code: 'ERR_GIT', status: 128 }))
+
+    assert.deepStrictEqual(gitUtils.getLatestCommits(), [])
+
+    sinon.assert.calledOnce(logError)
+    sinon.assert.calledWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS, {
+      command: 'get_local_commits',
+      errorType: 'ERR_GIT',
+      exitCode: 128,
+    })
+  })
+
+  it('records errno as exitCode when getLatestCommits fails without status', () => {
+    const { gitUtils, execStub, incrementCountMetric } = createGitModule()
+    execStub.throws(Object.assign(new Error('spawnSync git ENOENT'), { code: 'ENOENT', errno: -2 }))
+
+    assert.deepStrictEqual(gitUtils.getLatestCommits(), [])
+
+    sinon.assert.calledWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS, {
+      command: 'get_local_commits',
+      errorType: 'ENOENT',
+      exitCode: -2,
+    })
+  })
+
+  it('does not emit pack_objects error metric when cwd fallback succeeds', () => {
+    const { gitUtils, execStub, incrementCountMetric, logError } = createGitModule({
+      os: { tmpdir: () => getFakeDirectory() },
+      fs: { statSync: () => ({ isDirectory: () => true }) },
+    })
+    execStub.onCall(0).throws(Object.assign(new Error('EXDEV'), { status: 128 }))
+    execStub.onCall(1).returns('abc123')
+
+    const packFiles = gitUtils.generatePackFilesForCommits(['abc123'])
+
+    assert.strictEqual(packFiles.length, 1)
+    sinon.assert.notCalled(logError)
+    sinon.assert.neverCalledWithMatch(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS)
+  })
+
+  it('emits one pack_objects error metric when both packfile locations fail', () => {
+    const { gitUtils, execStub, incrementCountMetric, logError } = createGitModule({
+      os: { tmpdir: () => getFakeDirectory() },
+      fs: { statSync: () => ({ isDirectory: () => true }) },
+    })
+    execStub.onCall(0).throws(Object.assign(new Error('EXDEV'), { status: 1 }))
+    execStub.onCall(1).throws(Object.assign(new Error('EACCES'), { code: 'EACCES', status: 128 }))
+
+    assert.deepStrictEqual(gitUtils.generatePackFilesForCommits(['abc123']), [])
+
+    sinon.assert.calledOnce(logError)
+    sinon.assert.calledWithExactly(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS, {
+      command: 'pack_objects',
+      errorType: 'EACCES',
+      exitCode: 128,
+    })
+    const errorCalls = incrementCountMetric.getCalls().filter(c => c.args[0] === TELEMETRY_GIT_COMMAND_ERRORS)
+    assert.strictEqual(errorCalls.length, 1)
+  })
+
+  it('emits unshallow error metric only when all non-targeted fallbacks fail', () => {
+    const { gitUtils, execStub, incrementCountMetric } = createGitModule()
+    const setupUnshallow = () => {
+      execStub.withArgs('git', ['version']).returns('git version 2.39.0')
+      execStub.withArgs('git', ['symbolic-ref', '--quiet', 'HEAD']).returns('refs/heads/main')
+      execStub.withArgs('git', ['remote']).returns('origin')
+      execStub.withArgs('git', ['config', '--get', 'branch.main.remote']).returns('origin')
+      execStub.withArgs('git', ['rev-parse', 'HEAD']).returns('a'.repeat(40))
+      execStub.withArgs('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+        .returns('origin/main')
+    }
+
+    setupUnshallow()
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(Object.assign(new Error('head unpushed'), { status: 128 }))
+      .onSecondCall().returns('')
+
+    gitUtils.unshallowRepository(false)
+    sinon.assert.neverCalledWithMatch(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS)
+
+    execStub.reset()
+    incrementCountMetric.resetHistory()
+    setupUnshallow()
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .throws(Object.assign(new Error('remote unreachable'), { status: 128 }))
+
+    gitUtils.unshallowRepository(false)
+    const errorCalls = incrementCountMetric.getCalls().filter(c => c.args[0] === TELEMETRY_GIT_COMMAND_ERRORS)
+    assert.strictEqual(errorCalls.length, 1)
+    assert.deepStrictEqual(errorCalls[0].args[1], {
+      command: 'unshallow',
+      errorType: undefined,
+      exitCode: 128,
+    })
+  })
+
+  it('emits unshallow error metric only when targeted recovery fallback fails', () => {
+    const selected = 'a'.repeat(40)
+    const { gitUtils, execStub, incrementCountMetric, distributionMetric } = createGitModule()
+    const setupTargeted = () => {
+      execStub.withArgs('git', ['version']).returns('git version 2.39.0')
+      execStub.withArgs('git', ['symbolic-ref', '--quiet', 'HEAD']).returns('refs/heads/main')
+      execStub.withArgs('git', ['remote']).returns('origin')
+      execStub.withArgs('git', ['config', '--get', 'branch.main.remote']).returns('origin')
+      execStub.withArgs('git', ['rev-parse', 'HEAD']).returns('b'.repeat(40))
+      execStub.withArgs('git', ['cat-file', '-e', selected]).throws(new Error('missing'))
+    }
+
+    setupTargeted()
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(Object.assign(new Error('outside window'), { status: 128 }))
+      .onSecondCall().returns('')
+
+    gitUtils.unshallowRepository(false, selected)
+    sinon.assert.neverCalledWithMatch(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS)
+    sinon.assert.calledWithMatch(distributionMetric, TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' })
+
+    execStub.reset()
+    incrementCountMetric.resetHistory()
+    distributionMetric.resetHistory()
+    setupTargeted()
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(Object.assign(new Error('outside window'), { status: 128 }))
+      .onSecondCall().throws(Object.assign(new Error('depth=1 failed'), { code: 'ETIMEDOUT', status: 124 }))
+
+    gitUtils.unshallowRepository(false, selected)
+    const errorCalls = incrementCountMetric.getCalls().filter(c => c.args[0] === TELEMETRY_GIT_COMMAND_ERRORS)
+    assert.strictEqual(errorCalls.length, 1)
+    assert.deepStrictEqual(errorCalls[0].args[1], {
+      command: 'unshallow',
+      errorType: 'ETIMEDOUT',
+      exitCode: 124,
+    })
+    sinon.assert.calledWithMatch(distributionMetric, TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' })
+
+    execStub.reset()
+    incrementCountMetric.resetHistory()
+    distributionMetric.resetHistory()
+    setupTargeted()
+    execStub.withArgs('git', ['cat-file', '-e', selected]).returns('')
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .throws(Object.assign(new Error('outside window'), { code: 'ERR_GIT', status: 128 }))
+
+    gitUtils.unshallowRepository(false, selected)
+    const skippedFallbackErrors = incrementCountMetric.getCalls()
+      .filter(c => c.args[0] === TELEMETRY_GIT_COMMAND_ERRORS)
+    assert.strictEqual(skippedFallbackErrors.length, 1)
+    assert.deepStrictEqual(skippedFallbackErrors[0].args[1], {
+      command: 'unshallow',
+      errorType: 'ERR_GIT',
+      exitCode: 128,
+    })
+    sinon.assert.calledWithMatch(distributionMetric, TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' })
+  })
+
+  it('emits fetch_head_commit_sha error metric only when the final retry fails', () => {
+    const sha = 'a'.repeat(40)
+    const { gitUtils, execStub, incrementCountMetric } = createGitModule()
+    execStub.returns('')
+    execStub.withArgs('git', ['remote']).returns('origin')
+    execStub.withArgs('git', ['cat-file', '-e', sha]).throws(new Error('missing'))
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(Object.assign(new Error('shallow unsupported'), { status: 128 }))
+      .onSecondCall().returns('')
+
+    assert.strictEqual(gitUtils.fetchHeadCommitSha(sha), false)
+    sinon.assert.neverCalledWithMatch(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS)
+
+    execStub.reset()
+    incrementCountMetric.resetHistory()
+    execStub.returns('')
+    execStub.withArgs('git', ['remote']).returns('origin')
+    execStub.withArgs('git', ['cat-file', '-e', sha]).throws(new Error('missing'))
+    execStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .throws(Object.assign(new Error('remote unavailable'), { status: 128 }))
+
+    assert.strictEqual(gitUtils.fetchHeadCommitSha(sha), false)
+    const errorCalls = incrementCountMetric.getCalls().filter(c => c.args[0] === TELEMETRY_GIT_COMMAND_ERRORS)
+    assert.strictEqual(errorCalls.length, 1)
+    assert.deepStrictEqual(errorCalls[0].args[1], {
+      command: 'fetch_head_commit_sha',
+      errorType: undefined,
+      exitCode: 128,
+    })
+  })
 })
