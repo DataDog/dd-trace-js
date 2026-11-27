@@ -82,7 +82,7 @@ class NativeSpaceProfiler {
   }
 
   profile (restart) {
-    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'pack')
+    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'emit')
     if (!restart) {
       this.stop()
     }

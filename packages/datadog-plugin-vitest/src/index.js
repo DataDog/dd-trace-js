@@ -550,14 +550,11 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:worker-report:coverage', data => {
-      const formattedCoverages = JSON.parse(data).map(coverage => ({
-        sessionId: id(coverage.sessionId),
-        suiteId: id(coverage.suiteId),
-        files: coverage.files,
-      }))
-      for (const formattedCoverage of formattedCoverages) {
-        this.tracer._exporter.exportCoverage(formattedCoverage)
+    this.addSub('ci:vitest:worker-report:coverage', coverages => {
+      if (!Array.isArray(coverages)) return
+
+      for (const { sessionId, suiteId, files } of coverages) {
+        this.tracer._exporter.exportCoverage({ sessionId: id(sessionId), suiteId: id(suiteId), files })
       }
     })
 

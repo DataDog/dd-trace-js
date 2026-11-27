@@ -31,6 +31,35 @@ function isPlaywrightReporterError (message) {
 }
 
 /**
+ * Records the worker fixture pool for each serial suite containing the test.
+ * @param {Map<object, Set<string>>} serialSuites
+ * @param {object} test
+ */
+function addSerialSuites (serialSuites, test) {
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (suite._parallelMode !== 'serial') continue
+    let workerHashes = serialSuites.get(suite)
+    if (!workerHashes) {
+      workerHashes = new Set()
+      serialSuites.set(suite, workerHashes)
+    }
+    workerHashes.add(test._workerHash)
+  }
+}
+
+/**
+ * Reports whether the test shares a serial suite and scheduled job with a quarantined failure.
+ * @param {Map<object, Set<string>>} serialSuites
+ * @param {object} test
+ */
+function isInSerialSuite (serialSuites, test) {
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (serialSuites.get(suite)?.has(test._workerHash)) return true
+  }
+  return false
+}
+
+/**
  * Returns whether a finalized Playwright result contains a failed suite hook.
  *
  * @param {Array<object>} steps
@@ -148,25 +177,37 @@ class DatadogPlaywrightReporter {
     let quarantinedFailureCount = 0
     let hasIncompleteTests = suitesWithHookErrors.size > 0
     const tests = this.suite?.allTests?.()
+    const quarantinedSerialSuites = new Map()
+    const skippedTests = []
     if (tests) {
       for (const test of tests) {
         const outcome = test.outcome()
-        const finalResult = test.results.at(-1)
-        hasIncompleteTests ||= hasFailedSuiteHook(finalResult?.steps)
+        // A serial retry can append skipped results after the real failure, so ignore them.
+        const finalResult = test.results.findLast(result => result.status !== 'skipped') ?? test.results.at(-1)
+        hasIncompleteTests ||= finalResult?.status === 'interrupted' || hasFailedSuiteHook(finalResult?.steps)
         if (outcome === 'unexpected' || (outcome === 'flaky' && this.failOnFlakyTests)) {
           failureCount += 1
           const finalResultStatus = finalResult?.status
           const hasFailed = finalResultStatus === 'failed' || finalResultStatus === 'timedOut'
           if (outcome === 'unexpected' && hasFailed && test._ddIsQuarantined && !test._ddIsAttemptToFix) {
             quarantinedFailureCount += 1
+            addSerialSuites(quarantinedSerialSuites, test)
           }
         } else if (outcome === 'skipped' && !test._ddShouldSkipEfdRetry &&
           (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
-          const { results } = test
-          hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
-            !results.length || test.expectedStatus !== 'skipped'
+          skippedTests.push(test)
         }
       }
+    }
+    for (const test of skippedTests) {
+      const { results } = test
+      // Tests in a serial group that stopped because of a quarantined failure did not run by design.
+      if (!results.some(result => result.status === 'interrupted') &&
+        isInSerialSuite(quarantinedSerialSuites, test)) {
+        continue
+      }
+      hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
+        !results.length || test.expectedStatus !== 'skipped'
     }
     reporterRunSummaryCh.publish({ failureCount, quarantinedFailureCount, hasIncompleteTests })
     suitesWithHookErrors.clear()

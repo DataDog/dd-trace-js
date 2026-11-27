@@ -22,6 +22,7 @@ const propagationFns = [
   'replaceRegexStr',
   'replaceStr',
   'sliceStr',
+  'sliceUndefinedEndStr',
   'substrStr',
   'substringStr',
   'templateLiteralEndingWithNumberParams',

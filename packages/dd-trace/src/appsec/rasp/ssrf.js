@@ -109,22 +109,15 @@ function planResponseBodyCollection ({ ctx, res }) {
 
 /** @param {{ error?: Error, wafSubcontext?: import('../waf/waf_context_wrapper') }} ctx HTTP request context. */
 function handleRequestError (ctx) {
-  // The error channel also publishes timeouts without an error; those can still receive a response.
   if (ctx.error) waf.disposeSubContext(ctx)
 }
 
 /**
- * @param {import('../waf').SubcontextState & { req?: import('http').ClientRequest,
- *   res?: import('http').IncomingMessage }} ctx HTTP request context.
+ * @param {import('../waf').SubcontextState & { res?: import('http').IncomingMessage }} ctx HTTP request context.
  */
 function handleRequestFinish (ctx) {
   // Ordinary responses still need their response-finish evaluation, including truncated bodies.
   if (!waf.getRequest(ctx) || (ctx.res && !ctx.res.upgrade)) return
-  // Request finish is emitted only once and can precede a response after a timeout.
-  if (!ctx.res && ctx.req && !ctx.req.destroyed) {
-    ctx.req.once('close', () => handleRequestFinish(ctx))
-    return
-  }
   waf.disposeSubContext(ctx)
 }
 

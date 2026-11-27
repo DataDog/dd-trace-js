@@ -179,9 +179,10 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
-  const routeConfig = getRouteConfig(request)
+  const routeOptions = request?.routeOptions
 
-  const ctx = { req, res, routeConfig }
+  const routeConfig = routeOptions?.config
+  const ctx = { req, res, routeConfig, routeOptions, request }
   handleChannel.publish(ctx)
 
   return done()
@@ -313,10 +314,6 @@ function getReq (request) {
 
 function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
-}
-
-function getRouteConfig (request) {
-  return request?.routeOptions?.config
 }
 
 function publishError (ctx) {

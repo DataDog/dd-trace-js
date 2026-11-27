@@ -10,10 +10,8 @@ const pathToRegexp = require('path-to-regexp')
 
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
-const {
-  normalizeRouteExpress,
-  normalizeRoute,
-} = require('../../../src/appsec/api_security/normalized-route')
+const { normalizeRoute } = require('../../../src/appsec/api_security/normalized-route')
+const { normalizeRoute: normalizeRouteExpress } = require('../../../src/appsec/api_security/normalized-route/express')
 
 // Install the real path-to-regexp 8 adapters, as the loader does when the host requires it.
 for (const { versions, hook } of instrumentations['path-to-regexp']) {

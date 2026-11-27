@@ -39,6 +39,13 @@ const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
+let outputDirId = 0
+
+// Concurrent runs share the sandbox. Playwright removes its output dir on startup and worker artifacts on exit.
+function getUniqueOutputDir () {
+  return `./test-results-impacted-tests-${++outputDirId}`
+}
+
 const DEFAULT_IMPACTED_KNOWN_TESTS = {
   playwright: {
     'impacted-test.js':
@@ -274,6 +281,7 @@ versions.forEach((version) => {
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
                 GITHUB_BASE_REF: '',
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
                 ...extraEnvVars,
               },
             }
@@ -321,6 +329,7 @@ versions.forEach((version) => {
                   PW_BASE_URL: `http://localhost:${webAppPort}`,
                   TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
                   GITHUB_BASE_REF: '',
+                  PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
                 },
               }
             )
@@ -384,6 +393,7 @@ versions.forEach((version) => {
                   PW_BASE_URL: `http://localhost:${webAppPort}`,
                   TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
                   GITHUB_BASE_REF: '',
+                  PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir(),
                 },
               }
             )

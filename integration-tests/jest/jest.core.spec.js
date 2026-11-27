@@ -1807,6 +1807,33 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  for (const useThreads of [false, true]) {
+    const transport = useThreads ? 'thread' : 'fork'
+    const testWorker = useThreads ? onlyLatestIt : it
+    testWorker(`round-trips trace, span, and parent IDs from a ${transport} worker`, async () => {
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const spans = payloads.flatMap(({ payload }) => payload.events)
+          .filter(event => event.type === 'span' && event.content.name === 'jest.worker.ids')
+        assert.strictEqual(spans.length, 1, testOutput)
+        const { content: span } = spans[0]
+        assert.strictEqual(span.meta['ipc.transport'], transport)
+        assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+        assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+        assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+        assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+      })
+      const outputPromise = runJestAndCaptureOutput({
+        TESTS_TO_RUN: 'jest-plugin-tests/jest-worker-ids[.]js$|jest-teardown-timers/passing-one-test[.]js$',
+        RUN_IN_PARALLEL: '1',
+        USE_WORKER_THREADS: useThreads ? '1' : '',
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+        DD_INJECT_FORCE: 'true',
+        SHOULD_CHECK_RESULTS: '1',
+      })
+      await Promise.all([eventsPromise, outputPromise])
+    })
+  }
+
   context('when jest is using worker threads', () => {
     onlyLatestIt('ignores non-array worker-thread messages', (done) => {
       childProcess = fork(testFile, {

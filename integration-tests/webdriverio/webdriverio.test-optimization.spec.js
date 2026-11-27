@@ -404,6 +404,23 @@ for (const version of versions) {
           )
         }
 
+        it('round-trips trace, span, and parent IDs from a parallel worker', async () => {
+          await runScenario('workerIds', 2, payloads => {
+            const spans = getEvents(payloads)
+              .filter(({ type, content }) => type === 'span' && content.name === 'webdriverio.worker.ids')
+            assert.strictEqual(spans.length, 1)
+            const { content: span } = spans[0]
+            assert.strictEqual(span.meta['ipc.transport'], 'fork')
+            assert.strictEqual(span.meta['_dd.p.tid'], '1234567890abcdef')
+            assert.strictEqual(span.trace_id, 0xfedcba9876543210n)
+            assert.strictEqual(span.parent_id, 0xabcdef0123456789n)
+            assert.strictEqual(span.span_id, BigInt(span.meta['ipc.span_id']))
+          }, {
+            DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog,tracecontext',
+            DD_INJECT_FORCE: 'true',
+          })
+        })
+
         describe('automation exclusions', () => {
           const protectedFile = 'test-exclusions-protected.e2e.js'
           const protectedName = 'WebdriverIO protected exclusion critical check'

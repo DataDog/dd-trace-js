@@ -178,7 +178,7 @@ describe('AIGuard Vercel AI integration', () => {
       ], EVAL_OPTS)
     })
 
-    it('prefers accumulated tool calls over text', async () => {
+    it('evaluates accumulated text and tool calls together', async () => {
       const toolCall = { type: 'tool-call', toolCallId: 'c1', toolName: 'lookup', args: '{"q":"x"}' }
       const chunks = [{ type: 'text-delta', textDelta: 'thinking' }, toolCall]
       const ctx = modelCall('doStream')
@@ -187,6 +187,7 @@ describe('AIGuard Vercel AI integration', () => {
 
       assert.deepStrictEqual(evaluate.firstCall.args[0].at(-1), {
         role: 'assistant',
+        content: 'thinking',
         tool_calls: [{ id: 'c1', function: { name: 'lookup', arguments: '{"q":"x"}' } }],
       })
     })

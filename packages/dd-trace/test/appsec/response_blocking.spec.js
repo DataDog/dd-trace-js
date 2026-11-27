@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -20,9 +20,10 @@ describe('HTTP Response Blocking', () => {
   let server
   let responseHandler
   let httpRequest
+  let tracer
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http', undefined, { inferredProxyServicesEnabled: true })
 
     const http = require('http')
 
@@ -56,6 +57,7 @@ describe('HTTP Response Blocking', () => {
     })
 
     appsec.enable(getConfigFresh({
+      inferredProxyServicesEnabled: true,
       appsec: {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),
@@ -95,6 +97,92 @@ describe('HTTP Response Blocking', () => {
     const res = await httpRequest.get('/')
 
     assertBlocked(res)
+  })
+
+  it('should export the AppSec finding with the inferred proxy before an open child span finishes', async () => {
+    /** @type {{ child?: import('../../src/opentracing/span') }} */
+    const spans = {}
+    let serverSpanId
+    responseHandler = (req, res) => {
+      const parent = tracer.scope().active()
+      serverSpanId = parent.context().toSpanId()
+      spans.child = tracer.startSpan('open-child', { childOf: parent })
+      res.statusCode = 404
+      res.setHeader('k', '404')
+      res.end('end')
+    }
+
+    let findingTraceId
+    try {
+      const [res] = await Promise.all([
+        httpRequest.get('/', {
+          headers: {
+            'x-dd-proxy': 'aws-apigateway',
+            'x-dd-proxy-request-time-ms': '1729780025473',
+            'x-dd-proxy-path': '/',
+            'x-dd-proxy-httpmethod': 'GET',
+            'x-dd-proxy-domain-name': 'example.com',
+            'x-dd-proxy-stage': 'test',
+          },
+        }),
+        agent.assertSomeTraces(traces => {
+          const trace = traces.find(spans => spans.some(span => span.span_id.toString() === serverSpanId))
+          assert.ok(trace)
+          assert.equal(trace.length, 2)
+          const [proxySpan, serverSpan] = trace
+          assert.equal(proxySpan.name, 'aws.apigateway')
+          assert.equal(serverSpan.span_id.toString(), serverSpanId)
+          assert.equal(serverSpan.parent_id, proxySpan.span_id)
+          assert.ok(proxySpan.meta['_dd.appsec.json'])
+          assert.ok(serverSpan.meta['_dd.appsec.json'])
+          findingTraceId = serverSpan.trace_id.toString()
+        }),
+      ])
+
+      assertBlocked(res)
+      assert.ok(spans.child)
+
+      const childReceived = agent.assertSomeTraces(traces => {
+        const span = traces.flat().find(span => span.name === 'open-child')
+        assert.ok(span)
+        assert.equal(span.trace_id.toString(), findingTraceId)
+        assert.equal(span.parent_id.toString(), serverSpanId)
+      })
+      spans.child.finish()
+      await childReceived
+    } finally {
+      spans.child?.finish()
+    }
+  })
+
+  it('should keep a clean request buffered until its open child span finishes', async () => {
+    /** @type {{ child?: import('../../src/opentracing/span') }} */
+    const spans = {}
+    let serverSpanId
+    responseHandler = (req, res) => {
+      const parent = tracer.scope().active()
+      serverSpanId = parent.context().toSpanId()
+      spans.child = tracer.startSpan('open-child', { childOf: parent })
+      res.end('OK')
+    }
+
+    try {
+      const res = await httpRequest.get('/')
+      assert.equal(res.status, 200)
+      assert.ok(spans.child)
+
+      const traceReceived = agent.assertSomeTraces(traces => {
+        const trace = traces.find(spans => spans.some(span => span.name === 'open-child'))
+        assert.ok(trace)
+        const serverSpan = trace.find(span => span.span_id.toString() === serverSpanId)
+        assert.ok(serverSpan)
+        assert.equal(serverSpan.meta['_dd.appsec.json'], undefined)
+      })
+      spans.child.finish()
+      await traceReceived
+    } finally {
+      spans.child?.finish()
+    }
   })
 
   it('should block with setHeader() + setHeaders() + writeHead() headers', async () => {

@@ -67,6 +67,10 @@ function sliceStr (str) {
   return str.slice(1, 4)
 }
 
+function sliceUndefinedEndStr (str) {
+  return str.slice(1, undefined)
+}
+
 function toLowerCaseStr (str) {
   return str.toLowerCase()
 }
@@ -114,6 +118,7 @@ module.exports = {
   replaceRegexStr,
   replaceStr,
   sliceStr,
+  sliceUndefinedEndStr,
   substrStr,
   substringStr,
   templateLiteralEndingWithNumberParams,

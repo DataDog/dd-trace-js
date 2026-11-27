@@ -1,5 +1,10 @@
 [
   {
+    "name": "ai",
+    "source": "^dist\\/default-stop-condition-[\\w-]+\\.js$",
+    "flags": ""
+  },
+  {
     "name": "@modelcontextprotocol/client",
     "source": "^dist\\/index\\.[cm]js$",
     "flags": ""
