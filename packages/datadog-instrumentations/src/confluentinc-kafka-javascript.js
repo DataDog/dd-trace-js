@@ -115,7 +115,7 @@ function instrumentBaseModule (module) {
                   headers: carrier,
                 }],
                 bootstrapServers: brokers,
-                clusterId: clusterIds.get(producer) ?? undefined,
+                clusterId: getClusterId(producer),
               }
 
               return channels.producerStart.runStores(ctx, () => {
@@ -172,14 +172,14 @@ function instrumentBaseModule (module) {
               lookUpNativeClusterId(consumer)
               const ctx = {
                 groupId,
-                clusterId: clusterIds.get(consumer) ?? undefined,
+                clusterId: getClusterId(consumer),
                 bootstrapServers: this.globalConfig?.['bootstrap.servers'],
               }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   // The lookup started on `ready` may have settled since `consume()` was called.
-                  ctx.clusterId = clusterIds.get(consumer) ?? undefined
+                  ctx.clusterId = getClusterId(consumer)
                   if (messages && messages.length > 0) {
                     for (const message of messages) {
                       ctx.topic = message?.topic
@@ -292,7 +292,7 @@ function instrumentKafkaJS (kafkaJS) {
                       topic: outgoingPayload?.topic,
                       messages: outgoingPayload?.messages || [],
                       bootstrapServers,
-                      clusterId: clusterIds.get(producer) ?? undefined,
+                      clusterId: getClusterId(producer),
                       disableHeaderInjection,
                     }
 
@@ -379,7 +379,7 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: payload?.message?.offset,
                             message: payload?.message,
                             groupId,
-                            clusterId: clusterIds.get(consumer) ?? undefined,
+                            clusterId: getClusterId(consumer),
                             bootstrapServers,
                           }
                         })
@@ -400,7 +400,7 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: batch?.messages[batch?.messages?.length - 1]?.offset,
                             messages: batch?.messages,
                             groupId,
-                            clusterId: clusterIds.get(consumer) ?? undefined,
+                            clusterId: getClusterId(consumer),
                             bootstrapServers,
                           }
                         }
@@ -557,6 +557,14 @@ function lookUpKafkaJsClusterId (client) {
   })
   clusterIdLookups.set(client, lookup)
   return lookup
+}
+
+/**
+ * @param {object} client Producer or consumer.
+ * @returns {string | undefined} The cluster id, or `undefined` while it is unknown.
+ */
+function getClusterId (client) {
+  return clusterIds.get(client) ?? undefined
 }
 
 /**
