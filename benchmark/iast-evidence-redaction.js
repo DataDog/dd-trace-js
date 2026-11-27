@@ -27,6 +27,10 @@ const urlWellFormed = 'http://x/?' + 'k1=v1&k2=v2&k3=v3&'.repeat(400)
 // SQL Oracle: q-quote starts with no terminator — exercises the under-cap regex path.
 const sqlOracleIrregular = "q'<".repeat(2 * KB)
 
+// Value pattern: no-match runs at the cap.
+const valueJwtLike32k = 'eyJ'.repeat(10_922)
+const valueEmailLike32k = 'a'.repeat(32_768)
+
 // Just over the internal MAX_EVIDENCE_LENGTH (32_768 chars) — exercises the cap path.
 const overCap = 'a'.repeat(32_768 + 1)
 
@@ -59,6 +63,16 @@ suite
         [],
         []
       )
+    },
+  })
+  .add('Value pattern - JWT-like no-match (32KB)', {
+    fn () {
+      sensitiveHandler.isSensibleValue(valueJwtLike32k)
+    },
+  })
+  .add('Value pattern - email-like no-match (32KB)', {
+    fn () {
+      sensitiveHandler.isSensibleValue(valueEmailLike32k)
     },
   })
   .add('scrubEvidence - over cap', {
