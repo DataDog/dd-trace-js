@@ -776,6 +776,25 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(fullDone, null, 'ok', 202, {})
   })
 
+  it('charges the queue only for the compressed bytes of a pending gzipped payload', () => {
+    const payload = Buffer.alloc(2 * 1024 * 1024, 'test event metadata')
+    const filledDone = sinon.spy()
+    const rejectedDone = sinon.spy()
+
+    assert.strictEqual(request(payload, { gzip: true, headers: {} }, sinon.spy()), true)
+    const compressedLength = pendingRequests[0].data.length
+    request(Buffer.alloc(64 * 1024 * 1024 - compressedLength), {}, filledDone)
+    request(Buffer.alloc(1), {}, rejectedDone)
+
+    sinon.assert.notCalled(filledDone)
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE')
+    pendingRequests[1].callback(null, 'ok', 202, {})
+    pendingRequests[0].callback(null, 'ok', 202, {})
+    sinon.assert.calledOnceWithExactly(filledDone, null, 'ok', 202, {})
+  })
+
   it('keeps an opted-in payload uncompressed below 1024 bytes and compresses at 1024 bytes', () => {
     const belowThreshold = Buffer.alloc(1023, 'a')
     const atThreshold = Buffer.alloc(1024, 'a')
