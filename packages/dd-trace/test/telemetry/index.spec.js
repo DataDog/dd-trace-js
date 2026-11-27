@@ -38,6 +38,7 @@ describe('telemetry (proxy)', () => {
       start () {},
       updateIntegrations () {},
       updateConfig () {},
+      updateProfilerEnabled () {},
       appClosing () {},
       flush () {},
     })
@@ -66,6 +67,20 @@ describe('telemetry (proxy)', () => {
     sinon.assert.called(telemetry.updateConfig)
     sinon.assert.called(telemetry.appClosing)
     sinon.assert.called(telemetry.flush)
+  })
+
+  it('does not report the profiler state before telemetry is loaded', () => {
+    proxy.updateProfilerEnabled(true)
+    sinon.assert.notCalled(telemetry.updateProfilerEnabled)
+  })
+
+  it('should proxy the profiler state once telemetry is started', () => {
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
+
+    proxy.start(config)
+    proxy.updateProfilerEnabled(true)
+
+    sinon.assert.calledOnceWithExactly(telemetry.updateProfilerEnabled, true)
   })
 
   it('should proxy when enabled from updateConfig', () => {
@@ -410,6 +425,159 @@ describe('telemetry app-heartbeat', () => {
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 2)
     done()
+  })
+})
+
+describe('Telemetry profiler product', () => {
+  let clock
+  let requests
+  let failNextRequest
+  let telemetry
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    })
+    requests = []
+    failNextRequest = false
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        },
+      },
+      './send-data': {
+        sendData (config, application, host, reqType, payload, cb) {
+          requests.push({ reqType, payload })
+          const error = failNextRequest ? new Error('agent unavailable') : undefined
+          failNextRequest = false
+          cb?.(error, { reqType, payload })
+        },
+      },
+    })
+  })
+
+  afterEach(() => {
+    clock.restore()
+  })
+
+  /**
+   * @param {string} profilingEnabled - DD_PROFILING_ENABLED
+   * @param {boolean} [telemetryEnabled]
+   */
+  function start (profilingEnabled, telemetryEnabled = true) {
+    telemetry.start({
+      telemetry: {
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: telemetryEnabled,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { DD_APPSEC_ENABLED: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: profilingEnabled },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
+      env: 'preprod',
+      tags: { 'runtime-id': '1a2b3c' },
+    }, { _pluginsByName: {} })
+  }
+
+  /**
+   * @param {string} reqType
+   */
+  function sent (reqType) {
+    return requests.filter(request => request.reqType === reqType).map(request => request.payload)
+  }
+
+  /**
+   * @param {boolean} enabled
+   */
+  function productChange (enabled) {
+    return { products: { profiler: { version: tracerVersion, enabled } } }
+  }
+
+  /** @type {Array<[string, boolean]>} */
+  const appStartedCases = [['true', true], ['auto', false], ['false', false]]
+  for (const [profilingEnabled, expected] of appStartedCases) {
+    it(`reports DD_PROFILING_ENABLED=${profilingEnabled} as enabled: ${expected} in app-started`, () => {
+      start(profilingEnabled)
+
+      assert.strictEqual(sent('app-started')[0].products.profiler.enabled, expected)
+    })
+  }
+
+  it('sends app-product-change when the profiler state changes after app-started', () => {
+    start('auto')
+
+    telemetry.updateProfilerEnabled(true)
+    telemetry.updateProfilerEnabled(true)
+    telemetry.updateProfilerEnabled(false)
+
+    assert.deepStrictEqual(sent('app-product-change'), [productChange(true), productChange(false)])
+  })
+
+  it('does not send app-product-change for the state that app-started reported', () => {
+    start('true')
+
+    telemetry.updateProfilerEnabled(true)
+
+    assert.deepStrictEqual(sent('app-product-change'), [])
+  })
+
+  it('reports a state received before app-started in app-started', () => {
+    telemetry.updateProfilerEnabled(true)
+    start('auto')
+
+    assert.strictEqual(sent('app-started')[0].products.profiler.enabled, true)
+    assert.deepStrictEqual(sent('app-product-change'), [])
+  })
+
+  it('reports the current profiler state in the extended heartbeat', () => {
+    start('auto')
+    telemetry.updateProfilerEnabled(true)
+
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
+
+    assert.strictEqual(sent('app-extended-heartbeat')[0].products.profiler.enabled, true)
+  })
+
+  it('sends a profiler change in place of a pending retry of an outdated one', () => {
+    start('auto')
+    failNextRequest = true
+    telemetry.updateProfilerEnabled(true)
+
+    telemetry.updateProfilerEnabled(false)
+
+    assert.deepStrictEqual(requests.at(-1), { reqType: 'app-product-change', payload: productChange(false) })
+  })
+
+  it('still batches a pending retry of another request with a profiler change', () => {
+    start('auto')
+    const configuration = [{ name: 'DD_TRACE_SAMPLE_RATE', value: 0.5, origin: 'remote_config', seq_id: 1 }]
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
+    telemetry.updateConfig(configuration, config)
+    failNextRequest = true
+    telemetry.updateConfig(configuration, config)
+
+    telemetry.updateProfilerEnabled(true)
+
+    assert.deepStrictEqual(requests.at(-1), {
+      reqType: 'message-batch',
+      payload: [
+        { request_type: 'app-product-change', payload: productChange(true) },
+        { request_type: 'app-client-configuration-change', payload: { configuration } },
+      ],
+    })
+  })
+
+  it('does not send app-product-change when telemetry is disabled', () => {
+    start('auto', false)
+
+    telemetry.updateProfilerEnabled(true)
+
+    assert.deepStrictEqual(requests, [])
   })
 })
 

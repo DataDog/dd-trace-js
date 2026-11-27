@@ -303,6 +303,7 @@ class Profiler extends EventEmitter {
       return false
     }
 
+    this.emit('enabledChanged')
     return true
   }
 
@@ -353,6 +354,8 @@ class Profiler extends EventEmitter {
     if (!this.enabled) return
 
     this.#enabled = false
+    // Also emitted when the profiler stops itself, e.g. after a failed collection.
+    this.emit('enabledChanged')
 
     if (this.#spanFinishListener !== undefined) {
       spanFinishedChannel.unsubscribe(this.#spanFinishListener)
