@@ -3,7 +3,7 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 const { SAMPLING_INTERVAL } = require('../constants')
-const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
+const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL } = require('./shared')
 const PoissonProcessSamplingFilter = require('./poisson')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
@@ -483,7 +483,7 @@ class EventsProfiler {
    * @param {Date} endDate
    * @returns {CapturedProfile}
    */
-  profile (restart, startDate, endDate) {
+  capture (restart, startDate, endDate) {
     if (!restart) {
       this.stop()
     }
@@ -505,16 +505,6 @@ class EventsProfiler {
     return {
       maxSamples: this.#maxSamples,
     }
-  }
-
-  /**
-   * @param {CapturedProfile} profile
-   */
-  encode (profile) {
-    const { PprofProfileBuilder } = require('@datadog/pprof')
-    const builder = new PprofProfileBuilder(this.pprofBuilderOptions)
-    profile.visit(builder.visitor())
-    return encodeProfileAsync(builder.build())
   }
 }
 

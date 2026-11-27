@@ -40,16 +40,14 @@ function makeWall (Cls, {
 describe('profilers/native/wall', () => {
   let NativeWallProfiler
   let pprof
-  let profile0
+  let captured0
 
   beforeEach(() => {
-    profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
-    }
+    captured0 = { visit: sinon.stub().returns({ hasMissingMapFiles: false }) }
     pprof = {
       time: {
         start: sinon.stub(),
-        stop: sinon.stub().returns(profile0),
+        stopAndCapture: sinon.stub().returns(captured0),
         setContext: sinon.stub(),
         getContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
@@ -141,7 +139,7 @@ describe('profilers/native/wall', () => {
 
     profiler.stop()
 
-    sinon.assert.notCalled(pprof.time.stop)
+    sinon.assert.notCalled(pprof.time.stopAndCapture)
   })
 
   it('should stop the internal time profiler', () => {
@@ -150,7 +148,7 @@ describe('profilers/native/wall', () => {
     profiler.start()
     profiler.stop()
 
-    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.stopAndCapture)
   })
 
   it('should stop the internal time profiler only once', () => {
@@ -160,7 +158,7 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     profiler.stop()
 
-    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.stopAndCapture)
   })
 
   for (const asyncContextFrameEnabled of [true, false]) {
@@ -173,10 +171,10 @@ describe('profilers/native/wall', () => {
       // run() needs separate instrumentation only when the runtime doesn't use ACF.
       assert.strictEqual(Object.hasOwn(legacyStorage, 'run'), !isACFActive)
 
-      profiler.profile(true)
+      profiler.capture(true)
       assert.ok(Object.hasOwn(legacyStorage, 'enterWith'))
 
-      profiler.profile(false)
+      profiler.capture(false)
       assert.strictEqual(Object.hasOwn(legacyStorage, 'enterWith'), false)
       assert.strictEqual(Object.hasOwn(legacyStorage, 'run'), false)
 
@@ -223,16 +221,33 @@ describe('profilers/native/wall', () => {
     profiler.start()
     assert.strictEqual(profiler.isStarted(), true)
 
-    const profile = profiler.profile(true)
+    const profile = profiler.capture(true)
 
-    assert.strictEqual(profile, profile0)
+    assert.strictEqual(profile, captured0)
 
-    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.stopAndCapture)
     sinon.assert.calledOnce(pprof.time.start)
     assert.strictEqual(profiler.isStarted(), true)
     profiler.stop()
     assert.strictEqual(profiler.isStarted(), false)
-    sinon.assert.calledTwice(pprof.time.stop)
+    sinon.assert.calledTwice(pprof.time.stopAndCapture)
+  })
+
+  it('should capture pprof profiles with pprof labels', () => {
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true })
+    profiler.start()
+
+    profiler.capture(true)
+
+    const options = pprof.time.stopAndCapture.firstCall.args[1]
+    assert.strictEqual(options.samplePerContext, undefined)
+    const context = { timestamp: 1234n, context: { ref: { spanId: 42n } } }
+    const labels = options.generateLabels({ node: {}, context })
+    assert.strictEqual(labels['span id'], 42n)
+    // The timeline's sample time is a label
+    assert.strictEqual(labels.end_timestamp_ns, 1234000n)
+
+    profiler.capture(false)
   })
 
   it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {
@@ -240,15 +255,15 @@ describe('profilers/native/wall', () => {
 
     profiler.start()
 
-    const profile = profiler.profile(false)
+    const profile = profiler.capture(false)
 
-    assert.strictEqual(profile, profile0)
+    assert.strictEqual(profile, captured0)
 
-    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.stopAndCapture)
     sinon.assert.calledOnce(pprof.time.start)
     assert.strictEqual(profiler.isStarted(), false)
     profiler.stop()
-    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.stopAndCapture)
   })
 
   it('should publish v8 bug warning to the central log warn channel', () => {
@@ -261,7 +276,7 @@ describe('profilers/native/wall', () => {
     try {
       const profiler = makeWall(NativeWallProfiler)
       profiler.start()
-      profiler.profile(true)
+      profiler.capture(true)
       profiler.stop()
 
       assert.ok(
@@ -273,18 +288,14 @@ describe('profilers/native/wall', () => {
     }
   })
 
-  it('should encode profiles calling their encodeAsync method', () => {
+  it('should build pprof profiles with low-cardinality labels and columns for unminification', () => {
     const profiler = makeWall(NativeWallProfiler)
+    profiler.setCustomLabelKeys(['customer'])
 
-    profiler.start()
-
-    const profile = profiler.profile(true)
-
-    profiler.encode(profile)
-
-    profiler.stop()
-
-    sinon.assert.calledOnce(profile0.encodeAsync)
+    assert.deepStrictEqual(profiler.pprofBuilderOptions, {
+      lowCardinalityLabels: ['thread name', 'thread id', 'os thread id', 'trace endpoint', 'customer'],
+      columnNumbers: 'emit',
+    })
   })
 
   it('should use mapper if given', () => {

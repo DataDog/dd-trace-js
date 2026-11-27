@@ -18,6 +18,7 @@ require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
+const { encodeProfileAsync } = require('../../../src/profiling/profilers/shared')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
 const processTags = require('../../../src/process-tags')
@@ -68,8 +69,12 @@ async function createProfile (periodType) {
 
   await wait(50)
 
-  const profile = profiler.profile(false)
-  return profiler.encode(profile)
+  // Build and encode the pprof profile as the profiler does
+  const captured = /** @type {import('@datadog/pprof').CapturedProfile} */ (profiler.capture(false))
+  const { PprofProfileBuilder } = require('@datadog/pprof')
+  const builder = new PprofProfileBuilder(profiler.pprofBuilderOptions)
+  captured.visit(builder.visitor())
+  return encodeProfileAsync(builder.build())
 }
 
 async function createProfiles () {

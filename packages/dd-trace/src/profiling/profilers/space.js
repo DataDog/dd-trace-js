@@ -5,9 +5,10 @@ const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
-const { encodeProfileAsync, getThreadLabels } = require('./shared')
+const { getThreadLabels } = require('./shared')
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
+/** @typedef {import('@datadog/pprof').CapturedProfile} CapturedProfile */
 /**
  * @typedef {import('../exporters/agent').AgentExporter
  *   | import('../exporters/file').FileExporter} ProfilingExporter
@@ -81,19 +82,32 @@ class NativeSpaceProfiler {
     this.#started = true
   }
 
-  profile (restart) {
-    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels, 'emit')
+  /**
+   * @param {boolean} restart
+   * @returns {CapturedProfile}
+   */
+  capture (restart) {
+    const captured = this.#pprof.heap.capture({
+      sourceMapper: this.#mapper,
+      generateLabels: getThreadLabels,
+    })
     if (!restart) {
       this.stop()
     }
-    return profile
+    return captured
+  }
+
+  /**
+   * How pprof profiles of the captured profiles are built: frames carry their column only for server-side
+   * unminification.
+   *
+   * @returns {import('@datadog/pprof').PprofSerializerOptions}
+   */
+  get pprofBuilderOptions () {
+    return { columnNumbers: 'emit' }
   }
 
   getInfo () {}
-
-  encode (profile) {
-    return encodeProfileAsync(profile)
-  }
 
   stop () {
     if (!this.#started) return
