@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
+const path = require('node:path')
 
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -1077,6 +1078,178 @@ describe('Telemetry retry', () => {
         ],
       }],
     })
+  })
+})
+
+describe('Telemetry dependency metadata', () => {
+  const HEARTBEAT_INTERVAL = 60000
+  // A private channel keeps the dependencies instance shared with other suites out of these tests.
+  const moduleLoadStartChannel = dc.channel('test:telemetry:dependency-metadata:moduleLoadStart')
+  const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
+  const registered = { type: 'reachability', value: '{"id":"GHSA-35jh-r3h4-6jhm","reached":[]}' }
+  const reached = {
+    type: 'reachability',
+    value: '{"id":"GHSA-35jh-r3h4-6jhm","reached":[{"path":"app.js","symbol":"render","line":3}]}',
+  }
+  let telemetry
+  let dependencies
+  let requirePackageJson
+  let requests
+  let failRequests
+  let clock
+
+  function nextImmediate () {
+    return new Promise(resolve => setImmediate(resolve))
+  }
+
+  function loadModule (request) {
+    const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+    moduleLoadStartChannel.publish({ request, filename })
+  }
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    })
+    requests = []
+    failRequests = false
+    const sendDataStub = {
+      sendData (config, application, host, reqType, payload, cb = () => {}) {
+        requests.push({ reqType, payload })
+        if (failRequests) {
+          cb(new Error('HTTP request error'), { payload, reqType })
+        } else {
+          cb()
+        }
+      },
+    }
+    requirePackageJson = sinon.stub().throws(new Error('no package.json'))
+    dependencies = proxyquire('../../src/telemetry/dependencies', {
+      'dc-polyfill': { channel: () => moduleLoadStartChannel },
+      './send-data': sendDataStub,
+      '../require-package-json': requirePackageJson,
+    })
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        },
+      },
+      './dependencies': dependencies,
+      './send-data': sendDataStub,
+    })
+
+    telemetry.start({
+      telemetry: {
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c',
+      },
+    }, {
+      _pluginsByName: {},
+    })
+
+    // force first publish to load cached requires
+    moduleLoadStartChannel.publish({})
+    requirePackageJson.returns({ version: '1.0.0' })
+  })
+
+  afterEach(() => {
+    dependencies.stop()
+    clock.restore()
+  })
+
+  it('should retry a failed dependency payload with the current metadata', async () => {
+    failRequests = true
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+    await nextImmediate()
+
+    failRequests = false
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [reached])
+    await nextImmediate()
+
+    const current = { dependencies: [{ name: 'custom-module', version: '1.0.0', metadata: [reached] }] }
+    assert.deepStrictEqual(requests.at(-1), {
+      reqType: 'message-batch',
+      payload: [
+        { request_type: 'app-dependencies-loaded', payload: current },
+        { request_type: 'app-dependencies-loaded', payload: current },
+      ],
+    })
+  })
+
+  it('should retry a failed dependency payload with the current metadata on the next heartbeat', async () => {
+    failRequests = true
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+    await nextImmediate()
+
+    failRequests = false
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [reached])
+    clock.tick(HEARTBEAT_INTERVAL)
+
+    assert.deepStrictEqual(requests.at(-1), {
+      reqType: 'message-batch',
+      payload: [
+        { request_type: 'app-heartbeat', payload: {} },
+        {
+          request_type: 'app-dependencies-loaded',
+          payload: { dependencies: [{ name: 'custom-module', version: '1.0.0', metadata: [reached] }] },
+        },
+      ],
+    })
+  })
+
+  it('should send failed dependencies and every dependency with metadata in the extended heartbeat', async () => {
+    failRequests = true
+    loadModule('plain-module')
+    await nextImmediate()
+    // Moves the failed retry of plain-module to the extended heartbeat.
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+    await nextImmediate()
+    // Moves the failed retry of custom-module, with its metadata at that time, to the extended heartbeat.
+    loadModule('another-module')
+    await nextImmediate()
+
+    failRequests = false
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [reached])
+    await nextImmediate()
+    dependencies.setDependencyMetadata('other-module', '2.0.0', [registered])
+    await nextImmediate()
+
+    clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
+
+    const extendedHeartbeat = requests.find(({ reqType }) => reqType === 'app-extended-heartbeat')
+    assert.deepStrictEqual(extendedHeartbeat.payload.dependencies, [
+      { name: 'plain-module', version: '1.0.0' },
+      { name: 'custom-module', version: '1.0.0', metadata: [reached] },
+      { name: 'other-module', version: '2.0.0', metadata: [registered] },
+    ])
+  })
+
+  it('should send pending dependencies before app-closing', async () => {
+    dependencies.setDependencyMetadata('custom-module', '1.0.0', [reached])
+    telemetry.appClosing()
+    await nextImmediate()
+
+    assert.deepStrictEqual(requests.slice(1), [
+      {
+        reqType: 'app-dependencies-loaded',
+        payload: { dependencies: [{ name: 'custom-module', version: '1.0.0', metadata: [reached] }] },
+      },
+      { reqType: 'app-closing', payload: {} },
+    ])
   })
 })
 

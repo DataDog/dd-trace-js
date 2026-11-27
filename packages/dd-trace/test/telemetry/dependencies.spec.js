@@ -15,7 +15,8 @@ const originalSetImmediate = global.setImmediate
 
 describe('dependencies', () => {
   function setImmediate2 (callback, ...args) {
-    return callback(...args)
+    callback(...args)
+    return { unref () {} }
   }
 
   setImmediate2.__promisify__ = function (...args) {
@@ -530,6 +531,124 @@ describe('dependencies', () => {
       sinon.assert.calledTwice(getRetryData)
       assert.strictEqual(capturedRequestType, 'message-batch')
       sinon.assert.calledTwice(updateRetryData)
+    })
+  })
+
+  describe('metadata', () => {
+    const application = 'test'
+    const host = 'host'
+    const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
+    const registered = { type: 'reachability', value: '{"id":"GHSA-35jh-r3h4-6jhm","reached":[]}' }
+    const reached = {
+      type: 'reachability',
+      value: '{"id":"GHSA-35jh-r3h4-6jhm","reached":[{"path":"app.js","symbol":"render","line":3}]}',
+    }
+    let dependencies
+    let sendData
+    let requirePackageJson
+
+    function start (collectionEnabled = true) {
+      const config = { telemetry: { DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED: collectionEnabled } }
+      dependencies.start(config, application, host, sinon.stub(), sinon.stub())
+      // force first publish to load cached requires
+      moduleLoadStartChannel.publish({})
+      requirePackageJson.returns({ version: '1.0.0' })
+    }
+
+    function loadModule (request) {
+      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename })
+    }
+
+    function sentDependencies () {
+      return sendData.getCalls().map(call => call.args[4].dependencies)
+    }
+
+    beforeEach(() => {
+      requirePackageJson = sinon.stub()
+      sendData = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './send-data': { sendData },
+        '../require-package-json': requirePackageJson,
+      })
+      global.setImmediate = setImmediate2
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      global.setImmediate = originalSetImmediate
+    })
+
+    it('should not report metadata until it is enabled', () => {
+      start()
+      loadModule('custom-module')
+
+      assert.deepStrictEqual(sentDependencies(), [[{ name: 'custom-module', version: '1.0.0' }]])
+    })
+
+    it('should report empty metadata once it is enabled', () => {
+      dependencies.enableMetadata()
+      start()
+      loadModule('custom-module')
+
+      assert.deepStrictEqual(sentDependencies(), [[{ name: 'custom-module', version: '1.0.0', metadata: [] }]])
+    })
+
+    it('should send only the updated dependency, with its complete current metadata', () => {
+      dependencies.enableMetadata()
+      start()
+      loadModule('custom-module')
+      loadModule('other-module')
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', [reached])
+
+      assert.deepStrictEqual(sentDependencies(), [
+        [{ name: 'custom-module', version: '1.0.0', metadata: [] }],
+        [{ name: 'other-module', version: '1.0.0', metadata: [] }],
+        [{ name: 'custom-module', version: '1.0.0', metadata: [registered] }],
+        [{ name: 'custom-module', version: '1.0.0', metadata: [reached] }],
+      ])
+    })
+
+    it('should keep the metadata of a dependency detected after its metadata was set', () => {
+      dependencies.enableMetadata()
+      start()
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+      loadModule('custom-module')
+
+      assert.deepStrictEqual(sentDependencies(), [
+        [{ name: 'custom-module', version: '1.0.0', metadata: [registered] }],
+        [{ name: 'custom-module', version: '1.0.0', metadata: [registered] }],
+      ])
+    })
+
+    it('should send at most 100 metadata entries per dependency', () => {
+      const metadata = Array.from({ length: 101 }, (_, index) => ({ type: 'reachability', value: String(index) }))
+      start()
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', metadata.slice(0, 100))
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', metadata)
+
+      const [[accepted], [truncated]] = sentDependencies()
+      assert.deepStrictEqual(accepted.metadata, metadata.slice(0, 100))
+      assert.deepStrictEqual(truncated.metadata, metadata.slice(0, 100))
+    })
+
+    it('should not report metadata when dependency collection is disabled', () => {
+      dependencies.enableMetadata()
+      start(false)
+      // Dependencies from the initial load are sent even when collection is disabled.
+      loadModule('custom-module')
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+
+      assert.deepStrictEqual(sentDependencies(), [[{ name: 'custom-module', version: '1.0.0' }]])
+    })
+
+    it('should ignore metadata set before start', () => {
+      dependencies.setDependencyMetadata('custom-module', '1.0.0', [registered])
+      start()
+      loadModule('custom-module')
+
+      assert.deepStrictEqual(sentDependencies(), [[{ name: 'custom-module', version: '1.0.0' }]])
     })
   })
 })
