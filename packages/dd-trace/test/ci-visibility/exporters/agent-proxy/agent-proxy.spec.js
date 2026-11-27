@@ -2,7 +2,9 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+const { gunzipSync } = require('node:zlib')
 
+const msgpack = require('@msgpack/msgpack')
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
@@ -18,6 +20,7 @@ const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
+const id = require('../../../../src/id')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
 
 // The real tracer Config always carries a `testOptimization` namespace object.
@@ -584,6 +587,68 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       assert.strictEqual(agentProxyCiVisibilityExporter._isGzipCompatible, false)
       assert.strictEqual(scope.isDone(), true)
+    })
+
+    // Long enough for the test-cycle payload to pass the gzip size threshold.
+    const testName = 'test name '.repeat(200)
+
+    /**
+     * Sends one test event through the test-cycle writer that the exporter creates for the advertised endpoints.
+     *
+     * @param {string[]} endpoints
+     * @param {string} evpProxyPrefix
+     * @returns {Promise<{ body: string, headers: import('node:http').IncomingHttpHeaders }>}
+     */
+    async function sendTestCyclePayload (endpoints, evpProxyPrefix) {
+      let intakeRequest
+      const scope = nock(url)
+        .get('/info')
+        .reply(200, JSON.stringify({ endpoints }))
+        .post(`${evpProxyPrefix}/api/v2/citestcycle`)
+        .reply(function (_, body) {
+          intakeRequest = { body, headers: this.req.headers }
+          return [202, '{}']
+        })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, tags })
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      const writer = agentProxyCiVisibilityExporter._writer
+      writer.append([{
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('0'),
+        name: 'test',
+        resource: 'test-r',
+        service: 'test-s',
+        type: 'test',
+        error: 0,
+        meta: { 'test.name': testName },
+        metrics: {},
+        start: 123,
+        duration: 456,
+      }])
+      await new Promise((resolve, reject) => writer.flush(error => error ? reject(error) : resolve()))
+
+      assert.strictEqual(scope.isDone(), true)
+      return intakeRequest
+    }
+
+    it('gzips test-cycle payloads sent through EVP proxy v4', async () => {
+      const { body, headers } = await sendTestCyclePayload(
+        ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/'],
+        '/evp_proxy/v4'
+      )
+
+      assert.strictEqual(headers['content-encoding'], 'gzip')
+      // Nock passes a binary request body as hex.
+      const payload = msgpack.decode(gunzipSync(Buffer.from(body, 'hex')), { useBigInt64: true })
+      assert.strictEqual(payload.events[0].content.meta['test.name'], testName)
+    })
+
+    it('sends uncompressed test-cycle payloads through EVP proxy versions before v4', async () => {
+      const { headers } = await sendTestCyclePayload(['/evp_proxy/v2', '/evp_proxy/v3'], '/evp_proxy/v2')
+
+      assert.strictEqual(headers['content-encoding'], undefined)
     })
   })
 

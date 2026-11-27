@@ -83,6 +83,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           tags,
           evpProxyPrefix,
+          isGzipCompatible: this._isGzipCompatible,
         })
         this._coverageWriter = new CoverageWriter({
           url: this._url,
