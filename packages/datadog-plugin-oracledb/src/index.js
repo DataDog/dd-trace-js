@@ -1,54 +1,28 @@
 'use strict'
 
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const PoolAcquirePlugin = require('./pool-acquire')
+const QueryPlugin = require('./query')
 
-let parser
-
-class OracledbPlugin extends DatabasePlugin {
+class OracledbPlugin extends CompositePlugin {
   static id = 'oracledb'
-  static system = 'oracle'
-  static peerServicePrecursors = ['db.instance', 'db.hostname']
 
-  bindStart (ctx) {
-    let { query, connAttrs, port, hostname, dbInstance } = ctx
+  static plugins = {
+    query: QueryPlugin,
+    poolAcquire: PoolAcquirePlugin,
+  }
 
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
-
-    if (hostname === undefined) {
-      // Lazy load for performance. This is not needed in v6 and up
-      parser ??= require('./connection-parser')
-      const dbInfo = parser(connAttrs)
-      hostname = dbInfo.hostname
-      port ??= dbInfo.port
-      dbInstance ??= dbInfo.dbInstance
+  /**
+   * @override
+   * @param {import('../../dd-trace/src/config/config-base') & { enabled: boolean }} config
+   */
+  configure (config) {
+    // The query child is an implementation boundary, not a separate public option.
+    const normalized = {
+      ...config,
+      query: undefined,
     }
-
-    // oracledb >= 6.4 accepts `execute({ statement, values })` (sql-template-tag form)
-    // in addition to a plain SQL string. Extract the SQL text either way so we can tag
-    // the resource and inject DBM into the statement, then re-wrap if needed to keep
-    // the caller's binds.
-    const sql = query?.statement ?? query
-
-    const span = this.startSpan(this.operationName(), {
-      service,
-      resource: sql,
-      type: 'sql',
-      kind: 'client',
-      meta: {
-        'db.user': this.config.user,
-        'db.instance': dbInstance,
-        'db.name': dbInstance,
-        'db.hostname': hostname,
-        'out.host': hostname,
-        [CLIENT_PORT_KEY]: port,
-      },
-    }, ctx)
-
-    const injected = this.injectDbmQuery(span, sql, service.name)
-    ctx.injected = query?.statement ? { ...query, statement: injected } : injected
-
-    return ctx.currentStore
+    return super.configure(normalized)
   }
 }
 

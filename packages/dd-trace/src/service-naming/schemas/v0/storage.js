@@ -143,7 +143,7 @@ const storage = {
       },
     },
     oracledb: {
-      opName: () => 'oracle.query',
+      opName: ({ operation = 'query' }) => `oracle.${operation}`,
       serviceName: withSuffixFunction('oracle'),
       serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
         return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'oracledb' })
