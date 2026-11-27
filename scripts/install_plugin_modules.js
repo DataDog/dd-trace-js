@@ -10,7 +10,7 @@ const { join } = require('path')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 
-const { externals, fixtures } = require('../packages/dd-trace/test/plugins/externals')
+const externals = require('../packages/dd-trace/test/plugins/externals')
 const {
   getInstrumentation,
   getInstrumentationNames,
@@ -72,11 +72,10 @@ async function run () {
 
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
-  const fixtureNames = process.argv.slice(2)
 
   const moduleNames = getInstrumentationNames().filter(name => !filter || filter.includes(name))
 
-  const packages = collectPackages(moduleNames, fixtureNames)
+  const packages = collectPackages(moduleNames)
 
   applyExternalConfiguration(moduleNames, packages)
   await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
@@ -115,10 +114,9 @@ function applyExternalConfiguration (moduleNames, packages) {
  * the instrumentation declaration wins for any shared folder.
  *
  * @param {string[]} moduleNames
- * @param {string[]} fixtureNames
  * @returns {Array<{ name: string, version: string|null, range: string }>}
  */
-function collectPackages (moduleNames, fixtureNames) {
+function collectPackages (moduleNames) {
   const seen = new Set()
   /** @type {Array<{ name: string, version: string|null, range: string }>} */
   const packages = []
@@ -179,14 +177,28 @@ function collectPackages (moduleNames, fixtureNames) {
 
   for (const name of Object.keys(externals)) {
     if (!moduleNames.includes(name)) continue
-    addInstrumentations(externals[name], true, name)
-  }
+    const declarations = externals[name]
+    addInstrumentations(declarations.filter(declaration => !declaration.integrationOnly), true, name)
 
-  for (const name of fixtureNames) {
-    if (!Object.hasOwn(fixtures, name)) {
-      throw new Error(`Unknown plugin test fixture: "${name}"`)
+    if (process.env.DD_TEST_PLUGIN_INTEGRATION === '0') {
+      continue
     }
-    addFolder(name, 'fixture', fixtures[name].range)
+
+    const integrationDependencies = declarations.filter(declaration => declaration.integrationOnly)
+    if (integrationDependencies.length === 0) {
+      continue
+    }
+
+    const { globSync } = require('glob')
+    const spec = process.env.SPEC || '*'
+    const pattern = `packages/datadog-plugin-${name}/test/integration-test/**/${spec}*.spec.js`
+    const specs = globSync(pattern, { cwd: join(__dirname, '..'), nodir: true, windowsPathsNoEscape: true })
+    if (specs.length > 0) {
+      // These dependencies are shared by the selected SDK versions.
+      for (const { name, version } of integrationDependencies) {
+        addFolder(name, null, version)
+      }
+    }
   }
 
   return packages

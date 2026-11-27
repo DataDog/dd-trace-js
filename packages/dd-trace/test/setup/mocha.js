@@ -15,7 +15,7 @@ require('./core')
 
 const { engines, nodeMaxMajor } = require('../../../../package.json')
 
-const { externals } = require('../plugins/externals')
+const externals = require('../plugins/externals')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')

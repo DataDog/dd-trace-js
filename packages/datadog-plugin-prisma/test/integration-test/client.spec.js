@@ -20,7 +20,7 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { externals } = require('../../../dd-trace/test/plugins/externals')
+const externals = require('../../../dd-trace/test/plugins/externals')
 const waitForMongoReplicaSet = require('../../../dd-trace/test/setup/services/mongo-replica-set')
 const waitForMssql = require('../../../dd-trace/test/setup/services/mssql')
 const {

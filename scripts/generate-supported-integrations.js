@@ -215,7 +215,7 @@ function readInstrumentations (nodeVersions) {
  * @param {Map<string, string>} [aliases]
  */
 function addPackageAliases (plugins, instrumentations, aliases = PACKAGE_ALIASES) {
-  const { externals } = require(TEST_EXTERNALS)
+  const externals = require(TEST_EXTERNALS)
   const integrations = new Set(plugins.values())
 
   for (const [dependency, integration] of aliases) {
@@ -493,7 +493,7 @@ function readTestDeclarations (dependency, integration, plugins) {
     if (plugin === integration) names.add(name)
   }
 
-  const { externals } = require(TEST_EXTERNALS)
+  const externals = require(TEST_EXTERNALS)
   const declarations = []
   for (const name of names) {
     if (externals[name]) {

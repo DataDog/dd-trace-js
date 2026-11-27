@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 const { coerce, major, maxSatisfying } = require('semver')
 
 const { getInstrumentation } = require('../setup/helpers/load-inst')
-const { externals } = require('./externals')
+const externals = require('./externals')
 const {
   brokenVersionReason,
   getVersionList,
