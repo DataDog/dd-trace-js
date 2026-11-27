@@ -180,7 +180,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
       this.addSub('tracing:orchestrion:graphql:apm:graphql:execution-context:end', rememberExecutionContext)
       this.addSub(
         'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execution-context:end',
-        rememberExecutionContext
+        context => {
+          const subscription = context.subscription
+          if (subscription) {
+            const { variables, hooks } = this.config
+            const variableValues = variables || hooks.execute ? context.rawVariableValues : undefined
+            subscriptionInputs.set(subscription, { document: context.document, variableValues })
+          }
+          rememberExecutionContext(context)
+        }
       )
     }
 
@@ -438,7 +446,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     } else if (rootCtx?.jitResolveHooksPending === true) {
       runResolveHooks(rootCtx)
     }
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+    this.config.hooks.execute?.(span, ctx.ddArgs, res)
     if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
@@ -1478,15 +1486,11 @@ function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolve
  * @param {{
  *   fieldResolver: GraphQLFieldResolver,
  *   executionKey: object,
- *   legacyExecutionKey?: object,
- *   subscription?: object,
- *   document?: import('graphql').DocumentNode,
- *   rawVariableValues?: ExecutionArguments['variableValues']
+ *   legacyExecutionKey?: object
  * }} context
  */
 function rememberExecutionContext (context) {
-  const { fieldResolver, executionKey, legacyExecutionKey, subscription, document, rawVariableValues } = context
-  if (subscription) subscriptionInputs.set(subscription, { document, variableValues: rawVariableValues })
+  const { fieldResolver, executionKey, legacyExecutionKey } = context
   const store = legacyStorage.getStore()
   const rootCtx = store?.graphqlRootCtx
   const preparedResolver = rootCtx?.preparedArgs?.fieldResolver

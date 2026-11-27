@@ -81,6 +81,65 @@ describe('GraphQL incremental execution', () => {
       }, false)
     })
 
+    for (const captureVariables of [false, true]) {
+      const description = captureVariables
+        ? 'preserves raw subscription variables for a variable filter'
+        : 'releases raw subscription variables without a configured reader'
+      it(description, async function () {
+        if (!global.gc) {
+          this.skip()
+        }
+
+        const tracer = require('../../dd-trace')
+        const schema = graphql.buildSchema(
+          'type Query { unused: String } type Subscription { event(label: String): String }'
+        )
+        const field = schema.getSubscriptionType().getFields().event
+        field.subscribe = async function * () {
+          yield 'event'
+        }
+        field.resolve = (payload, args) => args.label
+        const document = graphql.parse('subscription ($label: String) { event(label: $label) }')
+        const filterInputs = []
+        const filter = variables => {
+          filterInputs.push(variables)
+          return variables
+        }
+
+        function openSubscription () {
+          const variableValues = { label: 'delivery' }
+          return {
+            stream: subscribe({ schema, document, variableValues }),
+            variablesRef: new WeakRef(variableValues),
+          }
+        }
+
+        tracer.use('graphql', captureVariables ? { depth: 0, variables: filter } : {})
+        let stream
+        try {
+          const subscription = openSubscription()
+          stream = subscription.stream
+          for (let index = 0; index < 5; index++) {
+            await immediate()
+            global.gc()
+          }
+          if (!captureVariables) {
+            assert.strictEqual(subscription.variablesRef.deref(), undefined)
+          }
+
+          const event = await stream.next()
+          assert.strictEqual(event.value.data.event, 'delivery')
+          if (captureVariables) {
+            assert.strictEqual(filterInputs.length, 1)
+            assert.strictEqual(filterInputs[0], subscription.variablesRef.deref())
+          }
+        } finally {
+          tracer.use('graphql', {})
+          await stream?.return()
+        }
+      })
+    }
+
     for (const asyncSetup of [false, true]) {
       const setup = asyncSetup ? 'asynchronous' : 'synchronous'
       it(`checks each GraphQL Tools subscribe delivery after ${setup} setup`, () => {
