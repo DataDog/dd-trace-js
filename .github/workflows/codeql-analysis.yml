@@ -57,34 +57,43 @@ jobs:
           CODEQL_TOKEN: ${{ github.event_name == 'push' && steps.octo-sts.outputs.token || '' }}
         shell: bash
         run: |
+          # Early exits leave skip unset so CodeQL still runs.
+
+          # The shallow checkout can omit older push tips and completed analysis commits.
           fetch_commit() {
             git cat-file -e "$1^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$1"
           }
 
+          # Treat renames as a deletion and an addition so either path can require a scan.
           no_changes_in_scope() {
             git diff --quiet --no-ext-diff --no-renames --ignore-submodules=none "$1" HEAD -- "${pathspecs[@]}"
           }
 
+          # The PR merge commit's first parent holds the trusted base branch exclusions.
           base=HEAD^1
           config_ref=$base
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            # Batched pushes can start before the shallow checkout.
+            # A push can span several commits. Compare its previous tip using the scan config at HEAD.
             base=$PUSH_BEFORE
             config_ref=HEAD
             [[ -n "$base" ]] || exit 0
             fetch_commit "$base" || exit 0
           fi
 
+          # Translate the directory patterns that Git and CodeQL share. The trailing /** matches their contents.
           exclusions=$(git show "$config_ref:.github/codeql_config.yml" | yq --exit-status --unwrapScalar '
             .["paths-ignore"][]
             | select(tag == "!!str" and test("^[A-Za-z0-9._-]+(/([A-Za-z0-9._-]+|\\*\\*))*$"))
             | ":(exclude,glob)" + . + "/**"
           ') || exit 0
           mapfile -t pathspecs <<< "$exclusions"
+
+          # Only pushes with no in-scope changes need a baseline lookup.
           no_changes_in_scope "$base" || exit 0
 
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            # A failed scan can leave earlier source changes uncovered.
+            # A failed scan can leave source changes from earlier pushes unscanned.
+            # Reuse only a completed analysis for this workflow, job, and language.
             workflow_path=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY"/}
             workflow_path=${workflow_path%@*}
             analysis_key="$workflow_path:$GITHUB_JOB"
@@ -105,6 +114,7 @@ jobs:
               fetch_commit "$analyzed_sha" || exit 0
               no_changes_in_scope "$analyzed_sha" || exit 0
             fi
+            # Compare the workflow and config directly because paths-ignore can cover .github.
             git diff --quiet --no-ext-diff --no-renames "$analyzed_sha" HEAD -- \
               .github/codeql_config.yml "$workflow_path" || exit 0
           fi
