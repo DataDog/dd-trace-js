@@ -137,7 +137,7 @@
     "connect": "3.7.0",
     "cookie": "2.0.2",
     "cookie-parser": "1.4.7",
-    "couchbase": "4.7.2",
+    "couchbase": "4.8.0",
     "cypress": "16.3.0",
     "cypress-fail-fast": "8.2.0",
     "dd-trace-api": "1.0.1",
