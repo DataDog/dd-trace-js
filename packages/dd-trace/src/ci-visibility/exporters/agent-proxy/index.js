@@ -35,12 +35,11 @@ function getCanForwardDebuggerLogs (err, agentInfo) {
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
-  constructor (config) {
+  constructor (config, prioritySampler) {
     super(config)
 
     const {
       tags,
-      prioritySampler,
       lookup,
       protocolVersion,
       headers,

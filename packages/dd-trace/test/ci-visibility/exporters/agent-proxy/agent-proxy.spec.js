@@ -22,12 +22,13 @@ const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const id = require('../../../../src/id')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
+const log = require('../../../../src/log')
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
 class AgentProxyCiVisibilityExporter extends AgentProxyCiVisibilityExporterBase {
-  constructor (config) {
-    super({ testOptimization: {}, ...config })
+  constructor (config, prioritySampler) {
+    super({ testOptimization: {}, ...config }, prioritySampler)
   }
 }
 
@@ -398,6 +399,49 @@ describe('AgentProxyCiVisibilityExporter', () => {
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       assert.ok(agentProxyCiVisibilityExporter._writer instanceof AgentWriter)
       assert.strictEqual(agentProxyCiVisibilityExporter._coverageWriter, undefined)
+    })
+
+    it('should forward prioritySampler to AgentWriter and update rates on flush', async () => {
+      const rateByService = { 'service:test,env:ci': 0.5 }
+      const tracesScope = nock(url)
+        .put('/v0.4/traces')
+        .reply(200, JSON.stringify({ rate_by_service: rateByService }))
+      const prioritySampler = { update: sinon.spy() }
+      const logErrorSpy = sinon.spy(log, 'error')
+
+      try {
+        const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter(
+          { url, tags, protocolVersion: '0.4' },
+          prioritySampler
+        )
+        await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+        agentProxyCiVisibilityExporter.export([{
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('1234abcd1234abcd'),
+          parent_id: id('1234abcd1234abcd'),
+          name: 'test',
+          resource: 'test-r',
+          service: 'test-s',
+          type: 'test',
+          error: 0,
+          meta: {},
+          metrics: {},
+          start: 123,
+          duration: 456,
+          links: [],
+        }])
+
+        await new Promise((resolve, reject) => {
+          agentProxyCiVisibilityExporter.flush(err => (err ? reject(err) : resolve()))
+        })
+
+        assert.strictEqual(tracesScope.isDone(), true)
+        sinon.assert.calledOnceWithExactly(prioritySampler.update, rateByService)
+        sinon.assert.notCalled(logErrorSpy)
+      } finally {
+        logErrorSpy.restore()
+      }
     })
 
     it('should not process test suite level visibility spans', async () => {
