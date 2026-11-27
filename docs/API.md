@@ -693,11 +693,16 @@ Objects, class instances, and functions contribute their own enumerable properti
 
 For ordinary tags, arrays, symbols, bigint values, nullish values, and object fields beyond the first level are omitted.
 `service.name`, `resource.name`, and `span.type` accept strings. Error metadata tags and `http.status_code` also accept
-primitive values, `Buffer`, and `URL` instances for text conversion; nullish metadata and falsy status values are omitted.
+primitive values, `Buffer`, and `URL` instances for text conversion. The formatter omits nullish metadata and falsy
+status values other than an empty string.
 The `error` tag accepts flags, `Error` instances, and error-shaped values.
 
 Manual sampling tags request a decision for any own value except `false`. Analytics event tags accept flags,
 including numeric values. `sampling.priority` accepts numbers and numeric strings.
+
+In TypeScript, let `trace` and `wrap` infer the options type to check tags. Annotate the `trace` callback's
+return type or pass a typed function to `wrap`. If you supply only the first type argument, TypeScript uses
+the default options type. Supply the concrete options type as the second type argument to check its tags.
 
 <h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
 
