@@ -20,6 +20,7 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  configureDataloaderFastPath,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
@@ -408,6 +409,55 @@ function queryOne (root, selector) {
 
 /**
  * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureDataloaderFastPath (_state, node, _parent, ancestry) {
+  const statement = ancestry.find(ancestor => ancestor.type === 'ExpressionStatement')
+  const block = ancestry.find(ancestor => ancestor.type === 'BlockStatement' && ancestor.body.includes(statement))
+  assert(block, 'configureDataloaderFastPath: expected a block containing the prototype assignments')
+
+  const loadMany = queryOne(
+    block,
+    'AssignmentExpression[left.object.name="_proto"][left.property.name="loadMany"] > FunctionExpression'
+  )
+  const tracedLoadMany = queryOne(
+    loadMany,
+    'CallExpression[callee.property.name="runStores"] CallExpression[callee.name="__apm$traced"]'
+  )
+
+  const scope = parse(`
+    const __apm$activeLoadMany = new Set()
+    function __apm$runLoadMany (loader, loadMany) {
+      if (__apm$activeLoadMany.has(loader)) {
+        return loadMany()
+      }
+      __apm$activeLoadMany.add(loader)
+      try {
+        return loadMany()
+      } finally {
+        __apm$activeLoadMany.delete(loader)
+      }
+    }
+  `).body
+  assert(insertBeforeStatement(block, statement, scope))
+
+  const guard = configureTraceFastPath(node, block, statement, '__apm$originalLoad', 'configureDataloaderFastPath')
+  guard.test = {
+    type: 'LogicalExpression',
+    operator: '||',
+    left: parse('__apm$activeLoadMany.has(this)').body[0].expression,
+    right: guard.test,
+  }
+
+  const call = parse('__apm$runLoadMany(this, __apm$traced)').body[0].expression
+  tracedLoadMany.callee = call.callee
+  tracedLoadMany.arguments = call.arguments
+}
+
+/**
+ * @param {object} _state
  * @param {import('estree').FunctionDeclaration} node
  * @param {import('estree').Node} parent
  * @param {import('estree').Node[]} ancestry
@@ -428,7 +478,7 @@ function configureGraphqlFastPath (_state, node, parent, ancestry) {
     0,
     'configureGraphqlFastPath: original function binding already exists'
   )
-  configureGraphqlTraceFastPath(
+  configureTraceFastPath(
     node,
     insertionRoot,
     insertionTarget,
@@ -444,7 +494,7 @@ function configureGraphqlFastPath (_state, node, parent, ancestry) {
  * @param {string} originalName
  * @param {string} transformName
  */
-function configureGraphqlTraceFastPath (node, insertionRoot, insertionTarget, originalName, transformName) {
+function configureTraceFastPath (node, insertionRoot, insertionTarget, originalName, transformName) {
   const tracedDeclaration = queryOne(
     node,
     'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
@@ -490,6 +540,7 @@ function configureGraphqlTraceFastPath (node, insertionRoot, insertionTarget, or
   statements.splice(subscriberGuardIndex, 1)
   statements.splice(statements.indexOf(tracedDeclaration), 1)
   statements.unshift(subscriberGuard)
+  return subscriberGuard
 }
 
 /**
@@ -540,7 +591,7 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
     insertBeforeStatement(createBoundQuery.body, retDeclaration, bindings),
     'configureGraphqlJitExecute: could not insert query bindings'
   )
-  configureGraphqlTraceFastPath(
+  configureTraceFastPath(
     node,
     createBoundQuery.body,
     retDeclaration,
