@@ -86,6 +86,24 @@ function getInterprocessTelemetryCode () {
 }
 
 /**
+ * Replaces each line bitmap with its base64 text, which crosses to the main process as one JSON
+ * string, where a Buffer would be an array of numbers.
+ *
+ * @param {Array<string | { filename: string, bitmap?: Uint8Array | string }>} files
+ */
+function encodeBitmaps (files) {
+  for (let i = 0; i < files.length; i++) {
+    const bitmap = files[i]?.bitmap
+    if (bitmap instanceof Uint8Array) {
+      files[i] = {
+        filename: files[i].filename,
+        bitmap: Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength).toString('base64'),
+      }
+    }
+  }
+}
+
+/**
  * Lightweight exporter whose writers only do simple JSON serialization
  * of trace, coverage and logs payloads, which they send to the test framework's main process.
  * Currently used by Jest, Cucumber and Mocha workers.
@@ -113,6 +131,7 @@ class TestWorkerCiVisibilityExporter {
   }
 
   exportCoverage (formattedCoverage) {
+    encodeBitmaps(formattedCoverage.files)
     this._coverageWriter.append(formattedCoverage)
   }
 
