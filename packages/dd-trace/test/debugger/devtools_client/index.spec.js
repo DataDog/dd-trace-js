@@ -65,8 +65,12 @@ describe('onPause', function () {
   let log
   /** @type {PauseDurationHistogram} */
   let pauseDurations
+  let parentPort
+  let drainStatuses
 
   beforeEach(async function () {
+    parentPort = { once: sinon.spy(), postMessage: sinon.spy() }
+    drainStatuses = sinon.stub().resolves()
     ackEmitting = sinon.spy()
     refreshBreakpoints = sinon.stub().resolves()
     log = {
@@ -127,9 +131,11 @@ describe('onPause', function () {
       './collector': collector,
       './processor': processor,
     })
+    send.drain = sinon.stub().resolves()
     proxyquire('../../../src/debugger/devtools_client', {
       worker_threads: {
         ...workerThreads,
+        parentPort,
         workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer, pauseDurationBuffer },
       },
       './config': config,
@@ -138,7 +144,7 @@ describe('onPause', function () {
       './snapshot': snapshot,
       './log': log,
       './send': send,
-      './status': { ackEmitting },
+      './status': { ackEmitting, drain: drainStatuses },
       './breakpoints': { refreshBreakpoints, '@noCallThru': true },
       './remote_config': { '@noCallThru': true },
     })
@@ -146,6 +152,26 @@ describe('onPause', function () {
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')
     assert(onPausedCall, 'onPaused call should be found')
     onPaused = onPausedCall[1]
+  })
+
+  it('finishes pending captures and uploads before acknowledging shutdown', async () => {
+    let resume
+    let uploaded
+    session.post.withArgs('Debugger.resume').returns(new Promise(resolve => { resume = resolve }))
+    send.drain.returns(new Promise(resolve => { uploaded = resolve }))
+    const capture = onPaused(event)
+    const drain = parentPort.once.firstCall.args[1]()
+    sinon.assert.notCalled(send.drain)
+    resume()
+    await capture
+    await Promise.resolve()
+    sinon.assert.calledOnce(send.drain)
+    sinon.assert.calledOnce(drainStatuses)
+    sinon.assert.notCalled(parentPort.postMessage)
+
+    uploaded()
+    await drain
+    sinon.assert.calledOnceWithExactly(parentPort.postMessage, 'drained')
   })
 
   /**

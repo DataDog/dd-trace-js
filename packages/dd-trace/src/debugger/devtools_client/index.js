@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { workerData: { probeSamplerBuffer, pauseDurationBuffer } } = require('worker_threads')
+const { parentPort, workerData: { probeSamplerBuffer, pauseDurationBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY, WORKER_ERROR_REASON } = require('../constants')
@@ -21,7 +21,7 @@ const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
-const { ackEmitting } = require('./status')
+const { ackEmitting, drain: drainStatuses } = require('./status')
 const WorkerError = require('./worker-error')
 const config = require('./config')
 const log = require('./log')
@@ -45,9 +45,27 @@ const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${pro
 const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
 const sampledProbeIndexes = new Int32Array(probeSamplerBuffer)
 const pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
+const pendingCaptures = new Set()
+
+parentPort?.once('message', async () => {
+  await Promise.all(pendingCaptures)
+  await Promise.all([send.drain(), drainStatuses()])
+  parentPort.postMessage('drained')
+})
+
+session.on('Debugger.paused', async (event) => {
+  const capture = captureSnapshot(event)
+  pendingCaptures.add(capture)
+  try {
+    await capture
+  } finally {
+    pendingCaptures.delete(capture)
+  }
+})
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
-session.on('Debugger.paused', async ({ params }) => {
+/** @param {{ params: import('node:inspector').Debugger.PausedEventDataType }} event - The pause notification. */
+async function captureSnapshot ({ params }) {
   const start = process.hrtime.bigint()
 
   if (params.reason !== 'other') {
@@ -396,7 +414,7 @@ session.on('Debugger.paused', async ({ params }) => {
       }, err)
     })
   }
-})
+}
 
 /**
  * Called after resuming so reporting the elapsed time doesn't extend the pause. This measures from receipt of the
