@@ -22,6 +22,7 @@ const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
+const { OTEL_B3_STYLE } = require('../../src/opentracing/propagation/styles')
 const StableConfig = require('../../src/config/stable')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
@@ -695,8 +696,8 @@ describe('Config', () => {
         baz: 'qux1',
       },
       tracePropagationStyle: {
-        inject: ['b3', 'datadog'],
-        extract: ['b3', 'datadog'],
+        inject: [DD_MAJOR < 6 ? OTEL_B3_STYLE : 'b3', 'datadog'],
+        extract: [DD_MAJOR < 6 ? OTEL_B3_STYLE : 'b3', 'datadog'],
       },
     })
 
@@ -6670,11 +6671,32 @@ rules:
   })
 
   describe('setRemoteConfig', () => {
+    it('should report the v5 OTel B3 format across remote config updates', () => {
+      process.env.OTEL_PROPAGATORS = 'b3,tracecontext'
+      const config = getConfig(undefined, { ddMajor: 5 })
+
+      assertObjectContains(getLatestConfigUpdate('OTEL_PROPAGATORS'), { value: 'b3,tracecontext', origin: 'env_var' })
+      for (const [remote, inject, extract] of [
+        [undefined, 'b3,tracecontext', 'b3,tracecontext'],
+        [{ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' }, 'b3', 'b3,tracecontext'],
+        [{ DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' }, 'b3,tracecontext', 'b3,tracecontext'],
+        [null, 'b3,tracecontext', 'b3,tracecontext'],
+      ]) {
+        if (remote !== undefined) config.setRemoteConfig(remote)
+        assertObjectContains(getLatestConfigUpdate('DD_TRACE_PROPAGATION_STYLE'), {
+          value: 'b3,tracecontext',
+          origin: 'calculated',
+        })
+        assert.strictEqual(getLatestConfigUpdate('DD_TRACE_PROPAGATION_STYLE_INJECT').value, inject)
+        assert.strictEqual(getLatestConfigUpdate('DD_TRACE_PROPAGATION_STYLE_EXTRACT').value, extract)
+      }
+    })
+
     it('should preserve remote configuration that overrides a calculated fallback', () => {
       process.env.OTEL_PROPAGATORS = 'b3'
       const config = getConfig(undefined, { ddMajor: 5 })
 
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, [OTEL_B3_STYLE])
       assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
 
       config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
@@ -6684,7 +6706,7 @@ rules:
 
       config.setRemoteConfig(null)
 
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, [OTEL_B3_STYLE])
       assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
     })
 

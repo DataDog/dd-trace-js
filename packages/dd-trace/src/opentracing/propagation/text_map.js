@@ -38,7 +38,6 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
-const { getValidatedConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const { hasTraceSourcePropagationTag } = require('../../standalone/tracesource')
 const telemetryMetrics = require('../../telemetry/metrics')
@@ -46,6 +45,7 @@ const { DD_MAJOR } = require('../../../../../version')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
+const { OTEL_B3_LABEL, OTEL_B3_STYLE } = require('./styles')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -307,65 +307,9 @@ class TextMapPropagator {
   /** @type {ReturnType<import('../../config')>} */
   #config
 
-  /** @type {typeof extractB3SingleContext | typeof extractB3MultiContext} */
-  #extractB3Context
-
-  /** Whether the `b3` injection style resolves to single-header propagation. */
-  #b3InjectIsSingleHeader
-
-  /** Cached origin used to resolve the v5 `b3` injection style. */
-  #b3InjectOrigin
-
-  /** Cached state of the v5 experimental B3 setting. */
-  #b3ExperimentalEnabled
-
-  /** Cached origin of the shared v5 propagation style. */
-  #b3SharedOrigin
-
   /** @param {ReturnType<import('../../config')>} config */
   constructor (config) {
     this.#config = config
-
-    // v6+: `'b3'` is always single-header. v5: `OTEL_PROPAGATORS` callers
-    // expect single, legacy `DD_TRACE_PROPAGATION_STYLE` callers expect multi.
-    /* istanbul ignore else: v5 fallback */
-    if (DD_MAJOR >= 6) {
-      this.#b3InjectIsSingleHeader = true
-      this.#extractB3Context = extractB3SingleContext
-    } else {
-      const envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') ??
-        getValidatedConfiguredEnvName('OTEL_PROPAGATORS')
-      this.#extractB3Context = envName === 'OTEL_PROPAGATORS'
-        ? extractB3SingleContext
-        : extractB3MultiContext
-
-      this.#refreshB3InjectionStyle()
-    }
-  }
-
-  #refreshB3InjectionStyle () {
-    const origin = this.#config.getOrigin?.('tracePropagationStyle.inject') ?? 'default'
-    const experimentalEnabled = this.#config.experimental?.b3 === true
-    const sharedOrigin = origin === 'calculated'
-      ? this.#config.getOrigin?.('DD_TRACE_PROPAGATION_STYLE') ?? 'default'
-      : undefined
-    if (origin === this.#b3InjectOrigin &&
-      experimentalEnabled === this.#b3ExperimentalEnabled &&
-      sharedOrigin === this.#b3SharedOrigin) return
-
-    let envName
-    if (origin === 'calculated' && !experimentalEnabled && sharedOrigin !== 'remote_config') {
-      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') ??
-        getValidatedConfiguredEnvName('OTEL_PROPAGATORS')
-    } else if (origin === 'env_var' ||
-      origin === 'local_stable_config' ||
-      origin === 'fleet_stable_config') {
-      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE_INJECT')
-    }
-    this.#b3InjectIsSingleHeader = envName === 'OTEL_PROPAGATORS'
-    this.#b3InjectOrigin = origin
-    this.#b3ExperimentalEnabled = experimentalEnabled
-    this.#b3SharedOrigin = sharedOrigin
   }
 
   /**
@@ -451,7 +395,7 @@ class TextMapPropagator {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pickTextMap(carrier))
-      const styles = this.#config.tracePropagationStyle.extract.join(', ')
+      const styles = this.#config.tracePropagationStyle.extract.join(', ').replaceAll(OTEL_B3_STYLE, OTEL_B3_LABEL)
 
       return `Extract from carrier (${styles}): ${keys}.`
     })
@@ -614,7 +558,7 @@ class TextMapPropagator {
    */
   #injectB3MultipleHeaders (spanContext, carrier) {
     const hasB3multi = this.#hasPropagationStyle('inject', 'b3multi') ||
-      (this.#hasPropagationStyle('inject', 'b3') && !this.#usesB3SingleHeaderInjection())
+      (DD_MAJOR < 6 && this.#hasPropagationStyle('inject', 'b3'))
     if (!hasB3multi) return
 
     carrier ??= {}
@@ -641,7 +585,7 @@ class TextMapPropagator {
   #injectB3SingleHeader (spanContext, carrier) {
     // v6+ keeps `'b3 single header'` as a back-compat alias for callers that bypass parser normalisation.
     const hasB3SingleHeader = this.#hasPropagationStyle('inject', 'b3 single header') ||
-      (this.#hasPropagationStyle('inject', 'b3') && this.#usesB3SingleHeaderInjection())
+      this.#hasPropagationStyle('inject', DD_MAJOR < 6 ? OTEL_B3_STYLE : 'b3')
     if (!hasB3SingleHeader) return
 
     carrier ??= {}
@@ -656,11 +600,6 @@ class TextMapPropagator {
     writeB3(carrier, header)
 
     return carrier
-  }
-
-  #usesB3SingleHeaderInjection () {
-    if (DD_MAJOR < 6) this.#refreshB3InjectionStyle()
-    return this.#b3InjectIsSingleHeader
   }
 
   /**
@@ -839,7 +778,7 @@ class TextMapPropagator {
     let extractBaggage = false
     let traceContext
     let traceContextExtracted = false
-    for (const extractor of this.#config.tracePropagationStyle.extract) {
+    for (let extractor of this.#config.tracePropagationStyle.extract) {
       let extractedContext
       switch (extractor) {
         case 'datadog':
@@ -862,8 +801,11 @@ class TextMapPropagator {
           extractedContext = traceContext
           break
         case 'b3':
-          extractedContext = this.#extractB3Context(carrier)
+          extractedContext = DD_MAJOR < 6 ? extractB3MultiContext(carrier) : extractB3SingleContext(carrier)
           break
+        case OTEL_B3_STYLE:
+          extractor = OTEL_B3_LABEL
+          // falls through
         case 'b3 single header':
           extractedContext = extractB3SingleContext(carrier)
           break

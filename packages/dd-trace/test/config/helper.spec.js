@@ -323,31 +323,6 @@ describe('config-helper env resolution', () => {
       assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
     })
 
-    it('returns the env name from the highest-priority valid source', () => {
-      process.env.OTEL_LOG_LEVEL = 'debug'
-      const log = require('../../src/log')
-      sinon.spy(log, 'warn')
-
-      const StableConfigStub = sinon.stub()
-      StableConfigStub.callsFake(function () {
-        this.localEntries = {}
-        this.fleetEntries = {
-          DD_TRACE_LOG_LEVEL: 'invalid',
-        }
-        this.warnings = []
-      })
-
-      const mod = proxyquire('../../src/config/helper', {
-        '../serverless': {
-          IS_SERVERLESS: false,
-        },
-        './stable': StableConfigStub,
-      })
-
-      assert.strictEqual(mod.getValidatedConfiguredEnvName('DD_TRACE_LOG_LEVEL'), 'OTEL_LOG_LEVEL')
-      sinon.assert.notCalled(log.warn)
-    })
-
     it('does not override defined values with undefined', () => {
       const StableConfigStub = sinon.stub()
       StableConfigStub.callsFake(function () {

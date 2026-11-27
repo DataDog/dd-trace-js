@@ -26,6 +26,7 @@ const {
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { OTEL_B3_LABEL, OTEL_B3_STYLE } = require('../opentracing/propagation/styles')
 const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
@@ -200,6 +201,8 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
+  #hasConfiguredDatadogPropagationStyle = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') !== undefined
+
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -377,6 +380,32 @@ class Config extends ConfigBase {
     return trackedConfigOrigins.get(name) ?? 'default'
   }
 
+  /**
+   * @param {'tracePropagationStyle.inject' | 'tracePropagationStyle.extract'} path
+   * @param {string[]} styles
+   */
+  #applyExperimentalB3 (path, styles) {
+    // Shared styles take precedence over the experimental flag.
+    if (trackedConfigOrigins.get(path) === 'calculated') {
+      return
+    }
+
+    const hasMulti = styles.includes('b3') || styles.includes('b3multi')
+    const hasSingle = styles.includes('b3 single header')
+    if (hasMulti && hasSingle) {
+      return
+    }
+
+    const expanded = [...styles]
+    if (!hasMulti) {
+      expanded.push('b3')
+    }
+    if (!hasSingle) {
+      expanded.push('b3 single header')
+    }
+    setAndTrack(this, path, expanded)
+  }
+
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
     undo(this, 'calculated')
@@ -484,24 +513,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
     } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
-    }
-
-    // TODO: Remove the experimental env vars as a major or deprecate the option?
-    if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3')) {
-        this.tracePropagationStyle.inject.push('b3')
-      }
-      if (!this.tracePropagationStyle.extract.includes('b3')) {
-        this.tracePropagationStyle.extract.push('b3')
-      }
-      if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
-        this.tracePropagationStyle.inject.push('b3 single header')
-      }
-      if (!this.tracePropagationStyle.extract.includes('b3 single header')) {
-        this.tracePropagationStyle.extract.push('b3 single header')
-      }
-      setAndTrack(this, 'tracePropagationStyle.inject', this.tracePropagationStyle.inject)
-      setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
     if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
@@ -730,19 +741,31 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
-    // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
-    // propagation on its own. A set DD_TRACE_PROPAGATION_STYLE takes precedence, even when its value is invalid
-    // and its own default applies. Runs before the fallbacks so the inject and extract styles inherit it.
+    /** @type {Partial<Record<ConfigPath, string[]>> | undefined} */
+    let fallbackTelemetry
+    // A startup DD_TRACE_PROPAGATION_STYLE takes precedence even if its value was invalid.
     if (trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
-      getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE') === undefined) {
-      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', this.OTEL_PROPAGATORS)
+        !this.#hasConfiguredDatadogPropagationStyle &&
+        !trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE')) {
+      const otelStyles = this.OTEL_PROPAGATORS
+      let styles = otelStyles
+      if (DD_MAJOR < 6 && otelStyles.includes(OTEL_B3_LABEL)) {
+        styles = otelStyles.map(style => style === OTEL_B3_LABEL ? OTEL_B3_STYLE : style)
+        fallbackTelemetry = { DD_TRACE_PROPAGATION_STYLE: otelStyles }
+      }
+      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', styles, otelStyles)
     }
 
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
-        setAndTrack(this, configName, this[alias])
+        setAndTrack(this, configName, this[alias], fallbackTelemetry?.[alias])
       }
+    }
+
+    if (this.experimental?.b3) {
+      this.#applyExperimentalB3('tracePropagationStyle.inject', this.tracePropagationStyle.inject)
+      this.#applyExperimentalB3('tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
