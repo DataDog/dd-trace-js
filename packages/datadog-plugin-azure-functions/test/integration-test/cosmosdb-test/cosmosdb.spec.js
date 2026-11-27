@@ -18,7 +18,7 @@ const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  const func = useAzureFunctionsCoreTools()
+  const getFunc = useAzureFunctionsCoreTools()
 
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
@@ -45,7 +45,7 @@ describe('esm', () => {
         agent = await new FakeAgent().start()
         cosmosClient = await setup()
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -110,7 +110,7 @@ describe('esm', () => {
         const envArgs = {
           CONTAINER_APP_NAME: 'my-container-app',
         }
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port, undefined, envArgs)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port, undefined, envArgs)
       })
 
       after(async () => {

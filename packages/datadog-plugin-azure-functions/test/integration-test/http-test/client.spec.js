@@ -19,7 +19,7 @@ const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  const func = useAzureFunctionsCoreTools()
+  const getFunc = useAzureFunctionsCoreTools()
 
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
@@ -37,7 +37,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -94,7 +94,7 @@ describe('esm', () => {
             extensions: { http: { routePrefix: configuredPrefix } },
           }))
           agent = await new FakeAgent().start()
-          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port, undefined, {
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port, undefined, {
             DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
             DD_TRACE_SAMPLING_RULES: JSON.stringify([
               { resource: `GET ${routeRoot}/httptest2/{id}`, sample_rate: 0.5 },

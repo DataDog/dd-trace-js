@@ -22,7 +22,7 @@ const azureCreateGroup = (group) =>
   group.some(s => s.name === 'azure.servicebus.create')
 
 describe('esm', () => {
-  const func = useAzureFunctionsCoreTools()
+  const getFunc = useAzureFunctionsCoreTools()
 
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
@@ -40,7 +40,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -263,7 +263,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port, undefined, {
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port, undefined, {
           DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false',
         })
       })

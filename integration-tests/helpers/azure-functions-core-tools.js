@@ -1,61 +1,39 @@
 'use strict'
 
 const { execFile } = require('node:child_process')
-const { existsSync } = require('node:fs')
-const { chmod, mkdir, mkdtemp, rename, rm } = require('node:fs/promises')
-const { join, resolve } = require('node:path')
+const { mkdtemp, rm } = require('node:fs/promises')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
 const { promisify } = require('node:util')
 
-const { dependencies } = require('../../packages/dd-trace/test/plugins/versions/package.json')
+const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { BUN, BUN_CONFIG, withBun } = require('./bun')
 
 const exec = promisify(execFile)
-const platform = { darwin: 'osx', win32: 'win' }[process.platform] ?? process.platform
-const version = dependencies['azure-functions-core-tools']
-const build = `${platform}-${process.arch}.${version}`
-const cache = resolve(__dirname, '../../node_modules/.cache/azure-functions-core-tools')
-const installDir = join(cache, build)
+const name = 'azure-functions-core-tools'
 const executable = process.platform === 'win32' ? 'func.exe' : 'func'
-const func = join(installDir, executable)
 
 function useAzureFunctionsCoreTools () {
+  let folder
+
   before(async function () {
     this.timeout(300_000)
-    if (existsSync(func)) {
-      return
-    }
+    folder = await mkdtemp(join(tmpdir(), 'dd-trace-azure-functions-core-tools-'))
 
-    await mkdir(cache, { recursive: true })
-    const stagingDir = await mkdtemp(join(cache, 'install-'))
-    try {
-      const archive = `Azure.Functions.Cli.${build}.zip`
-      const url = `https://github.com/Azure/azure-functions-core-tools/releases/download/${version}/${archive}`
-      const zip = join(stagingDir, archive)
-      const extracted = join(stagingDir, 'bin')
-      const options = { signal: AbortSignal.timeout(270_000) }
+    const { NODE_OPTIONS, ...env } = withBun()
+    const range = getCappedRange(name, '4')
+    const args = ['add', `${name}@${range}`, `--config=${BUN_CONFIG}`, '--trust', '--no-progress']
+    await exec(BUN, args, { cwd: folder, env, timeout: 270_000 })
+  })
 
-      await mkdir(extracted)
-      await exec('curl', ['--fail', '--silent', '--show-error', '--location', '--output', zip, url], options)
-      if (process.platform === 'win32') {
-        await exec('tar', ['-xf', zip, '-C', extracted], options)
-      } else {
-        await exec('unzip', ['-q', zip, '-d', extracted], options)
-      }
-      await chmod(join(extracted, executable), 0o755)
-
-      // Publish the whole installation after extraction so parallel suites only see complete installs.
-      try {
-        await rename(extracted, installDir)
-      } catch (error) {
-        if (!existsSync(func)) {
-          throw error
-        }
-      }
-    } finally {
-      await rm(stagingDir, { recursive: true, force: true })
+  after(async function () {
+    this.timeout(30_000)
+    if (folder) {
+      await rm(folder, { recursive: true, force: true })
     }
   })
 
-  return func
+  return () => join(folder, 'node_modules', name, 'bin', executable)
 }
 
 module.exports = { useAzureFunctionsCoreTools }
