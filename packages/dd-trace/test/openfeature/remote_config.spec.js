@@ -17,9 +17,11 @@ describe('OpenFeature Remote Config', () => {
   let getOpenfeatureProxy
   let handlers
   let log
+  let getRemoteConfigCapabilities
   let enable
 
   beforeEach(() => {
+    getRemoteConfigCapabilities = sinon.stub().returns([])
     log = {
       debug: sinon.spy((messageOrFn) => {
         // Simulates a debug-enabled logger, which invokes the lazy callback form.
@@ -29,6 +31,9 @@ describe('OpenFeature Remote Config', () => {
 
     ;({ enable } = proxyquire('../../src/openfeature/remote_config', {
       '../log': log,
+      './evaluator-capabilities': {
+        getRemoteConfigCapabilities,
+      },
     }))
 
     handlers = new Map()
@@ -46,6 +51,17 @@ describe('OpenFeature Remote Config', () => {
 
     getOpenfeatureProxy = sinon.stub().returns(openfeatureProxy)
   })
+
+  for (const capabilities of [[], [1n << 50n]]) {
+    it(`composes evaluator RC capabilities for ${JSON.stringify(capabilities, (_, value) =>
+      typeof value === 'bigint' ? value.toString() : value)}`, () => {
+      getRemoteConfigCapabilities.returns(capabilities)
+      enable(rc, getOpenfeatureProxy, true)
+      const expected = [[1n << 46n, true]]
+      if (capabilities.length > 0) expected.push([1n << 50n, true])
+      assert.deepStrictEqual(rc.updateCapabilities.args, expected)
+    })
+  }
 
   describe('enable', () => {
     it('should enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
@@ -204,8 +220,11 @@ describe('OpenFeature Remote Config', () => {
     })
 
     it('should not advertise capability or register a handler without Remote Config delivery', () => {
+      getRemoteConfigCapabilities.returns([1n << 50n])
+
       enable(rc, getOpenfeatureProxy, false)
 
+      sinon.assert.notCalled(getRemoteConfigCapabilities)
       sinon.assert.notCalled(rc.updateCapabilities)
       sinon.assert.notCalled(rc.setProductHandler)
     })

@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
+const { getRemoteConfigCapabilities } = require('./evaluator-capabilities')
 
 /**
  * Configures remote config handlers for openfeature feature flagging
@@ -16,6 +17,7 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
   log.debug('Feature Flags: starting remote_config configuration source (Agent Remote Configuration)')
 
   rc.updateCapabilities(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
+  for (const capability of getRemoteConfigCapabilities()) rc.updateCapabilities(capability, true)
 
   /**
    * @param {string} action

@@ -49,6 +49,7 @@ describe('OpenFeature flag selection', () => {
   let config
   let configurationSource
   let count
+  let getOriginCapabilities
   let increment
   let log
   let namespace
@@ -73,6 +74,7 @@ describe('OpenFeature flag selection', () => {
     }
     increment = sinon.spy()
     count = sinon.spy(() => ({ inc: increment }))
+    getOriginCapabilities = sinon.stub().returns({ query: undefined, headers: {} })
     namespace = sinon.spy(() => ({ count }))
     AgentlessConfigurationSource = sinon.stub()
 
@@ -83,6 +85,9 @@ describe('OpenFeature flag selection', () => {
     configurationSource = proxyquire('../../src/openfeature/configuration_source', {
       '../log': log,
       './agentless_configuration_source': AgentlessConfigurationSource,
+      './evaluator-capabilities': {
+        getOriginCapabilities,
+      },
       './flag-selection': flagSelection,
     })
   })
@@ -252,23 +257,29 @@ describe('OpenFeature flag selection', () => {
       sinon.assert.notCalled(log.error)
     })
 
-    it('sends a request URL of exactly 8192 bytes and drops the selection one byte over', () => {
+    it('includes evaluator capabilities in the 8192-byte request URL limit', () => {
       const base = 'https://flags.example.test/ufc?pad='
+      const capability = '&cap_dependent-flags-variant-key=v1'
       const parameter = '&selected_flag_tags=mobile'
+      getOriginCapabilities.returns({
+        query: { 'cap_dependent-flags-variant-key': 'v1' },
+        headers: {},
+      })
 
       config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
-        base + 'p'.repeat(8192 - base.length - parameter.length)
+        base + 'p'.repeat(8192 - base.length - capability.length - parameter.length)
       const atLimit = createSourceConfig({ tags: ['mobile'] })
 
       assert.strictEqual(atLimit.endpoint.toString().length, 8192)
+      assert.strictEqual(atLimit.endpoint.searchParams.get('cap_dependent-flags-variant-key'), 'v1')
       assert.strictEqual(atLimit.flagSelectionSent, true)
       sinon.assert.notCalled(log.error)
 
-      const overLimitUrl = base + 'p'.repeat(8193 - base.length - parameter.length)
+      const overLimitUrl = base + 'p'.repeat(8193 - base.length - capability.length - parameter.length)
       config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = overLimitUrl
       const overLimit = createSourceConfig({ tags: ['mobile'] })
 
-      assert.strictEqual(overLimit.endpoint.toString(), overLimitUrl)
+      assert.strictEqual(overLimit.endpoint.toString(), `${overLimitUrl}${capability}`)
       assert.strictEqual(overLimit.flagSelectionSent, false)
       assertDropped('too_many_values', URL_LIMIT)
     })
