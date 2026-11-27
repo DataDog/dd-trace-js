@@ -42,9 +42,29 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.octo-sts.outputs.token }}
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+
+      - name: Check CodeQL scope
+        id: codeql-scope
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          # Compare the PR merge tree with its base and use the base's exclusions.
+          base=HEAD^1
+          exclusions=$(git show "$base:.github/codeql_config.yml" | yq --exit-status --unwrapScalar '
+            .["paths-ignore"][]
+            | select(tag == "!!str" and test("^[A-Za-z0-9._-]+(/([A-Za-z0-9._-]+|\\*\\*))*$"))
+            | ":(exclude,glob)" + . + "/**"
+          ') || exit 0
+          mapfile -t pathspecs <<< "$exclusions"
+          if git diff --quiet --no-ext-diff --no-renames --ignore-submodules=none "$base" HEAD -- "${pathspecs[@]}"; then
+            echo 'No changed files in CodeQL scope.'
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Initialize CodeQL
         id: init-codeql
+        if: steps.codeql-scope.outputs.skip != 'true'
         uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
@@ -57,12 +77,14 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: analyze
+        if: steps.codeql-scope.outputs.skip != 'true'
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           token: ${{ github.token }}
           wait-for-processing: false
 
       - name: Wait for SARIF processing
+        if: steps.codeql-scope.outputs.skip != 'true'
         env:
           TOKEN: ${{ steps.octo-sts.outputs.token }}
           SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
