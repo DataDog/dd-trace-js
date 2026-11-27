@@ -137,7 +137,7 @@ function undo (config, source) {
     if (trackedConfigOrigins.get(name) !== source) continue
 
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
-    setAndTrack(config, name, entry.value, undefined, entry.source, true)
+    setAndTrack(config, name, entry.value, undefined, entry.source)
   }
 }
 
@@ -164,20 +164,10 @@ function get (object, path) {
  * @param {import('./config-types').ConfigPathValue<TPath>} value
  * @param {unknown} [rawValue]
  * @param {TelemetrySource} [source]
- * @param {boolean} [resetUndefined]
  */
-function setAndTrack (config, name, value, rawValue = value, source = 'calculated', resetUndefined = false) {
-  // envs can not be undefined
-  if (value == null && !resetUndefined) {
-    // TODO: This works as before while ignoring undefined programmatic options is not ideal.
-    if (source !== 'default') {
-      if (rawValue !== value) {
-        generateTelemetry(rawValue, source, name)
-      }
-      return
-    }
-  } else if (source === 'calculated' || source === 'remote_config') {
-    if (source === 'calculated' && value === get(config, name)) {
+function setAndTrack (config, name, value, rawValue = value, source = 'calculated') {
+  if (source === 'calculated' || source === 'remote_config') {
+    if (source === 'calculated' && (value == null || value === get(config, name))) {
       return
     }
     changeTracker[source].add(name)
@@ -198,6 +188,22 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     trackedConfigOrigins.delete(name)
   } else {
     trackedConfigOrigins.set(name, source)
+  }
+}
+
+/**
+ * @param {Config} config
+ * @template {ConfigPath} TPath
+ * @param {TPath} name
+ * @param {import('./config-types').ConfigPathValue<TPath>} value
+ * @param {unknown} rawValue
+ * @param {TelemetrySource} source
+ */
+function applyParsedValue (config, name, value, rawValue, source) {
+  if (value != null) {
+    setAndTrack(config, name, value, rawValue, source)
+  } else if (rawValue !== value) {
+    generateTelemetry(rawValue, source, name)
   }
 }
 
@@ -293,25 +299,19 @@ class Config extends ConfigBase {
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
-      setAndTrack(this, entry.property ?? name, transformed, rawValue, source)
+      applyParsedValue(this, entry.property ?? name, transformed, rawValue, source)
     }
   }
 
   /**
-   * @param {TracerOptions | NonNullable<ProgrammaticConfig['llmobs']>} options
+   * @param {TracerOptions} options
    * @param {string} [root]
-   * @param {boolean} [resetUndefined]
    */
-  #applyOptions (options, root = '', resetUndefined = false) {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
-      if (!entry) {
-        log.warn('Unknown option %s with value %o', fullName, value)
-        continue
-      }
-
-      if (entry.nestedProperties) {
+      if (entry?.nestedProperties) {
         let matched = false
         if (typeof value === 'object' && value !== null) {
           for (const nestedProperty of entry.nestedProperties) {
@@ -319,7 +319,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, fullName, resetUndefined)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -342,15 +342,35 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const coerced = programmaticTypeCoercions[entry.type](value)
-      if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+      if (entry === undefined || value !== undefined) {
+        this.#applyOption(fullName, value, entry)
       }
-      const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, 'code')
-        : coerced
-      setAndTrack(this, entry.property, transformed, value, 'code', resetUndefined && value === undefined)
     }
+  }
+
+  /**
+   * @param {string} name
+   * @param {unknown} value
+   * @param {ConfigurationOption | undefined} entry
+   */
+  #applyOption (name, value, entry) {
+    if (entry === undefined) {
+      log.warn('Unknown option %s with value %o', name, value)
+      return
+    }
+    if (value === undefined) {
+      setAndTrack(this, entry.property, value, value, 'code')
+      return
+    }
+
+    const coerced = programmaticTypeCoercions[entry.type](value)
+    if (coerced === undefined) {
+      warnInvalidValue(value, name, 'code', `Invalid ${entry.type} input`)
+    }
+    const transformed = coerced !== undefined && entry.transformer
+      ? entry.transformer(coerced, name, 'code')
+      : coerced
+    applyParsedValue(this, entry.property, transformed, value, 'code')
   }
 
   /**
@@ -385,7 +405,10 @@ class Config extends ConfigBase {
     }
     if (options.llmobs !== undefined) {
       const { enabled, ...values } = options.llmobs
-      this.#applyOptions(values, 'llmobs', true)
+      for (const [name, value] of Object.entries(values)) {
+        const fullName = `llmobs.${name}`
+        this.#applyOption(fullName, value, optionsTable[fullName])
+      }
       if (enabled !== undefined) setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', enabled, enabled, 'code')
     }
     this.#applyCalculated()

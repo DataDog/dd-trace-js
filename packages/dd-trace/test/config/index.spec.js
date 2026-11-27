@@ -223,9 +223,17 @@ describe('Config', () => {
         config.setProgrammaticConfig({ llmobs: { enabled: false } })
         config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
         assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ML_APP, 'updated')
       } finally {
         channel('datadog:config:update').unsubscribe(listener)
       }
+    })
+
+    it('keeps the current LLMObs options when an update supplies invalid values', () => {
+      const config = getConfig({ llmobs: { mlApp: 'original', agentlessEnabled: true } })
+      config.setProgrammaticConfig({ llmobs: { mlApp: null, agentlessEnabled: 'invalid' } })
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ML_APP, 'original')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, true)
     })
 
     it('restores cleared LLMObs options after remote overrides are removed', () => {
