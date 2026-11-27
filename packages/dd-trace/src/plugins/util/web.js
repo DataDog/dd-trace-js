@@ -8,7 +8,13 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
-const { PUBLISHED_ROUTE, httpResourceName, joinRoute, trackSamplingContext } = require('../../http-resource')
+const {
+  PUBLISHED_ROUTE,
+  ROUTING_SELECTION,
+  httpResourceName,
+  joinRoute,
+  trackSamplingContext,
+} = require('../../http-resource')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
@@ -190,7 +196,7 @@ const web = {
   replacePublishedRouteWithRoot (req) {
     const context = contexts.get(req)
     if (context?.samplingRoute === PUBLISHED_ROUTE) {
-      web.setRoute(req, context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? '/' : '', true)
+      return web.setRoute(req, context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? '/' : '', true)
     }
   },
 
@@ -200,12 +206,12 @@ const web = {
    * @param {boolean} [routeSelected]
    * @param {import('../../http-resource').RouteReader} [reader]
    */
-  setRoute (req, path, routeSelected = false, reader = publishedRouteReader) {
+  setRoute (req, path, routeSelected, reader = publishedRouteReader) {
     const context = contexts.get(req)
 
     if (!context?.span) return
-    if (routeSelected) {
-      context.samplingRoute = PUBLISHED_ROUTE
+    if (routeSelected !== undefined) {
+      context.samplingRoute = routeSelected ? PUBLISHED_ROUTE : false
       web.setSamplingRouteReader(context, reader)
     } else if (context.samplingRoute === PUBLISHED_ROUTE) {
       context.samplingRoute = undefined
@@ -213,7 +219,7 @@ const web = {
 
     if (!path || !context.config?.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       context.paths = [path]
-      return
+      return context.paths
     }
 
     const spanContext = context.span.context()
@@ -223,7 +229,7 @@ const web = {
     // Publish before finish because downstream requests can trigger sampling inside the handler.
     // Replace only values this context owns, so an upstream route still wins.
     let route = currentRoute
-    if (currentRoute === undefined || currentRoute === publishedRoute) {
+    if (currentRoute === undefined || currentRoute === publishedRoute || currentRoute === context.generatedRoute) {
       route = path
       if (context.samplingRouteReader) context.generatedRoute = path
       context.span.setTag(HTTP_ROUTE, path)
@@ -231,6 +237,17 @@ const web = {
     if (ownsResource(spanContext)) {
       setInstrumentationHttpResource(context.span, otelHttpResourceName(req.method, route))
     }
+    return context.paths
+  },
+
+  /** @param {import('../../http-resource').RouteReader | undefined} reader */
+  isPublishedRouteReader (reader) {
+    return reader === publishedRouteReader
+  },
+
+  /** @param {string[]} paths */
+  isSelectingRoute (paths) {
+    return legacyStorage.getStore()?.[ROUTING_SELECTION]?.paths === paths
   },
 
   // Remove the current route segment.
@@ -410,11 +427,20 @@ const web = {
     context.finished = true
   },
 
+  /** @param {import('../../http-resource').HttpResourceSource} context */
+  finishRouting (context) {
+    const route = context.samplingRouteReader?.getProvisionalRoute?.(context.paths)
+    if (route !== undefined && !web.isSelectingRoute(context.paths)) {
+      web.setRoute(context.req, route, true)
+    }
+  },
+
   finishAll (context, spanType) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
 
+    web.finishRouting(context)
     web.finishMiddleware(context)
 
     web.finishSpan(context, spanType)

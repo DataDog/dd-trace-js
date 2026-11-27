@@ -164,6 +164,54 @@ describe('Fastify resource sampling', () => {
     })
   }
 
+  withVersions('fastify', 'fastify', '>=5', version => {
+    it('drops a provisional Express route before Fastify rewrites the URL', async () => {
+      const outer = 'GET /items/:outer'
+      const inner = 'GET /items/:inner'
+      const tracer = await agent.load(['http', 'express', 'router', 'fastify', 'find-my-way'],
+        [{ client: false }, { middleware: false }, { middleware: false }, {}, {}], {
+          sampleRate: 0,
+          rateLimit: -1,
+          samplingRules: [{ resource: outer, sampleRate: 1 }, { resource: inner, sampleRate: 1 }],
+        })
+      const express = require('../../../versions/express@5').get()
+      const createFastify = require('../../../versions/fastify@' + version).get()
+      const headers = {}
+      const fastify = createFastify({
+        rewriteUrl (req) {
+          if (req.url.endsWith('?rewrite')) {
+            tracer.trace('outbound', span => tracer.inject(span, 'http_headers', headers))
+          }
+          return '/items/42'
+        },
+      })
+      fastify.get('/items/:inner', (req, reply) => respondWithPriority(tracer, reply.raw))
+      const app = express()
+      app.param('outer', (req, res) => fastify.routing(req, res))
+      app.get('/items/:outer', (_req, res) => res.sendStatus(500))
+      await fastify.ready()
+      const server = app.listen(0, '127.0.0.1')
+
+      try {
+        await once(server, 'listening')
+        const address = 'http://127.0.0.1:' + server.address().port
+        await Promise.all([
+          assertPropagatedPriority(address, 2),
+          agent.assertFirstTraceSpan({ resource: inner, metrics: { _sampling_priority_v1: 2 } }),
+        ])
+        await Promise.all([
+          assertPropagatedPriority(address, -1, '/items/42?rewrite'),
+          agent.assertUserRejectedTrace(inner),
+        ])
+        assert.strictEqual(headers['x-datadog-sampling-priority'], '-1')
+      } finally {
+        await new Promise(resolve => server.close(resolve))
+        await fastify.close()
+        await agent.close()
+      }
+    })
+  })
+
   for (const { range, mode, compile } of [
     { range: '>=1.14.6 <4', mode: 'version' },
     { range: '>=4', mode: 'sync' },
@@ -233,7 +281,7 @@ describe('Fastify resource sampling', () => {
   })
 
   if (expressRange) {
-    it('does not rename a standalone Express root', async () => {
+    it('samples a standalone Express root with the method resource', async () => {
       const tracer = await agent.load(['http', 'express', 'router'], [{ client: false }], {
         sampleRate: 0,
         rateLimit: -1,
@@ -246,12 +294,9 @@ describe('Fastify resource sampling', () => {
 
       try {
         await once(server, 'listening')
-        const priority = createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED ? 2 : -1
         await Promise.all([
-          assertPropagatedPriority('http://127.0.0.1:' + server.address().port, priority, '/'),
-          priority === 2
-            ? agent.assertFirstTraceSpan({ resource: 'GET', metrics: { _sampling_priority_v1: 2 } })
-            : agent.assertUserRejectedTrace('GET'),
+          assertPropagatedPriority('http://127.0.0.1:' + server.address().port, 2, '/'),
+          agent.assertFirstTraceSpan({ resource: 'GET', metrics: { _sampling_priority_v1: 2 } }),
         ])
       } finally {
         await closeLoopbackServer(server)
@@ -767,6 +812,62 @@ describe('Fastify resource sampling', () => {
 
     if (!expressRange) return
 
+    for (const phase of ['constraint', 'handler']) {
+      it(`uses the native route scope when Express delegates to FindMyWay at ${phase}`, async () => {
+        const duringLookup = phase === 'constraint'
+        const innerResource = 'GET /items/:inner'
+        const tracer = await agent.load(['find-my-way', 'http', 'express', 'router'], [{}, { client: false }], {
+          sampleRate: 0,
+          rateLimit: -1,
+          samplingRules: [{ resource: duringLookup ? 'GET /items/:outer' : innerResource, sampleRate: 1 }],
+        })
+        const fixture = require('../../../versions/fastify@' + version)
+        const fromFastify = createRequire(fixture.getPath('fastify'))
+        const FindMyWay = fromFastify('find-my-way')
+        const createExpress = require('../../../versions/express@5').get()
+        const express = createExpress()
+        const router = FindMyWay()
+        const carrier = {}
+        router.addConstraintStrategy({
+          name: 'tenant',
+          storage: () => new Map(),
+          deriveConstraint () {
+            if (duringLookup) {
+              tracer.trace('outbound', span => tracer.inject(span, 'http_headers', carrier))
+            }
+            return 'tenant'
+          },
+        })
+        router.on('GET', '/items/:inner', { constraints: { tenant: 'tenant' } }, (req, res, params) => {
+          assert.strictEqual(params.inner, '42')
+          if (duringLookup) {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ priority: carrier['x-datadog-sampling-priority'] }))
+          } else {
+            respondWithPriority(tracer, res)
+          }
+        })
+        express.param('outer', (req, res) => router.lookup(req, res))
+        express.get('/items/:outer', (req, res) => res.sendStatus(500))
+
+        const server = express.listen(0, '127.0.0.1')
+        const closeServer = promisify(server.close.bind(server))
+        try {
+          await once(server, 'listening')
+          const address = 'http://127.0.0.1:' + server.address().port
+          await Promise.all([
+            assertPropagatedPriority(address, duringLookup ? -1 : 2),
+            duringLookup
+              ? agent.assertUserRejectedTrace(innerResource)
+              : agent.assertFirstTraceSpan({ resource: innerResource, metrics: { _sampling_priority_v1: 2 } }),
+          ])
+        } finally {
+          await closeServer()
+          await agent.close()
+        }
+      })
+    }
+
     /**
      * @param {string | RegExp} resource
      * @param {number} priority
@@ -832,9 +933,8 @@ describe('Fastify resource sampling', () => {
       }
     }
 
-    it('uses the existing inner resource after delegation to Express', async () => {
-      const priority = createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED ? 2 : -1
-      await assertDelegatedSampling('GET /items/:id', priority)
+    it('samples the selected Express route after delegation', async () => {
+      await assertDelegatedSampling('GET /items/:id', 2)
     })
 
     it('does not match a rule for the superseded outer route', async () => {
@@ -859,6 +959,11 @@ describe('Fastify resource sampling', () => {
 
     it('replaces the outer route when Express matches the root', async () => {
       await assertDelegatedSampling(/^GET \/\*$/, -1, 'root')
+    })
+
+    it('samples the selected Express root after delegation', async () => {
+      const resource = createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED ? 'GET /' : 'GET'
+      await assertDelegatedSampling(resource, 2, 'root')
     })
 
     it('uses the method when an Express root handler clears the route tag', async () => {

@@ -6,16 +6,27 @@ const { channel } = require('./instrument')
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
 const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resolved name + route matchers)
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
+const nativeMatches = new WeakMap()
+/** @type {WeakMap<import('node:http').IncomingMessage, NativeRouterMatch>} */
+const nativeDispatches = new WeakMap()
+
+/** @typedef {{ layer: object, path: string, index: number | undefined }} NativeRouterMatch */
+/** @typedef {{ path?: string, regex?: import('../path-to-regexp').CompiledRoute, isRegExp?: boolean }} LayerMatcher */
+/**
+ * @typedef {LayerMatcher[] & {
+ *   hasStarPath?: boolean,
+ *   hasSlashPath?: boolean,
+ *   groups?: Array<LayerMatcher | LayerMatcher[]>
+ * }} LayerMatchers
+ */
 
 /**
  * @typedef {object} LayerMeta
  * @property {string} [name]
  * @property {string} [captureRoute]
  * @property {boolean} [needMultiMatch]
- * @property {Array<{ path?: string, regex?: RegExp }> & {
- *   hasStarPath?: boolean,
- *   hasSlashPath?: boolean
- * }} [matchers]
+ * @property {boolean} [nativeSingleGroup]
+ * @property {LayerMatchers} [matchers]
  */
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
@@ -154,6 +165,99 @@ function getLayerMeta (layer) {
   return layerMeta.get(layer)
 }
 
+/**
+ * @param {{ params: object, index: number } | {
+ *   req: import('node:http').IncomingMessage, layer: object, params?: object, path: string
+ * }} context
+ */
+function recordNativeRouterMatch (context) {
+  if ('index' in context) {
+    nativeMatches.set(context.params, context.index)
+  } else {
+    const { req, layer, params, path } = context
+    const meta = layerMeta.get(layer)
+    if (meta?.needMultiMatch) {
+      nativeDispatches.set(req, { layer, path, index: nativeMatcherIndex(meta, params) })
+    }
+  }
+}
+
+/**
+ * @param {import('node:http').IncomingMessage} req
+ * @param {object} layer
+ */
+function takeNativeRouterMatch (req, layer) {
+  const dispatch = nativeDispatches.get(req)
+  if (dispatch?.layer !== layer) return
+
+  nativeDispatches.delete(req)
+  return dispatch
+}
+
+/**
+ * @param {LayerMeta} meta
+ * @param {object | undefined} params
+ */
+function nativeMatcherIndex (meta, params) {
+  return nativeMatches.get(params) ?? (meta.nativeSingleGroup ? 0 : undefined)
+}
+
+/**
+ * @param {LayerMeta} meta
+ * @param {string | RegExp | undefined} pattern
+ * @param {NativeRouterMatch | { params?: object, path?: string }} match
+ */
+function resolveNativeRouterRoute (meta, pattern, match) {
+  if (typeof pattern === 'string') {
+    return pattern
+  }
+
+  const matchers = meta.matchers
+  if (pattern === undefined) {
+    const index = 'layer' in match ? match.index : nativeMatcherIndex(meta, match.params)
+    if (index === undefined) return
+
+    const selected = matchers.groups?.[index] ?? matchers[index]
+    return Array.isArray(selected) ? replayLayerRoute(selected, match.path) : selected?.path
+  }
+
+  for (const { regex, path } of matchers) {
+    if (regex === pattern) {
+      return path
+    }
+  }
+}
+
+/**
+ * @param {LayerMatchers} matchers
+ * @param {string | undefined} matchedPath
+ * @param {boolean} [allowRegExp]
+ */
+function replayLayerRoute (matchers, matchedPath, allowRegExp = false) {
+  for (const { regex, path, isRegExp } of matchers) {
+    if (regex && isRegExp) {
+      if (!allowRegExp) {
+        return
+      }
+
+      // The legacy replay can share a stateful regexp with the router.
+      const stateful = /** @type {RegExp} */ (regex)
+      const lastIndex = stateful.lastIndex
+      try {
+        if (stateful.test(matchedPath)) {
+          return path
+        }
+      } finally {
+        if (!Object.is(stateful.lastIndex, lastIndex)) {
+          stateful.lastIndex = lastIndex
+        }
+      }
+    } else if (regex?.test(matchedPath)) {
+      return path
+    }
+  }
+}
+
 function normalizeMethodName (method) {
   return method === '_all' || method === 'all' ? '*' : method
 }
@@ -256,6 +360,10 @@ module.exports = {
   joinPath,
   setLayerMeta,
   getLayerMeta,
+  recordNativeRouterMatch,
+  takeNativeRouterMatch,
+  resolveNativeRouterRoute,
+  replayLayerRoute,
   markAppMounted,
   isAppMounted,
   normalizeRoutePath,

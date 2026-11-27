@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { createWrapRouterMethod, createLayerDispatchWrappers } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
-const { getCompileToRegexp } = require('./path-to-regexp')
+const { getRouteCompiler } = require('./path-to-regexp')
 const {
   setRouterMountPath,
   markAppMounted,
@@ -167,7 +167,7 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
   // `wrapLegacyHandle` only fires for express <4.6.0 layers, which have no
   // prototype dispatch; 4.6.0+ keeps `handle` pristine (wrapped below).
   const { wrapLegacyHandle } = createLayerDispatchWrappers('express')
-  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp(), wrapLegacyHandle)
+  const wrapRouterMethod = createWrapRouterMethod('express', getRouteCompiler(), wrapLegacyHandle)
 
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)

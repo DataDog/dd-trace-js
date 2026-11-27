@@ -1,9 +1,15 @@
 'use strict'
 
+const { createRequire } = require('node:module')
+
+const log = require('../../dd-trace/src/log')
 const { addHook } = require('./helpers/instrument')
 
-/** @type {((pattern: string | RegExp) => RegExp | undefined) | undefined} */
-let compileToRegexp
+/** @typedef {{ sensitive?: boolean, end: boolean, trailing: boolean }} RouteOptions */
+/** @typedef {RegExp | { test: (path: string) => object | false }} CompiledRoute */
+/** @typedef {(pattern: string | RegExp, options?: RouteOptions) => CompiledRoute | undefined} RouteCompiler */
+/** @type {RouteCompiler | undefined} */
+let compileRoute
 
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
@@ -14,26 +20,35 @@ let makeMatcher
 addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
   // 0.1.x and 6.x: `module.exports = (path, ...) => RegExp`.
   // 7.x: `module.exports = { pathToRegexp(path, ...) => RegExp }`.
-  // 8.x: `module.exports = { pathToRegexp(path, ...) => { regexp, keys } }`.
+  // 8.1+: `module.exports = { pathToRegexp(path, ...) => { regexp, keys } }`.
   const compile = typeof moduleExports === 'function'
     ? moduleExports
     : (typeof moduleExports?.pathToRegexp === 'function' ? moduleExports.pathToRegexp : undefined)
 
   if (compile !== undefined) {
-    compileToRegexp = pattern => {
-      let result
-      try {
-        result = compile(pattern)
-      } catch {
-        return
-      }
-      const regex = result?.regexp ?? result
-      if (regex instanceof RegExp) return regex
-    }
+    compileRoute = createCompiler(compile, typeof moduleExports !== 'function')
   }
 
   return moduleExports
 })
+
+/**
+ * @param {Function} compile
+ * @param {boolean} acceptsOptions
+ */
+function createCompiler (compile, acceptsOptions) {
+  return (pattern, options) => {
+    let result
+    try {
+      result = acceptsOptions && options !== undefined ? compile(pattern, options) : compile(pattern)
+    } catch {
+      return
+    }
+    if (typeof result === 'function') return { test: result }
+    const regex = result?.regexp ?? result
+    if (regex instanceof RegExp) return regex
+  }
+}
 
 // 8.x only: earlier majors also expose `parse`/`match`, but with incompatible shapes — 7.x returns
 // `{ tokens }` too, yet its tokens are bare strings rather than typed nodes. Gating on the version
@@ -77,15 +92,23 @@ addHook({ name: 'path-to-regexp', versions: ['>=8'] }, moduleExports => {
 })
 
 /**
- * Returns whatever path-to-regexp compile adapter the host most recently
- * loaded. Capture this once at addHook fire time so each express/router
- * instance keeps the dialect that was current when its routes were wrapped;
- * a later host load that swaps the global compile won't retroactively change
- * already-wrapped routers. `undefined` when the host has not loaded
- * path-to-regexp yet, or never if it does not depend on it.
+ * Prefer the router's own path-to-regexp. Hosts without a module filename
+ * capture the adapter that was current when their hook ran.
+ * @param {string} [hostFile] The host source file that imports path-to-regexp.
  */
-function getCompileToRegexp () {
-  return compileToRegexp
+function getRouteCompiler (hostFile) {
+  if (hostFile !== undefined) {
+    try {
+      const requireFromHost = createRequire(hostFile)
+      const { pathToRegexp, match } = requireFromHost('path-to-regexp')
+      if (typeof pathToRegexp === 'function') return createCompiler(pathToRegexp, true)
+      // 8.0.0 exposes match() and keeps its compiled RegExp private.
+      return createCompiler((pattern, options) => match(pattern, { ...options, decode: false }), true)
+    } catch (error) {
+      log.debug('Could not load path-to-regexp for %s: %s', hostFile, error)
+    }
+  }
+  return compileRoute
 }
 
 /**
@@ -107,4 +130,4 @@ function getMatch () {
   return makeMatcher
 }
 
-module.exports = { getCompileToRegexp, getParse, getMatch }
+module.exports = { getRouteCompiler, getParse, getMatch }

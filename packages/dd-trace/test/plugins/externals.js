@@ -146,6 +146,14 @@ module.exports = {
   ],
   express: [
     {
+      name: 'express',
+      versions: ['4.5.0'],
+    },
+    {
+      name: 'router',
+      versions: ['2.2.0'],
+    },
+    {
       name: 'axios',
       versions: ['>=1.0.0'],
     },
@@ -168,6 +176,14 @@ module.exports = {
     {
       name: 'ejs',
       versions: ['3.1.10'],
+    },
+    {
+      name: 'koa',
+      versions: ['2'],
+    },
+    {
+      name: '@koa/router',
+      versions: ['12'],
     },
   ],
   'express-mongo-sanitize': [

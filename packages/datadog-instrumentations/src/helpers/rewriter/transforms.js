@@ -27,10 +27,61 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishRouterMatch,
   publishRoutingStart,
   scopeRoutingSelection,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').WhileStatement | import('estree').ExpressionStatement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishRouterMatch (state, node, parent, ancestry) {
+  const program = /** @type {import('estree').Program} */ (ancestry.at(-1))
+  state.transforms.tracingChannelDeclaration(state, program)
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}.start`
+
+  if (node.type === 'WhileStatement') {
+    parent.body.splice(parent.body.indexOf(node) + 1, 0, ...parse(`
+      if (match && this.matchers.length > 1 && ${channel}.hasSubscribers) {
+        ${channel}.publish({ params: match.params, index: i - 1 })
+      }
+    `).body)
+  } else {
+    const call = /** @type {import('estree').CallExpression} */ (node.expression)
+    const continuation = /** @type {import('estree').FunctionExpression} */ (call.arguments.at(-1))
+    const next = ancestry.findIndex(ancestor => ancestor.type === 'FunctionDeclaration' && ancestor.id.name === 'next')
+    const [trimPrefix] = /** @type {import('estree').FunctionDeclaration[]} */ (
+      query(ancestry[next + 1], 'FunctionDeclaration[id.name="trimPrefix"]')
+    )
+    const [trim] = /** @type {import('estree').CallExpression[]} */ (
+      query(continuation, 'CallExpression[callee.name="trimPrefix"]')
+    )
+    const [route] = /** @type {import('estree').IfStatement[]} */ (
+      query(continuation, 'IfStatement[test.name="route"]')
+    )
+    const [error] = query(trimPrefix, 'IfStatement[test.name="layerError"]')
+    const [paramsAssignment] = query(parent,
+      'ExpressionStatement[expression.left.object.name="req"][expression.left.property.name="params"]')
+    parent.body.splice(parent.body.indexOf(paramsAssignment), 0, ...parse(`
+      const __apm$routeMatchParams = layer.matchers?.length > 1 ? layer.params : undefined
+    `).body)
+    const [publish] = parse(`
+      if (__apm$routeMatchParams !== undefined && ${channel}.hasSubscribers) {
+        ${channel}.publish({ req, layer, params: __apm$routeMatchParams, path: layerPath })
+      }
+    `).body
+    const params = /** @type {import('estree').Identifier} */ ({ type: 'Identifier', name: '__apm$routeMatchParams' })
+    trim.arguments.push(params)
+    trimPrefix.params.push(clone(params))
+    const routeBody = /** @type {import('estree').BlockStatement} */ (route.consequent)
+    routeBody.body.unshift(publish)
+    trimPrefix.body.body.splice(trimPrefix.body.body.indexOf(error), 0, clone(publish))
+  }
 }
 
 /**
