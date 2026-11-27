@@ -6,6 +6,7 @@ const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const dc = require('dc-polyfill')
 const log = require('../log')
+const SafeError = require('../log/safe-error')
 const { fetchAgentInfo } = require('../agent/info')
 const telemetryMetrics = require('../telemetry/metrics')
 const { logGenericError } = require('../startup-log')
@@ -134,7 +135,9 @@ function start (config, rcInstance) {
   })
   probeChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on probe port', err))
 
-  logChannel.port2.on('message', ({ level, args }) => {
+  logChannel.port2.on('message', ({ level, args, safeCause }) => {
+    // The worker only flags causes that were constructed as a SafeError there.
+    if (safeCause) Object.setPrototypeOf(args.at(-1), SafeError.prototype)
     log[level](...args)
   })
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))

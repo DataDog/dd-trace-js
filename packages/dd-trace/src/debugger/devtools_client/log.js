@@ -6,6 +6,8 @@
 
 const { workerData } = require('node:worker_threads')
 
+const SafeError = require('../../log/safe-error')
+
 // For testing purposes, we allow `workerData` to be undefined and fallback to a default config
 const { config: { debug = false, logLevel } = {}, logPort } = workerData ?? {}
 
@@ -17,7 +19,8 @@ const on = (level, ...args) => {
     // logger reads a trailing error as the cause of the log record.
     args[0] = args[0]()
   }
-  logPort.postMessage({ level, args })
+  // Structured cloning turns a SafeError into a plain Error, so tell the main thread to restore it.
+  logPort.postMessage(args.at(-1) instanceof SafeError ? { level, args, safeCause: true } : { level, args })
 }
 const off = () => {}
 
