@@ -137,7 +137,7 @@ jobs:
             echo "release-subject=$release_subject"
             echo "release-verb=$release_verb"
           } >> "$GITHUB_OUTPUT"
-      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
+      - uses: slackapi/slack-github-action@0bc3581177d9a0f8d555e07689384b376528e8fa # v2.1.0
         if: steps.release-age.outputs.warn == 'true'
         with:
           method: chat.postMessage
@@ -187,7 +187,7 @@ jobs:
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
+      - uses: slackapi/slack-github-action@0bc3581177d9a0f8d555e07689384b376528e8fa # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
