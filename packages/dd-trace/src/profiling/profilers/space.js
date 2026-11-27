@@ -5,13 +5,14 @@ const { channel } = require('dc-polyfill')
 const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
-const { getThreadLabels } = require('./shared')
+const { getOtelThreadLabels, getThreadLabels } = require('./shared')
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 /** @typedef {import('@datadog/pprof').CapturedProfile} CapturedProfile */
 /**
  * @typedef {import('../exporters/agent').AgentExporter
- *   | import('../exporters/file').FileExporter} ProfilingExporter
+ *   | import('../exporters/file').FileExporter
+ *   | import('../exporters/otlp').OtlpProfilesExporter} ProfilingExporter
  */
 
 const STACK_DEPTH = 64
@@ -23,6 +24,7 @@ class NativeSpaceProfiler {
   #exporters
   #identityRefreshListener
   #mapper
+  #otlp
   #pprof
   #samplingInterval
   #started = false
@@ -36,6 +38,7 @@ class NativeSpaceProfiler {
     this.#config = config
     this.#tags = tags
     this.#exporters = exporters
+    this.#otlp = config.OTEL_PROFILES_EXPORTER === 'otlp'
     this.#samplingInterval = config.DD_PROFILING_HEAP_SAMPLING_INTERVAL
   }
 
@@ -89,7 +92,8 @@ class NativeSpaceProfiler {
   capture (restart) {
     const captured = this.#pprof.heap.capture({
       sourceMapper: this.#mapper,
-      generateLabels: getThreadLabels,
+      // OTLP profiles have the semantic conventions' thread attributes
+      generateLabels: this.#otlp ? getOtelThreadLabels : getThreadLabels,
     })
     if (!restart) {
       this.stop()

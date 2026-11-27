@@ -32,12 +32,16 @@ class FileExporter extends EventSerializer {
   }
 
   export (exportSpec) {
-    const { profiles, end } = exportSpec
+    const { profiles, end, otlp } = exportSpec
     const types = Object.keys(profiles)
     const dateStr = formatDateTime(end)
     const tasks = types.map(type => {
       return writeFile(`${this.#pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
     })
+    if (otlp !== undefined) {
+      // The OTLP ExportProfilesServiceRequest of the cycle, with all of its profiles
+      tasks.push(writeFile(`${this.#pprofPrefix}profiles_worker_${threadId}_${dateStr}.otlp.pb`, otlp))
+    }
     tasks.push(writeFile(`event_worker_${threadId}_${dateStr}.json`, this.getEventJSON(exportSpec)))
     return Promise.all(tasks)
   }

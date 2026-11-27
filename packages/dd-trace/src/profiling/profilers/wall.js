@@ -19,7 +19,14 @@ const {
   END_TIMESTAMP_LABEL,
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
+  TRACE_ID_LABEL,
+  OTEL_LOCAL_ROOT_SPAN_ID,
+  OTEL_TRACE_ENDPOINT,
+  OTEL_ASYNC_ID,
   getNonJSThreadsLabels,
+  getNonJSThreadsOtelLabels,
+  getOtelCustomLabels,
+  getOtelThreadLabels,
   getThreadLabels,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
@@ -33,8 +40,47 @@ const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
 
+/**
+ * The profiling context of a span, as samples carry it.
+ *
+ * @typedef {{
+ *   spanId?: unknown,
+ *   rootSpanId?: unknown,
+ *   traceIdLow?: import('../../id').Identifier,
+ *   traceIdHigh?: string,
+ *   traceId?: bigint,
+ *   webTags?: Record<string, unknown>,
+ *   endpoint?: string,
+ * }} ProfilingContext
+ *
+ * With OTLP export, a span's trace ID is kept as its identifier and the hex of its upper 64 bits, as the span context
+ * has them, and only combined into traceId when a sample needs it.
+ */
+
+// The tag of the hex of a 128-bit trace ID's upper 64 bits, when the span context's identifier only has the lower 64
+const TRACE_ID_128 = '_dd.p.tid'
+const HEX_64 = /^[\da-f]{16}$/i
+
 function toBigInt (spanId) {
   return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
+}
+
+/**
+ * A trace ID as a bigint, from the span context's identifier and the hex of the upper 64 bits, as its toTraceId(true)
+ * would have it, but without going through hex for the identifier.
+ *
+ * @param {import('../../id').Identifier} traceId
+ * @param {string | undefined} traceIdHigh
+ */
+function toTraceIdBigInt (traceId, traceIdHigh) {
+  const buffer = traceId.toBuffer()
+  if (buffer.length > 8) {
+    // A 128-bit identifier has its upper 64 bits itself
+    const bytes = Buffer.from(buffer)
+    return (bytes.readBigUInt64BE(bytes.length - 16) << 64n) | bytes.readBigUInt64BE(bytes.length - 8)
+  }
+  const low = traceId.toBigInt()
+  return traceIdHigh !== undefined && HEX_64.test(traceIdHigh) ? (BigInt(`0x${traceIdHigh}`) << 64n) | low : low
 }
 
 function updateContext (context) {
@@ -63,6 +109,9 @@ class NativeWallProfiler {
   #asyncContextFrameEnabled = false
   #captureSpanData = false
   #codeHotspotsEnabled = false
+  #otlp = false
+  // The OTLP labels of custom labels objects, for the profile being captured
+  #otelCustomLabels = new WeakMap()
   #contextCountGaugeUpdater
   collectsCpuTime = false
   #currentContext
@@ -86,6 +135,7 @@ class NativeWallProfiler {
   #boundSpanFinished = this.#spanFinished.bind(this)
   #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
+  #boundGenerateOtelLabels = this.#generateOtelLabels.bind(this)
 
   get type () { return 'wall' }
 
@@ -96,6 +146,7 @@ class NativeWallProfiler {
   constructor (config, { asyncContextFrameEnabled, flushInterval }) {
     this.#asyncContextFrameEnabled = asyncContextFrameEnabled
     this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.#otlp = config.OTEL_PROFILES_EXPORTER === 'otlp'
     this.collectsCpuTime = config.DD_PROFILING_CPU_ENABLED
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
@@ -251,10 +302,18 @@ class NativeWallProfiler {
 
       let spanId
       let rootSpanId
+      let traceIdLow
+      let traceIdHigh
       if (this.#codeHotspotsEnabled) {
         const startedSpans = getStartedSpans(context)
         spanId = context._spanId
         rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
+        if (this.#otlp) {
+          // OTLP samples link to their span by trace ID and span ID. Only references are kept here, as most spans
+          // aren't in a sample: #generateOtelLabels makes the trace ID of those that are.
+          traceIdLow = context._traceId
+          traceIdHigh = context._trace.tags[TRACE_ID_128]
+        }
       }
 
       // webTags is snapshotted into the sample context at getProfilingContext
@@ -263,7 +322,9 @@ class NativeWallProfiler {
       // cache (see web-tags-cache.js).
       const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
-      profilingContext = { spanId, rootSpanId, webTags }
+      profilingContext = traceIdLow === undefined
+        ? { spanId, rootSpanId, webTags }
+        : { spanId, rootSpanId, traceIdLow, traceIdHigh, webTags }
       span[ProfilingContext] = profilingContext
     }
     return profilingContext
@@ -317,8 +378,16 @@ class NativeWallProfiler {
       this.#lastSampleCount = 0
     }
 
-    // Labels are generated when the profile is visited
-    const profile = this.#pprof.time.stopAndCapture(restart, { generateLabels: this.#boundGenerateLabels })
+    // Labels are generated when the profile is visited, in the format it's exported in
+    if (this.#otlp) {
+      // A profile converts custom labels as they are when it's visited
+      this.#otelCustomLabels = new WeakMap()
+    }
+    const options = this.#otlp
+      // Every sample with a context is a timestamped observation, as the timeline needs
+      ? { generateLabels: this.#boundGenerateOtelLabels, samplePerContext: true }
+      : { generateLabels: this.#boundGenerateLabels }
+    const profile = this.#pprof.time.stopAndCapture(restart, options)
 
     if (restart) {
       const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -346,6 +415,85 @@ class NativeWallProfiler {
     return profile
   }
 
+  /**
+   * Returns a sample context's profiling context: the span's, if any. Native profiler doesn't set context.context for
+   * some samples, such as idle samples or when the context was otherwise unavailable when the sample was taken. With
+   * ACF, there is no "ref" indirection, and when custom labels are active, context.context is a 2-element array:
+   * [profilingContext, customLabels]. Otherwise it's a plain object.
+   *
+   * @param {{ context?: unknown }} context
+   * @returns {ProfilingContext | undefined}
+   */
+  #profilingContextOf (context) {
+    const cctx = context.context
+    if (this.#asyncContextFrameEnabled) {
+      return Array.isArray(cctx) ? cctx[0] : cctx
+    }
+    return cctx?.ref
+  }
+
+  /**
+   * Returns a sample context's custom labels, which it only has with ACF (see #profilingContextOf).
+   *
+   * @param {{ context?: unknown }} context
+   * @returns {Record<string, string | number> | undefined}
+   */
+  #customLabelsOf (context) {
+    const cctx = context.context
+    return this.#asyncContextFrameEnabled && Array.isArray(cctx) ? cctx[1] : undefined
+  }
+
+  /**
+   * The labels of an OTLP sample: the same as _generateLabels, with semantic-convention attributes where there are
+   * some, and otherwise execution context labels. The span's trace and span IDs become the sample's link, in the
+   * profiles builder, and its time is a sample timestamp, not a label.
+   *
+   * @param {{ node: { name: string }, context?: { context?: unknown, asyncId?: number } }} sample
+   */
+  #generateOtelLabels ({ node, context }) {
+    if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
+      return getNonJSThreadsOtelLabels()
+    }
+    if (context == null) {
+      return getOtelThreadLabels()
+    }
+
+    const ref = this.#profilingContextOf(context)
+    const customLabels = this.#customLabelsOf(context)
+
+    // As in _generateLabels, internal labels take precedence over custom labels of the same key
+    const labels = customLabels === undefined
+      ? { ...getOtelThreadLabels() }
+      : { ...getOtelCustomLabels(customLabels, this.#otelCustomLabels), ...getOtelThreadLabels() }
+
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels[OTEL_ASYNC_ID] = asyncId
+    }
+
+    if (typeof ref !== 'object') {
+      return labels
+    }
+
+    const { spanId, rootSpanId, traceIdLow, webTags, endpoint } = ref
+
+    // The span ID and trace ID become the sample's link. The trace ID is made once for each span in the samples.
+    if (spanId !== undefined && traceIdLow !== undefined) {
+      labels[SPAN_ID_LABEL] = toBigInt(spanId)
+      labels[TRACE_ID_LABEL] = ref.traceId ??= toTraceIdBigInt(traceIdLow, ref.traceIdHigh)
+    }
+    if (rootSpanId !== undefined) {
+      labels[OTEL_LOCAL_ROOT_SPAN_ID] = toBigInt(rootSpanId)
+    }
+    if (webTags !== undefined) {
+      labels[OTEL_TRACE_ENDPOINT] = endpointNameFromTags(webTags)
+    } else if (endpoint) {
+      labels[OTEL_TRACE_ENDPOINT] = endpoint
+    }
+
+    return labels
+  }
+
   _generateLabels ({ node, context }) {
     // check for special node that represents CPU time all non-JS threads.
     // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
@@ -359,23 +507,8 @@ class NativeWallProfiler {
       return getThreadLabels()
     }
 
-    // Native profiler doesn't set context.context for some samples, such as idle samples or when
-    // the context was otherwise unavailable when the sample was taken. Note that with ACF, we don't
-    // use the "ref" indirection.
-    let ref
-    let customLabels
-    const cctx = context.context
-    if (this.#asyncContextFrameEnabled) {
-      // When custom labels are active with ACF, context.context is a 2-element array:
-      // [profilingContext, customLabels]. Otherwise it's a plain object.
-      if (Array.isArray(cctx)) {
-        [ref, customLabels] = cctx
-      } else {
-        ref = cctx
-      }
-    } else {
-      ref = cctx?.ref
-    }
+    const ref = this.#profilingContextOf(context)
+    const customLabels = this.#customLabelsOf(context)
 
     // Custom labels are spread first so that internal labels always take
     // precedence and overwrite them.

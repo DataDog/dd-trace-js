@@ -1,25 +1,12 @@
 'use strict'
 
 const log = require('../../log')
+const { isInt64, transformAnyValue, transformAttributes } = require('./attributes')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
  */
-
-// OTLP integer fields are signed 64-bit. Larger integers wrap in protobuf and are rejected in JSON,
-// so they are exported as doubles instead.
-const INT64_MIN = -(2 ** 63)
-const INT64_MAX_EXCLUSIVE = 2 ** 63
-
-/**
- * Whether a number can be exported as an OTLP int64 (or sfixed64) value.
- *
- * @param {number} value
- */
-function isInt64 (value) {
-  return Number.isInteger(value) && value >= INT64_MIN && value < INT64_MAX_EXCLUSIVE
-}
 
 /**
  * Base class for OTLP transformers.
@@ -106,10 +93,7 @@ class OtlpTransformerBase {
    * @protected
    */
   transformAttributes (attributes) {
-    return Object.entries(attributes).map(([key, value]) => ({
-      key,
-      value: this.transformAnyValue(value),
-    }))
+    return transformAttributes(attributes)
   }
 
   /**
@@ -136,24 +120,7 @@ class OtlpTransformerBase {
    * @protected
    */
   transformAnyValue (value) {
-    if (typeof value === 'string') {
-      return { stringValue: value }
-    } else if (typeof value === 'number') {
-      if (isInt64(value)) {
-        return { intValue: value }
-      }
-      return { doubleValue: value }
-    } else if (typeof value === 'boolean') {
-      return { boolValue: value }
-    } else if (Array.isArray(value)) {
-      return {
-        arrayValue: {
-          values: value.map(v => this.transformAnyValue(v)),
-        },
-      }
-    }
-    // Fallback for any unexpected types
-    return { stringValue: String(value) }
+    return transformAnyValue(value)
   }
 
   /**

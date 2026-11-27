@@ -11,6 +11,7 @@ const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
+const { OtlpProfilesExporter } = require('./exporters/otlp')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
@@ -18,7 +19,7 @@ const { ensureOOMExportStrategies } = require('./oom')
 const { tagger } = require('./tagger')
 
 /** @typedef {import('../config/config-base')} TracerConfig */
-/** @typedef {AgentExporter | FileExporter} ProfilingExporter */
+/** @typedef {AgentExporter | FileExporter | OtlpProfilesExporter} ProfilingExporter */
 /** @typedef {WallProfiler | SpaceProfiler | EventsProfiler} ProfilingProfiler */
 
 /** @param {TracerConfig} config */
@@ -72,9 +73,10 @@ function getAsyncContextFrameEnabled (config) {
  *   flushInterval: number,
  *   tags: Record<string, string>,
  *   exporters: ProfilingExporter[],
+ *   otlp: boolean,
  * }} runtime
  */
-function createProfilers (config, { asyncContextFrameEnabled, flushInterval, tags, exporters }) {
+function createProfilers (config, { asyncContextFrameEnabled, flushInterval, tags, exporters, otlp }) {
   const profilers = []
   for (const name of selectProfilerTypes(config)) {
     switch (name) {
@@ -90,9 +92,13 @@ function createProfilers (config, { asyncContextFrameEnabled, flushInterval, tag
   }
 
   // The events profiler produces timeline events. It is only added if timeline
-  // is enabled and there's a wall profiler.
+  // is enabled and there's a wall profiler. Its events can't be sent as OTLP profiles yet.
   if (config.DD_PROFILING_TIMELINE_ENABLED && profilers.some(profiler => profiler instanceof WallProfiler)) {
-    profilers.push(new EventsProfiler(config, { flushInterval }))
+    if (otlp) {
+      log.debug('Timeline events are not collected when profiles are exported as OTLP')
+    } else {
+      profilers.push(new EventsProfiler(config, { flushInterval }))
+    }
   }
 
   return profilers
@@ -165,6 +171,8 @@ function getExporter (name, config) {
       return new AgentExporter(config)
     case 'file':
       return new FileExporter(config)
+    case 'otlp':
+      return new OtlpProfilesExporter(config)
     default:
       log.error('Unknown exporter "%s"', name)
   }
@@ -181,9 +189,12 @@ function getExporter (name, config) {
  */
 function buildProfilingRuntime (config) {
   const tags = getProfilingTags(config)
+  // With OTEL_PROFILES_EXPORTER=otlp, profiles are OTLP, sent to the OTLP profiles endpoint in place
+  // of the agent; DD_PROFILING_EXPORTERS keeps choosing the destinations.
+  const otlp = config.OTEL_PROFILES_EXPORTER === 'otlp'
   const exporters = []
   for (const name of config.DD_PROFILING_EXPORTERS) {
-    const exporter = getExporter(name, config)
+    const exporter = getExporter(otlp && name === 'agent' ? 'otlp' : name, config)
     // getExporter logs and returns undefined for an unknown exporter name; drop it so a misconfigured
     // DD_PROFILING_EXPORTERS entry can't crash the export path later.
     if (exporter !== undefined) {
@@ -192,7 +203,7 @@ function buildProfilingRuntime (config) {
   }
   const asyncContextFrameEnabled = getAsyncContextFrameEnabled(config)
   const flushInterval = config.DD_PROFILING_UPLOAD_PERIOD * 1000
-  const profilers = createProfilers(config, { asyncContextFrameEnabled, flushInterval, tags, exporters })
+  const profilers = createProfilers(config, { asyncContextFrameEnabled, flushInterval, tags, exporters, otlp })
   const uploadCompression = config.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION
 
   const oomMonitoringEnabled = config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED
@@ -204,6 +215,7 @@ function buildProfilingRuntime (config) {
     debugSourceMaps: config.DD_PROFILING_DEBUG_SOURCE_MAPS,
     endpointCollectionEnabled: config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
     heapSamplingInterval: config.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
+    otlpExportEnabled: otlp,
     oomMonitoring: {
       enabled: oomMonitoringEnabled,
       heapLimitExtensionSize: config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
@@ -220,7 +232,7 @@ function buildProfilingRuntime (config) {
     v8ProfilerBugWorkaroundEnabled: config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
   }
 
-  return { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport }
+  return { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport, otlp }
 }
 
 module.exports = {
