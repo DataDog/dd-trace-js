@@ -19,6 +19,7 @@
 "@jsep-plugin/assignment","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
 "@jsep-plugin/regex","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
 "@napi-rs/wasm-runtime","https://github.com/napi-rs/napi-rs","['MIT']","['LongYinan']"
+"@noble/ciphers","https://github.com/paulmillr/noble-ciphers","['MIT']","['Paul Miller']"
 "@opentelemetry/api","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
 "@opentelemetry/api-logs","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
 "@opentelemetry/core","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"

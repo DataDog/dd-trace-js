@@ -275,5 +275,8 @@
   },
   "trustedDependencies": [
     "bun"
-  ]
+  ],
+  "overrides": {
+    "@datadog/flagging-core": "3.6.0"
+  }
 }
