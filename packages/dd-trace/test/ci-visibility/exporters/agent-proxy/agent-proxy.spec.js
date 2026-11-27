@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+const zlib = require('node:zlib')
 
 const { describe, it, beforeEach } = require('mocha')
 const context = describe
@@ -17,8 +18,10 @@ const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentle
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
+const FormData = require('../../../../src/exporters/common/form-data')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
+const id = require('../../../../src/id')
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
@@ -585,6 +588,49 @@ describe('AgentProxyCiVisibilityExporter', () => {
       assert.strictEqual(agentProxyCiVisibilityExporter._isGzipCompatible, false)
       assert.strictEqual(scope.isDone(), true)
     })
+  })
+
+  describe('coverage requests', () => {
+    async function sendCoverage (endpoints) {
+      nock(url)
+        .get('/info')
+        .reply(200, JSON.stringify({ endpoints }))
+      const request = sinon.stub().yieldsAsync(null, 'OK', 200)
+      const CoverageWriterWithRequestStub = proxyquire(
+        '../../../../src/ci-visibility/exporters/agentless/coverage-writer',
+        { '../request': request }
+      )
+      const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agent-proxy', {
+        '../agentless/coverage-writer': CoverageWriterWithRequestStub,
+      })
+      const exporter = new Exporter({ url, tags, testOptimization: {} })
+      await exporter._canUseCiVisProtocolPromise
+
+      exporter._coverageWriter.append({ sessionId: id('1'), suiteId: id('2'), files: ['file.js'] })
+      await new Promise(resolve => exporter._coverageWriter.flush(resolve))
+
+      sinon.assert.calledOnce(request)
+      return request.firstCall.args
+    }
+
+    it('sends coverage gzipped when the agent offers evp_proxy v4', async () => {
+      const [body, options] = await sendCoverage(['/evp_proxy/v2/', '/evp_proxy/v3/', '/evp_proxy/v4/'])
+
+      assert.strictEqual(options.path, '/evp_proxy/v4/api/v2/citestcov')
+      assert.strictEqual(options.headers['Content-Encoding'], 'gzip')
+      assert.match(zlib.gunzipSync(body).toString('latin1'), /name="coverage1"; filename="coverage1\.msgpack"/)
+    })
+
+    for (const endpoints of [['/evp_proxy/v2/'], ['/evp_proxy/v2/', '/evp_proxy/v3/']]) {
+      it(`sends coverage uncompressed through evp_proxy v2 when the agent offers up to ${endpoints.at(-1)}`,
+        async () => {
+          const [body, options] = await sendCoverage(endpoints)
+
+          assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/citestcov')
+          assert.strictEqual(options.headers['Content-Encoding'], undefined)
+          assert.ok(body instanceof FormData)
+        })
+    }
   })
 
   describe('evpProxyPrefix', () => {
