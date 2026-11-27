@@ -192,16 +192,16 @@ cases:
   - id: dd-trace-js-config-scope-015
     files: [AGENTS.md]
     input: |
-      I am adding an internal tracer byte limit configured only through an environment variable.
-      Do I need configurationNames, public option declarations, or API guide content?
+      I am adding a public tracer byte limit configured only through an environment variable.
+      Do I need configurationNames, public option declarations, or a docs/API.md edit?
       Which public declaration file should document a separate v5-only option? Answer in at most 4 bullets.
     expected_criteria:
-      - Does not require configurationNames, public declarations, or public guide content for the internal option.
+      - Does not require configurationNames, public declarations, or a docs/API.md edit for the environment-only option.
       - Updates only index.d.v5.ts and its declaration comments for the v5-only public option.
     bad_signals:
       - Treats every environment variable as a public tracer.init() option.
       - Requires edits to both public type surfaces for the explicitly v5-only option.
-      - Requires docs/API.md for every registry entry.
+      - Requires a docs/API.md edit for the environment-only option.
 
   # AGENTS.md — Cross-Cutting Configuration Changes: custom behavior and configuration sources.
   - id: dd-trace-js-custom-configuration-016

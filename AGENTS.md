@@ -142,7 +142,8 @@ Other settings update only their owning surfaces:
 3. Run `npm run generate:config:types` and commit the generated configuration types. Update both supported public
     TypeScript surfaces when applicable.
 4. Document non-experimental public options in the declaration comments in `index.d.ts` and `index.d.v5.ts` as
-    applicable. TypeDoc reads `index.d.ts` to generate the API reference. Update `docs/API.md` for guide content.
+    applicable. TypeDoc reads `index.d.ts` to generate the API reference.
+    Update `docs/API.md` only for guide content about programmatic APIs.
 5. Test the option in `packages/dd-trace/test/config/index.spec.js`. Add telemetry tests when adding or changing
     a configuration source.
 
