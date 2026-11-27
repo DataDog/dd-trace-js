@@ -1,15 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { once } = require('node:events')
 const { join } = require('node:path')
 
-const dc = require('dc-polyfill')
-const { after, before, describe, it } = require('mocha')
+const { before, describe, it } = require('mocha')
 
 const { FakeAgent, spawnPluginIntegrationTestProcAndExpectExit } = require('../../../integration-tests/helpers')
 const { getLlmObsSpansFromApmSpans } = require('../../dd-trace/test/llmobs/util')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 /**
@@ -24,83 +21,61 @@ function assertOutput (llm, durationMs, value) {
   assert.equal(llm.meta.metadata.output_audio_omitted_reason, undefined)
 }
 
+/** @param {FakeAgent} fakeAgent */
+function collectApmSpans (fakeAgent) {
+  const spans = []
+  fakeAgent.on('message', ({ payload }) => {
+    if (Array.isArray(payload)) {
+      spans.push(...payload.flat())
+    }
+  })
+  return spans
+}
+
 withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version => {
   describe('elevenlabs APM', () => {
-    let sdkModule
-    before(async () => {
-      await agent.load('elevenlabs')
-      sdkModule = require(`../../../versions/@elevenlabs/elevenlabs-js@${version}`)
+    let fixtureEnv
+    before(() => {
+      const sdkModule = require(`../../../versions/@elevenlabs/elevenlabs-js@${version}`)
+      fixtureEnv = {
+        SDK_CONVERSATION_PATH: sdkModule.getPath(
+          '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
+        NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')} ` +
+          `--import=${require.resolve('./fixtures/preload.cjs')}`,
+      }
     })
-    after(() => agent.close())
 
     it('uses the default factory without retaining audio when LLMObs is disabled', async () => {
-      const { Conversation, DefaultAudioInterface } = sdkModule.get(
-        '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation')
-      const WebSocket = sdkModule.get('ws')
-      const server = new WebSocket.Server({ port: 0 })
-      await once(server, 'listening')
-      const audio = new DefaultAudioInterface()
-      const conversation = new Conversation({ agentId: 'test', requiresAuth: false, audioInterface: audio })
-      conversation._getWssUrl = () => `ws://127.0.0.1:${server.address().port}`
-      const connection = once(server, 'connection')
-      const traces = agent.assertSomeTraces(traces => {
-        const spans = traces.flat().filter(span => span.name === 'elevenlabs.request')
+      const fakeAgent = await new FakeAgent().start()
+      const apmSpans = collectApmSpans(fakeAgent)
+      try {
+        await spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
+          'packages/datadog-plugin-elevenlabs/test/fixtures/default-factory.cjs', fakeAgent.port, {
+            ...fixtureEnv,
+            DD_LLMOBS_ENABLED: 'false',
+          })
+        const spans = apmSpans.filter(span => span.name === 'elevenlabs.request')
         assert.equal(spans.length, 2)
         assert.deepEqual(spans.map(span => span.resource).sort(), ['elevenlabs audio turn', 'elevenlabs response'])
-        assert.equal(dc.channel('dd-trace:elevenlabs:audio').hasSubscribers, false)
         assert.ok(spans.every(span => span.meta.component === 'elevenlabs'))
-      })
-      try {
-        const [, [socket]] = await Promise.all([conversation.startSession(), connection])
-        const received = once(conversation, 'conversation_started')
-        socket.send(JSON.stringify({
-          type: 'conversation_initiation_metadata',
-          conversation_initiation_metadata_event: {
-            conversation_id: 'conv-default',
-            user_input_audio_format: 'pcm_16000',
-            agent_output_audio_format: 'pcm_24000',
-          },
-        }))
-        await received
-        const message = once(socket, 'message')
-        conversation.sendUserMessage('Hi')
-        await message
-        const answered = new Promise(resolve => { conversation.callbackAgentResponse = resolve })
-        socket.send(JSON.stringify({
-          type: 'agent_response',
-          agent_response_event: {
-            event_id: 1,
-            agent_response: 'Hello',
-          },
-        }))
-        await answered
-        conversation.endSession()
-        await traces
-      } finally {
-        conversation.endSession()
-        for (const socket of server.clients) socket.terminate()
-        await new Promise(resolve => server.close(resolve))
-      }
+      } finally { await fakeAgent.stop() }
     })
 
     for (const llmobs of [false, true]) {
       it(`drains deferred spans on natural process exit, llmobs=${llmobs}`, async () => {
         const fakeAgent = await new FakeAgent().start()
-        const apmSpans = []
+        const apmSpans = collectApmSpans(fakeAgent)
         const llmobsSpans = []
-        fakeAgent.on('message', ({ payload }) => { if (Array.isArray(payload)) apmSpans.push(...payload.flat()) })
         fakeAgent.on('llmobs', ({ payload }) => { for (const envelope of payload) llmobsSpans.push(...envelope.spans) })
         try {
           await spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
             'packages/datadog-plugin-elevenlabs/test/fixtures/natural-exit.cjs', fakeAgent.port, {
-              SDK_CONVERSATION_PATH: sdkModule.getPath(
-                '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
+              ...fixtureEnv,
               DD_LLMOBS_ENABLED: String(llmobs),
               DD_LLMOBS_ML_APP: 'elevenlabs-natural-exit-test',
               DD_LLMOBS_AGENTLESS_ENABLED: 'false',
               DD_TRACE_FLUSH_INTERVAL: '60000',
               _DD_LLMOBS_FLUSH_INTERVAL: '60000',
-              NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')}`,
             })
           assert.equal(apmSpans.filter(span => span.name === 'elevenlabs.request').length, 2)
           llmobsSpans.push(...getLlmObsSpansFromApmSpans(apmSpans))
@@ -112,22 +87,19 @@ withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version =
     for (const audioFirst of [false, true]) {
       it(`preserves full playback with the assumed SDK correction (audioFirst=${audioFirst})`, async () => {
         const fakeAgent = await new FakeAgent().start()
-        const apmSpans = []
-        fakeAgent.on('message', ({ payload }) => { if (Array.isArray(payload)) apmSpans.push(...payload.flat()) })
+        const apmSpans = collectApmSpans(fakeAgent)
         const message = fakeAgent.assertMessageReceived(({ payload }) => {
           assert.ok(Array.isArray(payload))
           assert.ok(payload.flat().some(span => span.name === 'elevenlabs.request'))
         })
         const proc = spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
           'packages/datadog-plugin-elevenlabs/test/fixtures/corrected-sdk.cjs', fakeAgent.port, {
-            SDK_CONVERSATION_PATH: sdkModule.getPath(
-              '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
+            ...fixtureEnv,
             AUDIO_FIRST: String(audioFirst),
             DD_LLMOBS_ENABLED: 'true',
             DD_LLMOBS_ML_APP: 'elevenlabs-corrected-sdk-test',
             DD_LLMOBS_AGENTLESS_ENABLED: 'false',
             _DD_LLMOBS_FLUSH_INTERVAL: '0',
-            NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')}`,
           })
         try {
           await Promise.all([proc, message])
@@ -160,14 +132,12 @@ withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version =
           assert.equal(spans.length, 2)
         })
         try {
-          await spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
-            `packages/datadog-plugin-elevenlabs/test/fixtures/app.${format === 'esm' ? 'mjs' : 'cjs'}`,
-            fakeAgent.port, {
-              SDK_CONVERSATION_PATH: sdkModule.getPath(
-                '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
-              NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')}`,
-            })
-          await message
+          await Promise.all([
+            spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
+              `packages/datadog-plugin-elevenlabs/test/fixtures/app.${format === 'esm' ? 'mjs' : 'cjs'}`,
+              fakeAgent.port, fixtureEnv),
+            message,
+          ])
         } finally { await fakeAgent.stop() }
       })
     }

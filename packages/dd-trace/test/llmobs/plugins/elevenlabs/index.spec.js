@@ -3,9 +3,10 @@
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const stubHttpClient = require('../../../../../datadog-plugin-elevenlabs/test/fixtures/stub-http-client.cjs')
 const { withVersions } = require('../../../setup/mocha')
 const { useLlmObs } = require('../../util')
 
@@ -54,12 +55,19 @@ describe('integrations', () => {
     withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version => {
       let Conversation, ClientTools, clock, conversation, socket, audio, tools, outputSpy
 
+      before(() => {
+        const sdkPath = require(`../../../../../../versions/@elevenlabs/elevenlabs-js@${version}`).getPath(
+          '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation')
+        const restore = stubHttpClient(sdkPath)
+        try {
+          ({ Conversation, ClientTools } = require(sdkPath))
+        } finally {
+          restore()
+        }
+      })
+
       beforeEach(() => {
         clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date'] })
-        const sdk = require(`../../../../../../versions/@elevenlabs/elevenlabs-js@${version}`).get(
-          '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation')
-        Conversation = sdk.Conversation
-        ClientTools = sdk.ClientTools
         tools = new ClientTools()
         outputSpy = sinon.spy()
         audio = {
