@@ -426,6 +426,25 @@ describe('Plugin', () => {
     describe('web search', () => {
       const tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }]
 
+      // The search the provider ran is recorded as a server tool call and its result.
+      const WEB_SEARCH_TOOL_MESSAGES = [
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            name: 'web_search',
+            arguments: { query: MOCK_STRING },
+            tool_id: MOCK_STRING,
+            type: 'server_tool_use',
+          }],
+        },
+        {
+          role: 'assistant',
+          content: '',
+          tool_results: [{ name: '', result: MOCK_STRING, tool_id: MOCK_STRING, type: 'tool_result' }],
+        },
+      ]
+
       /**
        * @param {object[]} apmSpans
        * @param {object[]} llmobsSpans
@@ -439,7 +458,9 @@ describe('Plugin', () => {
           modelName: 'claude-haiku-4-5-20251001',
           modelProvider: 'anthropic',
           inputMessages: [{ role: 'user', content }],
-          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          outputMessages: webSearchCount === undefined
+            ? [{ role: 'assistant', content: MOCK_STRING }]
+            : [...WEB_SEARCH_TOOL_MESSAGES, { role: 'assistant', content: MOCK_STRING }],
           metadata: { max_tokens: 1024 },
           metrics: {
             input_tokens: MOCK_NUMBER,

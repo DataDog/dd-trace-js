@@ -5,6 +5,7 @@ const {
   extractContentParts,
   getOpenAIModelProvider,
   getServerToolUsageMetrics,
+  getHostedToolMessage,
 } = require('../../src/llmobs/plugins/openai/utils')
 const OpenAiLLMObsPlugin = require('../../src/llmobs/plugins/openai')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../src/llmobs/constants/tags')
@@ -172,4 +173,83 @@ describe('getServerToolUsageMetrics', () => {
       assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 1 })
     })
   }
+})
+
+describe('getHostedToolMessage', () => {
+  function assertToolMessage (item, name, args, result) {
+    assert.deepStrictEqual(getHostedToolMessage(item), {
+      role: 'assistant',
+      content: '',
+      toolCalls: [{ name, arguments: args, toolId: item.id, type: item.type }],
+      toolResults: [{ name, result: JSON.stringify(result), toolId: item.id, type: 'tool_result' }],
+    })
+  }
+
+  it('keeps the web search action as arguments and only url and title of each source', () => {
+    assertToolMessage({
+      id: 'ws_1',
+      type: 'web_search_call',
+      status: 'completed',
+      action: { type: 'search', query: 'q', sources: [{ type: 'url', url: 'https://a.test', title: 'A' }] },
+    }, 'web_search', { type: 'search', query: 'q' }, {
+      status: 'completed',
+      sources: [{ url: 'https://a.test', title: 'A' }],
+    })
+  })
+
+  it('keeps a failed web search without action or sources', () => {
+    assertToolMessage({ id: 'ws_2', type: 'web_search_call', status: 'failed' }, 'web_search', {}, {
+      status: 'failed',
+    })
+  })
+
+  it('leaves file contents out of file search results', () => {
+    assertToolMessage({
+      id: 'fs_1',
+      type: 'file_search_call',
+      status: 'completed',
+      queries: ['refund policy'],
+      results: [{ file_id: 'file_1', filename: 'policy.pdf', score: 0.9, text: 'private contents', attributes: {} }],
+    }, 'file_search', { queries: ['refund policy'] }, {
+      status: 'completed',
+      results: [{ file_id: 'file_1', filename: 'policy.pdf', score: 0.9 }],
+    })
+  })
+
+  it('records code interpreter code, logs and an image placeholder', () => {
+    assertToolMessage({
+      id: 'ci_1',
+      type: 'code_interpreter_call',
+      status: 'completed',
+      code: 'print(1)',
+      container_id: 'cntr_1',
+      outputs: [{ type: 'logs', logs: '1' }, { type: 'image', url: 'https://img.test/1.png' }],
+    }, 'code_interpreter', { code: 'print(1)', container_id: 'cntr_1' }, {
+      status: 'completed',
+      outputs: ['1', '[image]'],
+    })
+  })
+
+  it('records only allowlisted web search action keys', () => {
+    assertToolMessage({
+      id: 'ws_3',
+      type: 'web_search_call',
+      status: 'completed',
+      action: { type: 'open_page', url: 'https://a.test', page_text: 'full page body' },
+    }, 'web_search', { type: 'open_page', url: 'https://a.test' }, { status: 'completed' })
+  })
+
+  it('caps each code interpreter logs output at 4096 characters', () => {
+    assertToolMessage({
+      id: 'ci_2',
+      type: 'code_interpreter_call',
+      status: 'completed',
+      code: 'print(x)',
+      container_id: 'cntr_1',
+      outputs: [{ type: 'logs', logs: 'a'.repeat(4096) }, { type: 'logs', logs: 'b'.repeat(4097) }],
+    }, 'code_interpreter', { code: 'print(x)', container_id: 'cntr_1' }, {
+      status: 'completed',
+      outputs: ['a'.repeat(4096), 'b'.repeat(4096)],
+    })
+  })
 })

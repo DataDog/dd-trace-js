@@ -32,4 +32,87 @@ describe('anthropic utils', () => {
       }],
     }])
   })
+
+  it('records server tool use and web search results without encrypted content', () => {
+    const messages = []
+
+    appendMessage(messages, {
+      role: 'assistant',
+      content: [
+        { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'q' } },
+        {
+          type: 'web_search_tool_result',
+          tool_use_id: 'srvtoolu_1',
+          content: [{ type: 'web_search_result', url: 'https://a.test', title: 'A', encrypted_content: 'secret' }],
+        },
+        {
+          type: 'web_search_tool_result',
+          tool_use_id: 'srvtoolu_2',
+          content: { type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded' },
+        },
+      ],
+    })
+
+    assert.deepStrictEqual(messages, [
+      {
+        content: '',
+        role: 'assistant',
+        toolCalls: [{ name: 'web_search', arguments: { query: 'q' }, toolId: 'srvtoolu_1', type: 'server_tool_use' }],
+      },
+      {
+        content: '',
+        role: 'assistant',
+        toolResults: [{
+          result: '{"sources":[{"url":"https://a.test","title":"A"}]}',
+          toolId: 'srvtoolu_1',
+          type: 'tool_result',
+        }],
+      },
+      {
+        content: '',
+        role: 'assistant',
+        toolResults: [{
+          result: '{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}',
+          toolId: 'srvtoolu_2',
+          type: 'tool_result',
+        }],
+      },
+    ])
+  })
+
+  it('summarizes web fetch results, capping page text and omitting binary documents', () => {
+    const fetchResult = (id, source) => ({
+      type: 'web_fetch_tool_result',
+      tool_use_id: id,
+      content: {
+        type: 'web_fetch_result',
+        url: 'https://a.test/doc',
+        retrieved_at: '2026-11-25T10:00:00Z',
+        content: { type: 'document', title: 'Doc', source },
+      },
+    })
+    const messages = []
+
+    appendMessage(messages, {
+      role: 'user',
+      content: [
+        fetchResult('srvtoolu_1', { type: 'text', media_type: 'text/plain', data: 'y'.repeat(4096) }),
+        fetchResult('srvtoolu_2', { type: 'text', media_type: 'text/plain', data: 'z'.repeat(4097) }),
+        fetchResult('srvtoolu_3', { type: 'base64', media_type: 'application/pdf', data: 'J'.repeat(100_000) }),
+        {
+          type: 'web_fetch_tool_result',
+          tool_use_id: 'srvtoolu_4',
+          content: { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' },
+        },
+      ],
+    })
+
+    const page = { url: 'https://a.test/doc', retrieved_at: '2026-11-25T10:00:00Z', title: 'Doc' }
+    assert.deepStrictEqual(messages.map(message => JSON.parse(message.toolResults[0].result)), [
+      { ...page, text: 'y'.repeat(4096) },
+      { ...page, text: 'z'.repeat(4096) },
+      { ...page, document: '[document omitted: application/pdf]' },
+      { type: 'web_fetch_tool_error', error_code: 'url_not_accessible' },
+    ])
+  })
 })

@@ -3,7 +3,7 @@
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
 const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
-const { appendMessage } = require('./util')
+const { appendMessage, formatAnthropicToolResultContent } = require('./util')
 
 const ALLOWED_METADATA_KEYS = new Set([
   'max_tokens',
@@ -56,8 +56,11 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
               response.content.push({ type, text: contentBlock.text })
             } else if (type === 'thinking') {
               response.content.push({ type, thinking: contentBlock.thinking ?? '' })
-            } else if (type === 'tool_use') {
+            } else if (type?.includes('tool_use')) {
               response.content.push({ type, name: contentBlock.name, input: '', id: contentBlock.id })
+            } else if (type?.includes('tool_result')) {
+              // Server tool results (e.g. `web_search_tool_result`) arrive whole in the start event.
+              response.content.push({ type, tool_use_id: contentBlock.tool_use_id, content: contentBlock.content })
             }
             break
           }
@@ -85,7 +88,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
           case 'content_block_stop': {
             const lastBlock = response.content.at(-1)
             if (!lastBlock) break
-            if (lastBlock.type === 'tool_use') {
+            if (lastBlock.type?.includes('tool_use')) {
               const input = lastBlock.input ?? '{}'
               lastBlock.input = safeJsonParse(input, {})
             }
@@ -187,7 +190,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       const { text } = block
       if (typeof text === 'string') {
         outputMessages.push({ content: text, role })
-      } else if (block.type === 'tool_use') {
+      } else if (block.type?.includes('tool_use')) {
         const toolCall = {
           name: block.name,
           arguments: safeJsonParse(block.input, {}),
@@ -196,6 +199,14 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
         }
 
         outputMessages.push({ content: text ?? '', role, toolCalls: [toolCall] })
+      } else if (block.type?.includes('tool_result')) {
+        const toolResult = {
+          result: formatAnthropicToolResultContent(block.content),
+          toolId: block.tool_use_id,
+          type: 'tool_result',
+        }
+
+        outputMessages.push({ content: '', role, toolResults: [toolResult] })
       }
     }
 

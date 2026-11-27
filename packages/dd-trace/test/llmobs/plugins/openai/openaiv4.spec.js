@@ -1611,6 +1611,24 @@ describe('integrations', () => {
         })
       })
 
+      // The hosted search is recorded as a tool call and its result (status only: the cassettes don't request sources).
+      const WEB_SEARCH_OUTPUT_MESSAGE = {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          name: 'web_search',
+          arguments: { type: 'search', queries: [MOCK_STRING], query: MOCK_STRING },
+          tool_id: MOCK_STRING,
+          type: 'web_search_call',
+        }],
+        tool_results: [{
+          name: 'web_search',
+          result: '{"status":"completed"}',
+          tool_id: MOCK_STRING,
+          type: 'tool_result',
+        }],
+      }
+
       it('submits a response span with web search tool usage', async function () {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
@@ -1633,7 +1651,7 @@ describe('integrations', () => {
             { role: 'user', content: 'What was a positive news story from today? Answer in one sentence.' },
           ],
           outputMessages: [
-            { role: 'assistant', content: '' },
+            WEB_SEARCH_OUTPUT_MESSAGE,
             { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
@@ -1686,7 +1704,7 @@ describe('integrations', () => {
             { role: 'user', content: 'What was a positive news story from today? Answer in one sentence, streamed.' },
           ],
           outputMessages: [
-            { role: 'assistant', content: '' },
+            WEB_SEARCH_OUTPUT_MESSAGE,
             { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
