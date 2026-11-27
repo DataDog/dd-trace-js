@@ -1,20 +1,5 @@
 'use strict'
 
-/**
- * @param {{ connect: () => Promise<void>, clusterId?: (options: { timeout: number }) => Promise<string> }} client
- */
-async function connectAndWaitForClusterId (client) {
-  if (typeof client.clusterId !== 'function') return client.connect()
-
-  const lookup = require('sinon').spy(client, 'clusterId')
-  try {
-    await client.connect()
-    await lookup.firstCall?.returnValue
-  } finally {
-    lookup.restore()
-  }
-}
-
 async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
   if (typeof admin?.fetchTopicMetadata !== 'function') return
 
@@ -49,4 +34,4 @@ async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
   throw new Error(`Timeout: Topic "${topic}" metadata was not ready within ${timeoutMs}ms`)
 }
 
-module.exports = { connectAndWaitForClusterId, waitForTopicReady }
+module.exports = { waitForTopicReady }

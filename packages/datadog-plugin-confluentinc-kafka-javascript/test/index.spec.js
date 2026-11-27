@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { randomUUID } = require('node:crypto')
+const { promisify } = require('node:util')
+
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -14,7 +16,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
-const { connectAndWaitForClusterId, waitForTopicReady } = require('./helpers')
+const { waitForTopicReady } = require('./helpers')
 
 /** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
 
@@ -38,12 +40,12 @@ describe('Plugin', () => {
       let messages
       let nativeApi
       let testTopic
-      let clusterId
 
       /**
        * @param {Record<string, string>} meta
+       * @param {string} [clusterId]
        */
-      function assertClusterId (meta) {
+      function assertClusterId (meta, clusterId) {
         if (clusterId) {
           assert.strictEqual(meta['kafka.cluster_id'], clusterId)
         } else {
@@ -75,8 +77,6 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
-          // `clusterId()` exists from 1.11.0 on; earlier releases expose no cluster id to report.
-          clusterId = typeof admin.clusterId === 'function' ? await admin.clusterId() : undefined
           await admin.createTopics({
             topics: [{
               topic: testTopic,
@@ -148,28 +148,36 @@ describe('Plugin', () => {
           })
 
           describe('cluster id', () => {
-            it('should tag producer spans', async () => {
-              const spanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0].find(s => s.name === expectedSchema.send.opName)
-                assert.ok(span)
-                assertClusterId(span.meta)
-              }, { timeoutMs: 10000 })
+            it('uses the cluster id resolved by the producer', async () => {
+              const producer = kafka.producer()
+              await producer.connect()
+              try {
+                const clusterId = await producer.clusterId?.()
+                const spanPromise = agent.assertSomeTraces(traces => {
+                  const span = traces[0].find(s => s.name === expectedSchema.send.opName)
+                  assert.ok(span)
+                  assertClusterId(span.meta, clusterId)
+                }, { timeoutMs: 10000 })
 
-              await Promise.all([sendMessages(kafka, testTopic, messages), spanPromise])
+                await Promise.all([producer.send({ topic: testTopic, messages }), spanPromise])
+              } finally {
+                await producer.disconnect()
+              }
             })
 
-            it('should tag consumer spans', async () => {
+            it('uses the cluster id resolved by the consumer', async () => {
               const consumer = kafka.consumer({
                 kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
               })
-              await connectAndWaitForClusterId(consumer)
-              await consumer.subscribe({ topic: testTopic })
+              await consumer.connect()
 
               try {
+                const clusterId = await consumer.clusterId?.()
+                await consumer.subscribe({ topic: testTopic })
                 const spanPromise = agent.assertSomeTraces(traces => {
                   const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
                   assert.ok(span)
-                  assertClusterId(span.meta)
+                  assertClusterId(span.meta, clusterId)
                 }, { timeoutMs: 10000 })
                 const receivedPromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                   consumer.run({ eachMessage: async () => resolve() }).catch(reject)
@@ -466,21 +474,14 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            it('should tag the cluster id once the first produce looked it up', async () => {
-              const isProducerSpan = (span) => span.name === expectedSchema.send.opName
-
-              const firstSpanPromise = agent.assertSomeTraces(traces => {
-                assert.ok(traces[0].find(isProducerSpan))
-              }, { timeoutMs: 10000 })
-              nativeProducer.produce(testTopic, null, Buffer.from('first'), 'native-key')
-              await firstSpanPromise
-
+            it('uses the cluster id resolved by the native producer', async () => {
+              const clusterId = await getNativeClusterId(nativeProducer)
               const spanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0].find(isProducerSpan)
+                const span = traces[0].find(s => s.name === expectedSchema.send.opName)
                 assert.ok(span)
-                assertClusterId(span.meta)
+                assertClusterId(span.meta, clusterId)
               }, { timeoutMs: 10000 })
-              nativeProducer.produce(testTopic, null, Buffer.from('second'), 'native-key')
+              nativeProducer.produce(testTopic, null, Buffer.from('cluster id message'), 'native-key')
               await spanPromise
             })
 
@@ -715,11 +716,12 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            it('should tag the cluster id', async () => {
+            it('uses the cluster id resolved by the native consumer', async () => {
+              const clusterId = await getNativeClusterId(nativeConsumer)
               const spanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
                 assert.ok(span)
-                assertClusterId(span.meta)
+                assertClusterId(span.meta, clusterId)
               }, { timeoutMs: 10000 })
 
               nativeConsumer.setDefaultConsumeTimeout(10)
@@ -825,12 +827,21 @@ function expectSpanWithDefaults (expected) {
 
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
-  await connectAndWaitForClusterId(producer)
+  await producer.connect()
   await producer.send({
     topic,
     messages,
   })
   await producer.disconnect()
+}
+
+/**
+ * @param {{ clusterId?: (timeout: number, callback: (error: Error | null, clusterId: string) => void) => void }} client
+ */
+function getNativeClusterId (client) {
+  if (typeof client.clusterId !== 'function') return
+  const lookup = promisify(client.clusterId)
+  return lookup.call(client, 1000)
 }
 
 /**

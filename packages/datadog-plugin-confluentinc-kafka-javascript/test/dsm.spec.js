@@ -14,7 +14,7 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const processTags = require('../../dd-trace/src/process-tags')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
-const { connectAndWaitForClusterId, waitForTopicReady } = require('./helpers')
+const { waitForTopicReady } = require('./helpers')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash, clusterId) => {
   let edgeTags
@@ -84,8 +84,6 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
-          // `clusterId()` exists from 1.11.0 on; earlier releases expose no cluster id to report.
-          clusterId = typeof admin.clusterId === 'function' ? await admin.clusterId() : undefined
           await admin.createTopics({
             topics: [{
               topic: testTopic,
@@ -99,7 +97,8 @@ describe('Plugin', () => {
           consumer = kafka.consumer({
             kafkaJS: { groupId, fromBeginning: true },
           })
-          await connectAndWaitForClusterId(consumer)
+          await consumer.connect()
+          clusterId = await consumer.clusterId?.()
           await consumer.subscribe({ topic: testTopic })
         })
 
@@ -363,7 +362,8 @@ describe('Plugin', () => {
 
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
-  await connectAndWaitForClusterId(producer)
+  await producer.connect()
+  await producer.clusterId?.()
   await producer.send({
     topic,
     messages,
