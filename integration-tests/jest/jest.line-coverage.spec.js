@@ -195,7 +195,7 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
     assert.ok(linesOf('runs instrumented code with every timer faked').has(4))
   })
 
-  it('reports the initialiser lines of the module copy each test ran', async () => {
+  it('reports the initialiser lines a file ran in every module copy by the end of each test', async () => {
     const coverageRecords = []
     const testsByName = new Map()
     const coveragePromise = receiver.gatherPayloadsMaxTimeout(
@@ -238,22 +238,22 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
     const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
     assert.strictEqual(exitCode, 0, testOutput)
 
-    const linesOf = (name) => {
+    // The line of branches.js that each test file's copy runs.
+    const branchLines = new Map([['runs the first branch', 5], ['runs the second branch', 7]])
+    const [earlier, later] = [...branchLines.keys()].map((name) => {
       const test = testsByName.get(`module copies ${name}`)
       assert.ok(test, `no test named ${name}`)
       assert.strictEqual(test.meta[TEST_STATUS], 'pass')
       const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
       assert.ok(record, `no record for ${name}`)
-      return getLines(record.files, 'ci-visibility/jest-line-coverage-copies/branches.js')
-    }
-    // Each copy took the branch its test file selected. A test gets the body of getBranch, and the
-    // initialiser lines of the copy it called, whichever file ran first.
-    const first = linesOf('runs the first branch')
-    const second = linesOf('runs the second branch')
-    assert.ok(first.has(11) && first.has(5), testOutput)
-    assert.ok(!first.has(7), testOutput)
-    assert.ok(second.has(11) && second.has(7), testOutput)
-    assert.ok(!second.has(5), testOutput)
+      const lines = getLines(record.files, 'ci-visibility/jest-line-coverage-copies/branches.js')
+      return { name, start: BigInt(test.start), lines }
+    }).sort((a, b) => (a.start < b.start ? -1 : 1))
+    // A test gets the body of getBranch, and the initialiser lines branches.js ran in the process by the
+    // test's end: those of its own copy, and those of the copies that test files run before it took.
+    assert.ok(earlier.lines.has(11) && earlier.lines.has(branchLines.get(earlier.name)), testOutput)
+    assert.ok(!earlier.lines.has(branchLines.get(later.name)), testOutput)
+    assert.ok(later.lines.has(11) && later.lines.has(5) && later.lines.has(7), testOutput)
   })
 
   esModuleIt('reports the lines each test ran in ECMAScript modules', async () => {
