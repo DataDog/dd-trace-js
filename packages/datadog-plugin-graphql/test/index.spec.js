@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { AsyncResource } = require('node:async_hooks')
 const http = require('node:http')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const { inspect } = require('node:util')
@@ -401,6 +402,37 @@ describe('Plugin', () => {
 
         after(() => {
           return agent.close()
+        })
+
+        it('releases abandoned execution inputs while a resolver async resource is live', async function () {
+          if (!global.gc) this.skip()
+
+          const schema = graphql.buildSchema('scalar Input type Query { outer(input: Input): String }')
+          const document = graphql.parse('query ($input: Input) { outer(input: $input) }')
+          schema.getType('Input').parseValue = () => ({ value: 'coerced' })
+          let resource
+          let inputRef
+
+          schema.getQueryType().getFields().outer.resolve = (source, args) => {
+            resource = new AsyncResource('graphql-test', { requireManualDestroy: true })
+            inputRef = new WeakRef(args.input)
+            return new Promise(() => {})
+          }
+
+          function abandonExecution () {
+            const contextValue = {}
+            graphql.execute({ schema, document, contextValue, variableValues: { input: 'raw' } })
+            return new WeakRef(contextValue)
+          }
+
+          const contextRef = abandonExecution()
+          try {
+            assert.ok(resource)
+            const collected = await Promise.all([waitForCollection(contextRef), waitForCollection(inputRef)])
+            assert.deepStrictEqual(collected, [true, true])
+          } finally {
+            resource?.emitDestroy()
+          }
         })
 
         withNamingSchema(
@@ -2570,11 +2602,64 @@ describe('Plugin', () => {
           graphql = require(`../../../versions/graphql@${version}`).get()
         })
 
-        // A resolver that re-enters execute() with the same object contextValue
-        // (Apollo federation and stitching do this) is short-circuited by the
-        // plugin and its resolvers reuse the outer operation's context. The
-        // per-resolver variable tags must still come from each field's own
-        // variableValues, not the outer operation's.
+        if (semver.major(graphqlVersion) === 15) {
+          it('preserves the native executeSync error from a non-callable default resolver', async () => {
+            const schema = graphql.buildSchema('type Query { value: String }')
+            const result = graphql.executeSync({
+              schema,
+              document: graphql.parse('{ value }'),
+              rootValue: { value: 'unexpected fallback' },
+              fieldResolver: false,
+            })
+            assert.strictEqual(result.data.value, null)
+            assert.strictEqual(result.errors.length, 1)
+            assert.deepStrictEqual(result.errors[0].path, ['value'])
+            assert.ok(result.errors[0].originalError instanceof TypeError)
+          })
+        }
+
+        it('keeps the resolver frame when a scalar executes a query during coercion', async function () {
+          if (typeof graphql.executeSync !== 'function') this.skip()
+
+          const schema = graphql.buildSchema(
+            'scalar Input type Query { hold: String, inner: String, main(input: Input): String }'
+          )
+          const contextValue = Object.freeze({})
+          const document = graphql.parse('query Outer($input: Input) { main(input: $input) }')
+          const innerDocument = graphql.parse('{ inner }')
+          let finishPeer
+          const pending = new Promise(resolve => { finishPeer = resolve })
+          const fields = schema.getQueryType().getFields()
+          fields.hold.resolve = () => pending
+          let innerResource
+          fields.inner.resolve = () => {
+            innerResource = tracer.scope().active()?.context().getTag('resource.name')
+            return 'inner'
+          }
+          let resource
+          fields.main.resolve = (source, args) => {
+            resource = tracer.scope().active()?.context().getTag('resource.name')
+            return args.input
+          }
+          schema.getType('Input').parseValue = value => {
+            const result = graphql.executeSync({ schema, document: innerDocument, contextValue })
+            assert.strictEqual(result.data.inner, 'inner')
+            return value
+          }
+
+          const peer = graphql.execute({ schema, document: graphql.parse('{ hold }'), contextValue })
+          try {
+            const result = await graphql.execute({ schema, document, contextValue, variableValues: { input: 'value' } })
+            assert.strictEqual(result.errors, undefined)
+            assert.strictEqual(result.data.main, 'value')
+            assert.strictEqual(resource, 'main:String')
+            assert.strictEqual(innerResource, 'inner:String')
+          } finally {
+            finishPeer('peer')
+            await peer
+          }
+        })
+
         it('tags each resolve span with its own operation variables', () => {
           const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
           const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')
