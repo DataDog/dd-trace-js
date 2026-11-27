@@ -102,6 +102,18 @@ class BatchLogRecordProcessor {
   }
 
   /**
+   * Drops queued records and cancels exports already handed to the exporter. A snapshot can occur
+   * after a batch leaves `#logRecords` but before its request completes; leaving that request alive
+   * would let every clone send the same pre-refresh payload.
+   * @returns {void}
+   */
+  resetPendingState () {
+    this.#logRecords = []
+    this.#clearTimer()
+    this.exporter.resetPendingState?.()
+  }
+
+  /**
    * Starts the batch timeout timer.
    * @private
    */

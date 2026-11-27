@@ -35,6 +35,18 @@ function getVercelOtlpStatsExporter () {
   }).OtlpStatsExporter
 }
 
+function getMicroVmOtlpStatsExporter () {
+  const loadBase = proxyquire.noPreserveCache()
+  const serverless = { ...require('../../../src/serverless'), IS_AWS_LAMBDA_MICROVM: true }
+  const OtlpHttpExporterBase = loadBase('../../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+    '../../serverless': serverless,
+  })
+  const loadExporter = proxyquire.noPreserveCache()
+  return loadExporter('../../../src/opentelemetry/metrics/otlp_span_stats_exporter', {
+    '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
+  }).OtlpStatsExporter
+}
+
 before(() => processTags.initialize())
 
 function makeSpan (overrides = {}) {
@@ -202,6 +214,32 @@ describe('OtlpStatsExporter', () => {
     httpStub.restore()
     if (originalVercel === undefined) delete process.env.VERCEL
     else process.env.VERCEL = originalVercel
+  })
+
+  it('cancels an in-flight export on MicroVM identity refresh', () => {
+    const MicroVmOtlpStatsExporter = getMicroVmOtlpStatsExporter()
+    const request = {
+      write: sinon.stub(),
+      end: sinon.stub(),
+      on: sinon.stub().returnsThis(),
+      once: sinon.stub().returnsThis(),
+      setTimeout: sinon.stub().returnsThis(),
+      destroy: sinon.spy(),
+    }
+    httpStub.callsFake(() => request)
+
+    const microVmExporter = new MicroVmOtlpStatsExporter(
+      'http://localhost:4318/v1/metrics',
+      'http/json',
+      RESOURCE_ATTRS,
+    )
+    const done = sinon.spy()
+
+    microVmExporter.export(makeDrained([makeSpan()]), BUCKET_SIZE_NS, done)
+    microVmExporter.resetPendingState()
+
+    sinon.assert.calledOnce(request.destroy)
+    sinon.assert.calledOnce(done)
   })
 
   it('sends a POST to /v1/metrics', () => {
