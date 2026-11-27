@@ -148,6 +148,7 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_er
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
 const TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED = 'dynamic_atr_retries.enabled'
+const TELEMETRY_IMPACTED_TESTS_MS = 'impacted_tests.ms'
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (typeof statusCode !== 'number') return 'network'
@@ -223,4 +224,5 @@ module.exports = {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
   TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
+  TELEMETRY_IMPACTED_TESTS_MS,
 }

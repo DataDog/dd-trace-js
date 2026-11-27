@@ -148,6 +148,37 @@ describe('git-cache integration tests', () => {
     })
   })
 
+  it('should cache async git commands and failures', async function () {
+    const firstResult = (await gitCache.cachedExecAsync('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)).toString().trim()
+    assert.strictEqual(firstResult, FIXED_COMMIT_MESSAGE)
+
+    const cacheKey = gitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
+    const cacheFilePath = gitCache.getCacheFilePath(cacheKey)
+    assert.strictEqual(fs.existsSync(cacheFilePath), true)
+
+    const failingArgs = ['nonexistent-async-command']
+    let firstError
+    await assert.rejects(gitCache.cachedExecAsync('git', failingArgs), error => {
+      firstError = error
+      return error instanceof Error
+    })
+
+    removeGitFromPath()
+
+    const cachedResult = (await gitCache.cachedExecAsync('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)).toString().trim()
+    assert.strictEqual(cachedResult, FIXED_COMMIT_MESSAGE)
+
+    await assert.rejects(gitCache.cachedExecAsync('git', failingArgs), error => {
+      assertObjectContains(error, {
+        message: firstError.message,
+        code: firstError.code,
+        status: firstError.status,
+        errno: firstError.errno,
+      })
+      return true
+    })
+  })
+
   it('should not cache when DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED is not set to true', function () {
     delete process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
 

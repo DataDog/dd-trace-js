@@ -78,6 +78,59 @@ function setCache (cacheKey, result) {
   }
 }
 
+const GIT_COMMAND_FAILED_PREFIX = '__GIT_COMMAND_FAILED__'
+
+/**
+ * @param {string} cachedResult
+ */
+function deserializeCachedError (cachedResult) {
+  let error
+  try {
+    const errorData = cachedResult.replace(GIT_COMMAND_FAILED_PREFIX, '')
+    const { message, code, status, errno } = JSON.parse(errorData)
+    error = new Error(message)
+    error.code = code
+    error.status = status
+    error.errno = errno
+  } catch {
+    // we couldn't parse the error data, so we'll throw a generic error
+    return new Error('Git command failed')
+  }
+  return error
+}
+
+/**
+ * @param {Error & { code?: string | number, status?: number, errno?: number }} err
+ */
+function serializeCachedError (err) {
+  return GIT_COMMAND_FAILED_PREFIX + JSON.stringify({
+    code: err.code,
+    status: err.status,
+    errno: err.errno,
+    message: err.message,
+  })
+}
+
+/**
+ * @param {string} cmd
+ * @param {string[]} flags
+ * @param {import('node:child_process').ExecFileOptions} [options]
+ * @returns {Promise<string | Buffer>}
+ */
+function execFileAsync (cmd, flags, options) {
+  return new Promise((resolve, reject) => {
+    cp.execFile(cmd, flags, options, (err, stdout) => {
+      if (err) {
+        if (typeof err.code === 'number' && err.status === undefined) {
+          err.status = err.code
+        }
+        return reject(err)
+      }
+      resolve(stdout)
+    })
+  })
+}
+
 function cachedExec (cmd, flags, options) {
   if (options === undefined) {
     options = { stdio: 'pipe' }
@@ -88,20 +141,8 @@ function cachedExec (cmd, flags, options) {
   const cacheKey = getCacheKey(cmd, flags, options.cwd)
   const cachedResult = getCache(cacheKey)
   if (cachedResult !== undefined) {
-    if (cachedResult.startsWith('__GIT_COMMAND_FAILED__')) {
-      let error
-      try {
-        const errorData = cachedResult.replace('__GIT_COMMAND_FAILED__', '')
-        const { message, code, status, errno } = JSON.parse(errorData)
-        error = new Error(message)
-        error.code = code
-        error.status = status
-        error.errno = errno
-      } catch {
-        // we couldn't parse the error data, so we'll throw a generic error
-        throw new Error('Git command failed')
-      }
-      throw error
+    if (cachedResult.startsWith(GIT_COMMAND_FAILED_PREFIX)) {
+      throw deserializeCachedError(cachedResult)
     }
     return cachedResult
   }
@@ -110,14 +151,36 @@ function cachedExec (cmd, flags, options) {
     setCache(cacheKey, result)
     return result
   } catch (err) {
-    const cacheValue = '__GIT_COMMAND_FAILED__' +
-      JSON.stringify({
-        code: err.code,
-        status: err.status,
-        errno: err.errno,
-        message: err.message,
-      })
-    setCache(cacheKey, cacheValue)
+    setCache(cacheKey, serializeCachedError(err))
+    throw err
+  }
+}
+
+/**
+ * @param {string} cmd
+ * @param {string[]} flags
+ * @param {import('node:child_process').ExecFileOptions} [options]
+ * @returns {Promise<string | Buffer>}
+ */
+async function cachedExecAsync (cmd, flags, options) {
+  const execOptions = options === undefined ? {} : options
+  if (!ensureCacheDir()) {
+    return execFileAsync(cmd, flags, execOptions)
+  }
+  const cacheKey = getCacheKey(cmd, flags, execOptions.cwd)
+  const cachedResult = getCache(cacheKey)
+  if (cachedResult !== undefined) {
+    if (cachedResult.startsWith(GIT_COMMAND_FAILED_PREFIX)) {
+      throw deserializeCachedError(cachedResult)
+    }
+    return cachedResult
+  }
+  try {
+    const result = await execFileAsync(cmd, flags, execOptions)
+    setCache(cacheKey, result.toString())
+    return result
+  } catch (err) {
+    setCache(cacheKey, serializeCachedError(err))
     throw err
   }
 }
@@ -126,4 +189,5 @@ module.exports = {
   getCacheKey,
   getCacheFilePath,
   cachedExec,
+  cachedExecAsync,
 }

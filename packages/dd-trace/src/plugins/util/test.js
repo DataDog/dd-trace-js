@@ -18,9 +18,17 @@ const { writeDatadogParentId, writeDatadogTraceId } = require('../../carrier')
 const id = require('../../id')
 const {
   incrementCountMetric,
+  distributionMetric,
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
+  TELEMETRY_IMPACTED_TESTS_MS,
 } = require('../../ci-visibility/telemetry')
+const {
+  buildCacheKey,
+  isCacheEnabled,
+  withCache,
+  writeToCache,
+} = require('../../ci-visibility/requests/fs-cache')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
@@ -72,13 +80,25 @@ const {
   getGitMetadata,
   getGitInformationDiscrepancy,
   getGitDiff,
+  getGitDiffAsync,
   getGitRemoteName,
+  getGitRemoteNameAsync,
+  getDefaultRemoteBranchAsync,
+  getCommitParentsAsync,
+  getRevParseAsync,
   getSourceBranch,
+  getSourceBranchAsync,
   checkAndFetchBranch,
+  checkAndFetchBranches,
+  checkAndFetchBranchesAsync,
   getLocalBranches,
+  getLocalBranchesAsync,
   getMergeBase,
+  getMergeBaseAsync,
   getCounts,
+  getCountsAsync,
   hasLocalGitObject,
+  hasLocalGitObjectAsync,
 } = require('./git')
 
 /**
@@ -247,7 +267,17 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
   playwright: '>=1.38.0',
 }
 
-const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
+const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set([
+  'mocha',
+  'playwright',
+  'vitest',
+  'cypress',
+  'webdriverio',
+])
+const LINE_LEVEL_IMPACTED_TESTS_FRAMEWORKS = new Set(['jest', 'cucumber'])
+const POSSIBLE_DEFAULT_BRANCHES = new Set(['main', 'master'])
+const MAX_RELEASE_CANDIDATE_BRANCHES = 10
+const GIT_DIFF_PATHS_CHUNK_SIZE = 100
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -380,23 +410,28 @@ function getSessionItrSkippingEnabledTags (sessionSpan) {
  *   isKnownTestsEnabled: boolean,
  *   isTestManagementTestsEnabled: boolean,
  *   isSuitesSkippingEnabled?: boolean,
+ *   isImpactedTestsEnabled?: boolean,
  *   getKnownTests: () => Promise<object>,
  *   getTestManagementTests: () => Promise<object>,
- *   getSkippableSuites?: () => Promise<object>
+ *   getSkippableSuites?: () => Promise<object>,
+ *   getModifiedFiles?: () => Promise<object>
  * }} options - Test optimization request factories.
  * @returns {Promise<{
  *   knownTestsResponse?: object,
  *   testManagementTestsResponse?: object,
- *   skippableSuitesResponse?: object
+ *   skippableSuitesResponse?: object,
+ *   modifiedFilesResponse?: object
  * }>}
  */
 function getTestOptimizationRequestResults ({
   isKnownTestsEnabled,
   isTestManagementTestsEnabled,
   isSuitesSkippingEnabled,
+  isImpactedTestsEnabled,
   getKnownTests,
   getTestManagementTests,
   getSkippableSuites,
+  getModifiedFiles,
 }) {
   const requestPromises = []
   const responseNames = []
@@ -416,6 +451,10 @@ function getTestOptimizationRequestResults ({
 
   if (isSuitesSkippingEnabled && getSkippableSuites) {
     addTestOptimizationRequest(requestPromises, responseNames, 'skippableSuitesResponse', getSkippableSuites)
+  }
+
+  if (isImpactedTestsEnabled && getModifiedFiles) {
+    addTestOptimizationRequest(requestPromises, responseNames, 'modifiedFilesResponse', getModifiedFiles)
   }
 
   if (!requestPromises.length) {
@@ -617,7 +656,10 @@ module.exports = {
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
+  getPullRequestBaseBranchAsync,
   getModifiedFilesFromDiff,
+  getModifiedFilesForCheckout,
+  isLineLevelImpactedTestsFramework,
   isModifiedTest,
   POSSIBLE_BASE_BRANCHES,
   GIT_COMMIT_SHA,
@@ -2018,80 +2060,249 @@ function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = 
   }
 }
 
+/**
+ * @param {string | undefined} testFramework
+ */
+function isLineLevelImpactedTestsFramework (testFramework) {
+  return LINE_LEVEL_IMPACTED_TESTS_FRAMEWORKS.has(testFramework)
+}
+
+/**
+ * @param {string} branch
+ * @param {string} remoteName
+ */
+function stripRemotePrefix (branch, remoteName) {
+  const prefix = `${remoteName}/`
+  return branch.startsWith(prefix) ? branch.slice(prefix.length) : branch
+}
+
+/**
+ * @param {string} branch
+ * @param {string} remoteName
+ * @param {string | undefined} defaultRemoteBranch
+ */
+function isDefaultCandidateBranch (branch, remoteName, defaultRemoteBranch) {
+  const shortName = stripRemotePrefix(branch, remoteName)
+  if (defaultRemoteBranch && shortName === defaultRemoteBranch) {
+    return true
+  }
+  return POSSIBLE_DEFAULT_BRANCHES.has(shortName)
+}
+
+/**
+ * @param {string[]} localBranches
+ * @param {string} remoteName
+ * @param {string | undefined} defaultRemoteBranch
+ * @param {string | undefined} excludedShortBranch
+ * @returns {string[]}
+ */
+function selectCandidateBranches (localBranches, remoteName, defaultRemoteBranch, excludedShortBranch) {
+  const defaultCandidates = []
+  const mainlineCandidates = []
+  const releaseCandidates = []
+  const seen = new Set()
+
+  for (const branch of localBranches) {
+    if (seen.has(branch)) continue
+    seen.add(branch)
+    const shortBranchName = stripRemotePrefix(branch, remoteName)
+    if (excludedShortBranch && shortBranchName === excludedShortBranch) {
+      continue
+    }
+    const isDefault = isDefaultCandidateBranch(branch, remoteName, defaultRemoteBranch)
+    if (!isDefault && !BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
+      continue
+    }
+    if (isDefault) {
+      defaultCandidates.push(branch)
+    } else if (POSSIBLE_BASE_BRANCHES.includes(shortBranchName)) {
+      mainlineCandidates.push(branch)
+    } else if (releaseCandidates.length < MAX_RELEASE_CANDIDATE_BRANCHES) {
+      releaseCandidates.push(branch)
+    }
+  }
+
+  return [...defaultCandidates, ...mainlineCandidates, ...releaseCandidates]
+}
+
+/**
+ * @param {Array<{ branch: string, baseSha: string, ahead: number | null }>} evaluations
+ * @param {string} remoteName
+ * @param {string | undefined} defaultRemoteBranch
+ * @returns {string | null}
+ */
+function selectBestBaseSha (evaluations, remoteName, defaultRemoteBranch) {
+  let bestBranch = null
+  let bestScore = Infinity
+  let bestBaseSha = null
+  for (const { branch, baseSha, ahead } of evaluations) {
+    if (!baseSha || ahead === null || Number.isNaN(ahead)) continue
+    if (
+      ahead < bestScore ||
+      (ahead === bestScore && isDefaultCandidateBranch(branch, remoteName, defaultRemoteBranch) &&
+        (!bestBranch || !isDefaultCandidateBranch(bestBranch, remoteName, defaultRemoteBranch)))
+    ) {
+      bestScore = ahead
+      bestBranch = branch
+      bestBaseSha = baseSha
+    }
+  }
+  return bestBaseSha
+}
+
 function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot) {
   const remoteName = getGitRemoteName(gitRoot)
-
   const sourceBranch = getSourceBranch(gitRoot)
-  // TODO: We will get the default branch name from the backend in the future.
-  const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
 
   const candidateBranches = []
   if (pullRequestBaseBranch) {
-    checkAndFetchBranch(pullRequestBaseBranch, remoteName, gitRoot)
-    candidateBranches.push(hasLocalGitObject(pullRequestBaseBranch, gitRoot)
-      ? pullRequestBaseBranch
-      : `${remoteName}/${pullRequestBaseBranch}`)
+    if (hasLocalGitObject(pullRequestBaseBranch, gitRoot)) {
+      candidateBranches.push(pullRequestBaseBranch)
+    } else {
+      checkAndFetchBranch(pullRequestBaseBranch, remoteName, gitRoot)
+      candidateBranches.push(hasLocalGitObject(pullRequestBaseBranch, gitRoot)
+        ? pullRequestBaseBranch
+        : `${remoteName}/${pullRequestBaseBranch}`)
+    }
   } else {
-    for (const branch of POSSIBLE_BASE_BRANCHES) {
-      checkAndFetchBranch(branch, remoteName, gitRoot)
+    let localBranches = getLocalBranches(remoteName, gitRoot)
+    const existingRemoteBranches = new Set(localBranches.map(branch => stripRemotePrefix(branch, remoteName)))
+    const hasMissingBaseBranch = POSSIBLE_BASE_BRANCHES.some(branch => !existingRemoteBranches.has(branch))
+    if (hasMissingBaseBranch) {
+      if (checkAndFetchBranches) {
+        checkAndFetchBranches(POSSIBLE_BASE_BRANCHES, remoteName, gitRoot, { existingRemoteBranches })
+      } else {
+        for (const branch of POSSIBLE_BASE_BRANCHES) {
+          if (!existingRemoteBranches.has(branch)) {
+            checkAndFetchBranch(branch, remoteName, gitRoot)
+          }
+        }
+      }
+      localBranches = getLocalBranches(remoteName, gitRoot)
     }
 
-    const localBranches = getLocalBranches(remoteName, gitRoot)
-    for (const branch of localBranches) {
-      const shortBranchName = branch.replace(new RegExp(`^${remoteName}/`), '')
-      if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
-        candidateBranches.push(branch)
-      }
-    }
+    const filteredCandidates = selectCandidateBranches(localBranches, remoteName, undefined, sourceBranch)
+    candidateBranches.push(
+      ...(filteredCandidates.length ? filteredCandidates : selectCandidateBranches(localBranches, remoteName))
+    )
   }
 
   if (candidateBranches.length === 1) {
-    return getMergeBase(candidateBranches[0], sourceBranch, gitRoot)
+    return getMergeBase(candidateBranches[0], sourceBranch, gitRoot) || null
   }
 
-  const metrics = {}
-  let hasMetrics = false
+  const evaluations = []
   for (const candidate of candidateBranches) {
-    // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch, gitRoot)
     if (!baseSha) {
       continue
     }
-    // Count commits ahead/behind
-    const counts = getCounts(candidate, sourceBranch, gitRoot)
+    const counts = getCounts(sourceBranch, candidate, gitRoot)
     if (!counts) {
       continue
     }
-    const behind = counts.behind
-    const ahead = counts.ahead
-    metrics[candidate] = {
-      behind,
-      ahead,
-      baseSha,
+    if (counts.ahead === 0 && isDefaultCandidateBranch(candidate, remoteName)) {
+      return baseSha
     }
-    hasMetrics = true
+    evaluations.push({ branch: candidate, baseSha, ahead: counts.ahead })
   }
 
-  function isDefaultBranch (branch) {
-    return POSSIBLE_DEFAULT_BRANCHES.some(defaultBranch =>
-      branch === defaultBranch || branch === `${remoteName}/${defaultBranch}`
-    )
+  return selectBestBaseSha(evaluations, remoteName)
+}
+
+/**
+ * @param {string | undefined} pullRequestBaseBranch
+ * @param {string | undefined} gitRoot
+ * @param {{
+ *   remoteName?: string,
+ *   sourceBranch?: string,
+ *   defaultRemoteBranch?: string,
+ * }} [options]
+ * @returns {Promise<string | null>}
+ */
+async function getPullRequestBaseBranchAsync (pullRequestBaseBranch, gitRoot, options) {
+  const [remoteName, sourceBranch] = await Promise.all([
+    options?.remoteName ? Promise.resolve(options.remoteName) : getGitRemoteNameAsync(gitRoot),
+    options?.sourceBranch ? Promise.resolve(options.sourceBranch) : getSourceBranchAsync(gitRoot),
+  ])
+  const defaultRemoteBranch = options?.defaultRemoteBranch
+
+  if (pullRequestBaseBranch) {
+    let candidate
+    if (await hasLocalGitObjectAsync(pullRequestBaseBranch, gitRoot)) {
+      candidate = pullRequestBaseBranch
+    } else {
+      await checkAndFetchBranchesAsync([pullRequestBaseBranch], remoteName, gitRoot)
+      candidate = (await hasLocalGitObjectAsync(pullRequestBaseBranch, gitRoot))
+        ? pullRequestBaseBranch
+        : `${remoteName}/${pullRequestBaseBranch}`
+    }
+    return (await getMergeBaseAsync(candidate, sourceBranch, gitRoot)) || null
   }
 
-  if (!hasMetrics) {
+  let localBranches = await getLocalBranchesAsync(remoteName, gitRoot)
+  const existingRemoteBranches = new Set(localBranches.map(branch => stripRemotePrefix(branch, remoteName)))
+  const branchesToProbe = defaultRemoteBranch
+    ? [defaultRemoteBranch, ...POSSIBLE_BASE_BRANCHES]
+    : POSSIBLE_BASE_BRANCHES
+  const hasMissingBaseBranch = branchesToProbe.some(branch => !existingRemoteBranches.has(branch))
+  if (hasMissingBaseBranch) {
+    await checkAndFetchBranchesAsync(branchesToProbe, remoteName, gitRoot, { existingRemoteBranches })
+    localBranches = await getLocalBranchesAsync(remoteName, gitRoot)
+  }
+
+  // Exclude the remote tracking ref for the current branch only when it points to the exact same commit
+  // (e.g. CI push on release/1.0), preserving diffing against origin/<branch> when there are unpushed local commits.
+  let excludedShortBranch
+  if (sourceBranch && sourceBranch !== 'HEAD') {
+    const matchingRemoteRef = localBranches.find(branch => stripRemotePrefix(branch, remoteName) === sourceBranch)
+    if (matchingRemoteRef) {
+      const [headSha, remoteSha] = await Promise.all([
+        getRevParseAsync('HEAD', gitRoot),
+        getRevParseAsync(matchingRemoteRef, gitRoot),
+      ])
+      if (headSha && remoteSha && headSha === remoteSha) {
+        excludedShortBranch = sourceBranch
+      }
+    }
+  }
+
+  const candidateBranches = selectCandidateBranches(localBranches, remoteName, defaultRemoteBranch, excludedShortBranch)
+  if (!candidateBranches.length) {
     return null
   }
-  // Find branch with smallest "ahead" value, preferring default branch on tie
-  let bestBranch = null
-  let bestScore = Infinity
-  for (const branch of Object.keys(metrics)) {
-    const score = metrics[branch].ahead
-    if (score < bestScore || score === bestScore && isDefaultBranch(branch)) {
-      bestScore = score
-      bestBranch = branch
+  if (candidateBranches.length === 1) {
+    return (await getMergeBaseAsync(candidateBranches[0], sourceBranch, gitRoot)) || null
+  }
+
+  const evaluateCandidate = async candidate => {
+    const baseSha = await getMergeBaseAsync(candidate, sourceBranch, gitRoot)
+    if (!baseSha) {
+      return { branch: candidate, baseSha: '', ahead: null }
+    }
+    const counts = await getCountsAsync(sourceBranch, candidate, gitRoot)
+    return { branch: candidate, baseSha, ahead: counts ? counts.ahead : null }
+  }
+
+  const defaultCandidates = []
+  const otherCandidates = []
+  for (const candidate of candidateBranches) {
+    if (isDefaultCandidateBranch(candidate, remoteName, defaultRemoteBranch)) {
+      defaultCandidates.push(candidate)
+    } else {
+      otherCandidates.push(candidate)
     }
   }
-  return bestBranch ? metrics[bestBranch].baseSha : null
+
+  const defaultEvaluations = await Promise.all(defaultCandidates.map(evaluateCandidate))
+  for (const evaluation of defaultEvaluations) {
+    if (evaluation.baseSha && evaluation.ahead === 0) {
+      return evaluation.baseSha
+    }
+  }
+
+  const otherEvaluations = await Promise.all(otherCandidates.map(evaluateCandidate))
+  return selectBestBaseSha([...defaultEvaluations, ...otherEvaluations], remoteName, defaultRemoteBranch)
 }
 
 function getPullRequestDiff (baseCommit, targetCommit, gitRoot) {
@@ -2099,6 +2310,249 @@ function getPullRequestDiff (baseCommit, targetCommit, gitRoot) {
     return
   }
   return getGitDiff(baseCommit, targetCommit, gitRoot)
+}
+
+/**
+ * @param {string} namesOutput
+ * @returns {string[]}
+ */
+function parseNameOnlyDiff (namesOutput) {
+  if (!namesOutput) return []
+  return namesOutput.split(/\r?\n/).filter(Boolean)
+}
+
+/**
+ * @param {string[]} changedFiles
+ * @returns {Record<string, number[]>}
+ */
+function buildFileLevelModifiedFiles (changedFiles) {
+  /** @type {Record<string, number[]>} */
+  const modifiedFiles = {}
+  for (const file of changedFiles) {
+    modifiedFiles[file] = [1]
+  }
+  return modifiedFiles
+}
+
+/**
+ * Resolves modified files for impacted tests detection using async Git commands,
+ * shortcut paths for merge commits and default-branch tips, granularity-aware diffs,
+ * and optional cross-process filesystem caching.
+ *
+ * @param {{
+ *   testEnvironmentMetadata: TestEnvironmentMetadata,
+ *   gitRoot: string | undefined,
+ *   testFramework?: string,
+ *   candidateFiles?: string[],
+ *   getUserProvidedGitMetadata?: () => Record<string, string | undefined>,
+ * }} options
+ * @returns {Promise<Record<string, number[]>>}
+ */
+async function getModifiedFilesForCheckout ({
+  testEnvironmentMetadata,
+  gitRoot,
+  testFramework,
+  candidateFiles,
+  getUserProvidedGitMetadata = getUserProviderGitMetadata,
+}) {
+  const startTime = Date.now()
+  try {
+    const isCustomCheckout = testEnvironmentMetadata[GIT_CHECKOUT_IS_CUSTOM] === 'true'
+    const userProvidedGitMetadata = getUserProvidedGitMetadata()
+    const diffMetadata = isCustomCheckout ? userProvidedGitMetadata : testEnvironmentMetadata
+    const {
+      [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+      [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
+    } = diffMetadata
+    const commitSha = testEnvironmentMetadata[GIT_COMMIT_SHA]
+    const branch = testEnvironmentMetadata[GIT_BRANCH]
+    const ciGitMergeCommitSha = isCustomCheckout ? undefined : testEnvironmentMetadata[CI_GIT_MERGE_COMMIT_SHA]
+    const targetCommit = commitHeadSha ||
+      (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
+    const isLineLevel = isLineLevelImpactedTestsFramework(testFramework)
+    const normalizedCandidateFiles = isLineLevel && Array.isArray(candidateFiles) && candidateFiles.length
+      ? [...new Set(candidateFiles)].sort()
+      : undefined
+    const hasExplicitBaseBranchOverride = Boolean(!isCustomCheckout &&
+      userProvidedGitMetadata?.[GIT_PULL_REQUEST_BASE_BRANCH])
+
+    const computeModifiedFiles = async () => {
+      let baseBranchSha = pullRequestBaseBranchSha
+      let diffTargetCommit = targetCommit
+      let remoteName
+      let sourceBranch
+      let defaultRemoteBranch
+
+      // Fast path 1: CI PR merge commit (e.g. GitHub Actions refs/pull/N/merge) where HEAD's first parent
+      // is the base branch tip and second parent is the PR head. Diffing firstParent..HEAD matches the PR changes
+      // without ls-remote or fetching the base branch ref.
+      if (
+        !baseBranchSha &&
+        !isCustomCheckout &&
+        !hasExplicitBaseBranchOverride &&
+        ciGitMergeCommitSha &&
+        commitSha &&
+        commitSha === ciGitMergeCommitSha
+      ) {
+        const parents = await getCommitParentsAsync(commitSha, gitRoot)
+        if (parents.length === 2) {
+          const [firstParent, secondParent] = parents
+          const headMatches = !commitHeadSha || secondParent === commitHeadSha
+          const baseMatches = !pullRequestBaseBranchHeadSha || firstParent === pullRequestBaseBranchHeadSha
+          if ((commitHeadSha || pullRequestBaseBranchHeadSha) && headMatches && baseMatches) {
+            baseBranchSha = firstParent
+            diffTargetCommit = commitSha
+          }
+        }
+      }
+
+      // Fast path 2: Non-PR run at the exact tip of the remote's default branch has no modified files.
+      if (!baseBranchSha && !pullRequestBaseBranch) {
+        remoteName = await getGitRemoteNameAsync(gitRoot)
+        ;[sourceBranch, defaultRemoteBranch] = await Promise.all([
+          getSourceBranchAsync(gitRoot),
+          getDefaultRemoteBranchAsync(remoteName, gitRoot),
+        ])
+        const isOnDefaultBranch = Boolean(
+          defaultRemoteBranch &&
+          (sourceBranch === defaultRemoteBranch ||
+            (sourceBranch === 'HEAD' && !isCustomCheckout && branch === defaultRemoteBranch))
+        )
+        if (isOnDefaultBranch) {
+          const [headSha, remoteDefaultSha] = await Promise.all([
+            getRevParseAsync(diffTargetCommit || 'HEAD', gitRoot),
+            getRevParseAsync(`refs/remotes/${remoteName}/${defaultRemoteBranch}`, gitRoot),
+          ])
+          if (headSha && remoteDefaultSha && headSha === remoteDefaultSha) {
+            return {}
+          }
+        }
+      }
+
+      if (!baseBranchSha) {
+        if (!remoteName) {
+          remoteName = await getGitRemoteNameAsync(gitRoot)
+        }
+        baseBranchSha = await getPullRequestBaseBranchAsync(pullRequestBaseBranch, gitRoot, {
+          remoteName,
+          sourceBranch,
+          defaultRemoteBranch,
+        })
+      }
+
+      if (!baseBranchSha) {
+        throw new Error('No modified tests could have been retrieved')
+      }
+
+      // Stage 1: tree-only --name-only --no-renames diff triggers zero blob reads/fetches in partial clones.
+      let namesOutput
+      try {
+        namesOutput = await getGitDiffAsync(baseBranchSha, diffTargetCommit, gitRoot, {
+          nameOnly: true,
+          remoteName,
+          throwOnError: true,
+        })
+      } catch {
+        throw new Error('No modified tests could have been retrieved')
+      }
+
+      const changedFiles = parseNameOnlyDiff(namesOutput)
+      if (!changedFiles.length) {
+        return {}
+      }
+
+      if (!isLineLevel) {
+        return buildFileLevelModifiedFiles(changedFiles)
+      }
+
+      // Stage 2 (line-level frameworks only): run -U0 --no-renames, narrowed to candidate files when known.
+      if (normalizedCandidateFiles) {
+        const candidateSet = new Set(normalizedCandidateFiles)
+        const matchedFiles = changedFiles.filter(file => candidateSet.has(file))
+        if (!matchedFiles.length) {
+          return {}
+        }
+        const pathChunks = []
+        for (let i = 0; i < matchedFiles.length; i += GIT_DIFF_PATHS_CHUNK_SIZE) {
+          pathChunks.push(matchedFiles.slice(i, i + GIT_DIFF_PATHS_CHUNK_SIZE))
+        }
+        let chunkDiffs
+        try {
+          chunkDiffs = await Promise.all(pathChunks.map(paths =>
+            getGitDiffAsync(baseBranchSha, diffTargetCommit, gitRoot, {
+              paths,
+              remoteName,
+              skipFetchCheck: true,
+              throwOnError: true,
+            })
+          ))
+        } catch {
+          throw new Error('No modified tests could have been retrieved')
+        }
+        /** @type {Record<string, number[]>} */
+        const merged = {}
+        for (const chunkDiff of chunkDiffs) {
+          const chunkModified = getModifiedFilesFromDiff(chunkDiff)
+          if (chunkModified) {
+            Object.assign(merged, chunkModified)
+          }
+        }
+        return merged
+      }
+
+      let diff
+      try {
+        diff = await getGitDiffAsync(baseBranchSha, diffTargetCommit, gitRoot, {
+          remoteName,
+          skipFetchCheck: true,
+          throwOnError: true,
+        })
+      } catch {
+        throw new Error('No modified tests could have been retrieved')
+      }
+
+      return getModifiedFilesFromDiff(diff) || {}
+    }
+
+    if (!isCacheEnabled() || !commitSha) {
+      return await computeModifiedFiles()
+    }
+
+    const cacheKey = buildCacheKey('modified-files', [
+      gitRoot ? path.resolve(gitRoot) : process.cwd(),
+      commitSha,
+      branch || '',
+      targetCommit || '',
+      pullRequestBaseBranch || '',
+      pullRequestBaseBranchSha || '',
+      pullRequestBaseBranchHeadSha || '',
+      ciGitMergeCommitSha || '',
+      hasExplicitBaseBranchOverride,
+      isLineLevel ? 'line' : 'file',
+      normalizedCandidateFiles || null,
+    ])
+
+    return await new Promise((resolve, reject) => {
+      withCache(cacheKey, (activeCacheKey, done) => {
+        computeModifiedFiles().then(
+          modifiedFiles => {
+            if (activeCacheKey) {
+              writeToCache(activeCacheKey, modifiedFiles)
+            }
+            done(null, modifiedFiles)
+          },
+          err => done(err)
+        )
+      }, (err, modifiedFiles) => {
+        if (err) return reject(err)
+        resolve(modifiedFiles)
+      })
+    })
+  } finally {
+    distributionMetric(TELEMETRY_IMPACTED_TESTS_MS, { testFramework }, Date.now() - startTime)
+  }
 }
 
 function getModifiedFilesFromDiff (diff) {

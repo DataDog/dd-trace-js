@@ -74,8 +74,7 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
-  getPullRequestDiff,
-  getModifiedFilesFromDiff,
+  getModifiedFilesForCheckout,
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
@@ -91,7 +90,6 @@ const {
   recordTestManagementExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
   setExpectedEmptyTestSessionTags,
@@ -145,7 +143,6 @@ const {
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_COMMIT_HEAD_MESSAGE,
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
@@ -365,30 +362,6 @@ function getTestManagementTests (tracer, testConfiguration) {
       })
     })
   })
-}
-
-function getModifiedFiles (testEnvironmentMetadata, gitRoot) {
-  const isCustomCheckout = testEnvironmentMetadata[GIT_CHECKOUT_IS_CUSTOM] === 'true'
-  const diffMetadata = isCustomCheckout ? getUserProviderGitMetadata() : testEnvironmentMetadata
-  const {
-    [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
-    [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-  } = diffMetadata
-  const commitSha = testEnvironmentMetadata[GIT_COMMIT_SHA]
-  const targetCommit = commitHeadSha || (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
-
-  const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch, gitRoot)
-
-  if (baseBranchSha) {
-    const diff = getPullRequestDiff(baseBranchSha, targetCommit, gitRoot)
-    const modifiedFiles = getModifiedFilesFromDiff(diff)
-    if (modifiedFiles) {
-      return modifiedFiles
-    }
-  }
-
-  throw new Error('Modified tests could not be retrieved')
 }
 
 function getSuiteStatus (suiteStats) {
@@ -1379,20 +1352,33 @@ class CypressPlugin {
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
+    const getCypressModifiedFiles = () => getModifiedFilesForCheckout({
+      testEnvironmentMetadata: this.testEnvironmentMetadata,
+      gitRoot: this.repositoryRoot,
+      testFramework: TEST_FRAMEWORK_NAME,
+      getUserProvidedGitMetadata: getUserProviderGitMetadata,
+    }).then(
+      modifiedFiles => ({ err: null, modifiedFiles }),
+      err => ({ err })
+    )
+
     const {
       knownTestsResponse,
       testManagementTestsResponse,
       skippableSuitesResponse: skippableTestsRequestResponse,
+      modifiedFilesResponse,
     } = await getTestOptimizationRequestResults({
       isKnownTestsEnabled: this.isKnownTestsEnabled,
       isTestManagementTestsEnabled: this.isTestManagementTestsEnabled,
       isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
+      isImpactedTestsEnabled: this.isImpactedTestsEnabled,
       getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
       getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
       getSkippableSuites: () => getSkippableTests(this.tracer, {
         ...this.testConfiguration,
         isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
       }),
+      getModifiedFiles: getCypressModifiedFiles,
     })
 
     if (this.isKnownTestsEnabled) {
@@ -1461,11 +1447,12 @@ class CypressPlugin {
     }
 
     if (this.isImpactedTestsEnabled) {
-      try {
-        this.modifiedFiles = getModifiedFiles(this.testEnvironmentMetadata, this.repositoryRoot)
-      } catch (error) {
-        log.error(error)
+      const currentModifiedFilesResponse = modifiedFilesResponse || await getCypressModifiedFiles()
+      if (currentModifiedFilesResponse.err) {
+        log.error(currentModifiedFilesResponse.err)
         this.isImpactedTestsEnabled = false
+      } else {
+        this.modifiedFiles = currentModifiedFilesResponse.modifiedFiles
       }
     }
 

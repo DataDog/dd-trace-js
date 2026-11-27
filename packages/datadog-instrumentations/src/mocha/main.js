@@ -941,6 +941,19 @@ function filterOnly (suite) {
   return suite.tests.length > 0 || suite.suites.length > 0
 }
 
+/**
+ * @param {{ err?: unknown, modifiedFiles?: Record<string, number[]> } | undefined} response
+ */
+function applyModifiedFilesResponse (response) {
+  const { err, modifiedFiles: receivedModifiedFiles } = response || {}
+  if (!response || err) {
+    config.modifiedFiles = []
+    config.isImpactedTestsEnabled = false
+  } else {
+    config.modifiedFiles = receivedModifiedFiles
+  }
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
@@ -1038,13 +1051,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   }
 
   const onReceivedImpactedTests = (response) => {
-    const { err, modifiedFiles: receivedModifiedFiles } = response || {}
-    if (!response || err) {
-      config.modifiedFiles = []
-      config.isImpactedTestsEnabled = false
-    } else {
-      config.modifiedFiles = receivedModifiedFiles
-    }
+    applyModifiedFilesResponse(response)
     if (config.isSuitesSkippingEnabled) {
       requestSkippableSuites()
     } else {
@@ -1054,8 +1061,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const continueAfterTestRequests = () => {
-    if (config.isImpactedTestsEnabled) {
+  const continueAfterTestRequests = (hasModifiedFilesResponse = false) => {
+    if (config.isImpactedTestsEnabled && !hasModifiedFilesResponse) {
       runStoresWithCompletion(modifiedFilesCh, ctx, onReceivedImpactedTests)
     } else if (config.isSuitesSkippingEnabled) {
       requestSkippableSuites()
@@ -1102,14 +1109,17 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       isKnownTestsEnabled: config.isKnownTestsEnabled,
       isTestManagementTestsEnabled: config.isTestManagementTestsEnabled,
       isSuitesSkippingEnabled: config.isSuitesSkippingEnabled,
+      isImpactedTestsEnabled: config.isImpactedTestsEnabled,
       getKnownTests: () => getRunStoresPromise(knownTestsCh, ctx),
       getTestManagementTests: () => getRunStoresPromise(testManagementTestsCh, ctx),
       getSkippableSuites: () => getRunStoresPromise(skippableSuitesCh, ctx),
+      getModifiedFiles: () => getRunStoresPromise(modifiedFilesCh, ctx),
     }).then(requestResults => {
       const {
         knownTestsResponse,
         testManagementTestsResponse,
         skippableSuitesResponse: requestSkippableSuitesResponse,
+        modifiedFilesResponse,
       } = requestResults
 
       if (knownTestsResponse) {
@@ -1118,9 +1128,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       if (testManagementTestsResponse) {
         applyTestManagementTestsResponse(testManagementTestsResponse)
       }
+      if (modifiedFilesResponse) {
+        applyModifiedFilesResponse(modifiedFilesResponse)
+      }
       skippableSuitesResponse = requestSkippableSuitesResponse
 
-      continueAfterTestRequests()
+      continueAfterTestRequests(Boolean(modifiedFilesResponse))
     })
   }
 

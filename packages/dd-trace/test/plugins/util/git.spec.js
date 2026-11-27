@@ -438,9 +438,9 @@ describe('unshallowRepository', () => {
       .onCall(0).returns(
         'git version 2.39.0'
       )
-      .onCall(1).returns('refs/heads/main')
-      .onCall(2).returns('origin\nupstream')
-      .onCall(3).returns('origin')
+      .onCall(1).returns('origin\nupstream')
+      .onCall(2).returns('refs/heads/main')
+      .onCall(3).returns('branch.main.remote origin\n')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
 
     const options = [
@@ -460,9 +460,9 @@ describe('unshallowRepository', () => {
   it('bounds targeted recovery without shortening an ordinary unshallow fetch', () => {
     const selected = 'a'.repeat(40)
     cachedExecStub.onCall(0).returns('git version 2.39.0')
-    cachedExecStub.onCall(1).returns('refs/heads/main')
-    cachedExecStub.onCall(2).returns('origin\nupstream')
-    cachedExecStub.onCall(3).returns('upstream')
+    cachedExecStub.onCall(1).returns('origin\nupstream')
+    cachedExecStub.onCall(2).returns('refs/heads/main')
+    cachedExecStub.onCall(3).returns('branch.main.remote upstream\n')
     cachedExecStub.onCall(4).returns('b'.repeat(40))
 
     unshallowRepository(false, selected)
@@ -476,9 +476,9 @@ describe('unshallowRepository', () => {
   it('keeps ordinary unshallow timing when the selected SHA is HEAD', () => {
     const selected = 'a'.repeat(40)
     cachedExecStub.onCall(0).returns('git version 2.39.0')
-    cachedExecStub.onCall(1).returns('refs/heads/main')
-    cachedExecStub.onCall(2).returns('origin\nupstream')
-    cachedExecStub.onCall(3).returns('origin')
+    cachedExecStub.onCall(1).returns('origin\nupstream')
+    cachedExecStub.onCall(2).returns('refs/heads/main')
+    cachedExecStub.onCall(3).returns('branch.main.remote origin\n')
     cachedExecStub.onCall(4).returns(selected)
 
     unshallowRepository(false, selected)
@@ -495,9 +495,9 @@ describe('unshallowRepository', () => {
       try {
         const selected = 'a'.repeat(40)
         cachedExecStub.onCall(0).returns('git version 2.39.0')
-        cachedExecStub.onCall(1).returns('refs/heads/main')
-        cachedExecStub.onCall(2).returns('origin\nupstream')
-        cachedExecStub.onCall(3).returns('origin')
+        cachedExecStub.onCall(1).returns('origin\nupstream')
+        cachedExecStub.onCall(2).returns('refs/heads/main')
+        cachedExecStub.onCall(3).returns('branch.main.remote origin\n')
         cachedExecStub.onCall(4).returns('b'.repeat(40))
         cachedExecStub.onCall(5).callsFake(() => {
           clock.tick(expired ? 5000 : 100)
@@ -527,9 +527,9 @@ describe('unshallowRepository', () => {
       .onCall(0).returns(
         'git version 2.39.0'
       )
-      .onCall(1).returns('refs/heads/main')
-      .onCall(2).returns('origin\nupstream')
-      .onCall(3).returns('origin')
+      .onCall(1).returns('origin\nupstream')
+      .onCall(2).returns('refs/heads/main')
+      .onCall(3).returns('branch.main.remote origin\n')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
 
     const options = [
@@ -551,9 +551,9 @@ describe('unshallowRepository', () => {
       .onCall(0).returns(
         'git version 2.39.0'
       )
-      .onCall(1).returns('refs/heads/main')
-      .onCall(2).returns('origin\nupstream')
-      .onCall(3).returns('origin')
+      .onCall(1).returns('origin\nupstream')
+      .onCall(2).returns('refs/heads/main')
+      .onCall(3).returns('branch.main.remote origin\n')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(5).throws()
       .onCall(6).returns('origin/master')
@@ -577,9 +577,9 @@ describe('unshallowRepository', () => {
       .onCall(0).returns(
         'git version 2.39.0'
       )
-      .onCall(1).returns('refs/heads/main')
-      .onCall(2).returns('origin\nupstream')
-      .onCall(3).returns('origin')
+      .onCall(1).returns('origin\nupstream')
+      .onCall(2).returns('refs/heads/main')
+      .onCall(3).returns('branch.main.remote origin\n')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(5).throws()
       .onCall(6).returns('origin/master')
@@ -673,9 +673,11 @@ describe('getGitDiff', () => {
 
     assert.strictEqual(diff, expectedDiff)
     sinon.assert.calledWith(cachedExecStub, 'git', [
+      '-c',
+      'core.quotepath=false',
       'diff',
       '-U0',
-      '--word-diff=porcelain',
+      '--no-renames',
       'base-commit',
       'target-commit',
     ])
@@ -686,7 +688,44 @@ describe('getGitDiff', () => {
     cachedExecStub.returns(expectedDiff)
     const diff = getGitDiff('base-commit')
     assert.strictEqual(diff, expectedDiff)
-    sinon.assert.calledWith(cachedExecStub, 'git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      '-c',
+      'core.quotepath=false',
+      'diff',
+      '-U0',
+      '--no-renames',
+      'base-commit',
+    ])
+  })
+
+  it('supports name-only diffs and path filters', () => {
+    cachedExecStub.returns('src/a.js\nsrc/b.js\n')
+    const names = getGitDiff('base-commit', 'target-commit', undefined, { nameOnly: true })
+    assert.strictEqual(names, 'src/a.js\nsrc/b.js\n')
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      '-c',
+      'core.quotepath=false',
+      'diff',
+      '--name-only',
+      '--no-renames',
+      'base-commit',
+      'target-commit',
+    ])
+
+    cachedExecStub.resetHistory()
+    getGitDiff('base-commit', 'target-commit', undefined, { paths: ['src/a.js'], skipFetchCheck: true })
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      '-c',
+      'core.quotepath=false',
+      'diff',
+      '-U0',
+      '--no-renames',
+      'base-commit',
+      'target-commit',
+      '--',
+      'src/a.js',
+    ])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['cat-file', '-e', 'base-commit'])
   })
 
   it('returns an empty string when git command fails because SHAs could not be found', () => {
@@ -717,33 +756,57 @@ describe('getGitRemoteName', () => {
     cachedExecStub.reset()
   })
 
-  it('returns upstream remote name when available', () => {
-    cachedExecStub.onCall(0).returns('refs/heads/main')
-    cachedExecStub.onCall(1).returns('origin\n')
-    cachedExecStub.onCall(2).returns('origin')
+  it('short-circuits with a single git remote command when only one remote exists', () => {
+    cachedExecStub.onCall(0).returns('upstream\n')
 
-    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
-      {
-        'node:child_process': { execFileSync: cachedExecStub },
-        './git-cache': {
-          cachedExec: cachedExecStub,
-        },
-      }
-    )
+    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
+      './git-cache': { cachedExec: cachedExecStub },
+    })
 
-    const remoteName = getGitRemoteName()
-    assert.strictEqual(remoteName, 'origin')
-    sinon.assert.calledWith(cachedExecStub, 'git',
-      ['config', '--get', 'branch.main.remote'])
+    assert.strictEqual(getGitRemoteName(), 'upstream')
+    sinon.assert.calledOnceWithMatch(cachedExecStub, 'git', ['remote'])
+  })
+
+  it('returns upstream remote name when multiple remotes exist', () => {
+    cachedExecStub.onCall(0).returns('origin\nupstream\n')
+    cachedExecStub.onCall(1).returns('refs/heads/main')
+    cachedExecStub.onCall(2).returns('branch.main.remote upstream\n')
+
+    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
+      './git-cache': { cachedExec: cachedExecStub },
+    })
+
+    assert.strictEqual(getGitRemoteName(), 'upstream')
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'config',
+      '--local',
+      '--get-regexp',
+      String.raw`^(clone\.defaultRemoteName|branch\..*\.remote)$`,
+    ])
+  })
+
+  it('falls back to inherited branch remote config when absent from local config', () => {
+    cachedExecStub.onCall(0).returns('origin\nupstream\n')
+    cachedExecStub.onCall(1).returns('refs/heads/main')
+    cachedExecStub.onCall(2).throws()
+    cachedExecStub.onCall(3).returns('upstream')
+
+    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
+      './git-cache': { cachedExec: cachedExecStub },
+    })
+
+    assert.strictEqual(getGitRemoteName(), 'upstream')
+    sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'branch.main.remote'])
   })
 
   for (const branch of ['main', 'backup/local-base', 'missing-upstream']) {
     it(`falls back to a configured remote for local upstream of ${branch}`, () => {
-      cachedExecStub.onCall(0).returns(`refs/heads/${branch}`)
-      cachedExecStub.onCall(1).returns('backup\norigin\nupstream\n')
-      cachedExecStub.onCall(2).returns('.')
-      cachedExecStub.onCall(3).throws()
-      cachedExecStub.onCall(4).returns(`branch.${branch}.remote .\n`)
+      cachedExecStub.onCall(0).returns('backup\norigin\nupstream\n')
+      cachedExecStub.onCall(1).returns(`refs/heads/${branch}`)
+      cachedExecStub.onCall(2).returns(`branch.${branch}.remote .\n`)
       const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
         'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': { cachedExec: cachedExecStub },
@@ -756,8 +819,8 @@ describe('getGitRemoteName', () => {
   it('prefers origin when upstream and a configured clone remote are not available', () => {
     const logError = sinon.spy()
     cachedExecStub
-      .onCall(0).throws()
-      .onCall(1).returns('upstream\norigin')
+      .onCall(0).returns('upstream\norigin')
+      .onCall(1).throws()
       .onCall(2).throws()
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
@@ -784,16 +847,21 @@ describe('getGitRemoteName', () => {
     { configured: '', remotes: 'backup\nupstream\n', expected: 'backup' },
   ]) {
     it(`selects ${expected} from ${JSON.stringify(remotes)} with configured remote ${configured}`, () => {
-      cachedExecStub.onCall(0).throws()
-      cachedExecStub.onCall(1).returns(remotes)
-      cachedExecStub.onCall(2).returns(configured)
+      cachedExecStub.onCall(0).returns(remotes)
+      cachedExecStub.onCall(1).throws()
+      cachedExecStub.onCall(2).returns(configured ? `clone.defaultremotename ${configured}\n` : '')
       const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
         'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': { cachedExec: cachedExecStub },
       })
 
       assert.strictEqual(getGitRemoteName(), expected)
-      sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--local', '--get', 'clone.defaultRemoteName'])
+      sinon.assert.calledWith(cachedExecStub, 'git', [
+        'config',
+        '--local',
+        '--get-regexp',
+        String.raw`^(clone\.defaultRemoteName|branch\..*\.remote)$`,
+      ])
     })
   }
 
@@ -802,17 +870,15 @@ describe('getGitRemoteName', () => {
     { tracking: 'branch.main.remote upstream\nbranch.other.remote backup\n', expected: 'origin' },
   ]) {
     it(`uses unambiguous checkout-local tracking configuration before falling back to ${expected}`, () => {
-      cachedExecStub.onCall(0).throws()
-      cachedExecStub.onCall(1).returns('backup\norigin\nupstream\n')
-      cachedExecStub.onCall(2).throws()
-      cachedExecStub.onCall(3).returns(tracking)
+      cachedExecStub.onCall(0).returns('backup\norigin\nupstream\n')
+      cachedExecStub.onCall(1).throws()
+      cachedExecStub.onCall(2).returns(tracking)
       const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
         'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': { cachedExec: cachedExecStub },
       })
 
       assert.strictEqual(getGitRemoteName(), expected)
-      sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--local', '--get', 'clone.defaultRemoteName'])
     })
   }
 
@@ -831,9 +897,7 @@ describe('getGitRemoteName', () => {
   })
 
   it('returns origin when no remotes are available', () => {
-    cachedExecStub
-      .onCall(0).throws()
-      .onCall(1).returns('')
+    cachedExecStub.onCall(0).returns('')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
@@ -894,33 +958,32 @@ describe('checkAndFetchBranch', () => {
   it('does nothing if the branch exists locally', () => {
     cachedExecStub.returns('')
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledOnceWithMatch(cachedExecStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
-    )
-    sinon.assert.neverCalledWith(cachedExecStub,
-      'git',
-      ['ls-remote', '--heads', 'origin', 'my-branch'],
-      { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
-    )
-    // Should not call fetch
-    sinon.assert.neverCalledWith(cachedExecStub,
-      'git',
-      ['fetch', '--depth', '1', 'origin', 'my-branch'],
-      { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 5000 }
     )
   })
 
   it('fetches the branch if it does not exist locally but exists on remote', () => {
+    const execFileSyncStub = sinon.stub()
+    execFileSyncStub.onCall(0).returns('true') // isShallowRepository
+    execFileSyncStub.onCall(1).returns('') // fetch
     cachedExecStub
       .onCall(0).throws() // local check fails
-      .onCall(1).returns('something') // remote check passes
-      .onCall(2).returns('') // fetch
+      .onCall(1).returns(`${'a'.repeat(40)}\trefs/heads/my-branch\n`) // remote check passes
+    const incrementCountMetricStub = sinon.stub()
+    const distributionMetricStub = sinon.stub()
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric: incrementCountMetricStub,
+        distributionMetric: distributionMetricStub,
+      },
     })
     checkAndFetchBranch('my-branch', 'origin')
     sinon.assert.calledWith(cachedExecStub,
@@ -929,17 +992,107 @@ describe('checkAndFetchBranch', () => {
     )
     sinon.assert.calledWith(cachedExecStub,
       'git',
-      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      ['ls-remote', '--heads', 'origin', 'refs/heads/my-branch'],
       { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
     )
-    sinon.assert.calledWith(cachedExecStub, 'git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
+    sinon.assert.calledWith(execFileSyncStub, 'git', [
+      'fetch',
+      '--depth=1',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--no-tags',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      'origin',
+      'refs/heads/my-branch:refs/remotes/origin/my-branch',
+    ], { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 5000 })
+    sinon.assert.calledWith(incrementCountMetricStub, 'git.command', { command: 'show_ref' })
+    sinon.assert.calledWith(incrementCountMetricStub, 'git.command', { command: 'ls_remote' })
+    sinon.assert.calledWith(incrementCountMetricStub, 'git.command', { command: 'fetch_branch' })
+    sinon.assert.calledWith(distributionMetricStub, 'git.command_ms', { command: 'fetch_branch' })
+  })
+
+  it('batches multiple missing branches into one ls-remote and one blobless fetch', () => {
+    const execFileSyncStub = sinon.stub()
+    execFileSyncStub.onCall(0).returns('false') // non-shallow clone preserves full history
+    execFileSyncStub.onCall(1).returns('')
+    cachedExecStub.onCall(0).returns(
+      `${'a'.repeat(40)}\trefs/heads/main\n${'b'.repeat(40)}\trefs/heads/dev\n`
+    )
+    const { checkAndFetchBranches } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execFileSyncStub },
+      './git-cache': { cachedExec: cachedExecStub },
+    })
+
+    checkAndFetchBranches(['main', 'master', 'dev', 'trunk'], 'origin', undefined, {
+      existingRemoteBranches: new Set(['master']),
+    })
+
+    sinon.assert.calledOnceWithMatch(cachedExecStub, 'git', [
+      'ls-remote',
+      '--heads',
+      'origin',
+      'refs/heads/main',
+      'refs/heads/dev',
+      'refs/heads/trunk',
+    ])
+    sinon.assert.calledWith(execFileSyncStub, 'git', [
+      'fetch',
+      '--filter=blob:none',
+      '--no-tags',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      'origin',
+      'refs/heads/main:refs/remotes/origin/main',
+      'refs/heads/dev:refs/remotes/origin/dev',
+    ])
+  })
+
+  it('batches missing branches asynchronously into one ls-remote and one blobless fetch', async () => {
+    const execFileStub = sinon.stub()
+    execFileStub.callsFake((_cmd, flags, _options, cb) => {
+      if (flags[0] === 'rev-parse') return cb(null, 'true')
+      return cb(null, '')
+    })
+    const cachedExecAsyncStub = sinon.stub().resolves(
+      `${'a'.repeat(40)}\trefs/heads/main\n`
+    )
+    const { checkAndFetchBranchesAsync } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFile: execFileStub },
+      './git-cache': { cachedExecAsync: cachedExecAsyncStub },
+    })
+
+    await checkAndFetchBranchesAsync(['main', 'master', 'trunk'], 'origin', undefined, {
+      existingRemoteBranches: new Set(['master']),
+    })
+
+    sinon.assert.calledOnceWithMatch(cachedExecAsyncStub, 'git', [
+      'ls-remote',
+      '--heads',
+      'origin',
+      'refs/heads/main',
+      'refs/heads/trunk',
+    ])
+    sinon.assert.calledWithMatch(execFileStub, 'git', [
+      'fetch',
+      '--depth=1',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--no-tags',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      'origin',
+      'refs/heads/main:refs/remotes/origin/main',
+    ])
   })
 
   it('does nothing if the branch does not exist locally or on remote', () => {
+    const execFileSyncStub = sinon.stub()
     cachedExecStub
       .onCall(0).throws() // local check fails
-      .onCall(1).returns('') // remote check fails
+      .onCall(1).returns('') // remote check finds no branch
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
@@ -949,21 +1102,19 @@ describe('checkAndFetchBranch', () => {
     )
     sinon.assert.calledWith(cachedExecStub,
       'git',
-      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      ['ls-remote', '--heads', 'origin', 'refs/heads/my-branch'],
       { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
     )
-    sinon.assert.neverCalledWith(cachedExecStub,
-      'git',
-      ['fetch', '--depth', '1', 'origin', 'my-branch'],
-      { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 5000 }
-    )
+    sinon.assert.notCalled(execFileSyncStub)
   })
 
   it('does nothing if the remote does not exist', () => {
+    const execFileSyncStub = sinon.stub()
     cachedExecStub
       .onCall(0).throws() // local check fails
-      .onCall(1).throws('') // remote does not exist
+      .onCall(1).throws(new Error('remote does not exist'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
@@ -973,20 +1124,17 @@ describe('checkAndFetchBranch', () => {
     )
     sinon.assert.calledWith(cachedExecStub,
       'git',
-      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      ['ls-remote', '--heads', 'origin', 'refs/heads/my-branch'],
       { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
     )
-    sinon.assert.neverCalledWith(cachedExecStub,
-      'git',
-      ['fetch', '--depth', '1', 'origin', 'my-branch'],
-      { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 5000 }
-    )
+    sinon.assert.notCalled(execFileSyncStub)
   })
 
   it('logs debug if a command throws', () => {
     const logDebugSpy = sinon.spy()
     cachedExecStub.throws(new Error('git command failed'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': { cachedExec: cachedExecStub },
       '../../log': { debug: logDebugSpy },
     })
@@ -1000,17 +1148,18 @@ describe('getLocalBranches', () => {
     cachedExecStub.reset()
   })
 
-  it('returns a list of local branches', () => {
-    cachedExecStub.returns('branch1\nbranch2\nbranch3')
+  it('returns a list of local branches sorted by committer date excluding remote HEAD', () => {
+    cachedExecStub.returns('my-origin/HEAD\nmy-origin/branch1\nmy-origin/branch2\nmy-origin/branch3')
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecStub },
     })
     const branches = getLocalBranches('my-origin')
-    assert.deepStrictEqual(branches, ['branch1', 'branch2', 'branch3'])
+    assert.deepStrictEqual(branches, ['my-origin/branch1', 'my-origin/branch2', 'my-origin/branch3'])
     sinon.assert.calledWith(cachedExecStub,
       'git',
       [
         'for-each-ref',
+        '--sort=-committerdate',
         '--format=%(refname:short)',
         'refs/remotes/my-origin',
       ]
@@ -1848,6 +1997,22 @@ done
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.match(diff, /-root/)
     assert.match(diff, /\+head/)
+  })
+
+  it('skips eager diff base fetch when impacted tests detection is disabled', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+    const gitUtils = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: cachedExecSpy },
+      'node:child_process': { execFileSync: cachedExecSpy },
+      '../../config': () => ({
+        testOptimization: { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: false },
+      }),
+    })
+
+    const metadata = gitUtils.getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: baseSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
+    assert.strictEqual(gitUtils.hasLocalGitObject(baseSha, checkout), false)
   })
 
   it('fetches missing diff snapshots without relying on metadata extraction', () => {

@@ -3361,13 +3361,16 @@ function getCliWrapper (isNewJestVersion) {
         knownTestsResponse,
         testManagementTestsResponse,
         skippableSuitesResponse,
+        modifiedFilesResponse,
       } = await getTestOptimizationRequestResults({
         isKnownTestsEnabled,
         isTestManagementTestsEnabled,
         isSuitesSkippingEnabled,
+        isImpactedTestsEnabled,
         getKnownTests: () => getChannelPromise(knownTestsCh),
         getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
         getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+        getModifiedFiles: () => getChannelPromise(modifiedFilesCh),
       })
 
       if (isKnownTestsEnabled) {
@@ -3422,7 +3425,8 @@ function getCliWrapper (isNewJestVersion) {
 
       if (isImpactedTestsEnabled) {
         try {
-          const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
+          const { err, modifiedFiles: receivedModifiedFiles } =
+            modifiedFilesResponse || await getChannelPromise(modifiedFilesCh)
           if (!err) {
             modifiedFiles = receivedModifiedFiles
           }
