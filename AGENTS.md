@@ -105,9 +105,9 @@ The tracer runs in user applications and hot paths:
   configuration may disable a subsystem during initialization; partial initialization or recovery is not required
   without a public contract. Preserve the application's own thrown, rejected, or callback error outcome.
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
-- Do not add promise machinery to synchronous library paths or inactive features. Inherently asynchronous APIs and
-  control-plane code may follow their asynchronous contract. Avoid additional promise overhead on hot paths.
-  Tests and worker threads may use promises and `async`/`await`.
+- Do not add promise machinery to synchronous library paths or inactive and hot paths. Inherently asynchronous APIs,
+  control-plane code, and worker threads may follow their upstream asynchronous contract; keep inactive paths cheap.
+  Tests may use promises and `async`/`await`.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
 - Use `.once()` for one terminal event on a conforming Node.js `EventEmitter`. Multiple terminal names need a shared
@@ -134,17 +134,17 @@ Preserve Datadog Boolean parsing, including `1`/`0`, for OpenTelemetry settings.
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Register the option in `packages/dd-trace/src/config/supported-configurations.json`, including its type and default.
+1. Register the option in `packages/dd-trace/src/config/supported-configurations.json`, including its default and type.
     Add `configurationNames` only for options exposed through `tracer.init()`.
-2. Run `npm run generate:config:types` after registry changes and commit the generated types. Do not edit them manually.
-3. The registry supplies ordinary defaults, environment and option parsing, and canonical configuration telemetry.
-    Change runtime configuration or telemetry code only for behavior the registry cannot express.
-4. Update `index.d.ts` and `index.d.v5.ts` and their documentation comments for public options.
-    Update only the applicable surface for version-specific options.
-    Declaration comments supply the generated API reference.
-    Update `docs/API.md` when additional guide content is needed.
-5. Test the option in `packages/dd-trace/test/config/index.spec.js`.
-    Add telemetry tests when adding or changing a configuration source.
+2. Defaults, environment/programmatic parsing, and canonical configuration telemetry are derived from the registry
+    at runtime by `config/defaults.js` and `config/index.js`. Edit these or `telemetry/telemetry.js` only for behavior
+    the registry cannot express; ordinary options do not need a separate telemetry name mapping.
+3. Run `npm run generate:config:types` and commit the generated configuration types. Update both supported public
+    TypeScript surfaces when applicable.
+4. Document non-experimental public options in the declaration comments in `index.d.ts` and `index.d.v5.ts` as
+    applicable. TypeDoc reads `index.d.ts` to generate the API reference. Update `docs/API.md` for guide content.
+5. Test the option in `packages/dd-trace/test/config/index.spec.js`. Add telemetry tests when adding or changing
+    a configuration source.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
 
