@@ -164,7 +164,7 @@
     "handlebars": "4.7.10",
     "hapi": "18.1.0",
     "hono": "4.13.20",
-    "ioredis": "6.0.0",
+    "ioredis": "6.1.0",
     "iovalkey": "0.4.0",
     "jest": "30.5.2",
     "jest-circus": "30.5.2",
