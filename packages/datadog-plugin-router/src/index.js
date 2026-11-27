@@ -1,11 +1,71 @@
 'use strict'
 
+const { HTTP_ROUTE } = require('../../../ext/tags')
+const {
+  getLayerMeta,
+  recordNativeRouterMatch,
+  resolveNativeRouterRoute,
+} = require('../../datadog-instrumentations/src/helpers/router-helper')
 const { PUBLISHED_ROUTE, joinRoute, normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
 const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+
+/**
+ * @typedef {{
+ *   selection: { active: boolean }, route: string, pathDepth: number, previous?: ProvisionalRoute,
+ * }} ProvisionalRoute
+ */
+
+class ProvisionalRouteReader {
+  /** @type {ProvisionalRoute | undefined} */
+  #selected
+  #previous
+
+  /** @param {import('../../dd-trace/src/http-resource').RouteReader | undefined} previous */
+  constructor (previous) {
+    this.#previous = previous
+  }
+
+  /**
+   * @param {{ active: boolean }} selection
+   * @param {string} route
+   * @param {string[]} paths
+   */
+  select (selection, route, paths) {
+    this.#selected = { selection, route, pathDepth: paths.length, previous: this.#findActive(paths) }
+  }
+
+  hasPublishedReader () {
+    return web.isPublishedRouteReader(this.#previous)
+  }
+
+  /** @param {string[]} paths */
+  getProvisionalRoute (paths) {
+    return this.#findActive(paths)?.route
+  }
+
+  /**
+   * @param {string | undefined} displayedRoute
+   * @param {import('../../dd-trace/src/http-resource').HttpResourceSource} source
+   */
+  readSamplingRoute (displayedRoute, source) {
+    const route = this.getProvisionalRoute(source.paths)
+    if (route === undefined) return this.#previous?.readSamplingRoute(displayedRoute, source)
+    return web.isSelectingRoute(source.paths) ? false : route
+  }
+
+  /** @param {string[]} paths */
+  #findActive (paths) {
+    let result = this.#selected
+    while (result && (!result.selection.active || result.pathDepth !== paths.length)) {
+      result = result.previous
+    }
+    return result
+  }
+}
 
 class RouterPlugin extends WebPlugin {
   static id = 'router'
@@ -18,7 +78,41 @@ class RouterPlugin extends WebPlugin {
 
     const id = this.constructor.id
     const tracksSelection = id === 'router' || id === 'express'
-    this.addSub(`apm:${id}:middleware:enter`, ({ req, name, route, layer }) => {
+    if (id === 'router') {
+      this.addSub('tracing:orchestrion:router:routeMatch:start', recordNativeRouterMatch)
+      this.addSub('tracing:orchestrion:router:routeParams:end', recordNativeRouterMatch)
+    }
+    if (tracksSelection) {
+      this.addSub(`tracing:orchestrion:${id}:routeParams:start`, selection => {
+        const { req, layer, pattern } = selection
+        const request = web.getContext(req)
+        const metadata = getLayerMeta(layer)
+        if (!request?.span || !metadata) return
+
+        if (metadata.nativeSingleGroup && pattern === undefined) {
+          // Nested routers can dispatch while these parameter callbacks run.
+          selection.path = layer.path
+        }
+        const route = metadata.needMultiMatch
+          ? resolveNativeRouterRoute(metadata, pattern, layer)
+          : metadata.captureRoute
+        if (typeof route !== 'string') return
+
+        const context = this.#contexts.get(req)
+        const prefix = context && joinRoute(context.stack)
+        const template = prefix ? prefix + route : route
+        if (context && context.route !== template && !isMoreSpecificThan(template, context.route)) return
+
+        let reader = request.samplingRouteReader
+        if (!(reader instanceof ProvisionalRouteReader)) {
+          reader = new ProvisionalRouteReader(reader)
+          web.setSamplingRouteReader(request, reader)
+        }
+        reader.select(selection, template, request.paths)
+      })
+    }
+
+    this.addSub(`apm:${id}:middleware:enter`, ({ req, name, route, layer, routeSelected }) => {
       // One ALS hop covers both the parent-span fallback (when no
       // per-request context exists yet) and the `storeStack` push below.
       // The previous shape paid an ALS read inside `#getStoreSpan` and a
@@ -35,6 +129,8 @@ class RouterPlugin extends WebPlugin {
       if (!childOf) return
 
       const span = this.#getMiddlewareSpan(name, childOf)
+      const matched = tracksSelection && layer?.route && typeof route === 'string' &&
+        (routeSelected || this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED)
       const previousRoute = context?.route
       context = this.#updateContext(req, context, route, childOf)
 
@@ -46,37 +142,67 @@ class RouterPlugin extends WebPlugin {
       this.enter(span, store)
 
       const request = web.patch(req)
-      if (tracksSelection) {
-        if (request.samplingRoute === false && context.route === '') return
-        if (request.samplingRoute === PUBLISHED_ROUTE) {
-          if (!layer?.route) {
-            if (context.stack.at(-1) === '') return
-            const paths = request.paths
-            const reader = request.samplingRouteReader
-            web.setRoute(req, joinRoute(context.stack))
-            this.#delegatedRoutes ??= new WeakMap()
-            this.#delegatedRoutes.set(context, {
-              paths,
-              reader,
-              previousRoute,
-              middlewarePaths: request.paths,
-              depth: context.stack.length,
-            })
-            return
-          }
-          if (context.route === '') {
-            if (route === '/' || layer.route.path === '/') {
-              web.replacePublishedRouteWithRoot(req)
-              return
-            }
-            web.setSamplingRoute(req)
-          }
-        }
+      if (!tracksSelection) {
+        web.setRoute(req, context.route)
+        return
       }
-      const delegated = tracksSelection && !layer?.route && this.#delegatedRoutes?.get(context)
+
+      const selected = Boolean(
+        matched && (context.route !== previousRoute || joinRoute(context.stack) === context.route)
+      )
+      const reader = request.samplingRouteReader
+      const provisional = reader instanceof ProvisionalRouteReader ? reader : undefined
+      const activeProvisional = provisional?.getProvisionalRoute(request.paths) !== undefined
+      if (!selected && activeProvisional) {
+        context.route = previousRoute ?? ''
+        return
+      }
+      if (request.samplingRoute === false && context.route === '' && !matched) return
+      if (request.samplingRoute === PUBLISHED_ROUTE && !layer?.route) {
+        if (context.stack.at(-1) === '') return
+        const paths = request.paths
+        const reader = request.samplingRouteReader
+        web.setRoute(req, joinRoute(context.stack))
+        this.#delegatedRoutes ??= new WeakMap()
+        this.#delegatedRoutes.set(context, {
+          paths,
+          reader,
+          previousRoute,
+          middlewarePaths: request.paths,
+          depth: context.stack.length,
+        })
+        return
+      }
+      if (route === undefined) return
+
+      // A delegated handler can fall through while its caller still owns the route.
+      const retained = selected && request.span && (activeProvisional || context.selectedPrevious ||
+        (request.samplingRoute === PUBLISHED_ROUTE &&
+          (web.isPublishedRouteReader(reader) || provisional?.hasPublishedReader())))
+      const previous = retained
+        ? {
+            reader,
+            paths: request.paths,
+            samplingRoute: request.samplingRoute,
+            generatedRoute: request.generatedRoute,
+            tag: request.span.context().getTag(HTTP_ROUTE),
+            route: previousRoute ?? '',
+            selectedPaths: context.selectedPaths,
+            selectedDepth: context.selectedDepth,
+            parent: context.selectedPrevious,
+          }
+        : undefined
+      const root = context.route === '' && route === '/' && layer?.route
+      const delegated = !layer?.route && this.#delegatedRoutes?.get(context)
       const tracksMiddleware = delegated && request.paths === delegated.middlewarePaths
-      web.setRoute(req, context.route)
+      const paths = (root ? web.replacePublishedRouteWithRoot(req) : undefined) ??
+        web.setRoute(req, context.route, selected)
       if (tracksMiddleware) delegated.middlewarePaths = request.paths
+      if (selected && paths) {
+        context.selectedPaths = paths
+        context.selectedDepth = context.stack.length
+        context.selectedPrevious = previous
+      }
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
@@ -85,6 +211,28 @@ class RouterPlugin extends WebPlugin {
       if (!context) return
 
       context.stack.pop()
+      if (context.selectedPaths && context.stack.length < context.selectedDepth) {
+        const request = web.getContext(req)
+        const previous = context.selectedPrevious
+        if (request?.paths === context.selectedPaths) {
+          if (previous) {
+            request.paths = previous.paths
+            request.samplingRoute = previous.samplingRoute
+            request.samplingRouteReader = previous.reader
+            if (request.generatedRoute !== undefined &&
+              request.span.context().getTag(HTTP_ROUTE) === request.generatedRoute) {
+              request.span.setTag(HTTP_ROUTE, previous.tag)
+            }
+            request.generatedRoute = previous.generatedRoute
+            context.route = previous.route
+          } else {
+            web.setSamplingRoute(req)
+          }
+        }
+        context.selectedPaths = previous?.selectedPaths
+        context.selectedDepth = previous?.selectedDepth ?? 0
+        context.selectedPrevious = previous?.parent
+      }
       const delegated = this.#delegatedRoutes?.get(context)
       if (delegated && context.stack.length < delegated.depth) {
         this.#delegatedRoutes.delete(context)
@@ -182,14 +330,15 @@ class RouterPlugin extends WebPlugin {
       return context
     }
 
-    // Five-property shape pinned at allocation so every request shares the
-    // same hidden class — no per-field transitions after construction.
     context = {
       span,
       stack: [route],
       route,
       middleware: [],
       storeStack: [],
+      selectedPaths: undefined,
+      selectedDepth: 0,
+      selectedPrevious: undefined,
     }
 
     this.#contexts.set(req, context)

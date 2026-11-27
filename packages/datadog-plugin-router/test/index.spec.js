@@ -51,6 +51,152 @@ describe('Plugin', () => {
           Router = require(`../../../versions/router@${version}`).get()
         })
 
+        it('preserves native dispatch for a global regexp in an array with a root route', async function () {
+          if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+          const router = Router()
+          router.get([/^\/items\/[0-9]+$/g, '/'], (_req, res) => res.end())
+          appListener = server(router).listen(0, '127.0.0.1')
+          await once(appListener, 'listening')
+          const url = `http://127.0.0.1:${appListener.address().port}/items/42`
+
+          const first = await fetch(url)
+          const second = await fetch(url)
+          assert.strictEqual(first.status, 200)
+          assert.strictEqual(second.status, 404)
+        })
+
+        it('reports the native winner when a global regexp and a string match the same path', async function () {
+          if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+          const pattern = /^\/$/g
+          const router = Router()
+          const lastIndexes = []
+          router.get([pattern, '/'], (_req, res) => {
+            lastIndexes.push(pattern.lastIndex)
+            res.end()
+          })
+          appListener = server(router).listen(0, '127.0.0.1')
+          await once(appListener, 'listening')
+          const url = `http://127.0.0.1:${appListener.address().port}/`
+          const resources = []
+          for (let i = 0; i < 2; i++) {
+            const [response] = await Promise.all([
+              fetch(url),
+              agent.assertFirstTraceSpan(span => {
+                resources.push(span.resource)
+              }),
+            ])
+            assert.strictEqual(response.status, 200)
+          }
+          assert.deepStrictEqual(lastIndexes, [1, 0])
+          assert.deepStrictEqual(resources, [`GET (${pattern})`, 'GET'])
+        })
+
+        it('keeps the native match across overlapping parameter callbacks', async function () {
+          if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+          const pattern = /^(?<item>\/items\/[0-9]+)$/g
+          const mount = '/tenants/:tenant'
+          const outer = Router()
+          const router = Router({ mergeParams: true })
+          let waitForSecond
+          const firstSelection = new Promise(resolve => { waitForSecond = resolve })
+          router.param('item', (req, res, next, value) => {
+            if (value === '/items/42') {
+              waitForSecond(next)
+            } else {
+              next()
+            }
+          })
+          router.get([['/unused', '/other'], pattern, '/items/:item', '/health'], (req, res) => {
+            res.end(req.params.tenant + ':' + req.params.item)
+          })
+          outer.use(mount, router)
+          appListener = server(outer).listen(0, '127.0.0.1')
+          await once(appListener, 'listening')
+          const url = `http://127.0.0.1:${appListener.address().port}/tenants/acme/items/42`
+          const first = fetch(url)
+          const second = (async () => {
+            const resume = await firstSelection
+            let firstTrace
+            try {
+              const [response] = await Promise.all([
+                fetch(url),
+                agent.assertFirstTraceSpan({ resource: `GET ${mount}/items/:item` }),
+              ])
+              assert.strictEqual(await response.text(), 'acme:42')
+              firstTrace = agent.assertFirstTraceSpan({ resource: `GET ${mount}(${pattern})` })
+            } finally {
+              resume()
+            }
+            await firstTrace
+          })()
+          const [response] = await Promise.all([first, second])
+          assert.strictEqual(await response.text(), 'acme:/items/42')
+        })
+
+        for (const { option, paths, url } of [
+          { option: 'caseSensitive', paths: ['/Items/:alternate', '/items/:id//'], url: '/items/42' },
+          { option: 'strict', paths: ['/items/:alternate', '/items/:id/'], url: '/items/42/' },
+        ]) {
+          it(`uses the native ${option} option for a grouped legacy matcher`, async function () {
+            if (!semver.satisfies(resolvedVersion, '>=2 <2.3')) this.skip()
+
+            const router = Router({ [option]: true })
+            router.get([paths, '/health'], (req, res) => res.end(req.params.id))
+            appListener = server(router).listen(0, '127.0.0.1')
+            await once(appListener, 'listening')
+            const [response] = await Promise.all([
+              fetch(`http://127.0.0.1:${appListener.address().port}${url}`),
+              agent.assertFirstTraceSpan({ resource: `GET ${paths[1]}` }),
+            ])
+            assert.strictEqual(await response.text(), '42')
+          })
+        }
+
+        it('preserves the route when enabled from a parameter callback', async function () {
+          if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+          const tracer = require('../../dd-trace')
+          tracer.use('router', false)
+          const router = Router()
+          router.param('id', (req, res, next) => {
+            tracer.use('router', { middleware: false })
+            next()
+          })
+          router.get(['/items/:id', '/health'], (req, res) => res.end(req.params.id))
+          appListener = server(router).listen(0, '127.0.0.1')
+          await once(appListener, 'listening')
+          const url = `http://127.0.0.1:${appListener.address().port}/items/42`
+          for (let request = 0; request < 2; request++) {
+            const [response] = await Promise.all([
+              fetch(url),
+              agent.assertFirstTraceSpan({ resource: 'GET /items/:id' }),
+            ])
+            assert.strictEqual(await response.text(), '42')
+          }
+        })
+
+        it('preserves the native error middleware path for an array of mounts', async function () {
+          if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+          const router = Router()
+          router.use((req, res, next) => next(new Error('route failure')))
+          router.use(['/items/:id', '/health'], (error, req, res, next) => {
+            res.statusCode = 500
+            res.end(error.message + ':' + req.params.id)
+          })
+          appListener = server(router).listen(0, '127.0.0.1')
+          await once(appListener, 'listening')
+          const [response] = await Promise.all([
+            fetch(`http://127.0.0.1:${appListener.address().port}/items/42`),
+            agent.assertFirstTraceSpan({ resource: 'GET /items/:id' }),
+          ])
+          assert.strictEqual(response.status, 500)
+          assert.strictEqual(await response.text(), 'route failure:42')
+        })
+
         it('should still set the route on the request span with nested routers', done => {
           const router = Router()
           const childRouter = Router()

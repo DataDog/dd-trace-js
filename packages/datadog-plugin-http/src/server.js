@@ -100,6 +100,7 @@ class HttpServerPlugin extends ServerPlugin {
     if (!context || !context.res) return // Not created by a http.Server instance.
 
     if (incomingHttpRequestEnd.hasSubscribers) {
+      web.finishRouting(context)
       incomingHttpRequestEnd.publish({ req, res: context.res })
     }
 

@@ -7,6 +7,7 @@ const http = require('node:http')
 
 const dc = require('dc-polyfill')
 
+const createConfig = require('../../dd-trace/src/config')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 /** @param {unknown} value */
@@ -125,6 +126,27 @@ describe('trpc server tracing', () => {
     assert.strictEqual(response.status, 200)
     assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
     await traceAssertion
+  })
+
+  it('reports the procedure route after delegation from an Express parameter callback', async function () {
+    if (createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      // The legacy adapter appends the procedure only when no HTTP route tag has been set.
+      this.skip()
+    }
+
+    const express = require('../../../versions/express@5').get()
+    const { nodeHTTPRequestHandler } = trpcVersion.get('@trpc/server/adapters/node-http')
+    const parameters = express.Router()
+    parameters.param('id', (req, res) => nodeHTTPRequestHandler({ req, res, router, path: 'getValue' }))
+    parameters.get('/items/:id', (_req, res) => res.sendStatus(500))
+    app.use('/delegation', parameters)
+
+    const [response] = await Promise.all([
+      fetch(`http://127.0.0.1:${server.address().port}/delegation/items/42`),
+      agent.assertFirstTraceSpan({ resource: 'GET /delegation/getValue' }),
+    ])
+    assert.strictEqual(response.status, 200)
+    assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
   })
 
   it('keeps a bounded HTTP resource and separate procedure spans for a mixed batch', async () => {

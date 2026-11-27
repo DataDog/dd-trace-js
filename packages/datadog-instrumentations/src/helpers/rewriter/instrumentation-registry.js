@@ -81,6 +81,8 @@ const registry = [
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
   },
+  { instrumentations: require('./instrumentations/router-match') },
+  { instrumentations: require('./instrumentations/router-params') },
   { activate: true, instrumentations: require('./instrumentations/supabase') },
   {
     activate: { setup: () => require('../../typesafe') },

@@ -1,16 +1,20 @@
 'use strict'
 
+const { join } = require('node:path')
+
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
-const ROUTE_RESOLUTION_FAILED = Symbol('routeResolutionFailed')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
-const { getCompileToRegexp } = require('./path-to-regexp')
+const { getRouteCompiler } = require('./path-to-regexp')
 
 const {
   getRouterMountPaths,
   joinPath,
   setLayerMeta,
   getLayerMeta,
+  takeNativeRouterMatch,
+  resolveNativeRouterRoute,
+  replayLayerRoute,
   isAppMounted,
   setRouterMountPath,
   extractMountPaths,
@@ -19,12 +23,14 @@ const {
   collectRoutesFromRouter,
 } = require('./helpers/router-helper')
 
+const nativeRouteMatch = channel('tracing:orchestrion:router:routeMatch:start')
+
 function isFastStar (layer, matchers) {
   return layer.regexp?.fast_star ?? matchers.hasStarPath
 }
 
 function isFastSlash (layer, matchers) {
-  return layer.regexp?.fast_slash ?? matchers.hasSlashPath
+  return layer.regexp?.fast_slash ?? (layer.route === undefined && matchers.hasSlashPath)
 }
 
 /**
@@ -33,9 +39,9 @@ function isFastSlash (layer, matchers) {
  * layer back to the user handler by scanning the handle, so the handle has to
  * stay the user's function.
  *
- * @param {{ handle: Function, name?: string, path?: string,
- *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
- * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
+ * @param {{ handle: Function, name?: string, path?: string, route?: object,
+ *   matchers?: Function[], regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
+ * @param {import('./helpers/router-helper').LayerMatchers} matchers
  */
 function annotateLayer (layer, matchers) {
   const handle = layer.handle
@@ -51,49 +57,40 @@ function annotateLayer (layer, matchers) {
     }
   }
 
-  setLayerMeta(layer, { name, captureRoute, needMultiMatch, matchers })
-}
-
-/**
- * Single-pattern layers carry a constant route. Multi-pattern layers use the
- * host's request-local pattern when available, or match its legacy `layer.path`.
- *
- * @param {{ captureRoute?: string, needMultiMatch: boolean,
- *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
- * @param {{ path?: string }} layer
- * @param {import('node:http').IncomingMessage} [req]
- * @param {symbol} [matchedRoute]
- * @returns {string | undefined}
- */
-function resolveLayerRoute (meta, layer, req, matchedRoute) {
-  if (!meta.needMultiMatch) return meta.captureRoute
-
-  const pattern = matchedRoute && req[matchedRoute]
-  if (typeof pattern === 'string') return pattern
-
-  for (const matcher of meta.matchers) {
-    if (matchedRoute ? matcher.regex === pattern : matcher.regex?.test(layer.path)) return matcher.path
-  }
+  const nativeSingleGroup = needMultiMatch && layer.route !== undefined &&
+    layer.matchers?.length === 1 && matchers.groups?.length === 1
+  setLayerMeta(layer, { name, captureRoute, needMultiMatch, nativeSingleGroup, matchers })
 }
 
 /**
  * Preserve the host Layer's error boundary while resolving a route outside its
  * dispatch method. This path runs only for multi-pattern layers.
  *
- * @param {{ captureRoute?: string, needMultiMatch: boolean,
- *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
- * @param {{ path?: string }} layer
+ * @param {import('./helpers/router-helper').LayerMeta} meta
+ * @param {{ req: import('node:http').IncomingMessage, layer: { path?: string },
+ *   route?: string, routeSelected: boolean }} context
  * @param {Function} next
- * @param {import('node:http').IncomingMessage} req
  * @param {symbol | undefined} matchedRoute
- * @returns {string | undefined | typeof ROUTE_RESOLUTION_FAILED}
+ * @param {boolean} captureLegacyMatch
  */
-function resolveLayerRouteOrForwardError (meta, layer, next, req, matchedRoute) {
+function resolveLayerRouteOrForwardError (meta, context, next, matchedRoute, captureLegacyMatch) {
+  if (captureLegacyMatch && !nativeRouteMatch.hasSubscribers) {
+    return true
+  }
+
+  const { req, layer } = context
   try {
-    return resolveLayerRoute(meta, layer, req, matchedRoute)
+    const dispatch = captureLegacyMatch ? takeNativeRouterMatch(req, layer) : undefined
+    if (matchedRoute || dispatch?.index !== undefined || (captureLegacyMatch && meta.nativeSingleGroup)) {
+      context.route = resolveNativeRouterRoute(meta, matchedRoute && req[matchedRoute], dispatch ?? layer)
+      context.routeSelected = context.route !== undefined
+    } else {
+      context.route = replayLayerRoute(meta.matchers, dispatch?.path ?? layer.path, !captureLegacyMatch)
+    }
+    return true
   } catch (error) {
     next(error)
-    return ROUTE_RESOLUTION_FAILED
+    return false
   }
 }
 
@@ -128,13 +125,14 @@ function adoptRequestNext (req, hostNext, wrappedNext) {
  *
  * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
  * @param {symbol} [matchedRoute] Native request-local route key, when provided by the host.
+ * @param {boolean} [captureLegacyMatch] The host provides an observed match before running its param callbacks.
  * @returns {{
  *   wrapLayerRequest: (originalRequest: Function) => Function,
  *   wrapLayerError: (originalError: Function) => Function,
  *   wrapLegacyHandle: (layer: object, original: Function, guardRepeatedNext?: boolean) => Function
  * }}
  */
-function createLayerDispatchWrappers (name, matchedRoute) {
+function createLayerDispatchWrappers (name, matchedRoute, captureLegacyMatch = false) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
   const exitChannel = channel(`apm:${name}:middleware:exit`)
   const finishChannel = channel(`apm:${name}:middleware:finish`)
@@ -193,15 +191,17 @@ function createLayerDispatchWrappers (name, matchedRoute) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length > 3) return originalRequest.call(this, req, res, next)
 
-      let route = meta.captureRoute
-      if (meta.needMultiMatch) {
-        route = resolveLayerRouteOrForwardError(meta, this, next, req, matchedRoute)
-        if (route === ROUTE_RESOLUTION_FAILED) return
+      const context = {
+        name: meta.name, req, route: meta.captureRoute, layer: this, routeSelected: !meta.needMultiMatch,
+      }
+      if (meta.needMultiMatch &&
+        !resolveLayerRouteOrForwardError(meta, context, next, matchedRoute, captureLegacyMatch)) {
+        return
       }
 
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
       if (wrappedNext !== next) adoptRequestNext(req, next, wrappedNext)
-      enterChannel.publish({ name: meta.name, req, route, layer: this })
+      enterChannel.publish(context)
 
       try {
         return originalRequest.call(this, req, res, wrappedNext)
@@ -222,15 +222,17 @@ function createLayerDispatchWrappers (name, matchedRoute) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length !== 4) return originalError.call(this, error, req, res, next)
 
-      let route = meta.captureRoute
-      if (meta.needMultiMatch) {
-        route = resolveLayerRouteOrForwardError(meta, this, next, req, matchedRoute)
-        if (route === ROUTE_RESOLUTION_FAILED) return
+      const context = {
+        name: meta.name, req, route: meta.captureRoute, layer: this, routeSelected: !meta.needMultiMatch,
+      }
+      if (meta.needMultiMatch &&
+        !resolveLayerRouteOrForwardError(meta, context, next, matchedRoute, captureLegacyMatch)) {
+        return
       }
 
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
       if (wrappedNext !== next) adoptRequestNext(req, next, wrappedNext)
-      enterChannel.publish({ name: meta.name, req, route, layer: this })
+      enterChannel.publish(context)
 
       try {
         return originalError.call(this, error, req, res, wrappedNext)
@@ -273,8 +275,8 @@ function createLayerDispatchWrappers (name, matchedRoute) {
         adoptRequestNext(req, hostNext, next)
       }
 
-      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
-      enterChannel.publish({ name, req, route, layer })
+      const route = needMultiMatch ? replayLayerRoute(meta.matchers, layer.path, true) : captureRoute
+      enterChannel.publish({ name, req, route, layer, routeSelected: !needMultiMatch })
 
       try {
         return inner.call(this, req, res, next)
@@ -325,7 +327,7 @@ function createLayerDispatchWrappers (name, matchedRoute) {
         adoptRequestNext(req, hostNext, next)
       }
 
-      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
+      const route = needMultiMatch ? replayLayerRoute(meta.matchers, layer.path, true) : captureRoute
       enterChannel.publish({ name, req, route, layer })
 
       try {
@@ -390,8 +392,8 @@ function createLayerDispatchWrappers (name, matchedRoute) {
         adoptRequestNext(req, hostNext, args[nextIndex])
       }
 
-      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
-      enterChannel.publish({ name, req, route, layer })
+      const route = needMultiMatch ? replayLayerRoute(meta.matchers, layer.path, true) : captureRoute
+      enterChannel.publish({ name, req, route, layer, routeSelected: !needMultiMatch })
 
       try {
         return inner.apply(this, args)
@@ -426,7 +428,7 @@ function hasLayerDispatch (layer) {
 // TODO: Move this function to a shared file between Express and Router
 /**
  * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
- * @param {((pattern: string | RegExp) => RegExp | undefined) | undefined} compile
+ * @param {import('./path-to-regexp').RouteCompiler | undefined} compile
  *   Host-resolved path-to-regexp compile adapter, or undefined when the host
  *   instance ships no path-to-regexp. Captured here so each express/router
  *   instance keeps the dialect it actually loaded.
@@ -463,7 +465,12 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
     }
   }
 
-  function extractMatchers (fn) {
+  /**
+   * @param {string | RegExp | Function | Array<string | RegExp>} fn
+   * @param {{ caseSensitive?: boolean, strict?: boolean }} router
+   * @param {{ route?: object, matchers?: Function[] }} layer
+   */
+  function extractMatchers (fn, router, layer) {
     const arg = Array.isArray(fn) ? fn.flat(Infinity) : [fn]
 
     if (typeof arg[0] === 'function') {
@@ -483,6 +490,10 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
     // would otherwise re-run on every request.
     let hasStarPath = false
     let hasSlashPath = false
+    const end = layer.route !== undefined
+    const options = layer.matchers === undefined
+      ? undefined
+      : { sensitive: router.caseSensitive, end, trailing: !end || !router.strict }
     const matchers = arg.map(pattern => {
       const isRegExp = pattern instanceof RegExp
       const path = isRegExp ? `(${pattern})` : pattern
@@ -491,13 +502,28 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
       } else if (path === '/') {
         hasSlashPath = true
       }
-      return {
-        path,
-        regex: isRegExp ? pattern : compile?.(pattern),
+      let candidate = pattern
+      if (options?.trailing && typeof pattern === 'string' && pattern !== '/') {
+        let length = pattern.length
+        while (pattern[length - 1] === '/') {
+          length--
+        }
+        candidate = pattern.slice(0, length)
       }
+      return { path, regex: isRegExp ? pattern : compile?.(candidate, options), isRegExp }
     })
     matchers.hasStarPath = hasStarPath
     matchers.hasSlashPath = hasSlashPath
+    if (Array.isArray(fn) && fn.some(Array.isArray)) {
+      let offset = 0
+      matchers.groups = fn.map(pattern => {
+        if (!Array.isArray(pattern)) return matchers[offset++]
+
+        const start = offset
+        offset += pattern.flat(Infinity).length
+        return matchers.slice(start, offset)
+      })
+    }
     return matchers
   }
 
@@ -564,7 +590,7 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
       }
 
       if (this.stack?.length > offset) {
-        wrapStack(this.stack.slice(offset), extractMatchers(fn))
+        wrapStack(this.stack.slice(offset), extractMatchers(fn, this, this.stack[offset]))
       }
 
       return router
@@ -575,7 +601,7 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
 }
 
 addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
-  const wrapRouterMethod = createWrapRouterMethod('router', getCompileToRegexp())
+  const wrapRouterMethod = createWrapRouterMethod('router', getRouteCompiler())
 
   shimmer.wrap(Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(Router.prototype, 'route', wrapRouterMethod)
@@ -595,8 +621,9 @@ addHook({ name: 'router', file: 'lib/layer.js', versions: ['>=1 <2'] }, Layer =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 const routeCreateCh = channel('datadog:router:route:create')
 
-addHook({ name: 'router', versions: ['>=2'] }, Router => {
-  const wrapRouterMethod = createWrapRouterMethod('router', getCompileToRegexp())
+addHook({ name: 'router', versions: ['>=2'] }, (Router, version, isIitm, { moduleBaseDir } = {}) => {
+  const hostFile = moduleBaseDir === undefined ? undefined : join(moduleBaseDir, 'lib/layer.js')
+  const wrapRouterMethod = createWrapRouterMethod('router', getRouteCompiler(hostFile))
 
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
     return function wrappedMethod (...args) {
@@ -686,7 +713,8 @@ addHook({
   name: 'router', file: 'lib/layer.js', versions: ['>=2'],
 }, (Layer, version, isIitm, { moduleBaseDir }) => {
   const matchedRoute = matchedRouteSymbols.get(moduleBaseDir)
-  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router', matchedRoute)
+  const captureLegacyMatch = matchedRoute === undefined
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router', matchedRoute, captureLegacyMatch)
 
   // `handleRequest` carries two concerns: the middleware dispatch span and the
   // param-start publish (`wrapHandleRequest`). Wrap the dispatch first so it

@@ -8,13 +8,17 @@ const {
 } = require('./plugins/util/http-otel-semantics')
 
 const PUBLISHED_ROUTE = Symbol('published route')
+const ROUTING_SELECTION = Symbol('routing selection')
 
 /** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
 /**
  * @typedef {'' | false | typeof PUBLISHED_ROUTE} SamplingRoute
  * @typedef {(displayedRoute: string | undefined, source: HttpResourceSource) => string | false | undefined}
  *   ReadSamplingRoute
- * @typedef {{ readSamplingRoute: ReadSamplingRoute }} RouteReader
+ * @typedef {{
+ *   readSamplingRoute: ReadSamplingRoute,
+ *   getProvisionalRoute?: (paths: string[]) => string | undefined,
+ * }} RouteReader
  * @typedef {{
  *   req: { method: string },
  *   config: { DD_TRACE_OTEL_SEMANTICS_ENABLED?: boolean },
@@ -82,6 +86,7 @@ function getSamplingResource (context) {
 
 module.exports = {
   PUBLISHED_ROUTE,
+  ROUTING_SELECTION,
   getSamplingResource,
   httpResourceName,
   joinRoute,
