@@ -975,7 +975,7 @@ describe('selected checkout context', () => {
     assert.deepStrictEqual(lineLevel, { 'pr-test.js': [1, 2, 3, 4] })
   })
 
-  it('short-circuits non-PR runs at the tip of the default remote branch without remote calls', async () => {
+  it('skips remote calls on the default branch tip while still detecting working-tree edits', async () => {
     const repo = path.join(directory, 'default-branch-tip')
     git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
     const currentBranch = git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])
@@ -984,61 +984,304 @@ describe('selected checkout context', () => {
     git(repo, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
 
     const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
-    const modifiedFiles = await getModifiedFilesForCheckout({
+    const headSha = git(repo, ['rev-parse', 'HEAD'])
+    const cleanModified = await getModifiedFilesForCheckout({
       testEnvironmentMetadata: {
-        'git.commit.sha': git(repo, ['rev-parse', 'HEAD']),
+        'git.commit.sha': headSha,
         'git.branch': currentBranch,
       },
       gitRoot: repo,
       testFramework: 'jest',
       getUserProvidedGitMetadata: () => ({}),
     })
-    assert.deepStrictEqual(modifiedFiles, {})
+    assert.deepStrictEqual(cleanModified, {})
+
+    // Unstaged and staged edits to tracked files must still be detected.
+    const trackedFile = path.join(repo, 'file.txt')
+    fs.writeFileSync(trackedFile, 'file\nedited line\n')
+    const unstagedModified = await getModifiedFilesForCheckout({
+      testEnvironmentMetadata: {
+        'git.commit.sha': headSha,
+        'git.branch': currentBranch,
+      },
+      gitRoot: repo,
+      testFramework: 'jest',
+      getUserProvidedGitMetadata: () => ({}),
+    })
+    assert.deepStrictEqual(unstagedModified, { 'file.txt': [1, 2] })
+
+    git(repo, ['add', 'file.txt'])
+    const stagedModified = await getModifiedFilesForCheckout({
+      testEnvironmentMetadata: {
+        'git.commit.sha': headSha,
+        'git.branch': currentBranch,
+      },
+      gitRoot: repo,
+      testFramework: 'vitest',
+      getUserProvidedGitMetadata: () => ({}),
+    })
+    assert.deepStrictEqual(stagedModified, { 'file.txt': [1] })
   })
 
-  it('diffs unpushed commits on main against origin/main and excludes pushed release/1.0', async () => {
-    const repo = path.join(directory, 'branch-exclusion-check')
-    git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
-    git(repo, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
-    const baseSha = git(repo, ['rev-parse', 'HEAD'])
-    git(repo, ['checkout', '-B', 'main', baseSha])
-    git(repo, ['update-ref', 'refs/remotes/origin/main', baseSha])
-    for (const branch of ['master', 'preprod', 'prod', 'dev', 'development', 'trunk']) {
-      git(repo, ['update-ref', `refs/remotes/origin/${branch}`, baseSha])
+  it('diffs unpushed commits on main against origin/main and excludes pushed release/1.0 (attached and detached)',
+    async () => {
+      const repo = path.join(directory, 'branch-exclusion-check')
+      git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
+      git(repo, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
+      const baseSha = git(repo, ['rev-parse', 'HEAD'])
+      git(repo, ['checkout', '-B', 'main', baseSha])
+      git(repo, ['update-ref', 'refs/remotes/origin/main', baseSha])
+      for (const branch of ['master', 'preprod', 'prod', 'dev', 'development', 'trunk']) {
+        git(repo, ['update-ref', `refs/remotes/origin/${branch}`, baseSha])
+      }
+      git(repo, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'])
+
+      // Add an unpushed local commit on main
+      fs.writeFileSync(path.join(repo, 'unpushed.spec.js'), 'test("local", () => {})\n')
+      git(repo, ['add', 'unpushed.spec.js'])
+      git(repo, [
+        '-c', 'commit.gpgsign=false', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+        'commit', '-m', 'unpushed commit',
+      ])
+
+      const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
+      const unpushedModified = await getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': git(repo, ['rev-parse', 'HEAD']),
+          'git.branch': 'main',
+        },
+        gitRoot: repo,
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      })
+      assert.deepStrictEqual(unpushedModified, { 'unpushed.spec.js': [1] })
+
+      // Simulate a CI push on release/1.0 where origin/release/1.0 === HEAD (attached and detached)
+      git(repo, ['checkout', '-b', 'release/1.0'])
+      const releaseSha = git(repo, ['rev-parse', 'HEAD'])
+      git(repo, ['update-ref', 'refs/remotes/origin/release/1.0', releaseSha])
+
+      const releaseModified = await getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': releaseSha,
+          'git.branch': 'release/1.0',
+        },
+        gitRoot: repo,
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      })
+      assert.deepStrictEqual(releaseModified, { 'unpushed.spec.js': [1] })
+
+      git(repo, ['checkout', '--detach', releaseSha])
+      const detachedWithBranch = await getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': releaseSha,
+          'git.branch': 'release/1.0',
+        },
+        gitRoot: repo,
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      })
+      assert.deepStrictEqual(detachedWithBranch, { 'unpushed.spec.js': [1] })
+
+      const detachedWithoutBranch = await getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': releaseSha,
+        },
+        gitRoot: repo,
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      })
+      assert.deepStrictEqual(detachedWithoutBranch, { 'unpushed.spec.js': [1] })
+    })
+
+  it('refreshes fetched base branches even when DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED is true', async () => {
+    const remoteRepo = path.join(directory, 'single-branch-remote.git')
+    git(directory, ['clone', '--quiet', '--bare', pathToFileURL(root).href, remoteRepo])
+    const baseSha = git(remoteRepo, ['rev-parse', 'HEAD'])
+    git(remoteRepo, ['update-ref', 'refs/heads/main', baseSha])
+
+    const seed = path.join(directory, 'single-branch-seed')
+    git(directory, ['clone', '--quiet', '--branch', 'main', pathToFileURL(remoteRepo).href, seed])
+    git(seed, ['checkout', '-b', 'feature/impacted'])
+    fs.writeFileSync(path.join(seed, 'feature.spec.js'), 'test("feature", () => {})\n')
+    git(seed, ['add', 'feature.spec.js'])
+    git(seed, [
+      '-c', 'commit.gpgsign=false', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+      'commit', '-m', 'feature commit',
+    ])
+    git(seed, ['push', '--quiet', 'origin', 'feature/impacted'])
+
+    const singleBranchCheckout = path.join(directory, 'single-branch-checkout')
+    git(directory, [
+      'clone', '--quiet', '--single-branch', '--branch', 'feature/impacted',
+      pathToFileURL(remoteRepo).href, singleBranchCheckout,
+    ])
+
+    const cacheDir = path.join(directory, 'git-cache-refresh')
+    const previousEnabled = process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
+    const previousDir = process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR
+    const cacheModules = [
+      '../../../src/config',
+      '../../../src/plugins/util/git-cache',
+      '../../../src/plugins/util/git',
+      '../../../src/plugins/util/test',
+    ]
+    const clearModules = () => {
+      for (const mod of cacheModules) {
+        delete require.cache[require.resolve(mod)]
+      }
     }
-    git(repo, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'])
 
-    // Add an unpushed local commit on main
-    fs.writeFileSync(path.join(repo, 'unpushed.spec.js'), 'test("local", () => {})\n')
-    git(repo, ['add', 'unpushed.spec.js'])
-    git(repo, ['commit', '-m', 'unpushed commit'])
+    try {
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = 'true'
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+      clearModules()
+      const { getPullRequestBaseBranchAsync, getPullRequestBaseBranch } = require('../../../src/plugins/util/test')
 
-    const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
-    const unpushedModified = await getModifiedFilesForCheckout({
-      testEnvironmentMetadata: {
-        'git.commit.sha': git(repo, ['rev-parse', 'HEAD']),
-        'git.branch': 'main',
-      },
-      gitRoot: repo,
-      testFramework: 'vitest',
-      getUserProvidedGitMetadata: () => ({}),
-    })
-    assert.deepStrictEqual(unpushedModified, { 'unpushed.spec.js': [1] })
+      assert.strictEqual(await getPullRequestBaseBranchAsync(undefined, singleBranchCheckout), baseSha)
 
-    // Now simulate a CI push on release/1.0 where origin/release/1.0 === HEAD
-    git(repo, ['checkout', '-b', 'release/1.0'])
-    const releaseSha = git(repo, ['rev-parse', 'HEAD'])
-    git(repo, ['update-ref', 'refs/remotes/origin/release/1.0', releaseSha])
-
-    const releaseModified = await getModifiedFilesForCheckout({
-      testEnvironmentMetadata: {
-        'git.commit.sha': releaseSha,
-        'git.branch': 'release/1.0',
-      },
-      gitRoot: repo,
-      testFramework: 'vitest',
-      getUserProvidedGitMetadata: () => ({}),
-    })
-    assert.deepStrictEqual(releaseModified, { 'unpushed.spec.js': [1] })
+      // Also verify the synchronous helper refreshes after fetching in a fresh single-branch checkout.
+      const syncCheckout = path.join(directory, 'single-branch-checkout-sync')
+      git(directory, [
+        'clone', '--quiet', '--single-branch', '--branch', 'feature/impacted',
+        pathToFileURL(remoteRepo).href, syncCheckout,
+      ])
+      assert.strictEqual(getPullRequestBaseBranch(undefined, syncCheckout), baseSha)
+    } finally {
+      if (previousEnabled === undefined) {
+        delete process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED
+      } else {
+        process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = previousEnabled
+      }
+      if (previousDir === undefined) {
+        delete process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR
+      } else {
+        process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = previousDir
+      }
+      clearModules()
+    }
   })
+
+  it('does not serve stale fs-cache entries when working-tree edits occur on an unchanged HEAD', async () => {
+    const repo = path.join(directory, 'fs-cache-working-tree')
+    git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
+    const baseSha = git(repo, ['rev-parse', 'HEAD'])
+    const previousFsCache = process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    const configModule = require.resolve('../../../src/config')
+    const fsCacheModule = require.resolve('../../../src/ci-visibility/requests/fs-cache')
+    const testUtilModule = require.resolve('../../../src/plugins/util/test')
+    const clearModules = () => {
+      delete require.cache[configModule]
+      delete require.cache[fsCacheModule]
+      delete require.cache[testUtilModule]
+    }
+    let cacheFilePath
+
+    try {
+      process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
+      clearModules()
+      const { buildCacheKey } = require('../../../src/ci-visibility/requests/fs-cache')
+      const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
+      const expectedKey = buildCacheKey('modified-files', [
+        path.resolve(repo),
+        baseSha,
+        '',
+        '',
+        '',
+        baseSha,
+        '',
+        '',
+        false,
+        'file',
+        null,
+      ])
+      cacheFilePath = path.join(os.tmpdir(), `dd-${expectedKey}.json`)
+
+      const callOptions = {
+        testEnvironmentMetadata: {
+          'git.commit.sha': baseSha,
+          'git.pull_request.base_branch_sha': baseSha,
+        },
+        gitRoot: repo,
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      }
+
+      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
+      assert.strictEqual(fs.existsSync(cacheFilePath), true)
+
+      // Edit a tracked file without committing: must not return the cached empty map.
+      const trackedFile = path.join(repo, 'file.txt')
+      const originalContent = fs.readFileSync(trackedFile, 'utf8')
+      fs.writeFileSync(trackedFile, originalContent + '\nmodified\n')
+      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), { 'file.txt': [1] })
+
+      // Revert back to clean: must immediately reflect empty diff again.
+      fs.writeFileSync(trackedFile, originalContent)
+      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
+    } finally {
+      if (cacheFilePath) {
+        fs.rmSync(cacheFilePath, { force: true })
+      }
+      if (previousFsCache === undefined) {
+        delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+      } else {
+        process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = previousFsCache
+      }
+      clearModules()
+    }
+  })
+
+  it('forwards exporter waitForGitUpload from both CiPlugin and CypressPlugin to getModifiedFilesForCheckout',
+    async () => {
+      const ciWaitStub = sinon.stub().resolves()
+      const ciGetModifiedFilesStub = sinon.stub().callsFake(async (options) => {
+        await options.waitForGitUpload()
+        return {}
+      })
+      const CiPlugin = proxyquire('../../../src/plugins/ci_plugin', {
+        './util/test': {
+          getTestEnvironmentMetadata: () => ({}),
+          getCodeOwnersFileEntries: () => [],
+          getModifiedFilesForCheckout: ciGetModifiedFilesStub,
+        },
+      })
+      class TestCiPlugin extends CiPlugin {
+        static id = 'vitest'
+      }
+      const ciPlugin = new TestCiPlugin({ _exporter: { waitForGitUpload: ciWaitStub } })
+      ciPlugin.configure({ enabled: true, tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'vitest_worker' } })
+      try {
+        const result = await new Promise(resolve => {
+          dc.channel('ci:vitest:modified-files').publish({ onDone: resolve })
+        })
+        assert.strictEqual(result.err, null)
+        sinon.assert.calledOnce(ciGetModifiedFilesStub)
+        sinon.assert.calledOnce(ciWaitStub)
+      } finally {
+        ciPlugin.configure(false)
+      }
+
+      const cypressWaitStub = sinon.stub().resolves()
+      const cypressGetModifiedFilesStub = sinon.stub().callsFake(async (options) => {
+        await options.waitForGitUpload()
+        return {}
+      })
+      const stop = new Error('stop after modified-file discovery')
+      const cypressPlugin = proxyquire('../../../../datadog-plugin-cypress/src/cypress-plugin', {
+        '../../dd-trace/src/plugins/util/test': {
+          getTestEnvironmentMetadata: () => ({}),
+          getCodeOwnersFileEntries: () => [],
+          getModifiedFilesForCheckout: cypressGetModifiedFilesStub,
+          getTestParentSpan: () => { throw stop },
+        },
+      })
+      cypressPlugin._isInit = true
+      cypressPlugin.isImpactedTestsEnabled = true
+      cypressPlugin.tracer = { _tracer: { _exporter: { waitForGitUpload: cypressWaitStub } } }
+      await assert.rejects(cypressPlugin.beforeRun({}), error => error === stop)
+      sinon.assert.calledOnce(cypressGetModifiedFilesStub)
+      sinon.assert.calledOnce(cypressWaitStub)
+    })
 })

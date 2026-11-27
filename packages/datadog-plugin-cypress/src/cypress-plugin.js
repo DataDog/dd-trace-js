@@ -1356,6 +1356,9 @@ class CypressPlugin {
       testEnvironmentMetadata: this.testEnvironmentMetadata,
       gitRoot: this.repositoryRoot,
       testFramework: TEST_FRAMEWORK_NAME,
+      waitForGitUpload: this.tracer?._tracer?._exporter?.waitForGitUpload
+        ? () => this.tracer._tracer._exporter.waitForGitUpload()
+        : undefined,
       getUserProvidedGitMetadata: getUserProviderGitMetadata,
     }).then(
       modifiedFiles => ({ err: null, modifiedFiles }),

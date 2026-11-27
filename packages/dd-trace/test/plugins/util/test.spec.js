@@ -2153,6 +2153,37 @@ describe('getPullRequestBaseBranch', () => {
       sinon.assert.neverCalledWith(getMergeBaseAsyncStub, 'origin/release/2.10', 'feature-branch', '/repo')
     })
 
+    it('excludes a detached release ref pointing to HEAD with or without branch metadata', async () => {
+      const headSha = 'c'.repeat(40)
+      const mainSha = 'd'.repeat(40)
+      const getMergeBaseAsyncStub = sinon.stub()
+      getMergeBaseAsyncStub.withArgs('origin/main', 'HEAD', '/repo').resolves(mainSha)
+      getMergeBaseAsyncStub.withArgs('origin/release/1.0', 'HEAD', '/repo').resolves(headSha)
+      const getRevParseAsyncStub = sinon.stub()
+      getRevParseAsyncStub.withArgs('HEAD', '/repo').resolves(headSha)
+      getRevParseAsyncStub.withArgs('origin/release/1.0', '/repo').resolves(headSha)
+      getRevParseAsyncStub.withArgs('origin/main', '/repo').resolves(mainSha)
+
+      const { getPullRequestBaseBranchAsync } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+          getSourceBranchAsync: sinon.stub().resolves('HEAD'),
+          getLocalBranchesAsync: sinon.stub().resolves(['origin/main', 'origin/release/1.0']),
+          checkAndFetchBranchesAsync: sinon.stub().resolves(),
+          getMergeBaseAsync: getMergeBaseAsyncStub,
+          getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
+          getRevParseAsync: getRevParseAsyncStub,
+        },
+      })
+
+      assert.strictEqual(
+        await getPullRequestBaseBranchAsync(undefined, '/repo', { currentBranch: 'release/1.0' }),
+        mainSha
+      )
+      assert.strictEqual(await getPullRequestBaseBranchAsync(undefined, '/repo'), mainSha)
+      sinon.assert.neverCalledWith(getMergeBaseAsyncStub, 'origin/release/1.0', 'HEAD', '/repo')
+    })
+
     it('returns null when no candidate branch has a merge base', () => {
       const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
         './git': {
@@ -2309,9 +2340,9 @@ describe('getModifiedFilesForCheckout', () => {
     })
   })
 
-  it('short-circuits non-PR runs at the exact tip of the default remote branch', async () => {
+  it('skips branch discovery on the default branch tip while preserving working-tree diffs', async () => {
     const tipSha = '4'.repeat(40)
-    const getGitDiffAsyncStub = sinon.stub()
+    const getGitDiffAsyncStub = sinon.stub().resolves('test/edited.spec.js\n')
     const checkAndFetchBranchesAsyncStub = sinon.stub()
 
     const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
@@ -2334,24 +2365,46 @@ describe('getModifiedFilesForCheckout', () => {
         'git.branch': 'main',
       },
       gitRoot: '/repo',
-      testFramework: 'jest',
+      testFramework: 'vitest',
       getUserProvidedGitMetadata: () => ({}),
     })
 
-    assert.deepStrictEqual(modifiedFiles, {})
+    assert.deepStrictEqual(modifiedFiles, { 'test/edited.spec.js': [1] })
     sinon.assert.notCalled(checkAndFetchBranchesAsyncStub)
+    sinon.assert.calledOnceWithMatch(getGitDiffAsyncStub, tipSha, undefined, '/repo', {
+      nameOnly: true,
+      skipFetchCheck: true,
+      throwOnError: true,
+    })
+
+    getGitDiffAsyncStub.resetHistory()
+    const explicitTargetResult = await getModifiedFilesForCheckout({
+      testEnvironmentMetadata: {
+        'git.commit.sha': tipSha,
+        'git.commit.head.sha': tipSha,
+        'git.branch': 'main',
+      },
+      gitRoot: '/repo',
+      testFramework: 'vitest',
+      getUserProvidedGitMetadata: () => ({}),
+    })
+    assert.deepStrictEqual(explicitTargetResult, {})
     sinon.assert.notCalled(getGitDiffAsyncStub)
   })
 
-  it('caches modified files across calls when fs-cache is enabled and does not cache failures', async () => {
+  it('caches clean or commit-targeted diffs when fs-cache is enabled and bypasses dirty working trees', async () => {
     const cacheStore = new Map()
     const getGitDiffAsyncStub = sinon.stub()
     getGitDiffAsyncStub.onCall(0).rejects(new Error('diff failed'))
     getGitDiffAsyncStub.onCall(1).resolves('test/cached.spec.js\n')
+    getGitDiffAsyncStub.onCall(2).resolves('test/dirty.spec.js\n')
+    const hasWorkingTreeChangesAsyncStub = sinon.stub()
+    hasWorkingTreeChangesAsyncStub.resolves(false)
 
     const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
       './git': {
         getGitDiffAsync: getGitDiffAsyncStub,
+        hasWorkingTreeChangesAsync: hasWorkingTreeChangesAsyncStub,
       },
       '../../ci-visibility/requests/fs-cache': {
         isCacheEnabled: () => true,
@@ -2387,6 +2440,106 @@ describe('getModifiedFilesForCheckout', () => {
     assert.deepStrictEqual(firstSuccess, { 'test/cached.spec.js': [1] })
     assert.deepStrictEqual(secondSuccess, { 'test/cached.spec.js': [1] })
     sinon.assert.calledTwice(getGitDiffAsyncStub)
+
+    // When tracked working-tree edits exist and no explicit target commit is set, bypass the cache.
+    hasWorkingTreeChangesAsyncStub.resolves(true)
+    const dirtySuccess = await getModifiedFilesForCheckout(options)
+    assert.deepStrictEqual(dirtySuccess, { 'test/dirty.spec.js': [1] })
+    sinon.assert.calledThrice(getGitDiffAsyncStub)
+  })
+
+  it('waits for pending git upload on shallow checkouts before resolving ancestry', async () => {
+    const events = []
+    let resolveGitUpload
+    const gitUploadPromise = new Promise(resolve => {
+      resolveGitUpload = () => {
+        events.push('git-upload-done')
+        resolve()
+      }
+    })
+
+    const getGitDiffAsyncStub = sinon.stub().callsFake(async () => {
+      events.push('diff')
+      return 'test/shallow.spec.js\n'
+    })
+    const getMergeBaseAsyncStub = sinon.stub().callsFake(async () => {
+      events.push('merge-base')
+      return '7'.repeat(40)
+    })
+
+    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        isShallowRepositoryAsync: sinon.stub().resolves(true),
+        getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+        getSourceBranchAsync: sinon.stub().resolves('feature'),
+        getDefaultRemoteBranchAsync: sinon.stub().resolves('main'),
+        getLocalBranchesAsync: sinon.stub().resolves(['origin/main']),
+        checkAndFetchBranchesAsync: sinon.stub().resolves(),
+        getMergeBaseAsync: getMergeBaseAsyncStub,
+        getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
+        getRevParseAsync: sinon.stub().resolves('8'.repeat(40)),
+        hasLocalGitObjectAsync: sinon.stub().resolves(true),
+        getGitDiffAsync: getGitDiffAsyncStub,
+      },
+      '../../ci-visibility/requests/fs-cache': {
+        isCacheEnabled: () => false,
+      },
+    })
+
+    const pending = getModifiedFilesForCheckout({
+      testEnvironmentMetadata: {
+        'git.commit.sha': '8'.repeat(40),
+        'git.branch': 'feature',
+      },
+      gitRoot: '/repo',
+      testFramework: 'vitest',
+      waitForGitUpload: () => gitUploadPromise,
+      getUserProvidedGitMetadata: () => ({}),
+    })
+
+    await new Promise(resolve => setImmediate(resolve))
+    sinon.assert.notCalled(getMergeBaseAsyncStub)
+
+    resolveGitUpload()
+    const modifiedFiles = await pending
+    assert.deepStrictEqual(modifiedFiles, { 'test/shallow.spec.js': [1] })
+    assert.deepStrictEqual(events, ['git-upload-done', 'merge-base', 'diff'])
+  })
+
+  it('does not wait for pending git upload on non-shallow checkouts', async () => {
+    const waitForGitUploadStub = sinon.stub().returns(new Promise(() => {}))
+    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        isShallowRepositoryAsync: sinon.stub().resolves(false),
+        getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+        getSourceBranchAsync: sinon.stub().resolves('feature'),
+        getDefaultRemoteBranchAsync: sinon.stub().resolves('main'),
+        getLocalBranchesAsync: sinon.stub().resolves(['origin/main']),
+        checkAndFetchBranchesAsync: sinon.stub().resolves(),
+        getMergeBaseAsync: sinon.stub().resolves('7'.repeat(40)),
+        getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
+        getRevParseAsync: sinon.stub().resolves('8'.repeat(40)),
+        hasLocalGitObjectAsync: sinon.stub().resolves(true),
+        getGitDiffAsync: sinon.stub().resolves('test/non-shallow.spec.js\n'),
+      },
+      '../../ci-visibility/requests/fs-cache': {
+        isCacheEnabled: () => false,
+      },
+    })
+
+    const modifiedFiles = await getModifiedFilesForCheckout({
+      testEnvironmentMetadata: {
+        'git.commit.sha': '8'.repeat(40),
+        'git.branch': 'feature',
+      },
+      gitRoot: '/repo',
+      testFramework: 'vitest',
+      waitForGitUpload: waitForGitUploadStub,
+      getUserProvidedGitMetadata: () => ({}),
+    })
+
+    assert.deepStrictEqual(modifiedFiles, { 'test/non-shallow.spec.js': [1] })
+    sinon.assert.notCalled(waitForGitUploadStub)
   })
 })
 

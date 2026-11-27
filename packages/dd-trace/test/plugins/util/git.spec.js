@@ -783,7 +783,7 @@ describe('getGitRemoteName', () => {
       'config',
       '--local',
       '--get-regexp',
-      String.raw`^(clone\.defaultRemoteName|branch\..*\.remote)$`,
+      String.raw`^(clone\.defaultremotename|branch\..*\.remote)$`,
     ])
   })
 
@@ -860,7 +860,7 @@ describe('getGitRemoteName', () => {
         'config',
         '--local',
         '--get-regexp',
-        String.raw`^(clone\.defaultRemoteName|branch\..*\.remote)$`,
+        String.raw`^(clone\.defaultremotename|branch\..*\.remote)$`,
       ])
     })
   }
@@ -970,11 +970,11 @@ describe('checkAndFetchBranch', () => {
 
   it('fetches the branch if it does not exist locally but exists on remote', () => {
     const execFileSyncStub = sinon.stub()
-    execFileSyncStub.onCall(0).returns('true') // isShallowRepository
-    execFileSyncStub.onCall(1).returns('') // fetch
+    execFileSyncStub.onCall(0).throws() // local show-ref check fails (uncached)
+    execFileSyncStub.onCall(1).returns('true') // isShallowRepository
+    execFileSyncStub.onCall(2).returns('') // fetch
     cachedExecStub
-      .onCall(0).throws() // local check fails
-      .onCall(1).returns(`${'a'.repeat(40)}\trefs/heads/my-branch\n`) // remote check passes
+      .onCall(0).returns(`${'a'.repeat(40)}\trefs/heads/my-branch\n`) // remote ls-remote check passes
     const incrementCountMetricStub = sinon.stub()
     const distributionMetricStub = sinon.stub()
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
@@ -986,7 +986,7 @@ describe('checkAndFetchBranch', () => {
       },
     })
     checkAndFetchBranch('my-branch', 'origin')
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledWith(execFileSyncStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
@@ -1088,15 +1088,14 @@ describe('checkAndFetchBranch', () => {
 
   it('does nothing if the branch does not exist locally or on remote', () => {
     const execFileSyncStub = sinon.stub()
-    cachedExecStub
-      .onCall(0).throws() // local check fails
-      .onCall(1).returns('') // remote check finds no branch
+    execFileSyncStub.onCall(0).throws() // local show-ref check fails (uncached)
+    cachedExecStub.onCall(0).returns('') // remote ls-remote check finds no branch
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledOnceWithMatch(execFileSyncStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
@@ -1105,20 +1104,18 @@ describe('checkAndFetchBranch', () => {
       ['ls-remote', '--heads', 'origin', 'refs/heads/my-branch'],
       { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
     )
-    sinon.assert.notCalled(execFileSyncStub)
   })
 
   it('does nothing if the remote does not exist', () => {
     const execFileSyncStub = sinon.stub()
-    cachedExecStub
-      .onCall(0).throws() // local check fails
-      .onCall(1).throws(new Error('remote does not exist'))
+    execFileSyncStub.onCall(0).throws() // local show-ref check fails (uncached)
+    cachedExecStub.onCall(0).throws(new Error('remote does not exist'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     checkAndFetchBranch('my-branch', 'origin')
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledOnceWithMatch(execFileSyncStub,
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
@@ -1127,7 +1124,6 @@ describe('checkAndFetchBranch', () => {
       ['ls-remote', '--heads', 'origin', 'refs/heads/my-branch'],
       { stdio: 'pipe', env: getEnvironmentVariables(), timeout: 2000 }
     )
-    sinon.assert.notCalled(execFileSyncStub)
   })
 
   it('logs debug if a command throws', () => {
@@ -1148,14 +1144,16 @@ describe('getLocalBranches', () => {
     cachedExecStub.reset()
   })
 
-  it('returns a list of local branches sorted by committer date excluding remote HEAD', () => {
-    cachedExecStub.returns('my-origin/HEAD\nmy-origin/branch1\nmy-origin/branch2\nmy-origin/branch3')
+  it('returns a list of local branches sorted by committer date excluding remote HEAD without caching', () => {
+    const execFileSyncStub = sinon.stub()
+      .returns('my-origin/HEAD\nmy-origin/branch1\nmy-origin/branch2\nmy-origin/branch3')
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: execFileSyncStub },
       './git-cache': { cachedExec: cachedExecStub },
     })
     const branches = getLocalBranches('my-origin')
     assert.deepStrictEqual(branches, ['my-origin/branch1', 'my-origin/branch2', 'my-origin/branch3'])
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledWith(execFileSyncStub,
       'git',
       [
         'for-each-ref',
@@ -1164,13 +1162,14 @@ describe('getLocalBranches', () => {
         'refs/remotes/my-origin',
       ]
     )
+    sinon.assert.notCalled(cachedExecStub)
   })
 
   it('returns empty array if command throws and logs an error', () => {
     const logErrorSpy = sinon.spy()
-    cachedExecStub.throws(new Error('git command failed'))
+    const execFileSyncStub = sinon.stub().throws(new Error('git command failed'))
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: cachedExecStub },
+      'node:child_process': { execFileSync: execFileSyncStub },
       '../../log': { error: logErrorSpy },
     })
     const branches = getLocalBranches('origin')
@@ -2536,4 +2535,14 @@ current
       assert.strictEqual(fetchedCommits.length, 2)
     })
   }
+
+  it('matches normalized clone.defaultRemoteName in detached multi-remote checkouts', async () => {
+    git(checkout, ['remote', 'add', 'custom', pathToFileURL(remote).href])
+    git(checkout, ['config', '--local', 'clone.defaultRemoteName', 'custom'])
+    git(checkout, ['checkout', '--detach', 'HEAD'])
+
+    const { getGitRemoteName, getGitRemoteNameAsync } = require('../../../src/plugins/util/git')
+    assert.strictEqual(getGitRemoteName(checkout), 'custom')
+    assert.strictEqual(await getGitRemoteNameAsync(checkout), 'custom')
+  })
 })

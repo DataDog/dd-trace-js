@@ -478,6 +478,9 @@ module.exports = class CiPlugin extends Plugin {
         gitRoot: this.repositoryRoot,
         testFramework: this.constructor.id,
         candidateFiles,
+        waitForGitUpload: this.tracer?._exporter?.waitForGitUpload
+          ? () => this.tracer._exporter.waitForGitUpload()
+          : undefined,
         getUserProvidedGitMetadata: getUserProviderGitMetadata,
       }).then(
         modifiedFiles => onDone({ err: null, modifiedFiles }),

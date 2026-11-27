@@ -579,7 +579,7 @@ function selectRemoteName (remoteNames, branchRemote, configuredRemote, tracking
   return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
 }
 
-const REMOTE_CONFIG_REGEXP = String.raw`^(clone\.defaultRemoteName|branch\..*\.remote)$`
+const REMOTE_CONFIG_REGEXP = String.raw`^(clone\.defaultremotename|branch\..*\.remote)$`
 
 function getGitRemoteName (cwd) {
   const remotes = sanitizedExec(
@@ -761,6 +761,21 @@ async function getCommitParentsAsync (commitSha, cwd) {
 /**
  * @param {string} ref
  * @param {string} [cwd]
+ */
+function getRevParse (ref, cwd) {
+  return sanitizedExec(
+    ['rev-parse', '--verify', ref + '^{commit}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'rev_parse' } },
+    true,
+    { expectedFailure: true, localOnly: true, uncached: true, cwd }
+  )
+}
+
+/**
+ * @param {string} ref
+ * @param {string} [cwd]
  * @returns {Promise<string>}
  */
 function getRevParseAsync (ref, cwd) {
@@ -772,6 +787,29 @@ function getRevParseAsync (ref, cwd) {
     true,
     { expectedFailure: true, localOnly: true, uncached: true, cwd }
   )
+}
+
+/**
+ * Checks whether tracked files have staged or unstaged changes relative to HEAD.
+ * Fails closed (`true`) if Git status cannot be inspected so callers do not reuse stale caches.
+ *
+ * @param {string} [cwd]
+ * @returns {Promise<boolean>}
+ */
+async function hasWorkingTreeChangesAsync (cwd) {
+  try {
+    const status = await sanitizedExecAsync(
+      ['status', '--porcelain', '--untracked-files=no'],
+      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'status' } },
+      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'status' } },
+      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'status' } },
+      true,
+      { uncached: true, throwOnError: true, cwd }
+    )
+    return status.length > 0
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -837,7 +875,7 @@ function checkAndFetchBranches (branches, remoteName, cwd, options) {
           { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'show_ref' } },
           { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'show_ref' } },
           true,
-          { expectedFailure: true, throwOnError: true, cwd }
+          { expectedFailure: true, throwOnError: true, uncached: true, cwd }
         )
       } catch {
         missingBranches.push(branch)
@@ -892,7 +930,7 @@ async function checkAndFetchBranchesAsync (branches, remoteName, cwd, options) {
           { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'show_ref' } },
           { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'show_ref' } },
           true,
-          { expectedFailure: true, throwOnError: true, cwd }
+          { expectedFailure: true, throwOnError: true, uncached: true, cwd }
         )
         return true
       } catch {
@@ -947,7 +985,7 @@ function getLocalBranches (remoteName, cwd) {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
-    false, { cwd }
+    false, { uncached: true, cwd }
   )
   return parseLocalBranches(localBranches, remoteName)
 }
@@ -963,7 +1001,7 @@ async function getLocalBranchesAsync (remoteName, cwd) {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
-    false, { cwd }
+    false, { uncached: true, cwd }
   )
   return parseLocalBranches(localBranches, remoteName)
 }
@@ -1477,7 +1515,9 @@ module.exports = {
   getGitRemoteNameAsync,
   getDefaultRemoteBranchAsync,
   getCommitParentsAsync,
+  getRevParse,
   getRevParseAsync,
+  hasWorkingTreeChangesAsync,
   getSourceBranch,
   getSourceBranchAsync,
   checkAndFetchBranch,

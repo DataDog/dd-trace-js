@@ -85,7 +85,10 @@ const {
   getGitRemoteNameAsync,
   getDefaultRemoteBranchAsync,
   getCommitParentsAsync,
+  getRevParse,
   getRevParseAsync,
+  hasWorkingTreeChangesAsync,
+  isShallowRepositoryAsync,
   getSourceBranch,
   getSourceBranchAsync,
   checkAndFetchBranch,
@@ -2077,6 +2080,23 @@ function stripRemotePrefix (branch, remoteName) {
 }
 
 /**
+ * @param {string | undefined} branch
+ * @param {string} remoteName
+ */
+function normalizeShortBranchName (branch, remoteName) {
+  if (!branch) return ''
+  let normalized = branch.trim()
+  if (normalized.startsWith('refs/heads/')) {
+    normalized = normalized.slice('refs/heads/'.length)
+  } else if (normalized.startsWith(`refs/remotes/${remoteName}/`)) {
+    normalized = normalized.slice(`refs/remotes/${remoteName}/`.length)
+  } else if (normalized.startsWith(`${remoteName}/`)) {
+    normalized = normalized.slice(remoteName.length + 1)
+  }
+  return normalized === 'HEAD' ? '' : normalized
+}
+
+/**
  * @param {string} branch
  * @param {string} remoteName
  * @param {string | undefined} defaultRemoteBranch
@@ -2093,10 +2113,10 @@ function isDefaultCandidateBranch (branch, remoteName, defaultRemoteBranch) {
  * @param {string[]} localBranches
  * @param {string} remoteName
  * @param {string | undefined} defaultRemoteBranch
- * @param {string | undefined} excludedShortBranch
+ * @param {Set<string> | string | undefined} excludedShortBranches
  * @returns {string[]}
  */
-function selectCandidateBranches (localBranches, remoteName, defaultRemoteBranch, excludedShortBranch) {
+function selectCandidateBranches (localBranches, remoteName, defaultRemoteBranch, excludedShortBranches) {
   const defaultCandidates = []
   const mainlineCandidates = []
   const releaseCandidates = []
@@ -2106,7 +2126,10 @@ function selectCandidateBranches (localBranches, remoteName, defaultRemoteBranch
     if (seen.has(branch)) continue
     seen.add(branch)
     const shortBranchName = stripRemotePrefix(branch, remoteName)
-    if (excludedShortBranch && shortBranchName === excludedShortBranch) {
+    const isExcluded = excludedShortBranches instanceof Set
+      ? excludedShortBranches.has(shortBranchName)
+      : Boolean(excludedShortBranches && shortBranchName === excludedShortBranches)
+    if (isExcluded) {
       continue
     }
     const isDefault = isDefaultCandidateBranch(branch, remoteName, defaultRemoteBranch)
@@ -2150,7 +2173,7 @@ function selectBestBaseSha (evaluations, remoteName, defaultRemoteBranch) {
   return bestBaseSha
 }
 
-function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot) {
+function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot, options) {
   const remoteName = getGitRemoteName(gitRoot)
   const sourceBranch = getSourceBranch(gitRoot)
 
@@ -2181,10 +2204,43 @@ function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot) {
       localBranches = getLocalBranches(remoteName, gitRoot)
     }
 
-    const filteredCandidates = selectCandidateBranches(localBranches, remoteName, undefined, sourceBranch)
-    candidateBranches.push(
-      ...(filteredCandidates.length ? filteredCandidates : selectCandidateBranches(localBranches, remoteName))
-    )
+    const effectiveSourceBranch = normalizeShortBranchName(sourceBranch, remoteName) ||
+      normalizeShortBranchName(options?.currentBranch, remoteName)
+    const allCandidates = selectCandidateBranches(localBranches, remoteName)
+    const excludedShortBranches = new Set()
+    if (effectiveSourceBranch) {
+      const matchingRemoteRef = allCandidates.find(
+        branch => stripRemotePrefix(branch, remoteName) === effectiveSourceBranch &&
+          !isDefaultCandidateBranch(branch, remoteName)
+      )
+      if (matchingRemoteRef) {
+        if (typeof getRevParse === 'function') {
+          const headSha = getRevParse('HEAD', gitRoot)
+          const remoteSha = getRevParse(matchingRemoteRef, gitRoot)
+          if (headSha && remoteSha && headSha === remoteSha) {
+            excludedShortBranches.add(effectiveSourceBranch)
+          }
+        } else {
+          excludedShortBranches.add(effectiveSourceBranch)
+        }
+      }
+    } else if (typeof getRevParse === 'function') {
+      const nonDefaultCandidates = allCandidates.filter(branch => !isDefaultCandidateBranch(branch, remoteName))
+      const headSha = nonDefaultCandidates.length ? getRevParse('HEAD', gitRoot) : ''
+      if (headSha) {
+        for (const candidate of nonDefaultCandidates) {
+          const candidateSha = getRevParse(candidate, gitRoot)
+          if (candidateSha && candidateSha === headSha) {
+            excludedShortBranches.add(stripRemotePrefix(candidate, remoteName))
+          }
+        }
+      }
+    }
+
+    const filteredCandidates = excludedShortBranches.size
+      ? selectCandidateBranches(localBranches, remoteName, undefined, excludedShortBranches)
+      : allCandidates
+    candidateBranches.push(...(filteredCandidates.length ? filteredCandidates : allCandidates))
   }
 
   if (candidateBranches.length === 1) {
@@ -2216,6 +2272,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch, gitRoot) {
  * @param {{
  *   remoteName?: string,
  *   sourceBranch?: string,
+ *   currentBranch?: string,
  *   defaultRemoteBranch?: string,
  * }} [options]
  * @returns {Promise<string | null>}
@@ -2251,23 +2308,50 @@ async function getPullRequestBaseBranchAsync (pullRequestBaseBranch, gitRoot, op
     localBranches = await getLocalBranchesAsync(remoteName, gitRoot)
   }
 
-  // Exclude the remote tracking ref for the current branch only when it points to the exact same commit
-  // (e.g. CI push on release/1.0), preserving diffing against origin/<branch> when there are unpushed local commits.
-  let excludedShortBranch
-  if (sourceBranch && sourceBranch !== 'HEAD') {
-    const matchingRemoteRef = localBranches.find(branch => stripRemotePrefix(branch, remoteName) === sourceBranch)
+  // Exclude the remote tracking ref for the current non-default branch when it points to HEAD
+  // (e.g. CI push on release/1.0, attached or detached), while keeping default branches and
+  // preserving diffing against origin/<branch> when there are unpushed local commits.
+  const effectiveSourceBranch = normalizeShortBranchName(sourceBranch, remoteName) ||
+    normalizeShortBranchName(options?.currentBranch, remoteName)
+  const allCandidates = selectCandidateBranches(localBranches, remoteName, defaultRemoteBranch)
+  const excludedShortBranches = new Set()
+  if (effectiveSourceBranch) {
+    const matchingRemoteRef = allCandidates.find(
+      branch => stripRemotePrefix(branch, remoteName) === effectiveSourceBranch &&
+        !isDefaultCandidateBranch(branch, remoteName, defaultRemoteBranch)
+    )
     if (matchingRemoteRef) {
       const [headSha, remoteSha] = await Promise.all([
         getRevParseAsync('HEAD', gitRoot),
         getRevParseAsync(matchingRemoteRef, gitRoot),
       ])
       if (headSha && remoteSha && headSha === remoteSha) {
-        excludedShortBranch = sourceBranch
+        excludedShortBranches.add(effectiveSourceBranch)
+      }
+    }
+  } else {
+    const nonDefaultCandidates = allCandidates.filter(
+      branch => !isDefaultCandidateBranch(branch, remoteName, defaultRemoteBranch)
+    )
+    if (nonDefaultCandidates.length) {
+      const headSha = await getRevParseAsync('HEAD', gitRoot)
+      if (headSha) {
+        const candidateShas = await Promise.all(
+          nonDefaultCandidates.map(candidate => getRevParseAsync(candidate, gitRoot))
+        )
+        for (let i = 0; i < nonDefaultCandidates.length; i++) {
+          if (candidateShas[i] && candidateShas[i] === headSha) {
+            excludedShortBranches.add(stripRemotePrefix(nonDefaultCandidates[i], remoteName))
+          }
+        }
       }
     }
   }
 
-  const candidateBranches = selectCandidateBranches(localBranches, remoteName, defaultRemoteBranch, excludedShortBranch)
+  const filteredCandidates = excludedShortBranches.size
+    ? selectCandidateBranches(localBranches, remoteName, defaultRemoteBranch, excludedShortBranches)
+    : allCandidates
+  const candidateBranches = filteredCandidates.length ? filteredCandidates : allCandidates
   if (!candidateBranches.length) {
     return null
   }
@@ -2344,6 +2428,7 @@ function buildFileLevelModifiedFiles (changedFiles) {
  *   gitRoot: string | undefined,
  *   testFramework?: string,
  *   candidateFiles?: string[],
+ *   waitForGitUpload?: () => Promise<void>,
  *   getUserProvidedGitMetadata?: () => Record<string, string | undefined>,
  * }} options
  * @returns {Promise<Record<string, number[]>>}
@@ -2353,6 +2438,7 @@ async function getModifiedFilesForCheckout ({
   gitRoot,
   testFramework,
   candidateFiles,
+  waitForGitUpload,
   getUserProvidedGitMetadata = getUserProviderGitMetadata,
 }) {
   const startTime = Date.now()
@@ -2384,6 +2470,20 @@ async function getModifiedFilesForCheckout ({
       let remoteName
       let sourceBranch
       let defaultRemoteBranch
+      let skipStage1FetchCheck = false
+      let waitedForGitUpload = false
+
+      const ensureShallowHistoryReady = async () => {
+        if (waitedForGitUpload || typeof waitForGitUpload !== 'function') return
+        waitedForGitUpload = true
+        if (typeof isShallowRepositoryAsync === 'function' && await isShallowRepositoryAsync(true, gitRoot)) {
+          try {
+            await waitForGitUpload()
+          } catch {
+            // Proceed with local discovery even if git upload failed.
+          }
+        }
+      }
 
       // Fast path 1: CI PR merge commit (e.g. GitHub Actions refs/pull/N/merge) where HEAD's first parent
       // is the base branch tip and second parent is the PR head. Diffing firstParent..HEAD matches the PR changes
@@ -2408,7 +2508,10 @@ async function getModifiedFilesForCheckout ({
         }
       }
 
-      // Fast path 2: Non-PR run at the exact tip of the remote's default branch has no modified files.
+      // Fast path 2: Non-PR run at the exact tip of the remote's default branch can skip candidate branch
+      // probing and fetches. When an explicit target commit matches the remote tip, the commit-to-commit diff
+      // is guaranteed empty; otherwise reuse remoteDefaultSha as baseBranchSha so Stage 1 still checks tracked
+      // working-tree edits locally without hitting the network.
       if (!baseBranchSha && !pullRequestBaseBranch) {
         remoteName = await getGitRemoteNameAsync(gitRoot)
         ;[sourceBranch, defaultRemoteBranch] = await Promise.all([
@@ -2418,7 +2521,8 @@ async function getModifiedFilesForCheckout ({
         const isOnDefaultBranch = Boolean(
           defaultRemoteBranch &&
           (sourceBranch === defaultRemoteBranch ||
-            (sourceBranch === 'HEAD' && !isCustomCheckout && branch === defaultRemoteBranch))
+            (sourceBranch === 'HEAD' && !isCustomCheckout &&
+              normalizeShortBranchName(branch, remoteName) === defaultRemoteBranch))
         )
         if (isOnDefaultBranch) {
           const [headSha, remoteDefaultSha] = await Promise.all([
@@ -2426,18 +2530,24 @@ async function getModifiedFilesForCheckout ({
             getRevParseAsync(`refs/remotes/${remoteName}/${defaultRemoteBranch}`, gitRoot),
           ])
           if (headSha && remoteDefaultSha && headSha === remoteDefaultSha) {
-            return {}
+            if (diffTargetCommit) {
+              return {}
+            }
+            baseBranchSha = remoteDefaultSha
+            skipStage1FetchCheck = true
           }
         }
       }
 
       if (!baseBranchSha) {
+        await ensureShallowHistoryReady()
         if (!remoteName) {
           remoteName = await getGitRemoteNameAsync(gitRoot)
         }
         baseBranchSha = await getPullRequestBaseBranchAsync(pullRequestBaseBranch, gitRoot, {
           remoteName,
           sourceBranch,
+          currentBranch: isCustomCheckout ? undefined : branch,
           defaultRemoteBranch,
         })
       }
@@ -2446,12 +2556,27 @@ async function getModifiedFilesForCheckout ({
         throw new Error('No modified tests could have been retrieved')
       }
 
+      if (!skipStage1FetchCheck && !waitedForGitUpload && typeof waitForGitUpload === 'function') {
+        const neededCommits = [baseBranchSha, diffTargetCommit].filter(Boolean)
+        let hasAllLocal = false
+        if (typeof hasLocalGitObjectAsync === 'function') {
+          const localChecks = await Promise.all(neededCommits.map(commit => hasLocalGitObjectAsync(commit, gitRoot)))
+          hasAllLocal = localChecks.every(Boolean)
+        }
+        if (hasAllLocal) {
+          skipStage1FetchCheck = true
+        } else {
+          await ensureShallowHistoryReady()
+        }
+      }
+
       // Stage 1: tree-only --name-only --no-renames diff triggers zero blob reads/fetches in partial clones.
       let namesOutput
       try {
         namesOutput = await getGitDiffAsync(baseBranchSha, diffTargetCommit, gitRoot, {
           nameOnly: true,
           remoteName,
+          skipFetchCheck: skipStage1FetchCheck,
           throwOnError: true,
         })
       } catch {
@@ -2516,7 +2641,12 @@ async function getModifiedFilesForCheckout ({
       return getModifiedFilesFromDiff(diff) || {}
     }
 
-    if (!isCacheEnabled() || !commitSha) {
+    const canUseFsCache = Boolean(
+      isCacheEnabled() &&
+      commitSha &&
+      (targetCommit || !(await hasWorkingTreeChangesAsync(gitRoot)))
+    )
+    if (!canUseFsCache) {
       return await computeModifiedFiles()
     }
 
