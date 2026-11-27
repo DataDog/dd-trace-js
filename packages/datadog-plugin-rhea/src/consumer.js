@@ -2,6 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const { normalizeRabbitMQName } = require('../../dd-trace/src/datastreams/rabbitmq')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static id = 'rhea'
@@ -27,7 +28,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     )
     this.tracer.decodeDataStreamsContext(msgObj.message.delivery_annotations)
     this.tracer
-      .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
+      .setCheckpoint(['direction:in', `topic:${normalizeRabbitMQName(name)}`, 'type:rabbitmq'], span, payloadSize)
   }
 
   bindStart (ctx) {
