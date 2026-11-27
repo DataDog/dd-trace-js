@@ -40,21 +40,11 @@ const NO_MERGEABLE_KEYS = []
 /** @type {NativeHeaders} */
 const EMPTY_NATIVE_HEADERS = []
 
-// we need to store the offset per partition per topic per cluster for the consumer to track offsets for DSM
-const latestConsumerOffsets = new Map()
-
-// librdkafka: the client is not connected (yet), so the lookup may succeed later.
-const ERR__STATE = -172
-
 /**
- * Cluster id per producer or consumer client; `null` while the lookup is in flight or when the
- * client has none to report.
- *
- * @type {WeakMap<object, string | null>}
+ * Confluent replaces its metrics object on disconnect. Use it to keep each result with its connection.
+ * @type {WeakMap<object, string>}
  */
 const clusterIds = new WeakMap()
-/** @type {WeakMap<object, Promise<void>>} Running KafkaJS-compatible lookups, shared by concurrent connects. */
-const clusterIdLookups = new WeakMap()
 
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
@@ -68,13 +58,36 @@ addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (modu
   return module
 })
 
+addHook({ name: '@confluentinc/kafka-javascript', file: 'lib/client.js', versions: ['>=1.0.0'] }, Client => {
+  if (typeof Client?.prototype?.clusterId !== 'function') return Client
+
+  // Confluent accepts an omitted callback. Shimmer lets the SDK own callback validation.
+  shimmer.wrap(Client.prototype, 'clusterId', function wrapClusterId (clusterId) {
+    return function wrappedClusterId (timeout, callback) {
+      // A metadata failure during connect can retry before Confluent replaces its metrics.
+      if (typeof callback === 'function' && !this?._isConnecting &&
+          (channels.producerStart.hasSubscribers || channels.consumerStart.hasSubscribers)) {
+        const metrics = this?.metrics
+        if (metrics && typeof metrics === 'object') {
+          arguments[1] = function captureClusterId (error, id) {
+            if (!error && id) clusterIds.set(metrics, id)
+            return Reflect.apply(callback, this, arguments)
+          }
+        }
+      }
+      return Reflect.apply(clusterId, this, arguments)
+    }
+  })
+  return Client
+})
+
 function instrumentBaseModule (module) {
   // Helper function to wrap producer classes
   function wrapProducerClass (ProducerClass, className) {
     return shimmer.wrap(module, className, function wrapProducer (Original) {
       return function wrappedProducer (...args) {
         const producer = new Original(...args)
-        lookUpNativeClusterIdWhenReady(producer, channels.producerStart)
+        const bootstrapServers = getBootstrapServers(producer.globalConfig)
 
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
@@ -84,8 +97,6 @@ function instrumentBaseModule (module) {
                 return produce.apply(this, arguments)
               }
 
-              const brokers = this.globalConfig?.['bootstrap.servers']
-              lookUpNativeClusterId(producer)
               const nativeHeaders = Array.isArray(headers) ? headers : EMPTY_NATIVE_HEADERS
 
               let carrier
@@ -114,8 +125,8 @@ function instrumentBaseModule (module) {
                   value: message,
                   headers: carrier,
                 }],
-                bootstrapServers: brokers,
-                clusterId: getClusterId(producer),
+                bootstrapServers,
+                clusterId: clusterIds.get(producer.metrics),
               }
 
               return channels.producerStart.runStores(ctx, () => {
@@ -155,7 +166,15 @@ function instrumentBaseModule (module) {
       return function wrappedConsumer (...args) {
         const consumer = new Original(...args)
         const groupId = this.groupId || (args[0]?.['group.id'])
-        lookUpNativeClusterIdWhenReady(consumer, channels.consumerStart)
+        const offsets = new Map()
+        const bootstrapServers = getBootstrapServers(consumer.globalConfig)
+        let connectionGeneration = 0
+        if (typeof consumer.on === 'function') {
+          consumer.on('disconnected', () => {
+            connectionGeneration++
+            offsets.clear()
+          })
+        }
 
         // Wrap the consume method
         if (typeof consumer?.consume === 'function') {
@@ -169,18 +188,15 @@ function instrumentBaseModule (module) {
                 callback = numMessages
               }
 
-              lookUpNativeClusterId(consumer)
-              const ctx = {
-                groupId,
-                clusterId: getClusterId(consumer),
-                bootstrapServers: this.globalConfig?.['bootstrap.servers'],
-              }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
+                const { metrics } = consumer
+                const generation = connectionGeneration
+                const ctx = { groupId, bootstrapServers, clusterId: undefined }
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
-                  // The lookup started on `ready` may have settled since `consume()` was called.
-                  ctx.clusterId = getClusterId(consumer)
+                  ctx.clusterId = clusterIds.get(metrics)
                   if (messages && messages.length > 0) {
+                    const currentOffsets = generation === connectionGeneration ? offsets : undefined
                     for (const message of messages) {
                       ctx.topic = message?.topic
                       ctx.partition = message?.partition
@@ -188,7 +204,9 @@ function instrumentBaseModule (module) {
 
                       // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
-                      updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId, ctx.clusterId)
+                      updateLatestOffset(
+                        currentOffsets, message?.topic, message?.partition, message?.offset, groupId, ctx.clusterId
+                      )
                     }
                   }
 
@@ -219,7 +237,7 @@ function instrumentBaseModule (module) {
 
           // Wrap the commit method for handling offset commits
           if (consumer && typeof consumer.commit === 'function') {
-            shimmer.wrap(consumer, 'commit', wrapCommit)
+            shimmer.wrap(consumer, 'commit', commit => wrapCommit(commit, offsets))
           }
         }
 
@@ -257,11 +275,8 @@ function instrumentKafkaJS (kafkaJS) {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
             return function wrappedProducerMethod (...args) {
               const producer = producerMethod.apply(this, args)
-              const bootstrapServers = mergedBrokers(options, args[0])
-
-              if (typeof producer?.connect === 'function') {
-                shimmer.wrap(producer, 'connect', connect => wrapConnect(connect, producer))
-              }
+              let connectedClient
+              let bootstrapServers
 
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
@@ -272,7 +287,8 @@ function instrumentKafkaJS (kafkaJS) {
                     }
 
                     const disableHeaderInjection = disabledHeaderWeakSet.has(producer)
-                    lookUpKafkaJsClusterId(producer)
+                    const nativeClient = connectedClient ?? getConnectedNativeClient(producer)
+                    const servers = bootstrapServers ?? getBootstrapServers(nativeClient?.globalConfig)
 
                     // Hand the underlying client a shallow clone so neither
                     // injection nor the client's auto-fields (it sets
@@ -291,8 +307,8 @@ function instrumentKafkaJS (kafkaJS) {
                     const ctx = {
                       topic: outgoingPayload?.topic,
                       messages: outgoingPayload?.messages || [],
-                      bootstrapServers,
-                      clusterId: getClusterId(producer),
+                      bootstrapServers: servers,
+                      clusterId: clusterIds.get(nativeClient?.metrics),
                       disableHeaderInjection,
                     }
 
@@ -301,6 +317,9 @@ function instrumentKafkaJS (kafkaJS) {
                         const result = send.call(this, outgoingPayload)
 
                         result.then((res) => {
+                          // KafkaJS can replace a ready native client during connection retries.
+                          connectedClient ??= nativeClient
+                          bootstrapServers ??= servers
                           ctx.result = res
                           channels.producerCommit.publish(ctx)
                           channels.producerFinish.publish(ctx)
@@ -346,26 +365,22 @@ function instrumentKafkaJS (kafkaJS) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
-              const bootstrapServers = mergedBrokers(options, config)
-
-              if (typeof consumer?.connect === 'function') {
-                shimmer.wrap(consumer, 'connect', connect => wrapConnect(connect, consumer))
-              }
+              const offsets = new Map()
 
               // Wrap the run method for handling message consumption
               if (typeof consumer?.run === 'function') {
                 shimmer.wrap(consumer, 'run', function wrapRun (run) {
                   return function wrappedRun (options) {
-                    if (!channels.consumerStart.hasSubscribers) {
+                    if (!channels.consumerStart.hasSubscribers || options !== Object(options)) {
                       return run.apply(this, arguments)
                     }
 
-                    lookUpKafkaJsClusterId(consumer)
-                    const eachMessage = options?.eachMessage
-                    const eachBatch = options?.eachBatch
-                    if (eachMessage) {
-                      options.eachMessage = wrapKafkaCallback(
-                        eachMessage,
+                    const nativeClient = getConnectedNativeClient(consumer)
+                    const bootstrapServers = getBootstrapServers(nativeClient?.globalConfig)
+                    const metrics = nativeClient?.metrics
+                    const runOptions = wrapKafkaRunOptions(options, {
+                      eachMessage: callback => wrapKafkaCallback(
+                        callback,
                         {
                           startCh: channels.consumerStart,
                           commitCh: channels.consumerCommit,
@@ -379,13 +394,14 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: payload?.message?.offset,
                             message: payload?.message,
                             groupId,
-                            clusterId: getClusterId(consumer),
+                            clusterId: clusterIds.get(metrics),
                             bootstrapServers,
                           }
-                        })
-                    } else if (eachBatch) {
-                      options.eachBatch = wrapKafkaCallback(
-                        eachBatch,
+                        },
+                        offsets
+                      ),
+                      eachBatch: callback => wrapKafkaCallback(
+                        callback,
                         {
                           startCh: channels.batchConsumerStart,
                           commitCh: channels.batchConsumerCommit,
@@ -400,21 +416,22 @@ function instrumentKafkaJS (kafkaJS) {
                             offset: batch?.messages[batch?.messages?.length - 1]?.offset,
                             messages: batch?.messages,
                             groupId,
-                            clusterId: getClusterId(consumer),
+                            clusterId: clusterIds.get(metrics),
                             bootstrapServers,
                           }
-                        }
-                      )
-                    }
+                        },
+                        offsets
+                      ),
+                    })
 
-                    return run.apply(this, arguments)
+                    return run.call(this, runOptions)
                   }
                 })
               }
 
               // Wrap the commit method for handling offset commits
               if (typeof consumer?.commitOffsets === 'function') {
-                shimmer.wrap(consumer, 'commitOffsets', wrapCommit)
+                shimmer.wrap(consumer, 'commitOffsets', commit => wrapCommit(commit, offsets))
               }
 
               return consumer
@@ -428,20 +445,49 @@ function instrumentKafkaJS (kafkaJS) {
   }
 }
 
-function wrapCommit (commit) {
+/**
+ * @param {object} options
+ * @param {Record<'eachMessage' | 'eachBatch',
+ *   (callback: (...args: unknown[]) => unknown) => (...args: unknown[]) => unknown>} wrap
+ */
+function wrapKafkaRunOptions (options, wrap) {
+  // Confluent checks own properties before copying options. Read from the caller's object so getters run in that order.
+  return new Proxy({}, {
+    ownKeys () {
+      return Reflect.ownKeys(options)
+    },
+    getOwnPropertyDescriptor (target, key) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(options, key)
+      // The proxy has an empty target, including when the caller freezes its options.
+      if (descriptor) descriptor.configurable = true
+      return descriptor
+    },
+    get (target, key) {
+      const value = Reflect.get(options, key)
+      if (typeof value === 'function' && (key === 'eachMessage' || key === 'eachBatch')) return wrap[key](value)
+      return value
+    },
+  })
+}
+
+function wrapCommit (commit, offsets) {
   return function wrappedCommit (options) {
     if (!channels.consumerCommit.hasSubscribers) {
       return commit.apply(this, arguments)
     }
 
     const result = commit.apply(this, arguments)
-    channels.consumerCommit.publish(getLatestOffsets())
-    latestConsumerOffsets.clear()
+    const committed = []
+    for (const partitions of offsets.values()) {
+      for (const record of partitions.values()) committed.push(record)
+    }
+    channels.consumerCommit.publish(committed)
+    offsets.clear()
     return result
   }
 }
 
-function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, getPayload) {
+function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, getPayload, offsets) {
   return function wrappedKafkaCallback (payload) {
     const commitPayload = getPayload(payload)
 
@@ -451,6 +497,7 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
 
     return startCh.runStores(ctx, () => {
       updateLatestOffset(
+        offsets,
         commitPayload?.topic,
         commitPayload?.partition,
         commitPayload?.offset,
@@ -495,10 +542,14 @@ function getGroupId (config) {
   return ''
 }
 
-function updateLatestOffset (topic, partition, offset, groupId, clusterId) {
-  // Consumers of different clusters may read topics and partitions of the same name.
-  const key = `${clusterId ?? ''}:${topic}:${partition}`
-  latestConsumerOffsets.set(key, {
+function updateLatestOffset (offsets, topic, partition, offset, groupId, clusterId) {
+  if (!offsets) return
+  let partitions = offsets.get(topic)
+  if (!partitions) {
+    partitions = new Map()
+    offsets.set(topic, partitions)
+  }
+  partitions.set(partition, {
     topic,
     partition,
     offset,
@@ -507,132 +558,41 @@ function updateLatestOffset (topic, partition, offset, groupId, clusterId) {
   })
 }
 
+/** @typedef {{ 'bootstrap.servers'?: string, 'metadata.broker.list'?: string }} BrokerOptions */
+
 /**
- * Delay the resolution of a KafkaJS-compatible `connect()` until the cluster id lookup settled, so
- * the first send or message already reports it. The lookup only reads the librdkafka metadata cache.
- *
- * @param {Function} connect
- * @param {object} client KafkaJS-compatible producer or consumer.
- * @returns {(...args: unknown[]) => unknown}
+ * @param {{ _getInternalClient?: () => NativeClient | null }} client
  */
-function wrapConnect (connect, client) {
-  return function wrappedConnect (...args) {
-    const result = connect.apply(this, args)
-    if (
-      (!channels.producerStart.hasSubscribers && !channels.consumerStart.hasSubscribers) ||
-      typeof result?.then !== 'function'
-    ) {
-      return result
+function getConnectedNativeClient (client) {
+  // Confluent applies serializer and deserializer builder results before constructing the native client.
+  if (typeof client._getInternalClient !== 'function') return
+  const nativeClient = client._getInternalClient()
+  if (!nativeClient?.isConnected?.() || nativeClient._isConnecting) return
+  return nativeClient
+}
+
+/**
+ * @param {BrokerOptions} [config]
+ */
+function getBootstrapServers (config) {
+  if (!config) return
+  let brokers
+  // The binding sets both aliases in property order.
+  for (const key of Object.keys(config)) {
+    if (key === 'bootstrap.servers' || key === 'metadata.broker.list') {
+      brokers = config[key]
     }
-    return result.then((value) => {
-      const lookup = lookUpKafkaJsClusterId(client)
-      return lookup ? lookup.then(() => value) : value
-    })
   }
+  return brokers
 }
 
 /**
- * Start reading the cluster id of a connected KafkaJS-compatible client, once. `clusterId()`
- * (>=1.11.0) with a zero timeout answers from the librdkafka metadata cache, which connecting has
- * filled, and never contacts a broker. Only a lookup made before connecting is retried.
- *
- * @param {{ clusterId?: (options: { timeout: number }) => Promise<string> }} client KafkaJS-compatible
- *   producer or consumer.
- * @returns {Promise<void> | undefined} The lookup, when this call started it.
+ * @typedef {object} NativeClient
+ * @property {() => boolean} [isConnected]
+ * @property {boolean} [_isConnecting]
+ * @property {object} [metrics]
+ * @property {BrokerOptions} [globalConfig]
  */
-function lookUpKafkaJsClusterId (client) {
-  // A concurrent connect waits for the lookup the first one started.
-  const running = clusterIdLookups.get(client)
-  if (running) return running
-  if (clusterIds.has(client)) return
-  clusterIds.set(client, null)
-  if (typeof client.clusterId !== 'function') return
-  // An async method: failures arrive as rejections.
-  const lookup = client.clusterId({ timeout: 0 }).then((clusterId) => {
-    if (clusterId) clusterIds.set(client, clusterId)
-  }, (error) => {
-    if (error?.code === ERR__STATE) clusterIds.delete(client)
-  }).finally(() => {
-    clusterIdLookups.delete(client)
-  })
-  clusterIdLookups.set(client, lookup)
-  return lookup
-}
-
-/**
- * @param {object} client Producer or consumer.
- * @returns {string | undefined} The cluster id, or `undefined` while it is unknown.
- */
-function getClusterId (client) {
-  return clusterIds.get(client) ?? undefined
-}
-
-/**
- * The brokers a producer or consumer connects to. The library merges its configuration over that of
- * the `Kafka` client, then lays the native configuration over the one converted from `kafkaJS`, so a
- * `bootstrap.servers` of either wins over any `kafkaJS.brokers`.
- *
- * @param {object} [options] `Kafka` constructor options.
- * @param {object} [config] Producer or consumer configuration.
- * @returns {string | undefined}
- */
-function mergedBrokers (options, config) {
-  return config?.['bootstrap.servers'] || options?.['bootstrap.servers'] ||
-    kafkaJSBrokers(config) || kafkaJSBrokers(options)
-}
-
-/**
- * @param {object} [config]
- * @returns {string | undefined}
- */
-function kafkaJSBrokers (config) {
-  const brokers = config?.kafkaJS?.brokers
-  return Array.isArray(brokers) && brokers.length > 0 ? brokers.join(',') : undefined
-}
-
-/**
- * Start the cluster id lookup of a node-rdkafka client as soon as `connect()` fetched metadata, so produce and
- * consume calls following the `ready` event soon enough are the only ones without it.
- *
- * @param {{ once?: Function }} client node-rdkafka producer or consumer.
- * @param {import('dc-polyfill').Channel} startCh Channel whose subscribers want the id.
- */
-function lookUpNativeClusterIdWhenReady (client, startCh) {
-  if (typeof client?.once !== 'function') return
-  client.once('ready', () => {
-    if (startCh.hasSubscribers) lookUpNativeClusterId(client)
-  })
-}
-
-/**
- * Start reading the cluster id of a connected node-rdkafka client, once. See
- * `lookUpKafkaJsClusterId`; `connect()` reports the client connected before it fetched metadata,
- * so the lookup waits until connecting finished.
- *
- * @param {object} client node-rdkafka producer or consumer.
- */
-function lookUpNativeClusterId (client) {
-  if (
-    clusterIds.has(client) ||
-    typeof client.clusterId !== 'function' ||
-    !client.isConnected?.() ||
-    client._isConnecting
-  ) {
-    return
-  }
-  clusterIds.set(client, null)
-  try {
-    client.clusterId(0, (error, clusterId) => {
-      if (!error && clusterId) clusterIds.set(client, clusterId)
-    })
-  } catch {
-    // Keep the id unavailable for this client.
-  }
-}
-
-function getLatestOffsets () {
-  return [...latestConsumerOffsets.values()]
-}
 
 /**
  * `Producer::NodeProduce` reads the first *enumerable* own key of each entry and

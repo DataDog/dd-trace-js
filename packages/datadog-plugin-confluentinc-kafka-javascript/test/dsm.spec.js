@@ -84,8 +84,6 @@ describe('Plugin', () => {
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.connect()
-          // `clusterId()` exists from 1.11.0 on; earlier releases expose no cluster id to report.
-          clusterId = typeof admin.clusterId === 'function' ? await admin.clusterId() : undefined
           await admin.createTopics({
             topics: [{
               topic: testTopic,
@@ -100,6 +98,7 @@ describe('Plugin', () => {
             kafkaJS: { groupId, fromBeginning: true },
           })
           await consumer.connect()
+          clusterId = await consumer.clusterId?.()
           await consumer.subscribe({ topic: testTopic })
         })
 
@@ -235,29 +234,17 @@ describe('Plugin', () => {
 
             await consumerRunPromise
 
-            // wait for the message to be processed before continuing
-            await sendMessages(kafka, testTopic, messages)
-            await messageProcessedPromise
-            await consumer.disconnect()
+            await Promise.all([sendMessages(kafka, testTopic, messages), messageProcessedPromise])
 
             for (const call of setOffsetSpy.getCalls()) {
               assert.notStrictEqual(call.args[0]?.type, 'kafka_commit')
             }
 
-            const newConsumer = kafka.consumer({
-              kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
-            })
-            await newConsumer.connect()
-            await sendMessages(kafka, testTopic, [{ key: 'key1', value: 'test2' }])
-            await newConsumer.run({
-              eachMessage: async () => {
-                await newConsumer.disconnect()
-              },
-            })
             setOffsetSpy.resetHistory()
-            await newConsumer.commitOffsets()
+            await consumer.commitOffsets([{ ...commitMeta, offset: String(commitMeta.offset + 1) }])
 
             // Check our work
+            sinon.assert.calledOnce(setOffsetSpy)
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg?.offset, commitMeta.offset)
             assert.strictEqual(runArg?.partition, commitMeta.partition)
@@ -376,6 +363,7 @@ describe('Plugin', () => {
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
   await producer.connect()
+  await producer.clusterId?.()
   await producer.send({
     topic,
     messages,
