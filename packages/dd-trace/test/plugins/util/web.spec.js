@@ -817,19 +817,6 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP /users/:id')
     })
 
-    it('updates the OTel instrumentation resource when finish resolves an entered route', () => {
-      config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
-      span = web.startSpan(tracer, config, req, res, 'test.request')
-      tags = span.context().getTags()
-
-      web.enterRoute(req, '/users/:id')
-      web.finishAll(web.getContext(req))
-
-      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
-      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
-      assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET /users/:id')
-    })
-
     for (const method of ['GET', 'PROPFIND']) {
       it(`samples the preserved upstream route for ${method} before finish`, () => {
         config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
@@ -854,16 +841,13 @@ describe('plugins/util/web', () => {
       })
     }
 
-    it('updates an OTel route assembled from multiple framework segments', () => {
+    it('replaces an OTel route after nested routing', () => {
       config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
       req.method = 'PROPFIND'
       span = web.startSpan(tracer, config, req, res, 'test.request')
       tags = span.context().getTags()
 
-      web.enterRoute(req, '/api')
-      web.enterRoute(req, '/users/:id')
-      span.setTag(HTTP_ROUTE, '/api/users/:id')
-
+      web.setRoute(req, '/api/users/:id')
       web.setRoute(req, '/users/:id')
 
       assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')

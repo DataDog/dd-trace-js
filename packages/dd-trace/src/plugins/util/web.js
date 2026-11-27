@@ -142,13 +142,6 @@ const web = {
 
     return span
   },
-  // Add a route segment that will be used for the resource name.
-  enterRoute (req, path) {
-    if (typeof path === 'string') {
-      contexts.get(req).paths.push(path)
-    }
-  },
-
   /**
    * @param {import('../../http-resource').HttpResourceSource & { span: import('../../opentracing/span') }} context
    * @param {import('../../http-resource').RouteReader} reader
@@ -183,11 +176,6 @@ const web = {
     if (ownsResource(spanContext)) {
       setInstrumentationHttpResource(context.span, otelHttpResourceName(req.method, route))
     }
-  },
-
-  // Remove the current route segment.
-  exitRoute (req) {
-    contexts.get(req).paths.pop()
   },
 
   // Register a callback to run before res.end() is called.

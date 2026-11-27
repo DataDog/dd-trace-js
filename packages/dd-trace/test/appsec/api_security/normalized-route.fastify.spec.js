@@ -159,7 +159,7 @@ describe('Fastify route capture', () => {
     const req = routedRequest('/items/:id')
     captureRoute(req, '/items/:id')
     assert.equal(normalizeRequest(req, '/override'), null)
-    web.enterRoute(req, '/nested')
+    web.setRoute(req, '/items/:id/nested')
     captureRoute(req, '/items/:id')
     assert.equal(normalizeRequest(req, '/items/:id'), null)
   })

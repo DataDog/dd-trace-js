@@ -52,12 +52,7 @@
   },
   {
     "name": "@trpc/server",
-    "source": "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.js$",
-    "flags": ""
-  },
-  {
-    "name": "@trpc/server",
-    "source": "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.mjs$",
+    "source": "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.m?js$",
     "flags": ""
   },
   {
@@ -72,12 +67,7 @@
   },
   {
     "name": "@trpc/server",
-    "source": "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.js$",
-    "flags": ""
-  },
-  {
-    "name": "@trpc/server",
-    "source": "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.mjs$",
+    "source": "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.m?js$",
     "flags": ""
   },
   {
