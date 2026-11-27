@@ -881,5 +881,9 @@ module.exports = {
       name: 'express',
       versions: ['^5'],
     },
+    {
+      name: 'find-my-way',
+      versions: ['9.10.2'],
+    },
   ],
 }

@@ -27,8 +27,56 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishTrpcDispatch,
+  publishTrpcNodeRequest,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').VariableDeclaration} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishTrpcNodeRequest (state, node, parent, ancestry) {
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  parent.body.splice(parent.body.indexOf(node) + 1, 0, ...parse(`
+    if (${channel}.start.hasSubscribers) {
+      ${channel}.start.publish(request)
+    }
+  `).body)
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').ExpressionStatement | import('estree').VariableDeclaration} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishTrpcDispatch (state, node, parent, ancestry) {
+  const awaited = /** @type {import('estree').AwaitExpression} */ (
+    node.type === 'ExpressionStatement' ? node.expression : node.declarations[0].init
+  )
+  const call = /** @type {import('estree').CallExpression} */ (awaited.argument)
+  const local = `tr_arg_apm$${state.channelName}`
+  const channel = `tr_ch_apm$${state.channelName}`
+  const value = state.channelName === 'nodeRequest' ? local : `{ request: opts, procedure: ${local} }`
+
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const [declaration, publish] = parse(`
+    let ${local}
+    ${local} = undefined,
+      ${channel}.start.hasSubscribers && ${channel}.start.publish(${value}),
+      ${local}
+  `).body
+  const sequence = /** @type {import('estree').SequenceExpression} */ (publish.expression)
+  const assignment = /** @type {import('estree').AssignmentExpression} */ (sequence.expressions[0])
+  // Capture the argument in place so the callee and options still evaluate in their original order.
+  assignment.right = /** @type {import('estree').Expression} */ (call.arguments[0])
+  call.arguments[0] = sequence
+  parent.body.splice(parent.body.indexOf(node), 0, declaration)
 }
 
 /**
@@ -57,7 +105,7 @@ function publishTrpcRequestInfo (state, node, _parent, ancestry) {
   const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
   insertionBlock.body.splice(insertionIndex + 1, 0, ...parse(`
     if (${channelVariable}.asyncEnd.hasSubscribers) {
-      ${channelVariable}.asyncEnd.publish({ result: {
+      ${channelVariable}.asyncEnd.publish({ request: opts, result: {
         isBatchCall,
         path: paths.length === 1 ? paths[0] : undefined
       } })
