@@ -76,10 +76,6 @@ updates:
   - package-ecosystem: "bun"
     directories:
       - "/"
-      - "/docs"
-      - "/.github/all-green"
-      - "/.github/workflow-job-names"
-      - "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"
       day: "sunday"
@@ -152,6 +148,38 @@ updates:
       security-non-production:
         applies-to: security-updates
         dependency-type: "development"
+        patterns:
+          - "*"
+
+  # Separate CI and docs dependencies from packages shipped to customers.
+  - package-ecosystem: "bun"
+    directories:
+      - "/docs"
+      - "/.github/all-green"
+      - "/.github/workflow-job-names"
+      - "/.github/actions/datadog-ci"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "01:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 100
+    cooldown:
+      default-days: 5
+      exclude:
+        - "@datadog/*"
+    versioning-strategy: "increase"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    groups:
+      ci-and-docs:
+        patterns:
+          - "*"
+      security-non-production:
+        applies-to: security-updates
         patterns:
           - "*"
 
@@ -435,6 +463,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      feature-flagging-test-data:
+        patterns:
+          - "*"
     labels:
       - dependabot
       - dependencies
@@ -452,6 +484,10 @@ updates:
         update-types: ["version-update:semver-major"]
     groups:
       startup-benchmark:
+        patterns:
+          - "*"
+      security-non-production:
+        applies-to: security-updates
         patterns:
           - "*"
     labels:
