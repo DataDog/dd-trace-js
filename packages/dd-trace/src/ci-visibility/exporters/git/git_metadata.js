@@ -15,7 +15,7 @@ const { filterSensitiveInfoFromRepository } = require('../../../plugins/util/url
 const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
-  getRepositoryRoot,
+  hasGitRepository,
   getRepositoryUrl,
   generatePackFilesForCommits,
   getCommitsRevList,
@@ -278,7 +278,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
-  if (!getRepositoryRoot(gitRoot)) {
+  if (!hasGitRepository(gitRoot)) {
     return callback(Object.assign(new Error('Selected Git commit is unavailable'), {
       code: 'ERR_GIT_COMMIT_UNAVAILABLE',
     }))

@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
+const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -30,7 +32,7 @@ describe('git_metadata', () => {
   const secondTemporaryPackFile = `${os.tmpdir()}/1111-cc424c261da5e261b76d982d5d361a023556e2aa.pack`
 
   let getLatestCommitsStub
-  let getRepositoryRootStub
+  let hasGitRepositoryStub
   let getRepositoryUrlStub
   let getCommitsRevListStub
   let generatePackFilesForCommitsStub
@@ -55,7 +57,7 @@ describe('git_metadata', () => {
 
   beforeEach(() => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
-    getRepositoryRootStub = sinon.stub().returns(process.cwd())
+    hasGitRepositoryStub = sinon.stub().returns(true)
     getCommitsRevListStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
     isShallowRepositoryStub = sinon.stub().returns(false)
@@ -74,7 +76,7 @@ describe('git_metadata', () => {
 
     const gitStubs = {
       getLatestCommits: getLatestCommitsStub,
-      getRepositoryRoot: getRepositoryRootStub,
+      hasGitRepository: hasGitRepositoryStub,
       getRepositoryUrl: getRepositoryUrlStub,
       generatePackFilesForCommits: generatePackFilesForCommitsStub,
       getCommitsRevList: getCommitsRevListStub,
@@ -516,7 +518,7 @@ describe('git_metadata', () => {
   })
 
   it('returns ERR_GIT_COMMIT_UNAVAILABLE immediately when gitRoot is not a git repository', (done) => {
-    getRepositoryRootStub.returns('')
+    hasGitRepositoryStub.returns(false)
 
     gitMetadata.sendGitMetadata(
       new URL('https://api.test.com'),
@@ -524,7 +526,7 @@ describe('git_metadata', () => {
       'https://github.com/DataDog/dd-trace-js.git',
       (err) => {
         assert.strictEqual(err?.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
-        sinon.assert.calledOnceWithExactly(getRepositoryRootStub, '/non-git-dir')
+        sinon.assert.calledOnceWithExactly(hasGitRepositoryStub, '/non-git-dir')
         sinon.assert.notCalled(getRepositoryUrlStub)
         sinon.assert.notCalled(getLatestCommitsStub)
         sinon.assert.notCalled(isShallowRepositoryStub)
@@ -537,6 +539,75 @@ describe('git_metadata', () => {
       '/non-git-dir'
     )
   })
+
+  for (const mode of ['bare', 'inside-git-dir']) {
+    it(`uploads history from a readable repository without a worktree (${mode})`, async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), `dd-trace-upload-${mode}-`))
+      const logError = sinon.spy()
+      const uploadRequestStub = sinon.stub()
+      uploadRequestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      uploadRequestStub.onCall(1).callsArgWith(2, null, '', 204)
+
+      try {
+        const repoPath = path.join(directory, mode === 'bare' ? 'repo.git' : 'checkout')
+        const initFlags = mode === 'bare' ? ['init', '--bare', repoPath] : ['init', repoPath]
+        const nowSeconds = Math.floor(Date.now() / 1000)
+        execFileSync('git', initFlags, { stdio: 'pipe' })
+        execFileSync('git', ['remote', 'add', 'origin', 'https://example.com/org/repo.git'], {
+          cwd: repoPath,
+          stdio: 'pipe',
+        })
+        execFileSync('git', ['fast-import', '--quiet'], {
+          cwd: repoPath,
+          stdio: 'pipe',
+          input: `commit refs/heads/main
+mark :1
+author Repo Author <author@example.com> ${nowSeconds} +0000
+committer Repo Committer <committer@example.com> ${nowSeconds} +0000
+data 11
+bare commit
+M 100644 inline README.md
+data 5
+hello
+`,
+        })
+        execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: repoPath, stdio: 'pipe' })
+        const commitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, stdio: 'pipe' }).toString().trim()
+        const targetDir = mode === 'bare' ? repoPath : path.join(repoPath, '.git')
+
+        const realGit = proxyquire('../../../../src/plugins/util/git', {
+          '../../log': { error: logError, debug: sinon.spy(), warn: sinon.spy() },
+          os: { tmpdir: () => directory },
+        })
+        const realGitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
+          '../../../plugins/util/git': realGit,
+          '../../../config': () => fakeConfig,
+          '../../../exporters/common/request': uploadRequestStub,
+          '../../../log': { error: logError, debug: sinon.spy(), warn: sinon.spy() },
+        })
+
+        const err = await new Promise((resolve) => {
+          realGitMetadata.sendGitMetadata(
+            new URL('https://api.test.com'),
+            { isEvpProxy: false },
+            undefined,
+            resolve,
+            commitSha,
+            targetDir
+          )
+        })
+
+        assert.strictEqual(err, null)
+        sinon.assert.calledTwice(uploadRequestStub)
+        const searchBody = JSON.parse(uploadRequestStub.getCall(0).args[0])
+        assert.strictEqual(searchBody.meta.repository_url, 'https://example.com/org/repo.git')
+        assert.deepStrictEqual(searchBody.data, [{ id: commitSha, type: 'commit' }])
+        sinon.assert.notCalled(logError)
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('should retry if backend temporarily fails', (done) => {
     // This test exercises request.js retry logic end-to-end, so it uses the

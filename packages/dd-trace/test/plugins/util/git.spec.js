@@ -1101,7 +1101,7 @@ describe('getGitInformationDiscrepancy', () => {
   )
 
   it('returns git repository URL and commit SHA', () => {
-    cachedExecStub.withArgs('git', ['rev-parse', '--show-toplevel']).returns('/repo')
+    cachedExecStub.withArgs('git', ['rev-parse', '--git-dir']).returns('.git')
     cachedExecStub.withArgs('git', ['remote']).returns('origin')
     cachedExecStub.withArgs('git', ['remote', 'get-url', 'origin'])
       .returns('https://github.com/datadog/safe-repository.git')
@@ -2468,7 +2468,9 @@ describe('git telemetry and repository gating', () => {
       [GIT_COMMIT_AUTHOR_EMAIL]: 'author@example.com',
       [GIT_TAG]: 'v1.0.0',
     })
-    sinon.assert.calledOnceWithMatch(execStub, 'git', ['rev-parse', '--show-toplevel'])
+    sinon.assert.calledTwice(execStub)
+    sinon.assert.calledWithMatch(execStub.firstCall, 'git', ['rev-parse', '--show-toplevel'])
+    sinon.assert.calledWithMatch(execStub.secondCall, 'git', ['rev-parse', '--git-dir'])
     sinon.assert.notCalled(logError)
     sinon.assert.notCalled(incrementCountMetric)
   })
@@ -2478,12 +2480,13 @@ describe('git telemetry and repository gating', () => {
     execStub.throws(Object.assign(new Error('spawnSync git ENOENT'), { code: 'ENOENT', errno: -2 }))
 
     assert.strictEqual(gitUtils.getRepositoryRoot('/workspace'), '')
+    assert.strictEqual(gitUtils.hasGitRepository('/workspace'), false)
     assert.deepStrictEqual(gitUtils.getGitInformationDiscrepancy('/workspace'), {
       gitRepositoryUrl: '',
       gitCommitSHA: '',
     })
 
-    sinon.assert.calledTwice(execStub)
+    sinon.assert.calledThrice(execStub)
     sinon.assert.notCalled(logError)
     sinon.assert.notCalled(incrementCountMetric)
   })
@@ -2675,4 +2678,80 @@ describe('git telemetry and repository gating', () => {
       exitCode: 128,
     })
   })
+
+  for (const mode of ['bare', 'inside-git-dir']) {
+    it(`reads metadata and discrepancy without errors in a readable repository without a worktree (${mode})`, () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), `dd-trace-git-${mode}-`))
+      const originalCwd = process.cwd()
+      const logError = sinon.spy()
+      const incrementCountMetric = sinon.spy()
+      const distributionMetric = sinon.spy()
+
+      try {
+        const repoPath = path.join(directory, mode === 'bare' ? 'repo.git' : 'checkout')
+        const initFlags = mode === 'bare' ? ['init', '--bare', repoPath] : ['init', repoPath]
+        execFileSync('git', initFlags, { stdio: 'pipe' })
+        execFileSync('git', ['remote', 'add', 'origin', 'https://example.com/org/repo.git'], {
+          cwd: repoPath,
+          stdio: 'pipe',
+        })
+        execFileSync('git', ['fast-import', '--quiet'], {
+          cwd: repoPath,
+          stdio: 'pipe',
+          input: `commit refs/heads/main
+mark :1
+author Repo Author <author@example.com> 1700000000 +0000
+committer Repo Committer <committer@example.com> 1700000001 +0000
+data 11
+bare commit
+M 100644 inline README.md
+data 5
+hello
+`,
+        })
+        execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: repoPath, stdio: 'pipe' })
+        const commitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, stdio: 'pipe' }).toString().trim()
+
+        const targetCwd = mode === 'bare' ? repoPath : path.join(repoPath, '.git')
+        process.chdir(targetCwd)
+
+        const realGitUtils = proxyquire('../../../src/plugins/util/git', {
+          '../../log': { error: logError, debug: sinon.spy(), warn: sinon.spy() },
+          '../../ci-visibility/telemetry': {
+            incrementCountMetric,
+            distributionMetric,
+            TELEMETRY_GIT_COMMAND,
+            TELEMETRY_GIT_COMMAND_MS,
+            TELEMETRY_GIT_COMMAND_ERRORS,
+          },
+        })
+
+        assert.strictEqual(realGitUtils.getRepositoryRoot(), '')
+        assert.strictEqual(realGitUtils.hasGitRepository(), true)
+
+        const metadata = realGitUtils.getGitMetadata({})
+        assert.strictEqual(metadata[GIT_COMMIT_SHA], commitSha)
+        assert.strictEqual(metadata[GIT_BRANCH], 'main')
+        assert.strictEqual(metadata[GIT_COMMIT_MESSAGE], 'bare commit\n')
+        assert.strictEqual(metadata[GIT_COMMIT_AUTHOR_NAME], 'Repo Author')
+        assert.strictEqual(metadata[GIT_COMMIT_AUTHOR_EMAIL], 'author@example.com')
+        assert.strictEqual(metadata[GIT_COMMIT_COMMITTER_NAME], 'Repo Committer')
+        assert.strictEqual(metadata[GIT_COMMIT_COMMITTER_EMAIL], 'committer@example.com')
+        assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'https://example.com/org/repo.git')
+        assert.strictEqual(metadata[GIT_CHECKOUT_ROOT], undefined)
+        assert.strictEqual(metadata[CI_WORKSPACE_PATH], '')
+
+        assert.deepStrictEqual(realGitUtils.getGitInformationDiscrepancy(), {
+          gitRepositoryUrl: 'https://example.com/org/repo.git',
+          gitCommitSHA: commitSha,
+        })
+
+        sinon.assert.notCalled(logError)
+        sinon.assert.neverCalledWithMatch(incrementCountMetric, TELEMETRY_GIT_COMMAND_ERRORS)
+      } finally {
+        process.chdir(originalCwd)
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+  }
 })

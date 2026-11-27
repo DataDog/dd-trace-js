@@ -615,8 +615,8 @@ function generatePackFilesForCommits (commitsToUpload, cwd) {
 }
 
 /**
- * Probes the Git repository root without logging errors when Git is unavailable
- * or `cwd` is outside a readable Git checkout.
+ * Probes the Git worktree root without logging errors when Git is unavailable
+ * or `cwd` is outside a worktree (for example, bare repos or inside `.git`).
  *
  * @param {string=} cwd
  */
@@ -631,7 +631,28 @@ function probeRepositoryRoot (cwd) {
       { expectedFailure: true, throwOnError: true, uncached: true, cwd }
     )
   } catch {
-    // Missing Git binary or non-repository directory; callers handle undefined.
+    // Missing Git binary, bare repository, inside `.git`, or outside any repository.
+  }
+}
+
+/**
+ * Checks whether `cwd` can read a Git repository, including bare/mirror
+ * repositories and paths inside `.git` where `--show-toplevel` fails.
+ *
+ * @param {string=} cwd
+ */
+function hasGitRepository (cwd) {
+  try {
+    return Boolean(sanitizedExec(
+      ['rev-parse', '--git-dir'],
+      null,
+      null,
+      null,
+      true,
+      { expectedFailure: true, throwOnError: true, uncached: true, cwd }
+    ))
+  } catch {
+    return false
   }
 }
 
@@ -662,29 +683,32 @@ function getGitMetadata (ciMetadata) {
     headCommitSha,
     pullRequestBaseBranchSha,
   } = ciMetadata
-  const gitRoot = probeRepositoryRoot()
+  let gitRoot = probeRepositoryRoot()
   if (gitRoot === undefined) {
-    const tags = {
-      [GIT_COMMIT_MESSAGE]: commitMessage || '',
-      [GIT_BRANCH]: branch || '',
-      [GIT_COMMIT_SHA]: commitSHA || '',
-      [CI_WORKSPACE_PATH]: ciWorkspacePath || '',
-    }
-    if (tags[GIT_BRANCH] === 'HEAD') delete tags[GIT_BRANCH]
-
-    const entries = [
-      GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(repositoryUrl || ''),
-      GIT_COMMIT_AUTHOR_NAME, ciAuthorName,
-      GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail,
-      GIT_TAG, tag,
-    ]
-    for (let i = 0; i < entries.length; i += 2) {
-      const value = entries[i + 1]
-      if (value) {
-        tags[entries[i]] = value
+    if (!hasGitRepository()) {
+      const tags = {
+        [GIT_COMMIT_MESSAGE]: commitMessage || '',
+        [GIT_BRANCH]: branch || '',
+        [GIT_COMMIT_SHA]: commitSHA || '',
+        [CI_WORKSPACE_PATH]: ciWorkspacePath || '',
       }
+      if (tags[GIT_BRANCH] === 'HEAD') delete tags[GIT_BRANCH]
+
+      const entries = [
+        GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository(repositoryUrl || ''),
+        GIT_COMMIT_AUTHOR_NAME, ciAuthorName,
+        GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail,
+        GIT_TAG, tag,
+      ]
+      for (let i = 0; i < entries.length; i += 2) {
+        const value = entries[i + 1]
+        if (value) {
+          tags[entries[i]] = value
+        }
+      }
+      return tags
     }
-    return tags
+    gitRoot = ''
   }
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -800,7 +824,7 @@ function getGitMetadata (ciMetadata) {
 }
 
 function getGitInformationDiscrepancy (cwd) {
-  if (probeRepositoryRoot(cwd) === undefined) {
+  if (!hasGitRepository(cwd)) {
     return { gitRepositoryUrl: '', gitCommitSHA: '' }
   }
 
@@ -894,4 +918,5 @@ module.exports = {
   hasLocalGitObject,
   fetchHeadCommitSha,
   getRepositoryRoot,
+  hasGitRepository,
 }
