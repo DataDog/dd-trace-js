@@ -4,7 +4,16 @@ import os
 import sys
 
 from ddtrace import patch, tracer
+from ddtrace.trace import TraceFilter
 
+
+class DropTraces(TraceFilter):
+    def process_trace(self, trace):
+        return None
+
+
+# The peer returns Python's trace identifiers over stdio. Only Node spans go to the mock agent.
+tracer.configure(trace_processors=[DropTraces()])
 patch(mcp=True)
 
 from mcp import ClientSession, StdioServerParameters

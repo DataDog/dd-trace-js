@@ -5581,7 +5581,7 @@ describe('Config', () => {
     it('enables propagation by default and reports its origin', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.DD_MCP_DISTRIBUTED_TRACING, true)
+      assert.strictEqual(config.mcp.DD_MCP_DISTRIBUTED_TRACING, true)
       assertConfigUpdateContains(updateConfig.firstCall.args[0], [{
         name: 'DD_MCP_DISTRIBUTED_TRACING', value: true, origin: 'default',
       }])
@@ -5598,7 +5598,7 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.DD_MCP_DISTRIBUTED_TRACING, expected)
+        assert.strictEqual(config.mcp.DD_MCP_DISTRIBUTED_TRACING, expected)
         assertConfigUpdateContains(updateConfig.firstCall.args[0], [{
           name: 'DD_MCP_DISTRIBUTED_TRACING', value: expected, origin: 'env_var',
         }])

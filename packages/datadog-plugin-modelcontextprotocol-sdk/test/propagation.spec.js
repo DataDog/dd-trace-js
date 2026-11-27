@@ -6,15 +6,19 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 /**
+ * @param {string} packageName
  * @param {string} version
  * @param {import('../../../').Tracer} tracer
  * @param {import('../../../').Span | null} [receiveSpan]
  */
-async function createPeer (version, tracer, receiveSpan = null) {
-  const versionMod = require(`../../../versions/@modelcontextprotocol/sdk@${version}`)
-  const { Client } = versionMod.get('@modelcontextprotocol/sdk/client')
-  const { McpServer } = versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
-  const { InMemoryTransport } = versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
+async function createPeer (packageName, version, tracer, receiveSpan = null) {
+  const versionMod = require(`../../../versions/${packageName}@${version}`)
+  const splitSdk = packageName === '@modelcontextprotocol/client'
+  const { Client } = versionMod.get(splitSdk ? undefined : '@modelcontextprotocol/sdk/client')
+  const { InMemoryTransport } = versionMod.get(splitSdk ? undefined : '@modelcontextprotocol/sdk/inMemory.js')
+  const { McpServer } = splitSdk
+    ? require('../../../versions/@modelcontextprotocol/server@2').get()
+    : versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
   const server = new McpServer({ name: 'propagation-server', version: '1.0.0' })
   server.registerTool('echo', { inputSchema: {} }, async () => ({ content: [{ type: 'text', text: 'echo' }] }))
 
@@ -39,9 +43,13 @@ async function createPeer (version, tracer, receiveSpan = null) {
   }
 }
 
-describe('MCP distributed tracing', () => {
-  withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', version => {
-    const versionMod = require(`../../../versions/@modelcontextprotocol/sdk@${version}`)
+/**
+ * @param {string} packageName
+ * @param {string} range
+ */
+function testPropagation (packageName, range) {
+  withVersions('modelcontextprotocol-sdk', packageName, range, version => {
+    const versionMod = require(`../../../versions/${packageName}@${version}`)
     let tracer
     let peer
 
@@ -71,7 +79,7 @@ describe('MCP distributed tracing', () => {
         })
 
         beforeEach(async () => {
-          peer = await createPeer(version, tracer)
+          peer = await createPeer(packageName, version, tracer)
         })
 
         afterEach(async () => {
@@ -80,15 +88,16 @@ describe('MCP distributed tracing', () => {
 
         it('controls tool request injection while preserving the tool result', async () => {
           const resources = new Set()
-          const traceAssertion = agent.assertSomeTraces(traces => {
+          let result
+          await agent.assertSomeTraces(traces => {
             for (const span of traces.flat()) resources.add(span.resource)
             assert.ok(resources.has('client_tool_call'))
             assert.ok(resources.has('server_tool_call'))
+          }, {
+            async operation () {
+              result = await peer.client.callTool({ name: 'echo', arguments: {} })
+            },
           })
-          const [result] = await Promise.all([
-            peer.client.callTool({ name: 'echo', arguments: {} }),
-            traceAssertion,
-          ])
           const headers = peer.requests[0].params?._meta?._dd_trace_context
           if (propagates) {
             assert.ok(headers?.['x-datadog-parent-id'])
@@ -99,8 +108,7 @@ describe('MCP distributed tracing', () => {
         })
 
         it('respects the switch after disabling and re-enabling the integration', async () => {
-          const { ListToolsResultSchema } = versionMod.get('@modelcontextprotocol/sdk/types.js')
-          const listTools = () => peer.client.request({ method: 'tools/list' }, ListToolsResultSchema)
+          const listTools = () => peer.client.listTools()
           const parent = tracer.startSpan('lifecycle-parent')
           try {
             tracer.use('modelcontextprotocol-sdk', false)
@@ -116,33 +124,43 @@ describe('MCP distributed tracing', () => {
         })
 
         it('chooses between an independently supplied carrier and the transport parent', async () => {
-          const { CallToolResultSchema } = versionMod.get('@modelcontextprotocol/sdk/types.js')
+          const resultSchema = packageName === '@modelcontextprotocol/client'
+            ? versionMod.get().fromJsonSchema({ type: 'object' })
+            : versionMod.get('@modelcontextprotocol/sdk/types.js').CallToolResultSchema
           const transport = tracer.startSpan('transport-parent')
           const remote = tracer.startSpan('remote-parent')
           const headers = {}
           tracer.inject(remote, 'text_map', headers)
           await peer.close()
-          peer = await createPeer(version, tracer, transport)
+          peer = await createPeer(packageName, version, tracer, transport)
           const expected = propagates ? remote : transport
-          const traceAssertion = agent.assertSomeTraces(traces => {
+          let result
+          await agent.assertSomeTraces(traces => {
             const span = traces.flat().find(span => span.resource === 'server_tool_call')
             assert.ok(span)
             assert.strictEqual(span.parent_id.toString(), expected.context().toSpanId())
             assert.strictEqual(span.trace_id.toString(), expected.context().toTraceId())
+          }, {
+            async operation () {
+              try {
+                result = await peer.client.request({
+                  method: 'tools/call',
+                  params: { name: 'echo', arguments: {}, _meta: { _dd_trace_context: headers } },
+                }, resultSchema)
+              } finally {
+                remote.finish()
+                transport.finish()
+              }
+            },
           })
-          try {
-            const result = await peer.client.request({
-              method: 'tools/call',
-              params: { name: 'echo', arguments: {}, _meta: { _dd_trace_context: headers } },
-            }, CallToolResultSchema)
-            assert.strictEqual(result.content[0].text, 'echo')
-          } finally {
-            remote.finish()
-            transport.finish()
-          }
-          await traceAssertion
+          assert.strictEqual(result.content[0].text, 'echo')
         })
       })
     }
   })
+}
+
+describe('MCP distributed tracing', () => {
+  testPropagation('@modelcontextprotocol/sdk', '*')
+  testPropagation('@modelcontextprotocol/client', '>=2')
 })

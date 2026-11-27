@@ -139,6 +139,15 @@
         "namespace": "mcp"
       }
     ],
+    "DD_MCP_DISTRIBUTED_TRACING": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "mcp",
+        "description": "Propagate trace context through metadata on instrumented MCP requests."
+      }
+    ],
     "DD_MIN_COLD_START_DURATION": [
       {
         "implementation": "B",
@@ -1743,14 +1752,6 @@
           "OTEL_LOG_LEVEL"
         ],
         "allowed": "debug|info|warn|error"
-      }
-    ],
-    "DD_MCP_DISTRIBUTED_TRACING": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "true",
-        "description": "Propagate trace context through metadata on instrumented MCP requests. Disabling propagation does not disable MCP spans."
       }
     ],
     "DD_METRICS_OTEL_ENABLED": [
