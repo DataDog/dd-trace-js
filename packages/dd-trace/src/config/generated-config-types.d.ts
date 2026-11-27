@@ -3,6 +3,7 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS: number;
   _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
   _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
@@ -641,6 +642,7 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS: number;
   _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
   _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;

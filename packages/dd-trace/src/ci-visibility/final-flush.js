@@ -1,6 +1,9 @@
 'use strict'
 
-const FINAL_FLUSH_TIMEOUT = 60_000
+const { getValueFromEnvSources } = require('../config/helper')
+
+// Integration tests shorten this to exercise the deadline without waiting a full minute.
+const FINAL_FLUSH_TIMEOUT = getValueFromEnvSources('_DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS')
 const FINAL_FLUSH_FALLBACK_DELAY = 100
 const FINAL_FLUSH_TIMEOUT_CODE = 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT'
 

@@ -39,6 +39,9 @@ const config = {
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
   timeout: Number(process.env.TEST_TIMEOUT) || 30000,
+  // Fixtures fail on purpose against a static page, so each failure would
+  // otherwise wait for the 5s default.
+  expect: { timeout: 1000 },
   fullyParallel: process.env.FULLY_PARALLEL === 'true',
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
   reporter: process.env.PLAYWRIGHT_FROZEN_REPORTER

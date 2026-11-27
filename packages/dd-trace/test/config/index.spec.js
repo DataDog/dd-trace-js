@@ -19,7 +19,11 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
+const {
+  getEnvironmentVariable,
+  getEnvironmentVariables,
+  getValueFromEnvSources,
+} = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
@@ -169,6 +173,12 @@ describe('Config', () => {
       assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), undefined)
       assert.strictEqual(config._DD_TEST_PARALLELIZATION_ENABLED, undefined)
       assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
+    })
+
+    it('reads the internal final flush timeout override', () => {
+      assert.strictEqual(getValueFromEnvSources('_DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS'), 60_000)
+      process.env._DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS = '2000'
+      assert.strictEqual(getValueFromEnvSources('_DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS'), 2000)
     })
 
     it('reads the internal parallelization runtime parameters', () => {
