@@ -85,6 +85,8 @@ class NoopLLMObs {
 
   annotate (span, options) {}
 
+  submitConversationCost (conversation, options) { return false }
+
   exportSpan (span) {
     return {}
   }

@@ -1,0 +1,368 @@
+[
+  {
+    "name": "complete",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0.12,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "explicit_zero",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "missing",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {}
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "credits_only",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {
+          "llm_charge": 50,
+          "platform_charge": 550
+        },
+        "cost": 600
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "negative",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": -1,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "boolean",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": false,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "string_cost",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": "0.12",
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "partial_llm",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {
+          "llm_price": 0.02
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "component_pair",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "processing",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "processing",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0.12,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "failed_call",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "failed",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0.12,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "interrupted",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0.12,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [
+        {
+          "role": "agent",
+          "interrupted": true,
+          "source_event_id": 17,
+          "llm_usage": {
+            "model_usage": {
+              "openai/gpt-4o": {
+                "input": {
+                  "tokens": 10
+                },
+                "output_total": {
+                  "tokens": 4
+                }
+              }
+            }
+          }
+        }
+      ],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "model_fallback",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": 0.12,
+        "charging": {
+          "llm_price": 0.02,
+          "platform_price": 0.1
+        }
+      },
+      "transcript": [
+        {
+          "role": "agent",
+          "source_event_id": 17,
+          "producing_llm": "claude-haiku-4-5",
+          "llm_override": "gpt-4o"
+        }
+      ],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": true
+  },
+  {
+    "name": "context_is_not_usage",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {},
+        "context_usage": {
+          "tokens": 1000,
+          "model_id": "gpt-4o"
+        }
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_with_user_zero",
+    "response": {
+      "agent_id": "agent_test",
+      "conversation_id": "conv_example",
+      "status": "done",
+      "metadata": {
+        "start_time_unix_secs": 1710000000,
+        "call_duration_secs": 12,
+        "cost_fiat": null,
+        "charging": {}
+      },
+      "transcript": [],
+      "has_audio": false,
+      "has_user_audio": false,
+      "has_response_audio": false,
+      "has_auxiliary_audio": false
+    },
+    "total_cost": 0,
+    "valid": true
+  }
+]

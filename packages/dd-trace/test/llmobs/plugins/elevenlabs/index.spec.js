@@ -50,7 +50,9 @@ function wav (part, rate, expected) {
 
 describe('integrations', () => {
   describe('elevenlabs', () => {
-    const { getEvents } = useLlmObs({ plugin: 'elevenlabs', tracerConfigOptions: {} })
+    const { getEvents } = useLlmObs({
+      plugin: 'elevenlabs', tracerConfigOptions: {},
+    })
     withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version => {
       let Conversation, ClientTools, clock, conversation, socket, audio, tools, outputSpy
 
@@ -112,6 +114,23 @@ describe('integrations', () => {
       }
       function vad (score) { socket.deliver({ type: 'vad_score', vad_score_event: { vad_score: score } }) }
       function close () { clock.tick(2000); conversation.endSession() }
+
+      it('ends a conversation without requesting billing', async () => {
+        const get = sinon.stub(conversation.client.conversationalAi.conversations, 'get')
+          .rejects(new Error('unexpected conversation-details request'))
+        clock.restore()
+        clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+        try {
+          await start()
+          response()
+          conversation.endSession()
+          conversation.endSession()
+          await clock.tickAsync(40000)
+          sinon.assert.notCalled(get)
+        } finally {
+          get.restore()
+        }
+      })
 
       it('exports bounded WAVs and direct phase children with explicit TTFA opt-out', async () => {
         await start()

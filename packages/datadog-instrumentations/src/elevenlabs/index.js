@@ -204,14 +204,20 @@ channel('_handleMessage').subscribe({
   },
 })
 channel('endSession').end.subscribe(ctx => {
-  observe(() => sessions.get(ctx.self)?.finalize(Boolean(ctx.error)))
+  observe(() => {
+    const session = sessions.get(ctx.self)
+    session?.finalize(Boolean(ctx.error))
+  })
 })
 channel('_onWebSocketOpen').error.subscribe(ctx => {
   observe(() => sessions.get(ctx.self)?.finalize(true))
 })
 channel('_onWebSocketClose').start.subscribe(ctx => {
   const code = ctx.arguments[0]
-  observe(() => sessions.get(ctx.self)?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code)))
+  observe(() => {
+    const session = sessions.get(ctx.self)
+    session?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code))
+  })
 })
 channel('executeToolAsync').start.subscribe(ctx => {
   if (handling?.turn && ctx.arguments[1] && typeof ctx.arguments[1] === 'object') {

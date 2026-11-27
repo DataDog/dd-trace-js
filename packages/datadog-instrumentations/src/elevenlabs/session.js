@@ -64,12 +64,13 @@ function toolIdOf (value) {
  */
 
 class Session {
-  /** @type {{runInContext?: <T>(fn: () => T) => T}} */
+  /** @type {Scope} */
   scope = {}
   /** @type {object | undefined} */
   socket = undefined
   /** @type {(failed: boolean) => void} */
   finalize = () => {}
+  collectCost = () => {}
   /** @type {Map<bigint, Turn>} */
   turns = new Map()
   pending = new AudioBuffer()
