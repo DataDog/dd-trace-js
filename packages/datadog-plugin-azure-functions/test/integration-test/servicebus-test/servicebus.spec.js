@@ -12,7 +12,7 @@ const {
   useSandbox,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
-const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
+const { getFuncPath } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 const azureInvokeGroup = (resource) => (group) =>
@@ -22,8 +22,6 @@ const azureCreateGroup = (group) =>
   group.some(s => s.name === 'azure.servicebus.create')
 
 describe('esm', () => {
-  const getFunc = useAzureFunctionsCoreTools()
-
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
@@ -40,7 +38,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFuncPath(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -263,7 +261,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port, undefined, {
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFuncPath(), ['start'], agent.port, undefined, {
           DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: 'false',
         })
       })

@@ -130,6 +130,45 @@ describe('plugin fixture discovery', () => {
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })
   })
+
+  for (const [plugin, spec, range] of [
+    ['azure-functions', 'eventhubs', '4'],
+    ['azure-durable-functions', 'client', '3'],
+    ['azure-functions|azure-durable-functions', 'client', ''],
+  ]) {
+    it(`installs one trusted Core Tools workspace for ${plugin} integration tests`, () => {
+      const env = { PLUGINS: plugin, SPEC: spec, RANGE: range, DD_TEST_PLUGIN_INTEGRATION: '' }
+      withInstallerFixture(env, fixtureRoot => {
+        const versions = join(fixtureRoot, 'versions')
+        const name = 'azure-functions-core-tools'
+        const manifest = JSON.parse(readFileSync(join(versions, 'package.json'), 'utf8'))
+        assert.deepStrictEqual(manifest.workspaces.packages.filter(workspace => workspace.startsWith(name)), [name])
+        assert.ok(manifest.trustedDependencies.includes(name))
+
+        const dependency = JSON.parse(readFileSync(join(versions, name, 'package.json'), 'utf8'))
+        const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+        assert.strictEqual(dependency.dependencies[name], getCappedRange(name, '4'))
+      })
+    })
+  }
+
+  it('leaves Core Tools out of the Azure index specs', () => {
+    const env = { PLUGINS: 'azure-functions|azure-durable-functions', SPEC: 'index', DD_TEST_PLUGIN_INTEGRATION: '' }
+    withInstallerFixture(env, fixtureRoot => {
+      const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
+      assert.strictEqual(manifest.workspaces.packages.includes('azure-functions-core-tools'), false)
+      assert.strictEqual(manifest.trustedDependencies.includes('azure-functions-core-tools'), false)
+    })
+  })
+
+  it('leaves Core Tools out of Azure instrumentation tests with no spec selector', () => {
+    const env = { PLUGINS: 'azure-functions', SPEC: '', DD_TEST_PLUGIN_INTEGRATION: '0' }
+    withInstallerFixture(env, fixtureRoot => {
+      const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
+      assert.strictEqual(manifest.workspaces.packages.includes('azure-functions-core-tools'), false)
+      assert.strictEqual(manifest.trustedDependencies.includes('azure-functions-core-tools'), false)
+    })
+  })
 })
 
 /**

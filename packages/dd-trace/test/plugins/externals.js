@@ -2,6 +2,8 @@
 
 const { DD_MAJOR } = require('../../../../version')
 
+const azureFunctionsCoreTools = [{ name: 'azure-functions-core-tools', version: '4', integrationOnly: true }]
+
 module.exports = {
   elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
@@ -104,6 +106,8 @@ module.exports = {
       versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
+  'azure-durable-functions': azureFunctionsCoreTools,
+  'azure-functions': azureFunctionsCoreTools,
   bullmq: [
     {
       name: 'ioredis',

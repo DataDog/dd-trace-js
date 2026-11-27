@@ -14,12 +14,10 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
-const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
+const { getFuncPath } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  const getFunc = useAzureFunctionsCoreTools()
-
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
@@ -45,7 +43,7 @@ describe('esm', () => {
         agent = await new FakeAgent().start()
         cosmosClient = await setup()
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFuncPath(), ['start'], agent.port)
       })
 
       after(async () => {
@@ -110,7 +108,9 @@ describe('esm', () => {
         const envArgs = {
           CONTAINER_APP_NAME: 'my-container-app',
         }
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), getFunc(), ['start'], agent.port, undefined, envArgs)
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(), getFuncPath(), ['start'], agent.port, undefined, envArgs
+        )
       })
 
       after(async () => {

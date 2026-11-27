@@ -14,12 +14,10 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../../../../integration-tests/helpers')
-const { useAzureFunctionsCoreTools } = require('../../../../integration-tests/helpers/azure-functions-core-tools')
+const { getFuncPath } = require('../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
-  const getFunc = useAzureFunctionsCoreTools()
-
   let agent
   let proc
 
@@ -44,7 +42,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(getFunc(), agent.port)
+      proc = await spawnPluginIntegrationTestProc(getFuncPath(), agent.port)
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         const durableSpan = durableSpanLookup(payload)
@@ -86,7 +84,7 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('namespaces spans under aca in an Azure Container App', async () => {
-      proc = await spawnPluginIntegrationTestProc(getFunc(), agent.port, { CONTAINER_APP_NAME: 'my-container-app' })
+      proc = await spawnPluginIntegrationTestProc(getFuncPath(), agent.port, { CONTAINER_APP_NAME: 'my-container-app' })
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         const durableSpan = durableSpanLookup(payload)
