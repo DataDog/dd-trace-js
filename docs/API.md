@@ -974,6 +974,33 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
+<h3 id="opentelemetry-profiles">OpenTelemetry Profiles</h3>
+
+dd-trace-js includes experimental support for exporting profiles as OpenTelemetry profiles, following the [OTLP profiles signal](https://opentelemetry.io/docs/specs/otel/profiles/), which is still in development. Enable profiling with `DD_PROFILING_ENABLED=true` and set `OTEL_PROFILES_EXPORTER=otlp` to send each profile collection as one OTLP request instead of uploading it to the Datadog Agent:
+
+```bash
+DD_PROFILING_ENABLED=true OTEL_PROFILES_EXPORTER=otlp node app.js
+```
+
+The profiles use OpenTelemetry semantic-convention attributes where there are some. Timeline events aren't collected yet with OTLP export, and requests are sent uncompressed.
+
+In agentless mode, profiles are sent to the Datadog OTLP intake for `DD_SITE`, with the API key from `DD_API_KEY`.
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `OTEL_PROFILES_EXPORTER` - Profile exporter. Options: `otlp`, `none`. `none` disables profiling unless `DD_PROFILING_ENABLED` is set (default: unset, profiles are uploaded to the Datadog Agent)
+- `OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT` - OTLP endpoint URL for profiles. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1development/profiles` appended (default: `http://localhost:4318/v1development/profiles`)
+- `OTEL_EXPORTER_OTLP_PROFILES_HEADERS` - Optional headers for profiles, as comma-separated `key=value` pairs. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: none)
+- `OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL` - OTLP protocol for profiles. Options: `http/protobuf`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT` - Request timeout in milliseconds for profiles. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_SDK_DISABLED` - Disables profiling when profiles are exported with `OTEL_PROFILES_EXPORTER=otlp` (default: `false`)
+
+Profile collection is configured with the usual `DD_PROFILING_*` settings. `DD_PROFILING_EXPORTERS` still selects the destinations: with `OTEL_PROFILES_EXPORTER=otlp`, `agent` sends to the OTLP endpoint, and `file` writes the OTLP request to a file.
+
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>
