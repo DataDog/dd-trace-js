@@ -2,6 +2,7 @@
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
+const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 const { assertLlmObsSpanEvent, MOCK_STRING, useLlmObs } = require('../../util')
 
@@ -26,6 +27,7 @@ function findServerSpan ({ apmSpans, llmobsSpans }, serverName, serverResource, 
 
 describe('integrations', () => {
   describe('modelcontextprotocol-sdk with @modelcontextprotocol/server 2.x', () => {
+    useEnv({ DD_MCP_ENRICHMENT_ENABLED: 'false' })
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/server', '>=2', version => {

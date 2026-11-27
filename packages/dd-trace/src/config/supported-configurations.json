@@ -133,9 +133,17 @@
     ],
     "DD_MCP_CAPTURE_INTENT": [
       {
+        "implementation": "B",
+        "type": "boolean",
+        "default": null,
+        "namespace": "mcp"
+      }
+    ],
+    "DD_MCP_ENRICHMENT_ENABLED": [
+      {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
+        "default": "true",
         "namespace": "mcp"
       }
     ],
