@@ -1,5 +1,7 @@
 'use strict'
 
+const ABSOLUTE_HTTP_ORIGIN = /^https?:\/\/[^/]*/i
+
 // Segments made up only of letters, hyphens and underscores carry no
 // request-specific value, so they survive quantization. Anything containing a
 // digit, a special character or a non-ASCII byte is replaced.
@@ -102,17 +104,19 @@ function quantizePath (path) {
 
 /**
  * Build an HTTP client span's resource name, appending a quantized path when
- * the feature is enabled. With OTel semantics enabled the call sites override
- * this with the OTel span name, as dd-trace-go does.
+ * the feature is enabled.
  *
  * @param {string} method upper-cased HTTP method
- * @param {string} path query-stripped request path
+ * @param {string} path request target without a query string or fragment
  * @param {boolean} [enabled] whether quantization is enabled
  */
 function clientResourceName (method, path, enabled) {
-  if (!enabled) return method
+  if (!enabled) {
+    return method
+  }
 
-  return `${method} ${quantizePath(path)}`
+  const pathname = path?.replace(ABSOLUTE_HTTP_ORIGIN, '')
+  return `${method} ${quantizePath(pathname)}`
 }
 
 module.exports = {

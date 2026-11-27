@@ -1,5 +1,7 @@
 'use strict'
 
+const { once } = require('node:events')
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -61,6 +63,20 @@ describe('Plugin', () => {
 
             http.get(`http://localhost:${port}/users/123`, res => res.resume())
           })
+        })
+
+        it('quantizes the destination path of an absolute-form request target', async () => {
+          const port = await new Promise(resolve => {
+            appListener = server(resolve)
+          })
+          const trace = agent.assertFirstTraceSpan({ resource: 'GET /users/*' })
+          const request = http.get({
+            hostname: 'localhost',
+            port,
+            path: 'http://example.test/users/123?view=full',
+          }, response => response.resume())
+
+          await Promise.all([trace, once(request, 'response')])
         })
 
         it('preserves API version segments', done => {

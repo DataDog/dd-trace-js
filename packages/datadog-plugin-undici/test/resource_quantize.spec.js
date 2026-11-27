@@ -2,6 +2,7 @@
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const satisfies = require('../../../vendor/dist/semifies')
 const { NODE_MAJOR } = require('../../../version')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -12,7 +13,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('undici-fetch', () => {
-    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', version => {
+    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
       describe('resource name quantization', () => {
         function server (app, listener) {
           const server = require('http').createServer(app)
@@ -78,6 +79,32 @@ describe('Plugin', () => {
 
               fetch.fetch(`http://localhost:${port}/users/123`, { method: 'GET' })
             })
+          })
+
+          it('quantizes the destination path of an absolute-form request target', async function () {
+            if (!satisfies(resolvedVersion, '>=4.7.0')) {
+              this.skip()
+              return
+            }
+
+            const port = await new Promise(resolve => {
+              appListener = server((req, res) => res.end(), resolve)
+            })
+            const client = new fetch.Client(`http://localhost:${port}`)
+
+            async function sendRequest () {
+              const { body } = await client.request({ method: 'GET', path: 'http://example.test/users/123?view=full' })
+              await body.text()
+            }
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ resource: 'GET /users/*' }),
+                sendRequest(),
+              ])
+            } finally {
+              await client.close()
+            }
           })
 
           it('keeps the query string out of the resource name', done => {

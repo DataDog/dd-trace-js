@@ -48,21 +48,22 @@ class Http2ClientPlugin extends ClientPlugin {
       ? `${sessionDetails.protocol}//REDACTED:REDACTED@${sessionDetails.host}:${sessionDetails.port}`
       : base
     const otelUri = sessionDetails.hasAuth ? `${otelBase}${pathname}` : uri
+    const resource = otelSemantics
+      ? otelHttpResourceName(method)
+      : clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
     const meta = {
       [COMPONENT]: this.constructor.id,
       [SPAN_KIND]: CLIENT,
-      'resource.name': clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE),
+      'resource.name': resource,
       'span.type': 'http',
       'http.method': method,
       'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, path, otelUri) : uri,
       'out.host': sessionDetails.host,
     }
     if (otelSemantics) {
-      const resource = otelHttpResourceName(method)
-      meta['resource.name'] = resource
       meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
     }
 
