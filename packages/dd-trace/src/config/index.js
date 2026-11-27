@@ -685,13 +685,11 @@ class Config extends ConfigBase {
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
-      // With OTLP, profiles go to the OTLP profiles endpoint instead of the agent.
+      // Without an agent, there's no agent destination for pprof profiles. With OTLP, the agent destination stands
+      // for the OTLP profiles endpoint, which agentless mode has.
       if (this.OTEL_PROFILES_EXPORTER !== 'otlp') {
         const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
         setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
-        if (profilingExporters.length === 0) {
-          setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
-        }
       }
     }
 
@@ -705,6 +703,18 @@ class Config extends ConfigBase {
         'profiling.DD_PROFILING_ENABLED',
         'Profiling is disabled, because OTEL_SDK_DISABLED=true disables the OpenTelemetry SDK, which exports ' +
           'profiles with OTEL_PROFILES_EXPORTER=otlp.',
+        'false'
+      )
+    }
+
+    // Without a destination, the profiler would collect profiles only to discard them, whichever their format
+    if (this.DD_PROFILING_EXPORTERS.length === 0) {
+      this.#deactivate(
+        'profiling.DD_PROFILING_ENABLED',
+        this.DD_AGENTLESS_ENABLED && this.OTEL_PROFILES_EXPORTER !== 'otlp'
+          ? 'Profiling is disabled, because agentless mode has no agent to send profiles to, and ' +
+            'DD_PROFILING_EXPORTERS lists no other destination.'
+          : 'Profiling is disabled, because DD_PROFILING_EXPORTERS lists no destination for profiles.',
         'false'
       )
     }

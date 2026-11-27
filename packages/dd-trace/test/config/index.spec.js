@@ -7172,6 +7172,32 @@ rules:
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     })
 
+    it('should explain why it disables explicitly enabled profiling without another destination', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'agentless-api-key'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      sinon.assert.calledOnceWithExactly(
+        logWriter.warn,
+        'DATADOG TRACER DIAGNOSTIC - Profiling is disabled, because agentless mode has no agent to send profiles ' +
+          'to, and DD_PROFILING_EXPORTERS lists no other destination.'
+      )
+    })
+
+    it('should keep profiling enabled in agentless mode with the file destination', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'agentless-api-key'
+      process.env.DD_PROFILING_ENABLED = 'true'
+      process.env.DD_PROFILING_EXPORTERS = 'agent,file'
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['file'])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    })
+
     it('should preserve an explicit trace sample rate', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_SAMPLE_RATE = '0.5'
@@ -7401,6 +7427,60 @@ rules:
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, undefined)
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS, undefined)
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
+    })
+  })
+
+  context('profiling destinations', () => {
+    for (const agentless of [false, true]) {
+      for (const otlp of [false, true]) {
+        const mode = `${agentless ? 'agentless' : 'agent'} mode with ${otlp ? 'OTLP' : 'pprof'} profiles`
+
+        it(`should disable profiling without any destination in ${mode}`, () => {
+          process.env.DD_TRACE_STARTUP_LOGS = 'true'
+          process.env.DD_PROFILING_ENABLED = 'true'
+          process.env.DD_PROFILING_EXPORTERS = ''
+          if (agentless) {
+            process.env.DD_AGENTLESS_ENABLED = 'true'
+            process.env.DD_API_KEY = 'agentless-api-key'
+          }
+          if (otlp) process.env.OTEL_PROFILES_EXPORTER = 'otlp'
+
+          const config = getConfig()
+
+          assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
+          assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+          assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'calculated')
+          sinon.assert.calledOnceWithExactly(
+            logWriter.warn,
+            agentless && !otlp
+              ? 'DATADOG TRACER DIAGNOSTIC - Profiling is disabled, because agentless mode has no agent to send ' +
+                'profiles to, and DD_PROFILING_EXPORTERS lists no other destination.'
+              : 'DATADOG TRACER DIAGNOSTIC - Profiling is disabled, because DD_PROFILING_EXPORTERS lists no ' +
+                'destination for profiles.'
+          )
+        })
+      }
+    }
+
+    it('should keep profiling enabled with the default destination', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.DD_PROFILING_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, ['agent'])
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      sinon.assert.notCalled(logWriter.warn)
+    })
+
+    it('should not explain anything when profiling is not enabled explicitly', () => {
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      process.env.DD_PROFILING_EXPORTERS = ''
+
+      const config = getConfig()
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      sinon.assert.notCalled(logWriter.warn)
     })
   })
 

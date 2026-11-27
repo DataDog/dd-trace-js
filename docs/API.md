@@ -997,7 +997,7 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 - `OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT` - Request timeout in milliseconds for profiles. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
 - `OTEL_SDK_DISABLED` - Disables profiling when profiles are exported with `OTEL_PROFILES_EXPORTER=otlp` (default: `false`)
 
-Profile collection is configured with the usual `DD_PROFILING_*` settings. `DD_PROFILING_EXPORTERS` still selects the destinations: with `OTEL_PROFILES_EXPORTER=otlp`, `agent` sends to the OTLP endpoint, and `file` writes the OTLP request to a file.
+Profile collection is configured with the usual `DD_PROFILING_*` settings. `DD_PROFILING_EXPORTERS` still selects the destinations: with `OTEL_PROFILES_EXPORTER=otlp`, `agent` sends to the OTLP endpoint, and `file` writes the OTLP request to a file. Profiling is disabled if no destination is listed.
 
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
