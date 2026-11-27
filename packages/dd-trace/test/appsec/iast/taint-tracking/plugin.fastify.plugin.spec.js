@@ -12,10 +12,10 @@ describe('Taint tracking plugin sources fastify tests', () => {
     prepareTestServerForIastInFastify('in fastify', version,
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {
-          function makePostRequest (done) {
-            httpRequest.post(`http://localhost:${config.port}/`, {
+          function makePostRequest () {
+            return httpRequest.post(`http://localhost:${config.port}/`, {
               command: 'echo 1',
-            }).catch(done)
+            })
           }
 
           testThatRequestHasVulnerability((req) => {
@@ -25,8 +25,8 @@ describe('Taint tracking plugin sources fastify tests', () => {
         })
 
         describe('tainted query param', () => {
-          function makeRequestWithQueryParam (done) {
-            httpRequest.get(`http://localhost:${config.port}/?command=echo`).catch(done)
+          function makeRequestWithQueryParam () {
+            return httpRequest.get(`http://localhost:${config.port}/?command=echo`)
           }
 
           testThatRequestHasVulnerability((req) => {
@@ -36,12 +36,12 @@ describe('Taint tracking plugin sources fastify tests', () => {
         })
 
         describe('tainted header', () => {
-          function makeRequestWithHeader (done) {
-            httpRequest.get(`http://localhost:${config.port}/`, {
+          function makeRequestWithHeader () {
+            return httpRequest.get(`http://localhost:${config.port}/`, {
               headers: {
                 'x-iast-test-command': 'echo 1',
               },
-            }).catch(done)
+            })
           }
 
           testThatRequestHasVulnerability((req) => {
@@ -51,10 +51,10 @@ describe('Taint tracking plugin sources fastify tests', () => {
         })
 
         describe('url parse taint tracking', () => {
-          function makePostRequest (done) {
-            httpRequest.post(`http://localhost:${config.port}/`, {
+          function makePostRequest () {
+            return httpRequest.post(`http://localhost:${config.port}/`, {
               url: 'http://www.datadoghq.com/',
-            }).catch(done)
+            })
           }
 
           testThatRequestHasVulnerability(
@@ -140,8 +140,8 @@ describe('Taint tracking plugin sources fastify tests', () => {
         })
 
         describe('tainted path parameters', () => {
-          function makeRequestWithPathParam (done) {
-            httpRequest.get(`http://localhost:${config.port}/?id=malicious-path`).catch(done)
+          function makeRequestWithPathParam () {
+            return httpRequest.get(`http://localhost:${config.port}/?id=malicious-path`)
           }
 
           testThatRequestHasVulnerability((req) => {

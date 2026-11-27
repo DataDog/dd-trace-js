@@ -41,8 +41,8 @@ describe('Unvalidated Redirect vulnerability', () => {
             path: redirectFunctionsFilename,
             line: 4,
           },
-        }, null, (done, config) => {
-          getAxiosInstance(config).get('/?location=https://app.com?id=tron').catch(done)
+        }, null, config => {
+          return getAxiosInstance(config).get('/?location=https://app.com?id=tron')
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -53,8 +53,8 @@ describe('Unvalidated Redirect vulnerability', () => {
             path: redirectFunctionsFilename,
             line: 8,
           },
-        }, null, (done, config) => {
-          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
+        }, null, config => {
+          return getAxiosInstance(config).get('/?location=http://user@app.com/')
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -65,8 +65,8 @@ describe('Unvalidated Redirect vulnerability', () => {
             path: redirectFunctionsFilename,
             line: 12,
           },
-        }, null, (done, config) => {
-          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
+        }, null, config => {
+          return getAxiosInstance(config).get('/?location=http://user@app.com/')
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -77,16 +77,16 @@ describe('Unvalidated Redirect vulnerability', () => {
             path: redirectFunctionsFilename,
             line: 12,
           },
-        }, null, (done, config) => {
-          getAxiosInstance(config).post('', {
+        }, null, config => {
+          return getAxiosInstance(config).post('', {
             location: 'http://user@app.com/',
-          }).catch(done)
+          })
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
           res.header('X-test', req.query.location)
-        }, UNVALIDATED_REDIRECT, (done, config) => {
-          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
+        }, UNVALIDATED_REDIRECT, config => {
+          return getAxiosInstance(config).get('/?location=http://user@app.com/')
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
@@ -95,12 +95,12 @@ describe('Unvalidated Redirect vulnerability', () => {
 
         testThatRequestHasNoVulnerability((req, res) => {
           redirectFunctions.insecureWithResLocationMethod(req.headers.redirectlocation, res)
-        }, UNVALIDATED_REDIRECT, (done, config) => {
-          getAxiosInstance(config).get('', {
+        }, UNVALIDATED_REDIRECT, config => {
+          return getAxiosInstance(config).get('', {
             headers: {
               redirectlocation: 'http://user@app.com/',
             },
-          }).catch(done)
+          })
         })
       })
   })

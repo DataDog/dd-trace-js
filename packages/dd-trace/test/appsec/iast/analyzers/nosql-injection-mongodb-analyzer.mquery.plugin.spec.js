@@ -91,8 +91,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
             })
 
@@ -117,8 +117,8 @@ describe('nosql injection detection with mquery', () => {
                 }
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
             })
 
@@ -134,8 +134,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
             })
 
@@ -152,8 +152,8 @@ describe('nosql injection detection with mquery', () => {
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               occurrences: 2,
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`)
               },
             })
 
@@ -170,8 +170,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`)
               },
             })
 
@@ -188,8 +188,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`)
               },
             })
 
@@ -207,8 +207,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value`)
               },
             })
 
@@ -226,8 +226,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
               occurrences: {
                 occurrences: 1,
@@ -252,8 +252,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
               occurrences: {
                 occurrences: 1,
@@ -278,8 +278,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value&key2=value2`)
               },
             })
 
@@ -325,8 +325,8 @@ describe('nosql injection detection with mquery', () => {
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?key=value`)
               },
             })
           })

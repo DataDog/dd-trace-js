@@ -49,12 +49,9 @@ describe('Code injection vulnerability', () => {
               res.send(require(evalFunctionsPath).runEval(req.query.script, 'test-result'))
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  assert.strictEqual(res.data, 'test-result')
-                })
-                .catch(done)
+            makeRequest: async config => {
+              const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+              assert.strictEqual(response.data, 'test-result')
             },
           })
 
@@ -76,8 +73,8 @@ describe('Code injection vulnerability', () => {
               res.send(`${require(evalFunctionsPath).runFakeEval(req.query.script)}`)
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
             },
           })
 
@@ -110,12 +107,9 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  assert.strictEqual(res.data, 3)
-                })
-                .catch(done)
+            makeRequest: async config => {
+              const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+              assert.strictEqual(response.data, 3)
             },
           })
 
@@ -149,12 +143,9 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  assert.strictEqual(res.data, 3)
-                })
-                .catch(done)
+            makeRequest: async config => {
+              const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+              assert.strictEqual(response.data, 3)
             },
           })
 
@@ -188,12 +179,9 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                .then(res => {
-                  assert.strictEqual(res.data, 3)
-                })
-                .catch(done)
+            makeRequest: async config => {
+              const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+              assert.strictEqual(response.data, 3)
             },
           })
 
@@ -228,12 +216,9 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?script=return%201%2B2`)
-                .then(res => {
-                  assert.strictEqual(res.data, 3)
-                })
-                .catch(done)
+            makeRequest: async config => {
+              const response = await httpRequest.get(`http://localhost:${config.port}/?script=return%201%2B2`)
+              assert.strictEqual(response.data, 3)
             },
           })
 
@@ -269,12 +254,9 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                  .then(res => {
-                    assert.strictEqual(res.data, 3)
-                  })
-                  .catch(done)
+              makeRequest: async config => {
+                const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+                assert.strictEqual(response.data, 3)
               },
             })
 
@@ -311,12 +293,9 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                  .then(res => {
-                    assert.strictEqual(res.data, 3)
-                  })
-                  .catch(done)
+              makeRequest: async config => {
+                const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+                assert.strictEqual(response.data, 3)
               },
             })
 
@@ -353,12 +332,9 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
-                  .then(res => {
-                    assert.strictEqual(res.data, 3)
-                  })
-                  .catch(done)
+              makeRequest: async config => {
+                const response = await httpRequest.get(`http://localhost:${config.port}/?script=1%2B2`)
+                assert.strictEqual(response.data, 3)
               },
             })
 

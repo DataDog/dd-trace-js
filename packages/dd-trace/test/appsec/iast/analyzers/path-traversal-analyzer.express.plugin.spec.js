@@ -49,11 +49,8 @@ describe('Path traversal analyzer', () => {
               },
               vulnerability: 'PATH_TRAVERSAL',
               occurrences: 1,
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?file=template`)
-                  .catch((err, ...args) => {
-                    done(err)
-                  })
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?file=template`)
               },
             })
 
@@ -65,9 +62,8 @@ describe('Path traversal analyzer', () => {
                 return true
               },
               vulnerability: 'PATH_TRAVERSAL',
-              makeRequest: (done, config) => {
-                httpRequest.get(`http://localhost:${config.port}/?file=template`)
-                  .catch(done)
+              makeRequest: config => {
+                return httpRequest.get(`http://localhost:${config.port}/?file=template`)
               },
             })
         })
