@@ -62,6 +62,21 @@ describe('Scheduler', () => {
       clock.tick(INTERVAL)
       sinon.assert.calledThrice(stub)
     })
+
+    for (const [minimumDelay, interval] of [[1000, INTERVAL], [21000, 21000]]) {
+      it(`waits ${interval}ms with a minimum delay of ${minimumDelay}ms`, () => {
+        const completions = []
+        stub.callsFake(callback => completions.push(callback))
+        scheduler.start()
+        clock.tick(1)
+        completions[0](minimumDelay)
+
+        clock.tick(interval - 1)
+        sinon.assert.calledOnce(stub)
+        clock.tick(1)
+        sinon.assert.calledTwice(stub)
+      })
+    }
   })
 
   describe('stop', () => {
@@ -101,7 +116,7 @@ describe('Scheduler', () => {
       clock.tick(1)
       sinon.assert.calledOnce(stub)
 
-      callbacks[0]()
+      callbacks[0](21000)
       clock.tick(1)
       sinon.assert.calledTwice(stub)
 

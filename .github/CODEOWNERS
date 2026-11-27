@@ -466,9 +466,11 @@
 /.github/renovate.json @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities
 /.github/pull_request_template.md @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/lang-platform-js
+/.github/workflows/remote-config-wasi.yml @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities @dd-octo-sts
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/openfeature.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/remote-config-wasm.js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities
 /benchmark/sirun/* @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
@@ -496,6 +498,7 @@
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/helpers/ @DataDog/lang-platform-js
 /scripts/test/integration-sandbox.spec.js @DataDog/lang-platform-js
+/scripts/test/remote-config-wasi.js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities
 /integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js

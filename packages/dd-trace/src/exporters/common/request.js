@@ -35,8 +35,16 @@ let activeBufferSize = 0
  *   retry?: boolean,
  *   deferTimeoutAbort?: boolean,
  *   keepProcessAlive?: boolean,
- *   includeErrorResponseBody?: boolean
+ *   includeErrorResponseBody?: boolean,
+ *   maxResponseBytes?: number,
+ *   responseType?: "buffer"
  * }} RequestOptions
+ */
+
+/**
+ * @template {Buffer|string|null} Response
+ * @typedef {(error: Error|null, result?: Response, statusCode?: number,
+ *   headers?: import("node:http").IncomingHttpHeaders, dropped?: boolean) => void} RequestCallback
  */
 
 /**
@@ -101,10 +109,21 @@ function prepareRequestOptions (options, contentLength) {
 }
 
 /**
+ * @overload
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {RequestOptions & { responseType: "buffer" }} options
+ * @param {RequestCallback<Buffer>} callback
+ */
+/**
+ * @overload
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {RequestOptions & { responseType?: undefined }} options
+ * @param {RequestCallback<string|null>} callback
+ */
+/**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {RequestOptions} options
- * @param {(error: Error|null, result?: string|null, statusCode?: number,
- *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
+ * @param {RequestCallback<Buffer|string|null>} callback
  */
 function request (data, options, callback) {
   if (data instanceof Readable) {
@@ -115,7 +134,11 @@ function request (data, options, callback) {
         chunks.push(data)
       })
       .on('end', () => {
-        request(Buffer.concat(chunks), options, callback)
+        if (options.responseType === 'buffer') {
+          request(Buffer.concat(chunks), { ...options, responseType: 'buffer' }, callback)
+        } else {
+          request(Buffer.concat(chunks), { ...options, responseType: undefined }, callback)
+        }
       })
       .on('error', (err) => {
         callback(err)
@@ -136,11 +159,11 @@ function request (data, options, callback) {
     return
   }
   const client = connectionOptions.protocol === 'https:' ? https : http
+  const useBuffer = options.responseType === 'buffer'
 
   /**
    * @param {import('node:http').IncomingMessage} res
-   * @param {(error: Error|null, result?: string|null, statusCode?: number,
-   *   headers?: import('node:http').IncomingHttpHeaders) => void} complete
+   * @param {RequestCallback<Buffer|string|null>} complete
    * @param {(error: Error) => void} handleError
    */
   const onResponse = (res, complete, handleError) => {
@@ -160,12 +183,37 @@ function request (data, options, callback) {
       handleError(error)
     })
 
-    res.on('data', chunk => {
-      chunks.push(chunk)
-    })
+    if (options.maxResponseBytes === undefined) {
+      res.on('data', chunk => chunks.push(chunk))
+    } else {
+      const maxResponseBytes = options.maxResponseBytes
+      let length = 0
+      res.on('data', chunk => {
+        length += chunk.length
+        if (length > maxResponseBytes) {
+          const error = new Error('Response exceeds the configured byte limit')
+          handleError(error)
+          res.destroy(error)
+        } else {
+          chunks.push(chunk)
+        }
+      })
+    }
 
     res.once('end', () => {
       const buffer = Buffer.concat(chunks)
+
+      if (useBuffer) {
+        const encoding = res.headers['content-encoding']
+        if (encoding?.toLowerCase() === 'gzip') {
+          zlib.gunzip(buffer, { maxOutputLength: options.maxResponseBytes }, (error, result) => {
+            complete(error, result, res.statusCode, res.headers)
+          })
+        } else {
+          complete(null, buffer, res.statusCode, res.headers)
+        }
+        return
+      }
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
         const contentEncoding = res.headers['content-encoding']
@@ -233,7 +281,7 @@ function request (data, options, callback) {
 
       /**
        * @param {Error | null} error
-       * @param {string | null} [result]
+       * @param {Buffer | string | null} [result]
        * @param {number} [statusCode]
        * @param {import('node:http').IncomingHttpHeaders} [headers]
        */

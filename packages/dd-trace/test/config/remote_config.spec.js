@@ -38,29 +38,21 @@ describe('Tracing Remote Config', () => {
     it('should register all APM tracing capabilities', () => {
       enable(rc, config, onConfigUpdated)
 
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
-      sinon.assert.calledWithExactly(
+      sinon.assert.calledOnceWithExactly(
         rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION,
+        RemoteConfigCapabilities.APM_TRACING_MULTICONFIG |
+        RemoteConfigCapabilities.APM_TRACING_ENABLED |
+        RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE |
+        RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES |
+        RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS |
+        RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS |
+        RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION |
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION |
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING |
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN |
+        RemoteConfigCapabilities.SDK_CONFIGURATION,
         true
       )
-      sinon.assert.calledWithExactly(
-        rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING,
-        true
-      )
-      sinon.assert.calledWithExactly(
-        rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN,
-        true
-      )
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.SDK_CONFIGURATION, true)
     })
 
     it('should register a single APM_TRACING batch handler', () => {
