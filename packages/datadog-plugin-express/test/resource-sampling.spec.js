@@ -15,6 +15,16 @@ const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const mountedResource = 'GET /api/:tenant/items/:id'
 const arrayResource = 'GET /items/:id'
 
+/**
+ * @param {import('node:http').ServerResponse} res
+ * @param {object} body
+ */
+function sendJson (res, body) {
+  // Early Express 4's res.json() reads private headers removed by Node 26.
+  res.setHeader('content-type', 'application/json')
+  res.end(JSON.stringify(body))
+}
+
 describe('Express resource sampling', () => {
   withVersions('express', 'express', (version, _name, resolvedVersion) => {
     const requireExpress = createRequire(require(`../../../versions/express@${version}`).getPath())
@@ -61,7 +71,7 @@ describe('Express resource sampling', () => {
       await loadRules('GET /api/items/:id')
       const app = express()
       const router = express.Router()
-      router.get('/items/:id', (req, res) => res.json({ priority: inject() }))
+      router.get('/items/:id', (req, res) => sendJson(res, { priority: inject() }))
       app.use('/api', router)
 
       const [propagated] = await Promise.all([
@@ -75,7 +85,7 @@ describe('Express resource sampling', () => {
       await loadRules('GET /api')
       const app = express()
       const router = express.Router()
-      router.get('/', (req, res) => res.json({ priority: inject() }))
+      router.get('/', (req, res) => sendJson(res, { priority: inject() }))
       app.use('/api', router)
 
       const [propagated] = await Promise.all([
@@ -93,7 +103,7 @@ describe('Express resource sampling', () => {
         req.propagatedPriority = inject()
         next()
       })
-      router.get('/items/:id', (req, res) => res.json({ priority: req.propagatedPriority }))
+      router.get('/items/:id', (req, res) => sendJson(res, { priority: req.propagatedPriority }))
       app.use('/api', router)
 
       assert.deepStrictEqual(await request(app, '/api/items/42'), { priority: '-1' })
@@ -104,7 +114,7 @@ describe('Express resource sampling', () => {
       const app = express()
       const router = express.Router()
       router.get('/skipped/:id', (req, res, next) => next('route'))
-      router.use((req, res) => res.json({ priority: inject() }))
+      router.use((req, res) => sendJson(res, { priority: inject() }))
       app.use('/api', router)
 
       assert.deepStrictEqual(await request(app, '/api/skipped/42'), { priority: '-1' })
@@ -120,7 +130,7 @@ describe('Express resource sampling', () => {
         })
         app.get('/probe/:productIdentifier', (req, res, next) => next('route'))
         app.get('/probe/:id', (req, res) => {
-          res.json({ priority: stage === 'handler' ? inject() : req.propagatedPriority })
+          sendJson(res, { priority: stage === 'handler' ? inject() : req.propagatedPriority })
         })
 
         const [propagated] = await Promise.all([
@@ -140,7 +150,7 @@ describe('Express resource sampling', () => {
         next()
       })
       app.get('/prefer/:id', (req, res, next) => next('route'))
-      app.get('/prefer/:productIdentifier', (req, res) => res.json({ priority: req.propagatedPriority }))
+      app.get('/prefer/:productIdentifier', (req, res) => sendJson(res, { priority: req.propagatedPriority }))
 
       const priority = semver.gte(resolvedVersion, '4.5.0') ? 2 : -1
       const [propagated] = await Promise.all([
@@ -155,7 +165,7 @@ describe('Express resource sampling', () => {
     it('preserves the published method-only resource in terminal middleware', async () => {
       await loadRules('POST')
       const app = express()
-      app.use((req, res) => res.json({ priority: inject() }))
+      app.use((req, res) => sendJson(res, { priority: inject() }))
 
       const priority = createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED ? 2 : -1
       const [propagated] = await Promise.all([
@@ -176,7 +186,7 @@ describe('Express resource sampling', () => {
         req.propagatedPriority = inject()
         next()
       })
-      router.get('/items/:id', (req, res) => res.json({ priority: req.propagatedPriority }))
+      router.get('/items/:id', (req, res) => sendJson(res, { priority: req.propagatedPriority }))
       app.use('/api/:tenant', router)
 
       const priority = semver.satisfies(resolvedVersion, '>=4.5.0') ? 2 : -1
@@ -241,7 +251,7 @@ describe('Express resource sampling', () => {
           if (stage === 'parameter callback') {
             app.get('/items/:id', (_req, _res, next) => next('route'))
             app.param('productId', delegateToKoa)
-            app.get('/items/:productId', (_req, res) => res.sendStatus(500))
+            app.get('/items/:productId', (_req, res) => res.status(500).end())
           } else {
             app.get('/items/:id', delegateToKoa)
           }
@@ -270,7 +280,7 @@ describe('Express resource sampling', () => {
         req.propagatedPriority = inject()
         next()
       })
-      app.get(['/unused', '/items/:id'], (req, res) => res.json({ priority: req.propagatedPriority }))
+      app.get(['/unused', '/items/:id'], (req, res) => sendJson(res, { priority: req.propagatedPriority }))
 
       const priority = hasNativeArraySelection ? 2 : -1
 
@@ -286,7 +296,7 @@ describe('Express resource sampling', () => {
     it('matches the reported resource during an array route handler', async () => {
       await loadRules(arrayResource)
       const app = express()
-      app.get(['/unused', '/items/:id'], (req, res) => res.json({ priority: inject() }))
+      app.get(['/unused', '/items/:id'], (req, res) => sendJson(res, { priority: inject() }))
 
       const priority = hasNativeArraySelection || createConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED ? '2' : '-1'
       assert.deepStrictEqual(await request(app, '/items/42'), { priority })
@@ -325,7 +335,7 @@ describe('Express resource sampling', () => {
           })
           router.get(routes, (req, res) => {
             const priority = stage === 'parameter callback' ? req.propagatedPriority : inject()
-            res.json({ lower: staticRoute ? '42' : req.params.lowercase, priority })
+            sendJson(res, { lower: staticRoute ? '42' : req.params.lowercase, priority })
           })
           app.use(router)
           registered = true
@@ -363,7 +373,7 @@ describe('Express resource sampling', () => {
         })
       })
       outer.get([['/items/:lowercase', '/alternatives/:alternate']], (req, res) => {
-        res.json({ params: req.params, priority: inject() })
+        sendJson(res, { params: req.params, priority: inject() })
       })
       app.use(outer)
 
@@ -393,8 +403,8 @@ describe('Express resource sampling', () => {
       await loadRules('GET /Items/:uppercase')
       const app = express()
       app.enable('case sensitive routing')
-      app.param('lowercase', (req, res, next, lower) => res.json({ lower, priority: inject() }))
-      app.get([['/Items/:uppercase', '/items/:lowercase']], (req, res) => res.sendStatus(500))
+      app.param('lowercase', (req, res, next, lower) => sendJson(res, { lower, priority: inject() }))
+      app.get([['/Items/:uppercase', '/items/:lowercase']], (req, res) => res.status(500).end())
       assert.deepStrictEqual(await request(app, '/items/42'), { lower: '42', priority: '-1' })
     })
 
@@ -406,7 +416,7 @@ describe('Express resource sampling', () => {
       const pattern = /^\/items\/([0-9]+)$/g
       await loadRules(`GET (${pattern})`)
       const app = express()
-      app.get([pattern, '/unused'], (req, res) => res.json({ priority: inject() }))
+      app.get([pattern, '/unused'], (req, res) => sendJson(res, { priority: inject() }))
 
       assert.deepStrictEqual(await request(app, '/items/42'), { priority: '-1' })
       const url = 'http://127.0.0.1:' + server.address().port + '/items/42'
@@ -429,7 +439,7 @@ describe('Express resource sampling', () => {
         next()
       })
       app.get(['/unused', pattern], (req, res) => {
-        res.json({ priority: req.propagatedPriority, capture: req.observedCapture })
+        sendJson(res, { priority: req.propagatedPriority, capture: req.observedCapture })
       })
 
       const priority = hasNativeArraySelection ? 2 : -1
@@ -454,7 +464,7 @@ describe('Express resource sampling', () => {
         next()
       })
       app.get('*', (req, res) => {
-        res.json({ priority: req.propagatedPriority, capture: req.params[0] })
+        sendJson(res, { priority: req.propagatedPriority, capture: req.params[0] })
       })
 
       const [propagated] = await Promise.all([
@@ -472,7 +482,7 @@ describe('Express resource sampling', () => {
         req.propagatedPriority = inject()
         next()
       })
-      app.get('/items/:id', (req, res) => res.json({ priority: req.propagatedPriority }))
+      app.get('/items/:id', (req, res) => sendJson(res, { priority: req.propagatedPriority }))
 
       const [propagated] = await Promise.all([
         request(app, '/items/42'),
@@ -489,7 +499,7 @@ describe('Express resource sampling', () => {
         req.propagatedPriority = inject()
         next()
       })
-      router.get('/items/:id', (req, res) => res.json({ priority: req.propagatedPriority }))
+      router.get('/items/:id', (req, res) => sendJson(res, { priority: req.propagatedPriority }))
       app.use('/api/:tenant', router)
 
       assert.deepStrictEqual(await request(app, '/api/acme/items/42'), { priority: '-1' })
@@ -508,7 +518,7 @@ describe('Express resource sampling', () => {
          * @param {import('express').Response} res
          */
         function propagate (_req, res) {
-          res.json({ priority: inject() })
+          sendJson(res, { priority: inject() })
         }
 
         if (destination === 'middleware') {
@@ -545,10 +555,10 @@ describe('Express resource sampling', () => {
     it('does not sample a parameterized route after res.format forwards an error', async () => {
       await loadRules('GET /items/:id')
       const app = express()
-      app.param('id', (req, res) => res.format({ 'text/plain': () => res.send('unexpected') }))
-      app.get('/items/:id', (req, res) => res.json({ priority: inject() }))
+      app.param('id', (req, res) => res.format({ 'text/plain': () => res.end('unexpected') }))
+      app.get('/items/:id', (req, res) => sendJson(res, { priority: inject() }))
       app.use((error, req, res, next) => {
-        res.json({ status: error.status ?? error.statusCode, priority: inject() })
+        sendJson(res, { status: error.status ?? error.statusCode, priority: inject() })
       })
 
       const response = await request(app, '/items/42', 'GET', { accept: 'application/json' })
@@ -563,10 +573,10 @@ describe('Express resource sampling', () => {
       await loadRules('GET /api/items/:id')
       const app = express()
       const router = express.Router()
-      router.param('id', (req, res) => res.format({ 'text/plain': () => res.send('unexpected') }))
+      router.param('id', (req, res) => res.format({ 'text/plain': () => res.end('unexpected') }))
       router.get('/items/:id', (req, res) => res.status(500).end())
       app.use('/api', (req, res) => router(req, res, error => {
-        res.json({ status: error.status ?? error.statusCode, priority: inject() })
+        sendJson(res, { status: error.status ?? error.statusCode, priority: inject() })
       }))
 
       const response = await request(app, '/api/items/42', 'GET', { accept: 'application/json' })
@@ -580,8 +590,8 @@ describe('Express resource sampling', () => {
       const app = express()
       const Router = require('../../../versions/router@2.2.0').get()
       const router = Router()
-      router.param('inner', (req, res, next, id) => res.json({ id, priority: inject() }))
-      router.get(['/unused/:inner', '/items/:inner'], (req, res) => res.sendStatus(500))
+      router.param('inner', (req, res, next, id) => sendJson(res, { id, priority: inject() }))
+      router.get(['/unused/:inner', '/items/:inner'], (req, res) => res.status(500).end())
       app.use(router)
 
       const [propagated] = await Promise.all([
@@ -639,7 +649,7 @@ describe('Express resource sampling', () => {
                 return next('route')
               }
               if (fallthrough === 'handler') return next('route')
-              res.json({ id, priority: inject() })
+              sendJson(res, { id, priority: inject() })
             })
           }
 
@@ -647,15 +657,15 @@ describe('Express resource sampling', () => {
             router(req, res, error => {
               assert.ifError(error)
               if (resumesHandler) return next()
-              res.json({ id, priority: inject() })
+              sendJson(res, { id, priority: inject() })
             })
           }
 
           if (outerPhase === 'parameter') {
             app.param('id', delegate)
             app.get('/items/:id', (req, res) => {
-              if (resumesHandler) return res.json({ id: req.params.id, priority: inject() })
-              res.sendStatus(500)
+              if (resumesHandler) return sendJson(res, { id: req.params.id, priority: inject() })
+              res.status(500).end()
             })
           } else {
             app.get('/items/:id', delegate)
@@ -681,8 +691,8 @@ describe('Express resource sampling', () => {
         await loadRules(resource)
         const app = express()
         const router = mount ? express.Router() : app
-        router.param('id', (req, res) => res.json({ priority: inject() }))
-        router.get('/items/:id', (req, res) => res.send('unexpected'))
+        router.param('id', (req, res) => sendJson(res, { priority: inject() }))
+        router.get('/items/:id', (req, res) => res.end('unexpected'))
         if (mount) {
           app.use(mount, router)
         }
@@ -706,9 +716,9 @@ describe('Express resource sampling', () => {
       const app = express()
       app.param('id', (req, res) => {
         tracer.scope().active().setTag('http.route', '/manual')
-        res.json({ priority: inject() })
+        sendJson(res, { priority: inject() })
       })
-      app.get('/items/:id', (req, res) => res.send('unexpected'))
+      app.get('/items/:id', (req, res) => res.end('unexpected'))
 
       const [propagated] = await Promise.all([
         request(app, '/items/42'),

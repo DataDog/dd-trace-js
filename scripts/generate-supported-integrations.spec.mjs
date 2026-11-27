@@ -87,7 +87,7 @@ describe('generate supported integrations', () => {
       ]),
       getPackageVersions: dependency => {
         assert.strictEqual(dependency, 'express')
-        return Promise.resolve(['4.0.0', '4.22.1', '5.2.1', '6.0.0'])
+        return Promise.resolve(['4.0.0', '4.5.0', '4.22.1', '5.2.1', '6.0.0'])
       },
     })
 
@@ -100,13 +100,13 @@ describe('generate supported integrations', () => {
           node: ['26.2.0'],
         },
         supportedRange: '>=4 <6',
-        tested: ['4.0.0', '4.22.1', '5.2.1'],
+        tested: ['4.0.0', '4.5.0', '4.22.1', '5.2.1'],
       }, {
         testedRuntimes: {
           node: ['18.20.8'],
         },
         supportedRange: '>=4 <5',
-        tested: ['4.0.0', '4.22.1'],
+        tested: ['4.0.0', '4.5.0', '4.22.1'],
       }],
     }])
   })
@@ -158,7 +158,7 @@ describe('generate supported integrations', () => {
           { versions: ['>=5.0.0'] },
         ]]])],
       ]),
-      getPackageVersions: () => Promise.resolve(['4.0.0', '4.2.0', '4.3.0', '4.22.1', '5.0.0', '5.2.1']),
+      getPackageVersions: () => Promise.resolve(['4.0.0', '4.2.0', '4.3.0', '4.5.0', '4.22.1', '5.0.0', '5.2.1']),
     })
 
     assert.strictEqual(rows[0].versions[0].supportedRange, '>=4')
@@ -174,7 +174,7 @@ describe('generate supported integrations', () => {
           { versions: ['>=4 <5'] },
         ]]])],
       ]),
-      getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
+      getPackageVersions: () => Promise.resolve(['4.0.0', '4.5.0', '4.22.1']),
     })
 
     assert.strictEqual(rows[0].versions[0].supportedRange, '4')
@@ -200,7 +200,7 @@ describe('generate supported integrations', () => {
       ],
       plugins: new Map([['express', 'express']]),
       instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { express: declarations }),
-      getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
+      getPackageVersions: () => Promise.resolve(['4.0.0', '4.5.0', '4.22.1']),
     })
 
     assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.2.0'])
