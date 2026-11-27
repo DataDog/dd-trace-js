@@ -3,10 +3,11 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 
 const shimmer = require('../../datadog-shimmer')
-const { callRequestHandler } = require('./modelcontextprotocol-sdk')
+const { callRequestHandler, managedToolResolver, trackManagedToolHandlers } = require('./modelcontextprotocol-sdk')
 
 const wrapHandlerCh = tracingChannel('orchestrion:@modelcontextprotocol/server:Server__wrapHandler')
 const registerToolCh = tracingChannel('orchestrion:@modelcontextprotocol/server:McpServer_registerTool')
+const setToolHandlersCh = tracingChannel('orchestrion:@modelcontextprotocol/server:McpServer_setToolRequestHandlers')
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
 const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
@@ -22,9 +23,13 @@ wrapHandlerCh.end.subscribe(ctx => {
   ctx.result = shimmer.wrapFunction(handler, handler => function tracedRequestHandler (request, extra) {
     if (!serverRequestCh.hasSubscribers) return handler.apply(this, arguments)
 
-    const requestCtx = { request, extra, server }
+    const requestCtx = { request, extra, server, managedToolResolver }
     return serverRequestCh.tracePromise(callRequestHandler, requestCtx, undefined, requestCtx, handler, this, arguments)
   })
+})
+
+setToolHandlersCh.end.subscribe(ctx => {
+  if (!ctx.error) trackManagedToolHandlers(ctx.self)
 })
 
 // Tool objects are created at runtime, so their `update` method is wrapped to follow renames.

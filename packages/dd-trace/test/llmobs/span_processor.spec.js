@@ -443,7 +443,7 @@ describe('span processor', () => {
       assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
 
-    it('forwards the intent to the payload', () => {
+    function processToolIntent () {
       span = {
         context () {
           return {
@@ -460,12 +460,30 @@ describe('span processor', () => {
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'tool',
         '_ml_obs.meta.intent': 'Check the weather',
+        '_ml_obs.meta.input.value': 'Paris',
+        '_ml_obs.meta.output.value': 'sunny',
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      return writer.append.getCall(0).firstArg
+    }
 
+    it('forwards the intent to the payload', () => {
+      const payload = processToolIntent()
       assert.strictEqual(payload.meta.intent, 'Check the weather')
+    })
+
+    it('omits intent when a user processor redacts inputs and outputs', () => {
+      processor.setUserSpanProcessor(span => {
+        span.input[0].content = '[redacted]'
+        span.output[0].content = '[redacted]'
+        return span
+      })
+
+      const { meta } = processToolIntent()
+      assert.strictEqual(meta.input.value, '[redacted]')
+      assert.strictEqual(meta.output.value, '[redacted]')
+      assert.strictEqual(Object.hasOwn(meta, 'intent'), false)
     })
 
     it('preserves existing span event metadata _dd fields when setting cost tags', () => {

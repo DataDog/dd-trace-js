@@ -98,10 +98,13 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     if (!ctx.llmobs || !this._tracerConfig.mcp?.DD_MCP_CAPTURE_INTENT) return
 
     const method = ctx.request?.method
-    if (method === 'tools/list') {
-      ctx.transformResult = injectTelemetrySchema
-    } else if (method === 'tools/call') {
-      const stripped = stripTelemetry(ctx.request)
+    const isList = method === 'tools/list'
+    const getTool = (isList || method === 'tools/call') && ctx.managedToolResolver(ctx.server)
+    if (!getTool) return
+    if (isList) {
+      ctx.transformResult = result => injectTelemetrySchema(result, getTool)
+    } else {
+      const stripped = stripTelemetry(ctx.request, getTool)
       if (!stripped) return
       ctx.request = stripped.request
       ctx.llmobs.intent = stripped.intent

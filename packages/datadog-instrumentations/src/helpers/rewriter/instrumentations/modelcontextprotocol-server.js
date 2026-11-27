@@ -19,5 +19,6 @@ function entry (className, methodName, kind) {
 module.exports = [
   entry('Server', '_wrapHandler', 'Sync'),
   entry('McpServer', 'registerTool', 'Sync'),
+  entry('McpServer', 'setToolRequestHandlers', 'Sync'),
   entry('McpServer', 'executeToolHandler', 'Async'),
 ]
