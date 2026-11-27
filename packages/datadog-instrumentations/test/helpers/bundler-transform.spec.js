@@ -110,6 +110,28 @@ describe('bundler transform', () => {
     assert.strictEqual(result.map, sourceMap)
   })
 
+  it('preserves ESM export interception when the rewrite needs an existing hook', () => {
+    const projectDir = createProject()
+    const packageName = 'esm-rewrite-package'
+    const esm = createPackage(projectDir, packageName, { type: 'module', version: '1.0.0' })
+    const source = 'export default true\n'
+    const resourcePath = write(esm, 'index.js', source)
+    const instrumentations = {}
+    const hooks = {
+      [packageName] () {
+        instrumentations[packageName] = [{ versions: ['1'] }]
+      },
+    }
+    const rewriteTarget = () => ({ moduleName: packageName, filePath: 'index.js', esmHook: true })
+    const rewrite = sinon.stub().returns({ code: source + '// rewritten\n' })
+    const { classify, instrument } = loadHelper({ hooks, instrumentations, rewrite, rewriteTarget })
+
+    assert.equal(classify({ resourcePath, request: packageName }), 'esm-intercept')
+    const result = instrument({ source, resourcePath })
+    assert.ok(result)
+    assert.match(result.code, /\/\/ rewritten/)
+  })
+
   it('fails open with a warning for unsafe CJS activation', () => {
     const projectDir = createProject()
     const rewritten = createPackage(projectDir, 'rewritten-package', { version: '1.0.0' })

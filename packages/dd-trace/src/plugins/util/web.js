@@ -8,6 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
+const { httpResourceName, joinRoute, trackSamplingContext } = require('../../http-resource')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
@@ -148,6 +149,15 @@ const web = {
     }
   },
 
+  /**
+   * @param {import('../../http-resource').HttpResourceSource & { span: import('../../opentracing/span') }} context
+   * @param {import('../../http-resource').RouteReader} reader
+   */
+  setSamplingRouteReader (context, reader) {
+    context.samplingRouteReader = reader
+    trackSamplingContext(context.span.context(), context)
+  },
+
   setRoute (req, path) {
     const context = contexts.get(req)
 
@@ -160,13 +170,14 @@ const web = {
 
     const spanContext = context.span.context()
     const currentRoute = spanContext.getTag(HTTP_ROUTE)
-    const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
+    const publishedRoute = joinRoute(context.paths)
     context.paths = [path]
     // Publish before finish because downstream requests can trigger sampling inside the handler.
     // Replace only values this context owns, so an upstream route still wins.
     let route = currentRoute
     if (currentRoute === undefined || currentRoute === publishedRoute) {
       route = path
+      if (context.samplingRouteReader) context.generatedRoute = path
       context.span.setTag(HTTP_ROUTE, path)
     }
     if (ownsResource(spanContext)) {
@@ -345,6 +356,7 @@ const web = {
 
     context.config.hooks.request(context.span, req, res)
     addResourceTag(context)
+    if (context.samplingRouteReader) context.samplingRouteReader = undefined
 
     context.span.finish()
     context.finished = true
@@ -597,7 +609,7 @@ function applyRouteOrEndpointTag (context) {
 
   // Skip the `Array.prototype.join` builtin in the empty / single-segment
   // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
-  const route = paths.length > 1 ? paths.join('') : paths[0]
+  const route = joinRoute(paths)
 
   if (route) {
     // A framework route supersedes any http.endpoint fallback a pre-finish
@@ -633,11 +645,7 @@ function addResourceTag (context) {
   if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
     if (currentResource) return
 
-    let resource = req.method
-    const route = spanContext.getTag(HTTP_ROUTE)
-
-    if (route) resource += ` ${route}`
-    span.setTag(RESOURCE_NAME, resource)
+    span.setTag(RESOURCE_NAME, httpResourceName(req.method, spanContext.getTag(HTTP_ROUTE)))
     return
   }
 

@@ -161,7 +161,7 @@ function getTarget (inputPath, includeEsmHooks, request) {
   let publications = []
   if (!packageInfo.esm) {
     publications = getPublications(resourcePath, packageInfo)
-  } else if (includeEsmHooks && !rewriteTarget) {
+  } else if (includeEsmHooks && (!rewriteTarget || rewriteTarget.esmHook)) {
     // instrument() cannot intercept ESM exports, so only classification loads ESM hooks; the
     // bundler that requested it is responsible for intercepting 'esm-intercept' modules.
     publications = getPublications(resourcePath, packageInfo, request)
@@ -169,10 +169,12 @@ function getTarget (inputPath, includeEsmHooks, request) {
 
   /** @type {Classification} */
   let kind = 'none'
-  if (rewriteTarget) {
+  if (packageInfo.esm && publications.length > 0) {
+    kind = 'esm-intercept'
+  } else if (rewriteTarget) {
     kind = 'orchestrion-rewrite'
   } else if (publications.length > 0) {
-    kind = packageInfo.esm ? 'esm-intercept' : 'cjs-publication'
+    kind = 'cjs-publication'
   }
   return { kind, nativeResourcePath, resourcePath, packageInfo, publications, rewriteTarget }
 }

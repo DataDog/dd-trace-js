@@ -1,7 +1,10 @@
 'use strict'
 
+const { isProxy } = require('node:util').types
+
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
+const { routerMiddleware, middlewareRoute } = require('./helpers/koa-router-metadata')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const exitChannel = channel('apm:koa:middleware:exit')
@@ -12,16 +15,89 @@ const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
 const publishError = createErrorPublisher(errorChannel)
 
-const originals = new WeakMap()
+/** @type {WeakMap<Function, unknown>} */
+const allowedMethodsOptions = new WeakMap()
+const defaultAllowedMethodsOptions = {}
+const allowedMethodsErrors = ['notImplemented', 'methodNotAllowed']
+/** @type {WeakMap<Function, Function[]>} */
+const callbackStacks = new WeakMap()
 
-function wrapCallback (callback) {
+channel('tracing:orchestrion:koa:callback:end').subscribe(({ handleRequest, stack }) => {
+  callbackStacks.set(handleRequest, stack)
+})
+
+for (const name of ['koa-router', '@koa/router']) {
+  channel(`tracing:orchestrion:${name}:allowedMethods:end`).subscribe(({ arguments: args, result }) => {
+    if (typeof result === 'function') {
+      allowedMethodsOptions.set(result, args[0] || defaultAllowedMethodsOptions)
+    }
+  })
+}
+
+/**
+ * @param {object} options
+ * @param {object | null} prototype
+ * @param {string} name
+ */
+function getMethodOption (options, prototype, name) {
+  return Object.getOwnPropertyDescriptor(options, name) ??
+    (prototype ? Object.getOwnPropertyDescriptor(prototype, name) : undefined)
+}
+
+/** @param {unknown} options */
+function usesDefaultMethodErrors (options) {
+  if (!options || typeof options !== 'object' || isProxy(options)) return false
+
+  const prototype = Object.getPrototypeOf(options)
+  if (prototype !== null && prototype !== Object.prototype) return false
+
+  // Inspect the live options without invoking application getters or error factories.
+  const throwOption = getMethodOption(options, prototype, 'throw')
+  if (!throwOption) return true
+  if (!Object.hasOwn(throwOption, 'value')) return false
+  if (!throwOption.value) return true
+
+  for (const name of allowedMethodsErrors) {
+    const option = getMethodOption(options, prototype, name)
+    if (option && (!Object.hasOwn(option, 'value') || typeof option.value === 'function')) return false
+  }
+  return true
+}
+
+/**
+ * @param {Function} callback
+ * @param {boolean} hasFixedCompose
+ */
+function wrapCallback (callback, hasFixedCompose) {
   return function callbackWithTrace (...args) {
+    let stack = hasFixedCompose ? this.middleware : undefined
     const handleRequest = callback.apply(this, args)
+    if (!hasFixedCompose) {
+      stack = callbackStacks.get(handleRequest)
+      callbackStacks.delete(handleRequest)
+    }
 
-    if (typeof handleRequest !== 'function') return handleRequest
+    /** @type {((middleware: Function) => boolean) | undefined} */
+    let isFinalRouteStage
+    if (stack !== undefined) {
+      isFinalRouteStage = middleware => {
+        for (let index = stack.length - 1; index >= 0; index--) {
+          const stage = stack[index]
+          if (stage === middleware) {
+            return true
+          }
+          if (!usesDefaultMethodErrors(allowedMethodsOptions.get(stage))) {
+            break
+          }
+        }
+        return false
+      }
+    }
 
     return function handleRequestWithTrace (req, res) {
-      handleChannel.publish({ req, res })
+      if (handleChannel.hasSubscribers) {
+        handleChannel.publish({ req, res, isFinalRouteStage })
+      }
 
       return handleRequest.apply(this, arguments)
     }
@@ -32,10 +108,15 @@ function wrapUse (use) {
   return function useWithTrace (...args) {
     const result = use.apply(this, args)
 
-    if (Array.isArray(this.middleware)) {
-      const fn = this.middleware.pop()
-
-      this.middleware.push(wrapMiddleware(fn))
+    const stack = this.middleware
+    if (Array.isArray(stack)) {
+      const native = stack.pop()
+      const handler = wrapMiddleware(native)
+      stack.push(handler)
+      const options = allowedMethodsOptions.get(native)
+      if (options !== undefined) {
+        allowedMethodsOptions.set(handler, options)
+      }
     }
 
     return result
@@ -54,9 +135,10 @@ function wrapRegister (register) {
   }
 }
 
-function wrapRouterUse (use) {
-  return function useWithTrace (...args) {
-    const router = use.apply(this, args)
+/** @param {Function} update */
+function wrapRouterStackUpdate (update) {
+  return function updateWithTrace (...args) {
+    const router = update.apply(this, args)
 
     for (const layer of router.stack) {
       wrapStack(layer)
@@ -70,13 +152,11 @@ function wrapStack (layer) {
   layer.stack = layer.stack.map(middleware => {
     if (typeof middleware !== 'function') return middleware
 
-    const original = originals.get(middleware)
-
-    middleware = original || middleware
+    middleware = routerMiddleware.get(middleware)?.original ?? middleware
 
     const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
 
-    originals.set(handler, middleware)
+    routerMiddleware.set(handler, { original: middleware, layer })
 
     return handler
   })
@@ -87,16 +167,12 @@ function wrapMiddleware (fn, layer) {
 
   const name = fn.name
 
-  return shimmer.wrapFunction(fn, fn => function (ctx, next) {
+  const handler = shimmer.wrapFunction(fn, fn => function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
     const req = ctx.req
 
-    const path = layer && layer.path
-    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') &&
-      !path.includes('(?:') && path
-
-    enterChannel.publish({ req, name, route })
+    enterChannel.publish({ req, name, route: middlewareRoute(layer), context: ctx, middleware: handler })
 
     if (typeof next === 'function') {
       arguments[1] = wrapNext(req, next)
@@ -126,6 +202,8 @@ function wrapMiddleware (fn, layer) {
       exitChannel.publish({ req })
     }
   })
+
+  return handler
 }
 
 function fulfill (ctx, error) {
@@ -152,8 +230,9 @@ function wrapNext (req, next) {
   })
 }
 
-addHook({ name: 'koa', versions: ['>=2'] }, Koa => {
-  shimmer.wrap(Koa.prototype, 'callback', wrapCallback)
+addHook({ name: 'koa', versions: ['>=2'] }, (Koa, version) => {
+  const hasFixedCompose = version.startsWith('2.')
+  shimmer.wrap(Koa.prototype, 'callback', callback => wrapCallback(callback, hasFixedCompose))
   shimmer.wrap(Koa.prototype, 'use', wrapUse)
 
   return Koa
@@ -161,14 +240,16 @@ addHook({ name: 'koa', versions: ['>=2'] }, Koa => {
 
 addHook({ name: '@koa/router', versions: ['>=8'] }, Router => {
   shimmer.wrap(Router.prototype, 'register', wrapRegister)
-  shimmer.wrap(Router.prototype, 'use', wrapRouterUse)
+  shimmer.wrap(Router.prototype, 'use', wrapRouterStackUpdate)
+  shimmer.wrap(Router.prototype, 'param', wrapRouterStackUpdate)
 
   return Router
 })
 
 addHook({ name: 'koa-router', versions: ['>=7'] }, Router => {
   shimmer.wrap(Router.prototype, 'register', wrapRegister)
-  shimmer.wrap(Router.prototype, 'use', wrapRouterUse)
+  shimmer.wrap(Router.prototype, 'use', wrapRouterStackUpdate)
+  shimmer.wrap(Router.prototype, 'param', wrapRouterStackUpdate)
 
   return Router
 })

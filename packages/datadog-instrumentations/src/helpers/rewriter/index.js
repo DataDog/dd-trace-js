@@ -207,6 +207,7 @@ function createMatcher (dcModule) {
     postgresQueryLifecycle,
     postgresQueryPreparation,
   } = require('./transforms/postgres')
+  const { publishKoaCallback, publishKoaRouterDispatch } = require('./transforms/koa')
 
   const matcher = create(instrumentations, dcModule)
 
@@ -218,6 +219,8 @@ function createMatcher (dcModule) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('publishKoaCallback', publishKoaCallback)
+  matcher.addTransform('publishKoaRouterDispatch', publishKoaRouterDispatch)
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
   matcher.addTransform('postgresNativeCopy', postgresNativeCopy)
   matcher.addTransform('postgresNativePreparation', postgresNativePreparation)

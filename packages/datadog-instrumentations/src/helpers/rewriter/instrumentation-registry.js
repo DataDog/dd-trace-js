@@ -17,6 +17,7 @@
  *
  * @typedef {object} InstrumentationRegistryEntry
  * @property {true|ActivationConfig} [activate]
+ * @property {string[]} [esmHooks] - Keep the bundler's ESM export interception for these rewrite targets.
  * @property {Array<{ module: { name: string } }>} instrumentations
  */
 
@@ -41,6 +42,7 @@ const registry = [
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { instrumentations: require('./instrumentations/jest') },
+  { esmHooks: ['@koa/router'], instrumentations: require('./instrumentations/koa') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
@@ -141,6 +143,12 @@ function resolveActivationModules (modules, rewriteModules) {
 }
 
 const instrumentations = registry.flatMap(entry => entry.instrumentations)
+const esmHooks = new Set(registry.flatMap(entry => entry.esmHooks ?? []))
+
+/** @param {string} moduleName */
+function needsEsmHook (moduleName) {
+  return esmHooks.has(moduleName)
+}
 
 /**
  * @param {string} moduleName
@@ -157,4 +165,4 @@ function getActivationSetup (moduleName) {
   return activationSetups.get(moduleName)
 }
 
-module.exports = { getActivationSetup, isRewriteActivationEnabled, instrumentations, registry }
+module.exports = { getActivationSetup, isRewriteActivationEnabled, instrumentations, needsEsmHook, registry }

@@ -45,7 +45,7 @@ describe('koa instrumentation (unit)', () => {
     FakeKoa.prototype.use = function (fn) { this.middleware.push(fn) }
     FakeKoa.prototype.callback = function () {}
 
-    koaHook(FakeKoa)
+    koaHook(FakeKoa, '2.0.0')
 
     const app = new FakeKoa()
     app.use(function thrower () { throw new Error('boom') })
