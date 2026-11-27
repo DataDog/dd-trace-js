@@ -297,8 +297,10 @@ describe('CiPlugin', () => {
 
   it('disables advanced features for basic-reporting library configuration requests', () => {
     const libraryConfig = {
+      isCodeCoverageEnabled: true,
       isEarlyFlakeDetectionEnabled: true,
       isFlakyTestRetriesEnabled: true,
+      isItrEnabled: true,
       isSuitesSkippingEnabled: true,
       isTestManagementEnabled: true,
     }
@@ -325,6 +327,7 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.libraryConfig, {})
     assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
     assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.strictEqual(onDone.firstCall.args[0].isLineCoverageAllowed, false)
     assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
@@ -370,6 +373,7 @@ describe('CiPlugin', () => {
       isSuitesSkippingEnabled: false,
     })
     assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, plugin.libraryConfig)
+    assert.strictEqual(onDone.firstCall.args[0].isLineCoverageAllowed, true)
     assert.deepStrictEqual(addMetadataTags.firstCall.args[0], {
       test: {
         [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: undefined,
@@ -385,6 +389,28 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
   })
+
+  for (const libraryConfig of [
+    { isCodeCoverageEnabled: true, isItrEnabled: false },
+    { isCodeCoverageEnabled: false, isItrEnabled: true },
+  ]) {
+    it(`does not allow line coverage for settings ${JSON.stringify(libraryConfig)}`, () => {
+      const onDone = sinon.stub()
+      const plugin = createPlugin('vitest_worker', true)
+      plugin.tracer._exporter.getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+      plugin.tracer._exporter.addMetadataTags = sinon.stub()
+
+      dc.channel('ci:vitest:library-configuration').publish({
+        disableTestImpactAnalysis: true,
+        frameworkVersion: '5.1.0',
+        onDone,
+      })
+      plugin.configure(false)
+
+      sinon.assert.calledOnce(onDone)
+      assert.strictEqual(onDone.firstCall.args[0].isLineCoverageAllowed, false)
+    })
+  }
 
   it('tags telemetry with the effective test framework', () => {
     const exportTelemetry = sinon.stub()

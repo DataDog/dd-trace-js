@@ -8,6 +8,7 @@ const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -59,6 +60,7 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const workerProcesses = new WeakSet()
@@ -84,6 +86,7 @@ let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
 let isCodeCoverageEnabled = false
+let isLineCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isSessionCodeCoverageEnabled = false
 let isSessionSuitesSkippingEnabled = false
@@ -409,6 +412,7 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
   if (!Array.isArray(testSpecifications)) {
     setProvidedContext(ctx, {
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddIsLineCoverageEnabled: isLineCoverageEnabled,
     }, 'Could not send TIA configuration to workers.')
     return testSpecifications
   }
@@ -423,6 +427,7 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
     areAllSuitesSkipped = hasSelectedSuites && !hasRunnableSuites
     setProvidedContext(ctx, {
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddIsLineCoverageEnabled: isLineCoverageEnabled,
     }, 'Could not send TIA configuration to workers.')
     return testSpecifications
   }
@@ -463,6 +468,7 @@ function applySuiteSkipping (ctx, testSpecifications, frameworkVersion) {
 
   setProvidedContext(ctx, {
     _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+    _ddIsLineCoverageEnabled: isLineCoverageEnabled,
     _ddItrCorrelationId: itrCorrelationId,
     _ddUnskippableSuites: unskippableSuites,
     _ddForcedToRunSuites: forcedToRunSuites,
@@ -650,6 +656,7 @@ function resetLibraryConfig () {
   isTestManagementTestsEnabled = false
   isImpactedTestsEnabled = false
   isCodeCoverageEnabled = false
+  isLineCoverageEnabled = false
   isSuitesSkippingEnabled = false
   testManagementAttemptToFixRetries = 0
 }
@@ -691,6 +698,7 @@ function resetMainProcessProvidedContext (ctx) {
     _ddTestManagementAttemptToFixRetries: 0,
     _ddTestPropertiesByFilepath: {},
     _ddIsCodeCoverageEnabled: false,
+    _ddIsLineCoverageEnabled: false,
     _ddItrCorrelationId: undefined,
     _ddUnskippableSuites: {},
     _ddForcedToRunSuites: {},
@@ -750,6 +758,7 @@ async function runMainProcessSetup (
     const {
       err,
       libraryConfig,
+      isLineCoverageAllowed,
       requestErrorTags: receivedRequestErrorTags = {},
     } = await getChannelPromise(libraryConfigurationCh, {
       frameworkVersion,
@@ -763,12 +772,15 @@ async function runMainProcessSetup (
       applyLibraryConfig(libraryConfig)
       // Older runners cache a numeric ceiling and cannot stop retries before the next lifecycle starts.
       isDynamicAtrEnabled &&= satisfies(frameworkVersion, '>=4.1.0')
+      // Browser projects disable Test Impact Analysis for the whole run, but Node workers can still report
+      // per-test lines. Without worker init, no worker runs the tracer to instrument code.
+      isLineCoverageEnabled = isLineCoverageRequested && isLineCoverageAllowed === true && !shouldInstallNoWorkerInit
     }
   } catch {
     requestErrorTags = {}
     resetLibraryConfig()
   }
-  isSessionCodeCoverageEnabled ||= isCodeCoverageEnabled
+  isSessionCodeCoverageEnabled ||= isCodeCoverageEnabled || isLineCoverageEnabled
   isSessionSuitesSkippingEnabled ||= isSuitesSkippingEnabled
 
   resetMainProcessProvidedContext(ctx)
