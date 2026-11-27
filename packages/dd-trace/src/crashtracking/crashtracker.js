@@ -13,7 +13,9 @@ const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 
+const handledRaspAbort = channel('datadog:appsec:rasp:handled-uncaught-exception')
 const identityRefreshChannel = channel('datadog:identity:refresh')
+const raspExceptionMonitorAttached = channel('datadog:appsec:rasp:exception-monitor-attached')
 const INHERITED_RECEIVER_ENVIRONMENT_VARIABLES = [
   'HTTP_PROXY',
   'HTTPS_PROXY',
@@ -94,13 +96,40 @@ class Crashtracker {
   }
 
   #trackUnhandledExceptions () {
-    process.once('uncaughtExceptionMonitor', (error, origin) => {
+    const handledErrors = new WeakSet()
+
+    /** @param {Error} error */
+    const markHandled = (error) => {
+      handledErrors.add(error)
+    }
+
+    /**
+     * @param {Error} error
+     * @param {'uncaughtException'|'unhandledRejection'} origin
+     */
+    const reportUnhandled = (error, origin) => {
+      if (handledErrors.delete(error)) {
+        return
+      }
+
+      process.off('uncaughtExceptionMonitor', reportUnhandled)
+      handledRaspAbort.unsubscribe(markHandled)
+      raspExceptionMonitorAttached.unsubscribe(prioritizeRaspRecovery)
       try {
         binding.reportUncaughtExceptionMonitor(error, origin)
       } catch (e) {
         process.stderr.write(`Error reporting uncaught exception to crashtracker: ${e.toString()}${EOL}`)
       }
-    })
+    }
+
+    const prioritizeRaspRecovery = () => {
+      process.off('uncaughtExceptionMonitor', reportUnhandled)
+      process.on('uncaughtExceptionMonitor', reportUnhandled)
+    }
+
+    process.on('uncaughtExceptionMonitor', reportUnhandled)
+    handledRaspAbort.subscribe(markHandled)
+    raspExceptionMonitorAttached.subscribe(prioritizeRaspRecovery)
   }
 
   withProfilerSerializing (f) {

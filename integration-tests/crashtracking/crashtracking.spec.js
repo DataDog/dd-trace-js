@@ -233,6 +233,30 @@ describeNotWindows('crashtracking integration', () => {
   })
 
   describe('uncaught exception', () => {
+    const crashtrackingEnvironment = { DD_CRASHTRACKING_ENABLED: 'true' }
+
+    it('reports a fatal exception after AppSec handles a RASP abort', async () => {
+      const logsPromise = collectCrashLogs(agent)
+      const exitPromise = spawnCrashFixture('rasp-abort.js', agent.port, crashtrackingEnvironment)
+
+      const [{ ping, report }] = await Promise.all([logsPromise, exitPromise])
+
+      assert.strictEqual(ping.kind, 'UnhandledException')
+      assert.match(report.error.message, /integration test uncaught exception after RASP abort/)
+    })
+
+    it('reports a RASP abort when an existing capture callback controls process exit', async () => {
+      const logsPromise = collectCrashLogs(agent)
+      const exitPromise = spawnCrashFixture('rasp-abort.js', agent.port, {
+        ...crashtrackingEnvironment,
+        TEST_RASP_CAPTURE_CALLBACK: 'true',
+      })
+
+      const [{ report }] = await Promise.all([logsPromise, exitPromise])
+
+      assert.match(report.error.message, /DatadogRaspAbortError/)
+    })
+
     it('sends a crash report and a ping with a JS stack to the telemetry endpoint', async () => {
       const logsPromise = collectCrashLogs(agent)
       const exitPromise = spawnCrashFixture('uncaught-exception.js', agent.port)

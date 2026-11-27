@@ -2,6 +2,9 @@
 
 const { types } = require('node:util')
 
+const { channel } = require('dc-polyfill')
+
+const log = require('../../log')
 const web = require('../../plugins/util/web')
 const {
   setUncaughtExceptionCaptureCallbackStart,
@@ -18,6 +21,9 @@ const lfi = require('./lfi')
 const cmdi = require('./command_injection')
 
 const { DatadogRaspAbortError, hasBlockingAbort, markToBlockOnDetection } = require('./utils')
+
+const handledRaspAbort = channel('datadog:appsec:rasp:handled-uncaught-exception')
+const raspExceptionMonitorAttached = channel('datadog:appsec:rasp:exception-monitor-attached')
 
 // Same bound as the `cause` chain; libraries keep the abort error one or two errors deep.
 const MAX_WRAPPING_ERRORS = 10
@@ -99,7 +105,14 @@ function resolveAbortError (error, failedRequest) {
 }
 
 function handleUncaughtExceptionMonitor (error) {
-  if (!blockOnDatadogRaspAbortError({ error, isTopLevel: true })) return
+  try {
+    if (!blockOnDatadogRaspAbortError({ error, isTopLevel: true })) {
+      return
+    }
+  } catch {
+    log.error('[ASM] Cannot handle uncaught exception')
+    return
+  }
 
   if (process.hasUncaughtExceptionCaptureCallback()) {
     // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
@@ -118,8 +131,11 @@ function handleUncaughtExceptionMonitor (error) {
 
     process.setUncaughtExceptionCaptureCallback(null)
 
-    // For some reason, previous callback was defined before the instrumentation
-    // We can not restore it, so we let the app decide
+    // A capture callback registered before instrumentation remains installed.
+    if (process.hasUncaughtExceptionCaptureCallback()) {
+      return
+    }
+
     if (previousCb) {
       process.setUncaughtExceptionCaptureCallback(() => {
         process.setUncaughtExceptionCaptureCallback(null)
@@ -136,6 +152,10 @@ function handleUncaughtExceptionMonitor (error) {
     })
 
     process.once('uncaughtException', handler)
+  }
+
+  if (handledRaspAbort.hasSubscribers) {
+    handledRaspAbort.publish(error)
   }
 }
 
@@ -172,6 +192,9 @@ function enable (config) {
   cmdi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+  if (raspExceptionMonitorAttached.hasSubscribers) {
+    raspExceptionMonitorAttached.publish()
+  }
 
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
