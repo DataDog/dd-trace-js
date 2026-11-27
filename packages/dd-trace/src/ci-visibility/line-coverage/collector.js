@@ -116,6 +116,9 @@ class LineCoverageCollector {
   /** what runs in no window, or in a context whose window has closed */
   unowned = new Owner()
 
+  /** whether initialiser lines go to their owner, as in a process that runs for a single test */
+  initToOwner = false
+
   /** @type {() => Owner} returns the owner of the running context */
   resolveOwner = () => this.unowned
 
@@ -336,10 +339,11 @@ class LineCoverageCollector {
       owner.modules.push(id)
     }
     const initMasks = module.initMasks
+    const initToOwner = this.initToOwner
     for (let i = 1; i < count; i += 2) {
       const word = scratch[i]
       const bits = scratch[i + 1]
-      const init = bits & initMasks[word]
+      const init = initToOwner ? 0 : bits & initMasks[word]
       if (init !== 0) this.#addInit(module, word, init)
       words[word] |= bits & ~init
     }
@@ -386,7 +390,8 @@ class LineCoverageCollector {
           bits ^= lowest
           const slot = base + 31 - Math.clz32(lowest)
           const file = files[slot]
-          if (file !== -1) target.add(file, lines[slot])
+          // Initialiser lines are negated; they reach an owner only when `initToOwner` is set.
+          if (file !== -1) target.add(file, Math.abs(lines[slot]))
         }
       }
     }
