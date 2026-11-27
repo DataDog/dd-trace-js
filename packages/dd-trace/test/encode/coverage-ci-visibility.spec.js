@@ -27,6 +27,7 @@ const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 describe('coverage-ci-visibility', () => {
   let encoder
   let logger
+  let writer
   let formattedCoverage, formattedCoverage2, formattedCoverageTest
 
   beforeEach(() => {
@@ -36,7 +37,8 @@ describe('coverage-ci-visibility', () => {
     const { CoverageCIVisibilityEncoder } = proxyquire('../../src/encode/coverage-ci-visibility', {
       '../log': logger,
     })
-    encoder = new CoverageCIVisibilityEncoder()
+    writer = { flush: sinon.spy() }
+    encoder = new CoverageCIVisibilityEncoder(writer)
 
     formattedCoverage = {
       sessionId: id('1'),
@@ -103,6 +105,23 @@ describe('coverage-ci-visibility', () => {
     encoder.makePayload()
 
     assert.strictEqual(encoder.count(), 0)
+  })
+
+  it('should flush once the queued payload is larger than 1 MiB', () => {
+    const encodeBitmapOf = (size) => encoder.encode({
+      sessionId: id('1'),
+      suiteId: id('2'),
+      files: [{ filename: 'file.js', bitmap: Buffer.alloc(size) }],
+    })
+    encodeBitmapOf(100_000)
+    const bytesBesideBitmap = encoder.makePayload()._data[3].length - 100_000
+
+    encodeBitmapOf(1024 * 1024 - bytesBesideBitmap)
+    sinon.assert.notCalled(writer.flush)
+
+    encoder.makePayload()
+    encodeBitmapOf(1024 * 1024 - bytesBesideBitmap + 1)
+    sinon.assert.calledOnce(writer.flush)
   })
 
   it('drops the queued payload and logs when the chunk cap fires mid-encode', () => {
