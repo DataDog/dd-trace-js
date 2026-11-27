@@ -60,15 +60,22 @@ function getEndpointKey (options) {
 }
 
 /**
+ * Stable destination key for request options, whether they carry a URL or prepared connection fields.
+ *
+ * @param {EndpointOptions} options
+ */
+function getRequestEndpointKey (options) {
+  if (!options.url) return getEndpointKey(options)
+  const url = parseUrl(options.url)
+  return url.protocol === 'unix:' ? url.pathname : getEndpointKey(url)
+}
+
+/**
  * @param {EndpointOptions} options
  */
 function inStartupPhase (options) {
   if ((Date.now() - startedAtMs) >= STARTUP_GRACE_MS) return false
-  if (options.url) {
-    const url = parseUrl(options.url)
-    return !reachedEndpoints.has(url.protocol === 'unix:' ? url.pathname : getEndpointKey(url))
-  }
-  return !reachedEndpoints.has(getEndpointKey(options))
+  return !reachedEndpoints.has(getRequestEndpointKey(options))
 }
 
 /**
@@ -102,6 +109,7 @@ function markEndpointReached (options) {
 module.exports = {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRequestEndpointKey,
   getRetryDelay,
   isRetriableNetworkError,
   markEndpointReached,

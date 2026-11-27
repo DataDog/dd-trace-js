@@ -6,6 +6,7 @@ const commonRequest = require('../../exporters/common/request')
 const {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRequestEndpointKey,
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
@@ -31,6 +32,74 @@ let ownedBackpressureWaiters = 0
 
 /** @type {Set<BackpressureWaiter>} */
 const backpressureWaiters = new Set()
+
+/**
+ * Attempts handed to one origin's socket pool in an HTTP agent, and the attempts waiting for one of its sockets.
+ *
+ * @typedef {object} SocketSlots
+ * @property {number} active
+ * @property {boolean} draining
+ * @property {number} limit
+ * @property {Set<() => void>} waiting
+ */
+
+/** @type {WeakMap<import('node:http').Agent, Map<string, SocketSlots>>} */
+const agentSocketSlots = new WeakMap()
+
+/**
+ * Returns the socket accounting shared by every request to one origin through an agent with a bounded pool.
+ * Node.js applies `maxSockets` to each origin separately.
+ *
+ * @param {import('../../exporters/common/retry').EndpointOptions & { agent?: import('node:http').Agent }} options
+ * @returns {SocketSlots | undefined}
+ */
+function getSocketSlots (options) {
+  const { agent } = options
+  if (!Number.isFinite(agent?.maxSockets)) return
+
+  let origin
+  try {
+    origin = getRequestEndpointKey(options)
+  } catch {
+    // The transport reports the invalid target.
+    return
+  }
+
+  let origins = agentSocketSlots.get(agent)
+  if (origins === undefined) {
+    origins = new Map()
+    agentSocketSlots.set(agent, origins)
+  }
+  let slots = origins.get(origin)
+  if (slots === undefined) {
+    slots = { active: 0, draining: false, limit: agent.maxSockets, waiting: new Set() }
+    origins.set(origin, slots)
+  }
+  return slots
+}
+
+/**
+ * Hands a finished attempt's socket to the oldest attempt waiting for one.
+ *
+ * @param {SocketSlots} slots
+ */
+function releaseSocketSlot (slots) {
+  slots.active--
+  // An attempt that fails synchronously releases its socket inside the loop below, which hands it on.
+  if (slots.draining) return
+
+  slots.draining = true
+  try {
+    // A woken request can settle or wait for exporter backpressure instead, leaving the socket to the next one.
+    while (slots.active < slots.limit && slots.waiting.size > 0) {
+      const [next] = slots.waiting
+      slots.waiting.delete(next)
+      next()
+    }
+  } finally {
+    slots.draining = false
+  }
+}
 
 /**
  * Keeps the shared polling timer alive only while an owned request is waiting.
@@ -285,6 +354,8 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   let settled = false
   let lastError
   let waitingForBackpressure = false
+  let socketWaiter
+  const slots = getSocketSlots(options)
 
   const backpressureWaiter = {
     attempt,
@@ -308,6 +379,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     clearTimeout(attemptTimer)
     clearImmediate(attemptTimerImmediate)
     removeBackpressureWaiter(backpressureWaiter)
+    if (socketWaiter) slots.waiting.delete(socketWaiter)
     signal?.removeEventListener('abort', onAbort)
     bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
@@ -365,6 +437,21 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     }
     waitingForBackpressure = false
 
+    // Hold the attempt until one of the agent's sockets is free. Otherwise its timeout also counts the wait behind
+    // other requests, and an attempt that times out after sending its body is uploaded again by the retry.
+    if (slots) {
+      if (slots.active >= slots.limit) {
+        waitingForBackpressure = true
+        socketWaiter = () => {
+          socketWaiter = undefined
+          attempt(attemptIndex)
+        }
+        slots.waiting.add(socketWaiter)
+        return
+      }
+      slots.active++
+    }
+
     const attemptOptions = {
       ...options,
       deferTimeoutAbort: true,
@@ -378,6 +465,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     try {
       attemptData = typeof data === 'function' ? data() : data
     } catch (error) {
+      if (slots) releaseSocketSlot(slots)
       complete(error)
       return
     }
@@ -402,6 +490,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     }
 
     transport(attemptData, attemptOptions, (error, result, statusCode, headers) => {
+      if (slots) releaseSocketSlot(slots)
       clearTimeout(attemptTimer)
       clearImmediate(attemptTimerImmediate)
       if (attemptController === controller) attemptController = undefined
