@@ -1,7 +1,10 @@
 'use strict'
 
+const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../version')
+
 // CommonJS and ESM preloads can both be used in the same process.
-let registered = false
+/** @type {'sync' | 'async' | undefined} */
+let loaderMode
 
 /**
  * @param {typeof import('node:module').register | undefined} registerAsync
@@ -9,7 +12,7 @@ let registered = false
  * @param {() => boolean | undefined} [tryRegisterSync] Returns undefined when sync hooks are unsupported.
  */
 function registerLoader (registerAsync, parentURL, tryRegisterSync) {
-  if (registered) return
+  if (loaderMode) return
 
   let syncResult
   let syncError
@@ -21,7 +24,7 @@ function registerLoader (registerAsync, parentURL, tryRegisterSync) {
   }
 
   if (syncResult) {
-    registered = true
+    loaderMode = 'sync'
     return
   }
 
@@ -36,8 +39,24 @@ function registerLoader (registerAsync, parentURL, tryRegisterSync) {
   if (registerAsync) {
     const { getLoaderRegisterOptions } = require('./esm-module-load')
     registerAsync('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
-    registered = true
+    loaderMode = 'async'
   }
 }
 
+function getLoaderMode () {
+  return loaderMode
+}
+
+function isSyncLoaderHookVersionSupported () {
+  // Earlier implementations can reject nullish CommonJS source returned by another loader.
+  // See nodejs/node#59929.
+  if (NODE_MAJOR >= 26) return true
+  if (NODE_MAJOR === 25) return NODE_MINOR >= 1
+  if (NODE_MAJOR === 24) return NODE_MINOR > 11 || (NODE_MINOR === 11 && NODE_PATCH >= 1)
+  if (NODE_MAJOR === 22) return NODE_MINOR > 22 || (NODE_MINOR === 22 && NODE_PATCH >= 3)
+  return false
+}
+
 module.exports = registerLoader
+module.exports.getLoaderMode = getLoaderMode
+module.exports.isSyncLoaderHookVersionSupported = isSyncLoaderHookVersionSupported
