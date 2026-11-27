@@ -19,7 +19,7 @@ const { MAX_REQUEST_BUFFERED_BYTES } = require('./limits')
 const realQueueMicrotask = queueMicrotask
 
 const BACKPRESSURE_RETRY_MS = 50
-const QUEUE_PRESSURE_BYTES = 48 * 1024 * 1024
+const MIN_GZIP_BYTES = 1024
 const REQUEST_BUFFER_FULL_CODE = 'ERR_DD_REQUEST_BUFFER_FULL'
 
 let bufferedBytes = 0
@@ -332,7 +332,7 @@ function bufferReadable (data, signal, callback) {
 /**
  * Sends Test Optimization exporter data through the common single-attempt transport while
  * keeping retry and finalization policy scoped to Test Optimization. Returns true when the body
- * was compressed because the request queue was under pressure.
+ * was compressed.
  *
  * @param {Buffer|string|Readable|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -359,7 +359,7 @@ function request (data, options, callback) {
 
 /**
  * Applies the Test Optimization retry policy to replayable request data. Returns true when the body
- * was compressed because the request queue was under pressure.
+ * was compressed.
  *
  * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -375,9 +375,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   let payloadSize = reservedPayloadSize ?? getPayloadSize(data)
   let gzipped = false
 
-  // Reserve space for bursts before incoming payloads hit the hard queue cap.
-  if (options.gzipOnQueuePressure && bufferedBytes + payloadSize > QUEUE_PRESSURE_BYTES &&
-      Buffer.isBuffer(data)) {
+  if (options.gzip && Buffer.isBuffer(data) && payloadSize >= MIN_GZIP_BYTES) {
     const maxOutputLength = Math.min(availableBytes, payloadSize - 1)
     if (maxOutputLength > 0) {
       try {

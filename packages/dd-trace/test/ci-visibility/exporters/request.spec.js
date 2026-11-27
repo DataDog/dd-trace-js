@@ -744,17 +744,15 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(firstDone, null, 'ok', 200, {})
   })
 
-  it('compacts a gzip view above the 48 MiB threshold and reuses the body on retry', () => {
-    const fillDone = sinon.spy()
+  it('compacts a gzip view and reuses the compressed body on retry', () => {
     const done = sinon.spy()
     const payload = Buffer.alloc(2 * 1024 * 1024, 'test event metadata')
     const headers = { 'Content-Type': 'application/msgpack' }
 
-    request(Buffer.alloc(48 * 1024 * 1024), {}, fillDone)
-    assert.strictEqual(request(payload, { gzipOnQueuePressure: true, headers }, done), true)
+    assert.strictEqual(request(payload, { gzip: true, headers }, done), true)
 
-    assert.strictEqual(pendingRequests.length, 2)
-    const first = pendingRequests[1]
+    assert.strictEqual(pendingRequests.length, 1)
+    const first = pendingRequests[0]
     assert.strictEqual(first.options.headers['Content-Encoding'], 'gzip')
     // zlib returns this body as a view over a 16 KiB chunk; the queued body must own only its bytes.
     assert.strictEqual(first.data.buffer.byteLength, first.data.length)
@@ -764,48 +762,63 @@ describe('Test Optimization exporter request', () => {
     const unavailable = Object.assign(new Error('unavailable'), { status: 503 })
     first.callback(unavailable, null, 503, {})
     clock.tick(6000)
-    const retry = pendingRequests[2]
+    const retry = pendingRequests[1]
     assert.strictEqual(retry.data, first.data)
     assert.strictEqual(retry.options.headers['Content-Encoding'], 'gzip')
     retry.callback(null, 'ok', 202, {})
     sinon.assert.calledOnceWithExactly(done, null, 'ok', 202, {})
 
-    // The retry must release the compressed bytes so the remaining space is available again.
-    const lastDone = sinon.spy()
-    request(Buffer.alloc(16 * 1024 * 1024), {}, lastDone)
-    assert.strictEqual(pendingRequests.length, 4)
-    pendingRequests[3].callback(null, 'ok', 202, {})
-    pendingRequests[0].callback(null, 'ok', 202, {})
+    // Completion must release the compressed bytes so the full 64 MiB queue is available again.
+    const fullDone = sinon.spy()
+    request(Buffer.alloc(64 * 1024 * 1024), {}, fullDone)
+    assert.strictEqual(pendingRequests.length, 3)
+    pendingRequests[2].callback(null, 'ok', 202, {})
+    sinon.assert.calledOnceWithExactly(fullDone, null, 'ok', 202, {})
   })
 
-  it('keeps an opted-in payload uncompressed at exactly 48 MiB', () => {
-    const data = Buffer.alloc(1024 * 1024, 'test event metadata')
-    const done = sinon.spy()
-    request(Buffer.alloc(47 * 1024 * 1024), {}, sinon.spy())
-    assert.strictEqual(request(data, { gzipOnQueuePressure: true, headers: {} }, done), false)
+  it('keeps an opted-in payload uncompressed below 1024 bytes and compresses at 1024 bytes', () => {
+    const belowThreshold = Buffer.alloc(1023, 'a')
+    const atThreshold = Buffer.alloc(1024, 'a')
 
-    assert.strictEqual(pendingRequests[1].options.headers['Content-Encoding'], undefined)
-    assert.strictEqual(pendingRequests[1].data, data)
+    assert.strictEqual(request(belowThreshold, { gzip: true, headers: {} }, sinon.spy()), false)
+    assert.strictEqual(pendingRequests[0].options.headers['Content-Encoding'], undefined)
+    assert.strictEqual(pendingRequests[0].data, belowThreshold)
+
+    assert.strictEqual(request(atThreshold, { gzip: true, headers: {} }, sinon.spy()), true)
+    assert.strictEqual(pendingRequests[1].options.headers['Content-Encoding'], 'gzip')
+    assert.deepStrictEqual(gunzipSync(pendingRequests[1].data), atThreshold)
+
     pendingRequests[1].callback(null, 'ok', 202, {})
     pendingRequests[0].callback(null, 'ok', 202, {})
   })
+
+  function createIncompressibleBuffer (size) {
+    const data = Buffer.allocUnsafe(size)
+    let state = 0x12345678
+    for (let i = 0; i < data.length; i++) {
+      state ^= state << 13
+      state ^= state >>> 17
+      state ^= state << 5
+      data[i] = state & 0xff
+    }
+    return data
+  }
 
   it('keeps the original body if gzip would increase its size and the original fits', () => {
-    const data = Buffer.from('test event')
-    request(Buffer.alloc(48 * 1024 * 1024), {}, sinon.spy())
-    assert.strictEqual(request(data, { gzipOnQueuePressure: true, headers: {} }, sinon.spy()), false)
+    const data = createIncompressibleBuffer(1024)
 
-    assert.strictEqual(pendingRequests[1].options.headers['Content-Encoding'], undefined)
-    assert.strictEqual(pendingRequests[1].data, data)
-    pendingRequests[1].callback(null, 'ok', 202, {})
+    assert.strictEqual(request(data, { gzip: true, headers: {} }, sinon.spy()), false)
+
+    assert.strictEqual(pendingRequests[0].options.headers['Content-Encoding'], undefined)
+    assert.strictEqual(pendingRequests[0].data, data)
     pendingRequests[0].callback(null, 'ok', 202, {})
   })
 
   it('reports a burst when an opted-in payload cannot fit in the queue after compression', () => {
-    const data = Buffer.from('test event')
+    const data = createIncompressibleBuffer(1024)
     const rejectedDone = sinon.spy()
     request(Buffer.alloc(64 * 1024 * 1024 - data.length + 1), {}, sinon.spy())
-    assert.strictEqual(request(data, { gzipOnQueuePressure: true, headers: {} }, rejectedDone), false)
+    assert.strictEqual(request(data, { gzip: true, headers: {} }, rejectedDone), false)
 
     assert.strictEqual(pendingRequests.length, 1)
     sinon.assert.calledOnce(rejectedDone)

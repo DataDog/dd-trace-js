@@ -58,7 +58,7 @@ class Writer extends BaseWriter {
       url: this._url,
       agent: getAgent(this._url),
       deadline: flushOptions?.deadline,
-      gzipOnQueuePressure: this.#isGzipCompatible,
+      gzip: this.#isGzipCompatible,
     }
 
     if (this._evpProxyPrefix) {
@@ -74,7 +74,7 @@ class Writer extends BaseWriter {
 
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
-    // The request layer decides synchronously whether queue pressure requires compression.
+    // The request layer decides synchronously whether the payload is compressed.
     let compressed = false
     const send = (body, requestOptions, callback) => {
       compressed = request(body, requestOptions, callback)
