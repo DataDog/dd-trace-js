@@ -7,13 +7,14 @@
 // Own lines ran inside the test's window, in a context that carries the test. The window opens
 // before the test's per-test hooks and closes after them. A context carries the test when dd-trace's
 // active span belongs to the test's trace: the test's own context, everything started from it, and
-// requests handled for it in the same process when trace context reaches them. Fixture lines ran in
-// a suite-scope setup hook (beforeAll) of a suite enclosing the test, in a context opened for that
-// hook, while it ran. Initialiser lines (module top level, static members of classes defined there)
-// belong to no window: every test that ran other lines of a file gets the initialiser lines of that
-// file. Everything else is reported once per process as Shared, in three parts: initialiser lines,
-// suite setup lines, and the rest (unowned): what ran outside every window, in a context that carries
-// no open window, or in one whose window had closed.
+// requests handled for it in the same process when trace context reaches them. Child processes and
+// worker threads started for the test, and messages posted to workers for it, carry it too (see
+// worker-threads.js). Fixture lines ran in a suite-scope setup hook (beforeAll) of a suite enclosing
+// the test, in a context opened for that hook, while it ran. Initialiser lines (module top level,
+// static members of classes defined there) belong to no window: every test that ran other lines of a
+// file gets the initialiser lines of that file. Everything else is reported once per process as
+// Shared, in three parts: initialiser lines, suite setup lines, and the rest (unowned): what ran
+// outside every window, in a context that carries no open window, or in one whose window had closed.
 //
 // A framework integration calls, in each process that runs tests:
 //   enable({ root })                    once; instruments CommonJS modules under root as they load
@@ -27,6 +28,7 @@ const fs = require('node:fs')
 const Module = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
+const { threadId } = require('node:worker_threads')
 
 const dc = require('dc-polyfill')
 
@@ -37,16 +39,21 @@ const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
 const { instrument } = require('./instrument')
 const { createPositionMapper, readSourceMap } = require('./source-map')
+const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
 
 /**
  * @typedef {{ filename: string, bitmap: Buffer }} FileCoverage
  * @typedef {import('./collector').Owner} Owner
+ * @typedef {import('./worker-threads').PathLines} PathLines
  */
 
 const legacyStorage = storage('legacy')
 
-// Marks the context opened for a suite setup hook. Stores derived from it keep it.
-const SUITE_SETUP_OWNER = Symbol('dd-trace.line-coverage.suite-setup')
+// Marks a context opened on an owner's behalf: a suite setup hook, or a message for a worker
+// thread. Stores derived from it keep the mark, with the trace of the span it was set on: a span of
+// another trace, continued from propagated headers, can still carry a test.
+const OWNER = Symbol('dd-trace.line-coverage.owner')
+const MARKED_TRACE = Symbol('dd-trace.line-coverage.marked-trace')
 
 // A child process started for a test (or suite setup) gets these variables. It counts everything it
 // runs as that owner's and, at exit, writes it to `<target>-<pid>.json`.
@@ -85,6 +92,12 @@ let childTargets = 0
 const childTargetByOwner = new WeakMap()
 /** @type {string | undefined} the target this process writes to, when it is such a child */
 let ownTarget
+
+/** @type {Map<Owner, LineSet>} what worker threads ran for each owner, not taken yet */
+const workerLines = new Map()
+
+/** @type {import('./worker-threads').Pending} */
+const NOTHING_PENDING = { owned: [] }
 
 const NO_STORE = {}
 let cachedStore = NO_STORE
@@ -125,19 +138,39 @@ function resolveOwner () {
  * @returns {Owner}
  */
 function findOwner (store) {
-  const collector = getCollector()
-  if (!store) return collector.unowned
+  const { unowned } = getCollector()
+  if (!store) return unowned
+  const marked = store[OWNER]
+  const context = typeof store.span?.context === 'function' ? store.span.context() : undefined
+  // Spans started under the mark belong to the trace it was set on.
+  if (marked !== undefined && context?._trace === store[MARKED_TRACE]) return marked.open ? marked : unowned
   let owner
-  const span = store.span
-  if (span && typeof span.context === 'function') {
-    const context = span.context()
-    if (context?._trace) owner = ownerByTrace.get(context._trace)
-    if (owner === undefined && ownerByTraceId.size > 0 && context?._traceId) {
-      owner = ownerByTraceId.get(context._traceId.toString(16))
-    }
+  if (context?._trace) owner = ownerByTrace.get(context._trace)
+  if (owner === undefined && ownerByTraceId.size > 0 && context?._traceId) {
+    owner = ownerByTraceId.get(context._traceId.toString(16))
   }
-  owner ??= store[SUITE_SETUP_OWNER]
-  return owner?.open ? owner : collector.unowned
+  if (owner?.open) return owner
+  return marked?.open ? marked : unowned
+}
+
+/**
+ * @template {object} T
+ * @param {T | undefined} store
+ * @param {Owner} owner
+ * @returns {T}
+ */
+function markStore (store, owner) {
+  const span = /** @type {{ span?: { context?: () => { _trace?: object } } } | undefined} */ (store)?.span
+  const trace = typeof span?.context === 'function' ? span.context()?._trace : undefined
+  return /** @type {T} */ ({ ...store, [OWNER]: owner, [MARKED_TRACE]: trace })
+}
+
+/**
+ * @param {Owner} owner
+ * @param {() => unknown} fn
+ */
+function runAs (owner, fn) {
+  return legacyStorage.run(markStore(legacyStorage.getStore(), owner), fn)
 }
 
 // Called at every window boundary, after the collector moved what ran so far to its owners.
@@ -157,6 +190,7 @@ function closeSetup () {
   const lines = new LineSet()
   collector.takeLines(owner, lines)
   takeChildLines(owner, lines)
+  takeWorkerLines(owner, lines)
   let fixture = fixtures.get(suite)
   if (fixture === undefined) {
     fixture = new LineSet()
@@ -210,6 +244,7 @@ function finishTest (test, suites) {
   const coverage = new LineSet()
   collector.takeLines(test, coverage)
   takeChildLines(test, coverage)
+  takeWorkerLines(test, coverage)
   if (suites) {
     for (const suite of suites) {
       const fixture = fixtures.get(suite)
@@ -248,7 +283,7 @@ function startSuiteSetup (suite) {
  */
 function suiteSetupStore (store) {
   if (!openSetup) return store
-  return { ...store, [SUITE_SETUP_OWNER]: openSetup.owner }
+  return markStore(store, openSetup.owner)
 }
 
 /**
@@ -270,6 +305,7 @@ function takeShared () {
   collector.boundary()
   collector.takeLines(collector.unowned, unownedLines)
   takeLateChildLines(unownedLines)
+  takeWorkerLines(collector.unowned, unownedLines)
   const shared = [
     { shared: 'init', files: toFiles(collector.sharedInit) },
     { shared: 'suiteSetup', files: toFiles(suiteSetup) },
@@ -348,21 +384,139 @@ function takeLateChildLines (lines) {
  * @param {LineSet} lines
  */
 function readChildLines (accept, lines) {
-  const collector = getCollector()
   for (const name of fs.readdirSync(childDirectory)) {
     if (!name.endsWith('.json') || !accept(name)) continue
     const filename = path.join(childDirectory, name)
     try {
-      const { files } = JSON.parse(fs.readFileSync(filename, 'utf8'))
-      for (const [source, sourceLines] of Object.entries(files)) {
-        const file = collector.fileIndex(source)
-        for (const line of sourceLines) lines.add(file, line)
-      }
+      addPathLines(lines, JSON.parse(fs.readFileSync(filename, 'utf8')).files)
     } catch (error) {
       log.debug('Line coverage could not read %s: %s', filename, error.message)
     }
     fs.rmSync(filename, { force: true })
   }
+}
+
+/**
+ * @param {LineSet} lines
+ * @param {PathLines | undefined} files
+ */
+function addPathLines (lines, files) {
+  if (files === undefined) return
+  const collector = getCollector()
+  for (const source of Object.keys(files)) {
+    const file = collector.fileIndex(source)
+    for (const line of files[source]) lines.add(file, line)
+  }
+}
+
+/**
+ * @param {LineSet} lines
+ * @returns {PathLines | undefined} undefined when there are no lines
+ */
+function toPathLines (lines) {
+  const collector = getCollector()
+  let files
+  for (const [file, bitmap] of lines.bitmaps) {
+    const fileLines = []
+    for (let line = 0; line < bitmap.length * 8; line++) {
+      if (bitmap[line >> 3] & (1 << (line & 7))) fileLines.push(line)
+    }
+    if (fileLines.length === 0) continue
+    files ??= {}
+    files[collector.filename(file)] = fileLines
+  }
+  return files
+}
+
+/**
+ * Records lines a worker thread ran for `owner`. Lines for no owner, or for one whose window has
+ * closed, are unowned.
+ *
+ * @param {Owner | undefined} owner
+ * @param {PathLines | undefined} files
+ */
+function receiveWorkerLines (owner, files) {
+  if (files === undefined) return
+  const collector = getCollector()
+  if (owner === undefined || !owner.open) owner = collector.unowned
+  let lines = workerLines.get(owner)
+  if (lines === undefined) {
+    lines = new LineSet()
+    workerLines.set(owner, lines)
+  }
+  addPathLines(lines, files)
+}
+
+/**
+ * @param {PathLines | undefined} files
+ */
+function receiveWorkerInit (files) {
+  if (files === undefined) return
+  const collector = getCollector()
+  addPathLines(collector.init, files)
+  addPathLines(collector.sharedInit, files)
+}
+
+/**
+ * @param {Owner} owner
+ * @param {LineSet} target
+ */
+function takeWorkerLines (owner, target) {
+  const lines = workerLines.get(owner)
+  if (lines === undefined) return
+  workerLines.delete(owner)
+  target.addAll(lines)
+}
+
+/**
+ * What ran in this worker since the last report: per owner, unowned, and initialiser lines.
+ *
+ * @returns {import('./worker-threads').Pending}
+ */
+function takeWorkerReport () {
+  const collector = getCollector()
+  collector.boundary()
+  if (collector.ownersWithLines.size === 0 && workerLines.size === 0 && collector.sharedInit.bitmaps.size === 0) {
+    return NOTHING_PENDING
+  }
+  const { unowned } = collector
+  /** @type {Map<Owner, LineSet>} */
+  const byOwner = new Map()
+  for (const owner of collector.ownersWithLines) {
+    if (owner === unowned) continue
+    const lines = new LineSet()
+    collector.takeLines(owner, lines)
+    byOwner.set(owner, lines)
+  }
+  for (const [owner, lines] of workerLines) {
+    if (owner === unowned) continue
+    const ownerLines = byOwner.get(owner)
+    if (ownerLines === undefined) byOwner.set(owner, lines)
+    else ownerLines.addAll(lines)
+    workerLines.delete(owner)
+  }
+  const unownedLines = new LineSet()
+  collector.takeLines(unowned, unownedLines)
+  takeWorkerLines(unowned, unownedLines)
+  const init = collector.sharedInit
+  collector.sharedInit = new LineSet()
+  /** @type {Array<[Owner, PathLines]>} */
+  const owned = []
+  for (const [owner, lines] of byOwner) {
+    const files = toPathLines(lines)
+    if (files !== undefined) owned.push([owner, files])
+  }
+  return { owned, unowned: toPathLines(unownedLines), init: toPathLines(init) }
+}
+
+const workerHost = {
+  resolveOwner,
+  createOwner: () => getCollector().createOwner(),
+  unowned: () => getCollector().unowned,
+  runAs,
+  receive: receiveWorkerLines,
+  receiveInit: receiveWorkerInit,
+  takePending: takeWorkerReport,
 }
 
 /**
@@ -394,17 +548,13 @@ function writeChildLines (target, owner) {
     const lines = new LineSet()
     collector.takeLines(owner, lines)
     collector.takeLines(collector.unowned, lines)
-    const files = {}
-    for (const [file, bitmap] of lines.bitmaps) {
-      const fileLines = []
-      for (let line = 0; line < bitmap.length * 8; line++) {
-        if (bitmap[line >> 3] & (1 << (line & 7))) fileLines.push(line)
-      }
-      files[collector.filename(file)] = fileLines
-    }
-    const temporary = `${target}-${process.pid}.tmp`
-    fs.writeFileSync(temporary, JSON.stringify({ files }))
-    fs.renameSync(temporary, `${target}-${process.pid}.json`)
+    takeWorkerLines(owner, lines)
+    takeWorkerLines(collector.unowned, lines)
+    // A worker thread of the child that writes for itself shares the child's process id.
+    const writer = threadId === 0 ? String(process.pid) : `${process.pid}.${threadId}`
+    const temporary = `${target}-${writer}.tmp`
+    fs.writeFileSync(temporary, JSON.stringify({ files: toPathLines(lines) }))
+    fs.renameSync(temporary, `${target}-${writer}.json`)
   } catch (error) {
     log.debug('Line coverage could not write the lines of a child process: %s', error.message)
   }
@@ -616,12 +766,33 @@ function installGlobal (globalObject) {
  */
 function enable ({ root, patchModuleLoader = true }) {
   if (enabled) return
+  startCollecting(root, patchModuleLoader)
+  childProcessChannel.subscribe({ start: onChildProcessStart })
+  process.once('exit', removeChildDirectory)
+  followWorkers(workerHost, rootPrefix)
+}
+
+/**
+ * Starts collecting in a worker thread started by a thread that collects: what runs for each
+ * message of that thread is reported to it, for the owner of the context that posted the message.
+ */
+function enableWorker () {
+  const settings = getParentSettings()
+  if (settings === undefined || enabled) return
+  startCollecting(settings.root, true)
+  reportToParent(workerHost, settings)
+  followWorkers(workerHost, rootPrefix)
+}
+
+/**
+ * @param {string} root
+ * @param {boolean} patchModuleLoader
+ */
+function startCollecting (root, patchModuleLoader) {
   enabled = true
   const collector = getCollector()
   collector.resolveOwner = resolveOwner
   scheduleResets(collector)
-  childProcessChannel.subscribe({ start: onChildProcessStart })
-  process.once('exit', removeChildDirectory)
   let realRoot = root
   try {
     realRoot = fs.realpathSync(root)
@@ -636,7 +807,8 @@ function enable ({ root, patchModuleLoader = true }) {
       return compile.call(this, content, filename, ...rest)
     }
   }
-  if (dumpPath) process.once('exit', writeDump)
+  // A worker thread reports to its parent, which writes the dump.
+  if (dumpPath && threadId === 0) process.once('exit', writeDump)
   if (getEnvironmentVariable('_DD_LINE_COVERAGE_STATS')) {
     process.once('exit', () => {
       const c = getCollector().stats
@@ -699,6 +871,7 @@ function canLeavePromisesOut (asyncHooks) {
 module.exports = {
   enable,
   enableChild,
+  enableWorker,
   finishSuiteSetup,
   finishTest,
   getCollector,
