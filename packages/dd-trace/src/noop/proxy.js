@@ -42,6 +42,10 @@ class NoopProxy {
     return this
   }
 
+  setUrl () {
+    return this
+  }
+
   profilerStarted () {
     return Promise.resolve(false)
   }
@@ -70,11 +74,6 @@ class NoopProxy {
     options ||= {}
 
     return this._tracer.wrap(name, options, fn)
-  }
-
-  setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
-    return this
   }
 
   startSpan () {

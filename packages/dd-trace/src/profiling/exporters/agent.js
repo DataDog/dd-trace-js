@@ -131,6 +131,11 @@ class AgentExporter extends EventSerializer {
     return this._url
   }
 
+  /** @param {import('./event_serializer').TracerConfig} config */
+  configure (config) {
+    this._url = config.url
+  }
+
   export (exportSpec) {
     const { profiles } = exportSpec
     const fields = []

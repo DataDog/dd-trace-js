@@ -8,7 +8,7 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const log = require('../log')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const { createMetricsClient, subscribeToIdentityRefresh } = require('./client')
+const { createMetricsClient, subscribeToConfigUpdates } = require('./client')
 
 const eventLoopDelayResolution = 4
 const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 ||
@@ -28,7 +28,7 @@ let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
 let capture = null
-let unsubscribeIdentityRefresh = null
+let unsubscribeConfigUpdates = null
 
 // !!!!!!!!!!!
 //  IMPORTANT
@@ -50,7 +50,7 @@ module.exports = {
     const trackGc = config.runtimeMetrics.gc !== false
 
     client = createMetricsClient(config)
-    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
+    unsubscribeConfigUpdates = subscribeToConfigUpdates(client, config)
 
     if (trackGc) {
       startGCObserver()
@@ -119,8 +119,8 @@ module.exports = {
     clearInterval(interval)
     interval = null
 
-    unsubscribeIdentityRefresh?.()
-    unsubscribeIdentityRefresh = null
+    unsubscribeConfigUpdates?.()
+    unsubscribeConfigUpdates = null
     client = null
     capture = null
     lastCpuUsage = null

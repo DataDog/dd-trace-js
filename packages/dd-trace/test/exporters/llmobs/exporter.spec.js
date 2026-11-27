@@ -21,7 +21,7 @@ describe('LLMObsExporter', () => {
       _url: new URL('http://agent:8126'),
       export: sinon.stub().returns(true),
       flush: sinon.stub().callsFake(done => done?.()),
-      setUrl: sinon.stub(),
+      configure: sinon.stub(),
     }
     agentlessExporter = {
       _url: new URL('https://intake.example'),
@@ -55,6 +55,41 @@ describe('LLMObsExporter', () => {
       url: new URL('http://agent:8126'),
     }
   }
+
+  it('repeats discovery when the Agent changes before its response arrives', () => {
+    const config = getConfig()
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    fetchAgentInfo.firstCall.args[1](new Error('Previous Agent unavailable'))
+
+    sinon.assert.notCalled(AgentlessExporter)
+    sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledTwice(fetchAgentInfo)
+    assert.strictEqual(fetchAgentInfo.secondCall.args[0], config.url)
+    fetchAgentInfo.secondCall.args[1](null, {})
+    exporter.export([{ name: 'updated' }])
+    sinon.assert.calledOnce(AgentExporter)
+    sinon.assert.calledOnce(agentExporter.export)
+  })
+
+  it('preserves direct intake on remote Agent updates', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    sinon.assert.notCalled(agentlessExporter.setUrl)
+  })
+
+  it('updates an active Agent transport for remote configuration', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    sinon.assert.calledOnceWithExactly(agentExporter.configure, config)
+  })
 
   it('buffers traces and drains them to the Agent exporter when discovery succeeds', () => {
     const config = getConfig()
@@ -278,16 +313,6 @@ describe('LLMObsExporter', () => {
     sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
     sinon.assert.notCalled(fetchAgentInfo)
     sinon.assert.notCalled(AgentlessExporter)
-  })
-
-  it('applies a URL set before transport selection to the selected exporter', () => {
-    const exporter = new Exporter(getConfig(), {})
-    const url = new URL('http://custom-agent:8126')
-
-    exporter.setUrl(url)
-    fetchAgentInfo.yield(null, { endpoints: [] })
-
-    sinon.assert.calledOnceWithExactly(agentExporter.setUrl, url)
   })
 
   it('waits for transport selection before completing a flush', () => {

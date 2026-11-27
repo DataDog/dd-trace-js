@@ -6,7 +6,6 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const log = require('../../../src/log')
 const OtlpHttpExporterBase = require('../../../src/opentelemetry/otlp/otlp_http_exporter_base')
 const { version: tracerVersion } = require('../../../../../package.json')
 
@@ -83,67 +82,5 @@ describe('OtlpHttpExporterBase', () => {
     assert.ok(exporter.options.agent)
     assert.strictEqual(exporter.options.agent.proxy.hostname, '127.0.0.1')
     assert.strictEqual(exporter.options.agent.proxy.port, '9999')
-  })
-
-  describe('setUrl', () => {
-    it('picks up a proxy agent when re-targeted to an HTTPS endpoint', () => {
-      const exporter = new OtlpHttpExporterBase(
-        'http://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
-      )
-      assert.strictEqual(exporter.options.agent, undefined)
-
-      process.env.https_proxy = 'http://127.0.0.1:9999'
-      exporter.setUrl('https://intake.example/other-path')
-
-      assert.ok(exporter.options.agent)
-      assert.strictEqual(exporter.options.agent.proxy.hostname, '127.0.0.1')
-      assert.strictEqual(exporter.options.agent.proxy.port, '9999')
-    })
-
-    it('clears the agent when re-targeted from HTTPS to HTTP', () => {
-      process.env.https_proxy = 'http://127.0.0.1:9999'
-      const exporter = new OtlpHttpExporterBase(
-        'https://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
-      )
-      assert.ok(exporter.options.agent)
-
-      exporter.setUrl('http://intake.example/other-path')
-
-      assert.strictEqual(exporter.options.agent, undefined)
-    })
-
-    for (const url of ['not a URL', 'ftp://intake.example/other-path']) {
-      it(`keeps the current target when re-targeted to ${url}`, () => {
-        const exporter = new OtlpHttpExporterBase(
-          'http://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
-        )
-        const error = sinon.stub(log, 'error')
-
-        exporter.setUrl(url)
-
-        assert.strictEqual(exporter.options.hostname, 'intake.example')
-        assert.strictEqual(exporter.options.port, '')
-        assert.strictEqual(exporter.options.path, '/path')
-        assert.strictEqual(exporter.options.agent, undefined)
-        assert.strictEqual(exporter.telemetryTags[0], 'protocol:http')
-        sinon.assert.calledOnce(error)
-      })
-    }
-
-    it('keeps the current target when proxy configuration is invalid', () => {
-      const exporter = new OtlpHttpExporterBase(
-        'http://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
-      )
-      const error = sinon.stub(log, 'error')
-      process.env.HTTPS_PROXY = '://invalid'
-
-      exporter.setUrl('https://other.example/other-path')
-
-      assert.strictEqual(exporter.options.hostname, 'intake.example')
-      assert.strictEqual(exporter.options.path, '/path')
-      assert.strictEqual(exporter.options.agent, undefined)
-      assert.strictEqual(exporter.telemetryTags[0], 'protocol:http')
-      sinon.assert.calledOnce(error)
-    })
   })
 })

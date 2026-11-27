@@ -64,8 +64,17 @@ describe('TracerProxy', () => {
   let supportsServerlessTelemetryRetention
   let flushServerlessTelemetry
   let otelThreadCtx
+  let configUpdateChannel
 
   beforeEach(() => {
+    const configListeners = new Set()
+    configUpdateChannel = {
+      subscribe (listener) { configListeners.add(listener) },
+      unsubscribe (listener) { configListeners.delete(listener) },
+      publish (config) {
+        for (const listener of configListeners) listener(config)
+      },
+    }
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
 
     aiguardSdk = {
@@ -90,8 +99,8 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
-      setUrl: sinon.stub(),
       configure: sinon.spy(),
+      configureAgent: sinon.spy(),
     }
 
     noop = {
@@ -101,7 +110,6 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
-      setUrl: sinon.stub(),
       configure: sinon.spy(),
     }
 
@@ -197,7 +205,11 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.stub(),
+      setRemoteConfig: sinon.stub().callsFake(() => {
+        configUpdateChannel.publish(config)
+      }),
+      setProgrammaticConfig: sinon.stub().callsFake(({ url }) => { config.url = url }),
+      getOrigin: () => 'remote_config',
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -301,6 +313,9 @@ describe('TracerProxy', () => {
     })
 
     ProxyClass = proxyquire('../src/proxy', {
+      'dc-polyfill': {
+        channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+      },
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -598,14 +613,30 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(dynamicInstrumentation.stop)
       })
 
-      it('starts and configures Dynamic Instrumentation when enabled', () => {
+      it('starts Dynamic Instrumentation once when enabled', () => {
         config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
 
         proxy.init()
 
         sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
-        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.configure, config)
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
       })
+
+      for (const isCiVisibility of [false, true]) {
+        it(`keeps Dynamic Instrumentation inactive without Remote Configuration in CI mode ${isCiVisibility}`, () => {
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
+          config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = isCiVisibility
+          config.isCiVisibility = isCiVisibility
+
+          proxy.init()
+          config.setRemoteConfig()
+
+          sinon.assert.notCalled(dynamicInstrumentation.start)
+          sinon.assert.notCalled(dynamicInstrumentation.configure)
+          sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+          sinon.assert.notCalled(RemoteConfig)
+        })
+      }
 
       it('should enable the IAST rewriter when IAST is enabled', () => {
         config.iast.DD_IAST_ENABLED = true
@@ -1119,6 +1150,9 @@ describe('TracerProxy', () => {
 
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
+          'dc-polyfill': {
+            channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+          },
           './tracer': DatadogTracer,
           './aiguard': aiguard,
           './aiguard/sdk': AIGuardSdk,
@@ -1152,6 +1186,9 @@ describe('TracerProxy', () => {
 
       it('should support applying remote config (only call disable if enabled before)', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
+          'dc-polyfill': {
+            channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+          },
           './tracer': DatadogTracer,
           './config': Config,
           './aiguard': aiguard,
@@ -1328,7 +1365,6 @@ describe('TracerProxy', () => {
       })
 
       it('should publish the config on the config-update channel during init', () => {
-        const configUpdateChannel = dc.channel('datadog:config:update')
         const subscriber = sinon.spy()
         configUpdateChannel.subscribe(subscriber)
 
@@ -1503,11 +1539,44 @@ describe('TracerProxy', () => {
     })
 
     describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.setUrl('http://example.com')
+      for (const url of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
+        it(`normalizes ${url} before updating shared configuration`, () => {
+          proxy.init()
+          tracer.configure.resetHistory()
 
-        sinon.assert.calledWith(noop.setUrl, 'http://example.com')
-        assert.strictEqual(returnValue, proxy)
+          assert.strictEqual(proxy.setUrl(url), proxy)
+
+          sinon.assert.calledOnceWithExactly(config.setProgrammaticConfig, { url: new URL(url) })
+          assert.strictEqual(rc.url.href, new URL(url).href)
+          sinon.assert.calledOnceWithExactly(tracer.configureAgent, config)
+          sinon.assert.notCalled(tracer.configure)
+        })
+      }
+
+      it('does not initialize configuration before init', () => {
+        assert.strictEqual(proxy.setUrl('http://agent:8126'), proxy)
+
+        sinon.assert.notCalled(Config)
+        sinon.assert.notCalled(config.setProgrammaticConfig)
+      })
+
+      it('updates the Remote Config destination when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+        proxy.init()
+
+        proxy.setUrl('http://updated:8126')
+
+        assert.strictEqual(rc.url.href, 'http://updated:8126/')
+        sinon.assert.notCalled(tracer.configureAgent)
+      })
+
+      it('preserves configuration when the URL is invalid', () => {
+        proxy.init()
+
+        assert.strictEqual(proxy.setUrl('invalid URL'), proxy)
+
+        sinon.assert.notCalled(config.setProgrammaticConfig)
+        sinon.assert.calledWith(log.error, 'Invalid Agent URL: %s', 'invalid URL')
       })
     })
 
@@ -1743,12 +1812,14 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.setUrl('http://example.com')
+    describe('configuration updates', () => {
+      it('logs a runtime consumer failure', () => {
+        const error = new Error('configuration failed')
+        tracer.configureAgent = sinon.stub().throws(error)
 
-        sinon.assert.calledWith(tracer.setUrl, 'http://example.com')
-        assert.strictEqual(returnValue, proxy)
+        proxy.setUrl('http://agent:8126')
+
+        sinon.assert.calledOnceWithExactly(log.error, 'Error reconfiguring tracer', error)
       })
     })
 
@@ -1818,12 +1889,12 @@ describe('TracerProxy', () => {
       const microVmChannelNames = new Set([
         'http.server.request.start',
         'datadog:identity:update',
-        'datadog:identity:refresh',
       ])
       const otherChannelMocks = new Map()
 
       diagnosticsChannelMock = {
         channel: sinon.stub().callsFake((name) => {
+          if (name === 'datadog:config:update') return configUpdateChannel
           if (microVmChannelNames.has(name)) return channelMock
           if (!otherChannelMocks.has(name)) {
             otherChannelMocks.set(name, { subscribe: sinon.stub(), unsubscribe: sinon.stub(), publish: sinon.stub() })
@@ -1885,7 +1956,7 @@ describe('TracerProxy', () => {
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.calledOnce(channelMock.publish)
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
       sinon.assert.notCalled(storeConfig)
       sinon.assert.calledOnceWithExactly(log.error, 'Error initializing tracer', error)
@@ -1899,7 +1970,7 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.notCalled(storeConfig)
-      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.calledOnce(channelMock.publish)
     })
 
     it('should preload process-discovery at registration and store metadata only on /run', () => {
@@ -1948,11 +2019,12 @@ describe('TracerProxy', () => {
 
       sinon.assert.notCalled(log.error)
 
+      const publishConfig = sinon.spy(configUpdateChannel, 'publish')
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      sinon.assert.calledTwice(channelMock.publish)
-      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(channelMock.publish, config)
+      sinon.assert.calledOnceWithExactly(publishConfig, config)
       sinon.assert.calledOnceWithExactly(storeConfig, config)
     })
 
@@ -1965,8 +2037,7 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
-      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:refresh')
-      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.calledOnce(channelMock.publish)
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
     })
 
@@ -1983,34 +2054,33 @@ describe('TracerProxy', () => {
         const subscriber = channelMock.subscribe.firstCall.args[0]
         subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-        sinon.assert.calledTwice(channelMock.publish)
+        sinon.assert.calledOnce(channelMock.publish)
         sinon.assert.calledTwice(randomFillSync)
       })
     }
 
     it('should update identity, store metadata, and then refresh consumers', () => {
-      // Core identity producers (id/config/remote_config) must finish reseeding before
-      // identity:refresh notifies downstream cache-holders
-      // (dogstatsd, otel metrics, debugger); otherwise those subsystems would refresh from the
-      // pre-reseed identity.
       storeConfig.returns(undefined)
       microProxy.init()
+      const publish = sinon.spy(configUpdateChannel, 'publish')
+      publish.resetHistory()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      const channelNames = diagnosticsChannelMock.channel.getCalls().map(call => call.args[0])
-      const updateIndex = channelNames.indexOf('datadog:identity:update')
-      const refreshIndex = channelNames.indexOf('datadog:identity:refresh')
-
-      assert.notStrictEqual(updateIndex, -1)
-      assert.notStrictEqual(refreshIndex, -1)
-
-      const updateCall = diagnosticsChannelMock.channel.getCall(updateIndex)
-      const refreshCall = diagnosticsChannelMock.channel.getCall(refreshIndex)
-      assert.ok(updateCall.callId < storeConfig.firstCall.callId)
-      assert.ok(storeConfig.firstCall.callId < refreshCall.callId)
+      sinon.assert.callOrder(channelMock.publish, storeConfig, publish)
       sinon.assert.calledOnceWithExactly(log.warn, 'Could not store tracer configuration for service discovery')
+    })
+
+    it('publishes the committed configuration after storing the resumed identity', () => {
+      microProxy.init()
+      const publish = sinon.spy(configUpdateChannel, 'publish')
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledOnceWithExactly(publish, config)
+      sinon.assert.callOrder(channelMock.publish, storeConfig, publish)
     })
 
     it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
@@ -2111,7 +2181,12 @@ describe('TracerProxy', () => {
       const dgram = { createSocket: sinon.stub().returns(udp4) }
       const dns = { lookup: sinon.stub().callsFake((hostname, callback) => callback(null, hostname, 4)) }
       const loadCustomMetrics = proxyquire.noPreserveCache()
-      const RealCustomMetrics = loadCustomMetrics('../src/dogstatsd', { dgram }).CustomMetrics
+      const RealCustomMetrics = loadCustomMetrics('../src/dogstatsd', {
+        dgram,
+        'dc-polyfill': {
+          channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+        },
+      }).CustomMetrics
 
       storeConfig = sinon.stub().callsFake(metadataConfig => {
         storedRuntimeId = metadataConfig.tags['runtime-id']
@@ -2154,7 +2229,9 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
-        // dc-polyfill intentionally NOT mocked — this test exercises the real shared channel.
+        'dc-polyfill': {
+          channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+        },
       })
 
       microProxy = new MicroVmProxy()

@@ -54,7 +54,7 @@ const { programmaticTypeCoercions, transformers } = require('./parsers')
 const rfdc = createRfdc({
   proto: false,
   circles: false,
-  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+  constructorHandlers: [[RegExp, transformers.toCamelCase], [URL, transformers.toURL]],
 })
 
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
@@ -91,6 +91,10 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * | 'fleet_stable_config'} TelemetrySource
  * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
+ * @typedef {{
+ *   url?: URL,
+ *   llmobs?: { enabled?: boolean } & Pick<NonNullable<TracerOptions['llmobs']>, 'mlApp' | 'agentlessEnabled'>
+ * }} ProgrammaticConfig
  * @typedef {import('./config-types').ConfigKey} ConfigKey
  * @typedef {import('./config-types').ConfigPath} ConfigPath
  * @typedef {import('./config-types').ConfigurationOption} ConfigurationOption
@@ -108,8 +112,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /** @type {Config | null} */
 let configInstance = null
 
-// Fires whenever remote config applies a new value; profiling and other RC-driven consumers
-// subscribe here instead of proxy.js hardcoding a call into each of them.
+// Fires whenever remote or programmatic config applies a new value. Consumers such as profiling
+// subscribe here to pick up the effective configuration.
 const configUpdateChannel = channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
@@ -162,17 +166,8 @@ function get (object, path) {
  * @param {TelemetrySource} [source]
  */
 function setAndTrack (config, name, value, rawValue = value, source = 'calculated') {
-  // envs can not be undefined
-  if (value == null) {
-    // TODO: This works as before while ignoring undefined programmatic options is not ideal.
-    if (source !== 'default') {
-      if (rawValue !== value) {
-        generateTelemetry(rawValue, source, name)
-      }
-      return
-    }
-  } else if (source === 'calculated' || source === 'remote_config') {
-    if (source === 'calculated' && value === get(config, name)) {
+  if (source === 'calculated' || source === 'remote_config') {
+    if (source === 'calculated' && (value == null || value === get(config, name))) {
       return
     }
     changeTracker[source].add(name)
@@ -193,6 +188,22 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     trackedConfigOrigins.delete(name)
   } else {
     trackedConfigOrigins.set(name, source)
+  }
+}
+
+/**
+ * @param {Config} config
+ * @template {ConfigPath} TPath
+ * @param {TPath} name
+ * @param {import('./config-types').ConfigPathValue<TPath>} value
+ * @param {unknown} rawValue
+ * @param {TelemetrySource} source
+ */
+function applyParsedValue (config, name, value, rawValue, source) {
+  if (value != null) {
+    setAndTrack(config, name, value, rawValue, source)
+  } else if (rawValue !== value) {
+    generateTelemetry(rawValue, source, name)
   }
 }
 
@@ -288,7 +299,7 @@ class Config extends ConfigBase {
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
-      setAndTrack(this, entry.property ?? name, transformed, rawValue, source)
+      applyParsedValue(this, entry.property ?? name, transformed, rawValue, source)
     }
   }
 
@@ -300,12 +311,7 @@ class Config extends ConfigBase {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
-      if (!entry) {
-        log.warn('Unknown option %s with value %o', fullName, value)
-        continue
-      }
-
-      if (entry.nestedProperties) {
+      if (entry?.nestedProperties) {
         let matched = false
         if (typeof value === 'object' && value !== null) {
           for (const nestedProperty of entry.nestedProperties) {
@@ -336,15 +342,35 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const coerced = programmaticTypeCoercions[entry.type](value)
-      if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+      if (entry === undefined || value !== undefined) {
+        this.#applyOption(fullName, value, entry)
       }
-      const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, 'code')
-        : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
+  }
+
+  /**
+   * @param {string} name
+   * @param {unknown} value
+   * @param {ConfigurationOption | undefined} entry
+   */
+  #applyOption (name, value, entry) {
+    if (entry === undefined) {
+      log.warn('Unknown option %s with value %o', name, value)
+      return
+    }
+    if (value === undefined) {
+      setAndTrack(this, entry.property, value, value, 'code')
+      return
+    }
+
+    const coerced = programmaticTypeCoercions[entry.type](value)
+    if (coerced === undefined) {
+      warnInvalidValue(value, name, 'code', `Invalid ${entry.type} input`)
+    }
+    const transformed = coerced !== undefined && entry.transformer
+      ? entry.transformer(coerced, name, 'code')
+      : coerced
+    applyParsedValue(this, entry.property, transformed, value, 'code')
   }
 
   /**
@@ -366,6 +392,25 @@ class Config extends ConfigBase {
       this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
+    this.#applyCalculated()
+    configUpdateChannel.publish(this)
+  }
+
+  /**
+   * @param {ProgrammaticConfig} options
+   */
+  setProgrammaticConfig (options) {
+    if (options.url !== undefined) {
+      setAndTrack(this, 'url', options.url, options.url.href, 'code')
+    }
+    if (options.llmobs !== undefined) {
+      const { enabled, ...values } = options.llmobs
+      for (const [name, value] of Object.entries(values)) {
+        const fullName = `llmobs.${name}`
+        this.#applyOption(fullName, value, optionsTable[fullName])
+      }
+      if (enabled !== undefined) setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', enabled, enabled, 'code')
+    }
     this.#applyCalculated()
     configUpdateChannel.publish(this)
   }
@@ -413,13 +458,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
     }
 
-    if (this.url ||
-        os.type() !== 'Windows_NT' &&
+    if (!this.url && os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&
         !trackedConfigOrigins.has('port') &&
         fs.existsSync('/var/run/datadog/apm.socket')) {
-      setAndTrack(this, 'url', new URL(this.url || 'unix:///var/run/datadog/apm.socket'))
-    } else {
+      setAndTrack(this, 'url', new URL('unix:///var/run/datadog/apm.socket'))
+    } else if (!this.url) {
       setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 

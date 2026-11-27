@@ -228,17 +228,13 @@ class SpanStatsProcessor {
         DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
         interval = 10,
       } = {},
-      hostname,
-      port,
-      url,
       env,
-      tags,
       version: appVersion,
       reportHostname,
       _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
     } = config
     if (!otlpExporter) {
-      this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
+      this.exporter = new SpanStatsExporter(config)
     }
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3

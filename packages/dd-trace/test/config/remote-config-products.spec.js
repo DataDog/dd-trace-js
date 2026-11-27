@@ -15,9 +15,11 @@ describe('Remote config product composition', () => {
   let config
   let handlers
   let updateConfig
+  let updateTracer
 
   beforeEach(() => {
     updateConfig = sinon.spy()
+    updateTracer = sinon.spy()
     const getConfig = proxyquire('../../src/config', {
       '../telemetry': { updateConfig },
     })
@@ -34,7 +36,7 @@ describe('Remote config product composition', () => {
         handlers.set(products[0], handler)
       },
     }
-    tracing.enable(rc, config, () => {})
+    tracing.enable(rc, config, updateTracer)
     profiling.enable(rc, config, () => ['wall', 'cpu', 'space'])
   })
 
@@ -59,6 +61,29 @@ describe('Remote config product composition', () => {
       },
     })
   }
+
+  it('keeps newer programmatic settings through profiling-only updates', () => {
+    update('APM_TRACING', {
+      sdk_config: { config: { DD_TRACE_URL: 'http://localhost:8126', DD_LLMOBS_ENABLED: 'true' } },
+    })
+    const url = new URL('http://localhost:8127')
+    config.setProgrammaticConfig({ url, llmobs: { enabled: false } })
+
+    updateTracer.resetHistory()
+
+    for (const file of [{ profilers: { wallTime: true } }, { profilers: { wallTime: false } }, null]) {
+      update('APM_PROFILING', file)
+
+      assert.strictEqual(config.url.href, url.href)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      sinon.assert.notCalled(updateTracer)
+    }
+
+    update('APM_TRACING', { sdk_config: { config: { DD_TRACE_AGENT_URL: 'http://localhost:8128' } } })
+
+    assert.strictEqual(config.url.href, 'http://localhost:8128/')
+    sinon.assert.calledOnce(updateTracer)
+  })
 
   for (const product of ['APM_TRACING', 'APM_PROFILING']) {
     it(`keeps local settings when removing ${product} before any product arrives`, () => {

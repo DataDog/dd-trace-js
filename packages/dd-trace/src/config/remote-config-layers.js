@@ -1,5 +1,6 @@
 'use strict'
 
+const { configurationsTable } = require('./defaults')
 const { getEnvironmentVariables } = require('./helper')
 
 /**
@@ -26,13 +27,24 @@ module.exports = function applyRemoteConfig (config, product, settings) {
     layers = { APM_TRACING: null, APM_PROFILING: null }
     layersByConfig.set(config, layers)
   }
-  layers[product] = settings
+  const previousTracing = layers.APM_TRACING
+  // Resolve aliases before comparing snapshots or combining products.
+  layers[product] = settings === null ? null : getEnvironmentVariables(settings, true)
 
   const { APM_TRACING: tracing, APM_PROFILING: profiling } = layers
-  if (tracing === null || profiling === null) {
+  if (tracing === null || (previousTracing === null && profiling === null)) {
     config.setRemoteConfig(tracing ?? profiling)
     return
   }
-  // Resolve aliases first, so that each setting has a single key across products.
-  config.setRemoteConfig({ ...getEnvironmentVariables(tracing, true), ...getEnvironmentVariables(profiling, true) })
+
+  const merged = { ...tracing }
+  if (previousTracing !== null) {
+    // Keep code settings that arrived after an unchanged tracing value.
+    for (const name of Object.keys(tracing)) {
+      if (tracing[name] !== previousTracing[name]) continue
+      const path = configurationsTable[name].property ?? name
+      if (config.getOrigin(path) === 'code') delete merged[name]
+    }
+  }
+  config.setRemoteConfig(Object.assign(merged, profiling))
 }

@@ -244,7 +244,7 @@ const transformers = {
     return parts.join(':')
   },
   /**
-   * @param {string} value
+   * @param {string | URL} value
    */
   toURL (value) {
     try {

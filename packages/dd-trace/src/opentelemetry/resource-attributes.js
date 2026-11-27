@@ -4,7 +4,7 @@ const os = require('node:os')
 
 const { channel } = require('dc-polyfill')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 const resourceAttributeRefreshers = new Map()
 
 function refreshActiveResourceAttributes () {
@@ -45,7 +45,7 @@ function buildResourceAttributes (config) {
  */
 function registerResourceAttributeRefresh (exporter, buildResourceAttributes) {
   if (resourceAttributeRefreshers.size === 0) {
-    identityRefreshChannel.subscribe(refreshActiveResourceAttributes)
+    configUpdateChannel.subscribe(refreshActiveResourceAttributes)
   }
   resourceAttributeRefreshers.set(exporter.signalType, () => {
     exporter.updateResourceAttributes(buildResourceAttributes())

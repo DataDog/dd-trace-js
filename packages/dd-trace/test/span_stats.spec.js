@@ -538,12 +538,7 @@ describe('SpanStatsProcessor', () => {
     processor = new SpanStatsProcessor(config)
     clearTimeout(processor.timer)
 
-    assert.deepStrictEqual(SpanStatsExporter.lastCall.args[0], {
-      hostname: config.hostname,
-      port: config.port,
-      url: config.url,
-      tags: config.tags,
-    })
+    assert.strictEqual(SpanStatsExporter.lastCall.args[0], config)
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, '')

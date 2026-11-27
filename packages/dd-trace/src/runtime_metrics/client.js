@@ -4,11 +4,11 @@ const { channel } = require('dc-polyfill')
 const { DogStatsDClient, createMetricsAggregationClient } = require('../dogstatsd')
 const processTags = require('../process-tags')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 
 /**
  * Builds the DogStatsD tags (with process tags applied) for the runtime-metrics client.
- * Shared by `createMetricsClient()` and `subscribeToIdentityRefresh()` so their tag
+ * Shared by `createMetricsClient()` and `subscribeToConfigUpdates()` so their tag
  * composition can't drift apart.
  *
  * Process tags are applied here, not via config/generateClientConfig, so they only
@@ -16,7 +16,7 @@ const identityRefreshChannel = channel('datadog:identity:refresh')
  * also tag user-facing custom metrics, inflating their cardinality (and billing).
  *
  * @param {import('../config/config-base')} config - Tracer configuration
- * @returns {{ host: string, port: number, tags: string[], lookup: Function, metricsProxyUrl?: URL }}
+ * @returns {import('../dogstatsd').DogStatsDClientOptions}
  */
 function buildClientConfig (config) {
   const clientConfig = DogStatsDClient.generateClientConfig(config)
@@ -43,17 +43,17 @@ function createMetricsClient (config) {
 }
 
 /**
- * Subscribes a runtime-metrics client to the identity-refresh channel so its DogStatsD tags
+ * Subscribes a runtime-metrics client to the config-update channel so its DogStatsD tags
  * (runtime-id, RC client id) reflect `config.tags` after a MicroVM clone resume.
  *
  * @param {ReturnType<typeof createMetricsAggregationClient>} client - The client returned by `createMetricsClient()`
  * @param {import('../config/config-base')} config - Tracer configuration
  * @returns {() => void} Unsubscribe function; call it from the owning module's `stop()`
  */
-function subscribeToIdentityRefresh (client, config) {
-  const onIdentityRefresh = () => client.updateTags(buildClientConfig(config).tags)
-  identityRefreshChannel.subscribe(onIdentityRefresh)
-  return () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
+function subscribeToConfigUpdates (client, config) {
+  const onConfigUpdate = () => client.configure(buildClientConfig(config))
+  configUpdateChannel.subscribe(onConfigUpdate)
+  return () => configUpdateChannel.unsubscribe(onConfigUpdate)
 }
 
-module.exports = { createMetricsClient, subscribeToIdentityRefresh }
+module.exports = { createMetricsClient, subscribeToConfigUpdates }

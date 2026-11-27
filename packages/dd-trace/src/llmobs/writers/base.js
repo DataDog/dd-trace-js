@@ -1,7 +1,7 @@
 'use strict'
 
 const { URL, format } = require('node:url')
-const path = require('node:path')
+const { posix: path } = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
 const { createServerlessDeliveryTracker, IS_STANDARD_AWS_LAMBDA } = require('../../serverless')

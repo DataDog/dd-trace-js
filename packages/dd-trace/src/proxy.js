@@ -5,6 +5,7 @@ const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
+const { transformers: { toURL } } = require('./config/parsers')
 const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
@@ -110,6 +111,9 @@ class Tracer extends NoopProxy {
   /** @type {boolean} */
   #iastUnavailable = false
 
+  /** @type {import('./remote_config') | undefined} */
+  #remoteConfig
+
   constructor () {
     super()
 
@@ -201,13 +205,10 @@ class Tracer extends NoopProxy {
 
       if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
-        const rc = new RemoteConfig(config)
+        const rc = this.#remoteConfig = new RemoteConfig(config)
 
         const tracingRemoteConfig = require('./config/remote_config')
-        tracingRemoteConfig.enable(rc, config, () => {
-          this.#updateTracing(config)
-          this.#updateDebugger(config, rc)
-        })
+        tracingRemoteConfig.enable(rc, config, () => this.#updateConfig(config))
 
         // Subscribe even when profiling is off so RC can enable it.
         require('./profiling/remote-config').enable(rc, config, profiler.getRunningProfileTypes)
@@ -235,18 +236,11 @@ class Tracer extends NoopProxy {
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
 
-        if (config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED) {
-          getDynamicInstrumentation().start(config, rc)
-        }
-
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         const subscribeOpenfeatureToRemoteConfig = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
       }
-
-      configUpdateChannel.publish(config)
-      this.#configPublished = true
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
@@ -281,7 +275,9 @@ class Tracer extends NoopProxy {
         registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
-      const tracing = this.#updateTracing(config)
+      const tracing = this.#updateConfig(config)
+      configUpdateChannel.publish(config)
+      this.#configPublished = true
       setStartupLogConfig(config, { ...tracing, logs, metrics })
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
@@ -365,7 +361,7 @@ class Tracer extends NoopProxy {
             log.warn('Could not store tracer configuration for service discovery')
           }
         }
-        channel('datadog:identity:refresh').publish(config)
+        configUpdateChannel.publish(config)
       }
     }
 
@@ -407,6 +403,34 @@ class Tracer extends NoopProxy {
   }
 
   /**
+   * @param {ReturnType<typeof getConfig>} config
+   * @param {(config: ReturnType<typeof getConfig>) =>
+   *   import('./opentelemetry/startup-config').Pipelines | void} [configure]
+   */
+  #updateConfig (config, configure = this.#updateTracing) {
+    const rc = this.#remoteConfig
+    let tracing
+    try {
+      if (rc) rc.url = config.url
+      tracing = configure.call(this, config)
+      if (rc) this.#updateDebugger(config, rc)
+    } catch (error) {
+      log.error(this.#configPublished ? 'Error reconfiguring tracer' : 'Error initializing tracer', error)
+    }
+    return tracing
+  }
+
+  /** @param {ReturnType<typeof getConfig>} config */
+  #updateAgent (config) {
+    if (!this._tracingInitialized) return
+
+    this._tracer.configureAgent(config)
+    if (config.DD_TRACE_ENABLED !== false && config.llmobs.DD_LLMOBS_ENABLED) {
+      this._modules.llmobs.enable(config)
+    }
+  }
+
+  /**
    * @param {import('./config/config-base')} config - Tracer configuration
    * @returns {import('./opentelemetry/startup-config').Pipelines | undefined}
    */
@@ -426,6 +450,8 @@ class Tracer extends NoopProxy {
       }
       if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
+      } else {
+        this._modules.llmobs.disable()
       }
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
@@ -471,7 +497,6 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
-      dynamicInstrumentation?.configure(config)
     }
 
     initializeServerlessTelemetry(this._serverlessTelemetry)
@@ -539,6 +564,21 @@ class Tracer extends NoopProxy {
    */
   use () {
     this._pluginManager.configurePlugin(...arguments)
+    return this
+  }
+
+  /** @param {string} url */
+  setUrl (url) {
+    if (this.#configPublished) {
+      const parsedUrl = toURL(url)
+      if (parsedUrl) {
+        const config = getConfig()
+        config.setProgrammaticConfig({ url: parsedUrl })
+        this.#updateConfig(config, this.#updateAgent)
+      } else {
+        log.error('Invalid Agent URL: %s', url)
+      }
+    }
     return this
   }
 

@@ -27,8 +27,6 @@ class NoopTracer {
     return ''
   }
 
-  setUrl () {}
-
   startSpan (name, options) {
     return this._span
   }

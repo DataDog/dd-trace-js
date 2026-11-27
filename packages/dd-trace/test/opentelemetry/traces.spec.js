@@ -27,7 +27,7 @@ const { HTTP_STATUS_ERROR, applyHttpOtelSemantics } = require('../../src/plugins
 const processTags = require('../../src/process-tags')
 const { SpanBuckets } = require('../../src/span_stats')
 
-const identityRefreshChannel = channel('datadog:identity:refresh')
+const configUpdateChannel = channel('datadog:config:update')
 const { protoTraceService } = getProtobufTypes()
 
 /**
@@ -1374,24 +1374,24 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://traces-specific:9999')
     })
 
-    it('exporter setUrl preserves a bare URL as-is without adding a signal path', () => {
+    it('preserves a bare URL without adding a signal path', () => {
       const exporter = new OtlpHttpTraceExporter('http://collector:4318', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/')
     })
 
-    it('exporter setUrl preserves an explicit signal-specific path as-is', () => {
+    it('preserves an explicit signal-specific path', () => {
       const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/custom')
     })
 
-    it('exporter setUrl preserves a trailing-slash signal-specific path', () => {
+    it('preserves a trailing slash in the signal-specific path', () => {
       const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces/', {}, 1000, 'http/json', {})
       assert.strictEqual(exporter.options.path, '/v1/traces/')
     })
 
-    it('exporter setUrl keeps /v1/traces when already present', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', {}, 1000, 'http/json', {})
-      assert.strictEqual(exporter.options.path, '/v1/traces')
+    it('preserves the signal path and query string', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces?token=abc', {}, 1000, 'http/json', {})
+      assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
     })
 
     it('exports resource with service, version, env, and hostname', () => {
@@ -1501,33 +1501,7 @@ describe('OpenTelemetry Traces', () => {
     })
   })
 
-  describe('setUrl', () => {
-    it('retargets hostname and port and preserves an explicit custom path as-is', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
-
-      exporter.setUrl('http://otel-collector:9999/custom/path')
-
-      assert.strictEqual(exporter.options.hostname, 'otel-collector')
-      assert.strictEqual(exporter.options.port, '9999')
-      assert.strictEqual(exporter.options.path, '/custom/path')
-    })
-
-    it('uses a bare URL as-is without adding a signal path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
-
-      exporter.setUrl('http://otel-collector:9999')
-
-      assert.strictEqual(exporter.options.path, '/')
-    })
-
-    it('keeps /v1/traces when already present and preserves the query string', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {})
-
-      exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
-
-      assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
-    })
-
+  describe('HTTP transport', () => {
     it('selects http transport for http:// URLs', () => {
       const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, 'http/json', {})
       const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
@@ -1549,18 +1523,6 @@ describe('OpenTelemetry Traces', () => {
 
       assert.ok(httpsStub.calledOnce, 'https.request should have been called')
     })
-
-    it('switches transport when setUrl is called with a different scheme', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, 'http/json', {})
-      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
-      sinon.stub(http, 'request').returns(mockReq)
-      const httpsStub = sinon.stub(https, 'request').returns(mockReq)
-
-      exporter.setUrl('https://secure-collector.example/v1/traces')
-      exporter.sendPayload(Buffer.from('{}'), () => {})
-
-      assert.ok(httpsStub.calledOnce, 'https.request should have been called after switching to https')
-    })
   })
 
   describe('Identity refresh', () => {
@@ -1577,7 +1539,7 @@ describe('OpenTelemetry Traces', () => {
       const startupResource = exporter.getStartupResourceAttributes()
 
       config.tags['runtime-id'] = 'refreshed-id'
-      identityRefreshChannel.publish(config)
+      configUpdateChannel.publish(config)
       exporter.export([createMockSpan()])
 
       assert.strictEqual(startupResource['runtime-id'], initialRuntimeId)
@@ -1603,7 +1565,7 @@ describe('OpenTelemetry Traces', () => {
 
       firstConfig.tags['runtime-id'] = 'stale-first-id'
       secondConfig.tags['runtime-id'] = 'second-refreshed-id'
-      identityRefreshChannel.publish(secondConfig)
+      configUpdateChannel.publish(secondConfig)
       firstExporter.export([createMockSpan()])
       secondExporter.export([createMockSpan()])
 
@@ -1644,7 +1606,7 @@ describe('OpenTelemetry Traces', () => {
 
       traceConfig.tags['runtime-id'] = 'refreshed-trace-id'
       statsConfig.tags['runtime-id'] = 'refreshed-stats-id'
-      identityRefreshChannel.publish(traceConfig)
+      configUpdateChannel.publish(traceConfig)
       traceExporter.export([createMockSpan()])
       statsExporter.export(createSpanStatsDrain(), 10 * 1e9)
 

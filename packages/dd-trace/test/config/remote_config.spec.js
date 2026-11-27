@@ -29,6 +29,7 @@ describe('Tracing Remote Config', () => {
       service: 'test-service',
       env: 'test-env',
       setRemoteConfig: sinon.spy(),
+      getOrigin: () => 'remote_config',
     }
 
     onConfigUpdated = sinon.spy()
