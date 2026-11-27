@@ -315,6 +315,7 @@ interface Plugins {
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
   "cypress": tracer.plugins.cypress;
+  "dataloader": tracer.plugins.dataloader;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
@@ -2850,6 +2851,12 @@ declare namespace tracer {
      * [cypress](https://github.com/cypress-io/cypress) module.
      */
     interface cypress extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [dataloader](https://github.com/graphql/dataloader) library.
+     */
+    interface dataloader extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
