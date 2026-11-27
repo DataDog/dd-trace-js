@@ -59,9 +59,13 @@ const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'Ar
  * @property {(line: number, column: number) => (MappedPosition | undefined)} [mapPosition]
  *   maps a generated position (1-based line, 0-based column) to a source and its 1-based line, or
  *   undefined when the position is not credited
+ * @property {(source: number, line: number, column: number, isInitialiser: boolean) => (boolean | undefined)}
+ *   [isSourceInitialiser] whether a mapped position is initialiser code by the structure of its source,
+ *   given whether the structure of the code makes it initialiser code; undefined keeps the latter
  *
- * @typedef {{ source: number, line: number, start?: number, end?: number }} MappedPosition
- *   `start` and `end` are the columns of the generated line between which every position maps the same
+ * @typedef {{ source: number, line: number, column?: number, start?: number, end?: number }} MappedPosition
+ *   `column` is the position's column in the source; `start` and `end` are the columns of the generated
+ *   line between which every position maps the same
  *
  * @typedef {{ source: number, line: number, init: boolean }} Slot
  */
@@ -82,12 +86,13 @@ class Instrumenter {
    * @param {object} program
    * @param {InstrumentOptions} options
    */
-  constructor (code, program, { moduleKey = '', sources = [null], mapPosition }) {
+  constructor (code, program, { moduleKey = '', sources = [null], mapPosition, isSourceInitialiser }) {
     this.code = code
     this.program = program
     this.moduleKey = moduleKey
     this.sources = sources
     this.mapPosition = mapPosition
+    this.isSourceInitialiser = isSourceInitialiser
     this.prefix = choosePrefix(code)
     // Source maps count lines by `\n` alone.
     this.lineStarts = mapPosition ? getNewlineStarts(code) : getLineStarts(code)
@@ -181,9 +186,10 @@ class Instrumenter {
   // --- Positions and credit points ---
 
   slotAt (offset) {
-    const init = this.init
+    const codeInit = this.init
     // Most positions are on the line of the position before them, and in the same mapped segment.
-    if (offset >= this.lastStart && offset < this.lastEnd && init === this.lastInit) return this.lastSlot
+    if (offset >= this.lastStart && offset < this.lastEnd && codeInit === this.lastInit) return this.lastSlot
+    let init = codeInit
     let source = 0
     let line = lineAt(this.lineStarts, offset)
     let start = this.lineStarts[line - 1]
@@ -196,6 +202,12 @@ class Instrumenter {
       line = mapped.line
       end = Math.min(end, start + (mapped.end ?? column + 1))
       start += mapped.start ?? column
+      // A compiler can move code between the module's top level and functions, such as a class into a
+      // function it calls at once: the source says what is initialiser code. Every position of a mapped
+      // segment maps to the same place, so the segment's slot stands.
+      if (this.isSourceInitialiser !== undefined && mapped.column !== undefined) {
+        init = this.isSourceInitialiser(source, line, mapped.column, codeInit) ?? codeInit
+      }
     }
     const key = (source * 4_194_304 + line) * 2 + (init ? 1 : 0)
     let slot = this.slotByKey.get(key)
@@ -206,7 +218,7 @@ class Instrumenter {
     }
     this.lastStart = start
     this.lastEnd = end
-    this.lastInit = init
+    this.lastInit = codeInit
     this.lastSlot = slot
     return slot
   }
