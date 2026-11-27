@@ -41,11 +41,11 @@ const tags = require('../../../../../ext/tags')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const { hasTraceSourcePropagationTag } = require('../../standalone/tracesource')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { OTEL_B3_STYLE } = require('../../constants')
 const { DD_MAJOR } = require('../../../../../version')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
+const { OTEL_B3_LABEL, OTEL_B3_STYLE, formatPropagationStyles } = require('./styles')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -395,7 +395,7 @@ class TextMapPropagator {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pickTextMap(carrier))
-      const styles = this.#config.tracePropagationStyle.extract.join(', ').replaceAll(OTEL_B3_STYLE, 'b3')
+      const styles = formatPropagationStyles(this.#config.tracePropagationStyle.extract, ', ')
 
       return `Extract from carrier (${styles}): ${keys}.`
     })
@@ -804,9 +804,10 @@ class TextMapPropagator {
           extractedContext = DD_MAJOR < 6 ? extractB3MultiContext(carrier) : extractB3SingleContext(carrier)
           break
         case OTEL_B3_STYLE:
+          extractor = OTEL_B3_LABEL
+          // falls through
         case 'b3 single header':
           extractedContext = extractB3SingleContext(carrier)
-          if (extractor === OTEL_B3_STYLE) extractor = 'b3'
           break
         case 'b3multi':
           extractedContext = extractB3MultiContext(carrier)

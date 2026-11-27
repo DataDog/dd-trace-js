@@ -2289,8 +2289,13 @@ describe('TextMapPropagator', () => {
         const load = proxyquire.noPreserveCache()
         const registry = load('../../../src/config/supported-configurations.json', {})
         const parsers = load('../../../src/config/parsers', {})
-        const helper = load('../../../src/config/helper', { './supported-configurations.json': registry })
-        helper.getStableConfigSources = () => ({ localStableConfig: local, fleetStableConfig: fleet })
+        const helper = load('../../../src/config/helper', {
+          './supported-configurations.json': registry,
+          './stable': class {
+            localEntries = local
+            fleetEntries = fleet
+          },
+        })
         const defaults = load('../../../src/config/defaults', {
           './supported-configurations.json': registry,
           './parsers': parsers,
@@ -2400,9 +2405,10 @@ describe('TextMapPropagator', () => {
       it('should replace and restore B3 styles on the same propagator', () => {
         configure({ OTEL_PROPAGATORS: 'b3', DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' })
 
-        for (const [remote, single] of [
+        for (const [remote, single, label = 'b3'] of [
           [undefined, true],
           [{ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3', DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'b3' }, false],
+          [{ OTEL_PROPAGATORS: 'b3multi' }, false, 'b3multi'],
           [{ OTEL_PROPAGATORS: 'b3' }, true],
           [{ OTEL_PROPAGATORS: 'b3', DD_TRACE_PROPAGATION_STYLE: 'b3' }, false],
           [{ DD_TRACE_PROPAGATION_STYLE: 'invalid' }, true],
@@ -2414,13 +2420,29 @@ describe('TextMapPropagator', () => {
           assert.strictEqual(carrier['x-b3-traceid'], single ? undefined : '0000000000000123')
           const extracted = propagator.extract(incoming)
           assert.strictEqual(extracted.toTraceId(), single ? '291' : '1929')
-          assert.strictEqual(extracted._links[0].attributes.context_headers, 'b3')
+          assert.strictEqual(extracted._links[0].attributes.context_headers, label)
 
           if (remote === undefined) {
             delete process.env.OTEL_PROPAGATORS
             process.env.DD_TRACE_PROPAGATION_STYLE = 'b3'
           }
         }
+      })
+
+      it('should apply and withdraw remote OTel B3 with no startup propagation style', () => {
+        configure()
+
+        config.setRemoteConfig({ OTEL_PROPAGATORS: 'b3' })
+        const carrier = inject()
+        assert.strictEqual(carrier['x-b3-traceid'], undefined)
+        assert.strictEqual(carrier.b3, incoming.b3)
+        assert.strictEqual(propagator.extract(incoming).toTraceId(), '291')
+
+        config.setRemoteConfig(null)
+        const restored = inject()
+        assert.strictEqual(restored.b3, undefined)
+        assert.strictEqual(restored['x-b3-traceid'], undefined)
+        assert.strictEqual(propagator.extract(incoming), null)
       })
 
       it('should preserve B3 labels on conflicting inbound contexts', () => {

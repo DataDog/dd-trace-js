@@ -4,7 +4,6 @@ const assert = require('node:assert')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
-const { OTEL_B3_STYLE } = require('../constants')
 const {
   parsers,
   programmaticTypeCoercions,
@@ -94,13 +93,6 @@ function generateTelemetry (value = null, origin, optionName) {
   // telemetry path (app-started and app-client-configuration-change).
   if (sensitiveConfigurations.has(canonicalName)) {
     return
-  }
-  if (origin === 'calculated' &&
-      (canonicalName === 'DD_TRACE_PROPAGATION_STYLE' ||
-        canonicalName === 'DD_TRACE_PROPAGATION_STYLE_INJECT' ||
-        canonicalName === 'DD_TRACE_PROPAGATION_STYLE_EXTRACT') &&
-      Array.isArray(value) && value.includes(OTEL_B3_STYLE)) {
-    value = value.map(style => style === OTEL_B3_STYLE ? 'b3' : style)
   }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
