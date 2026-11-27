@@ -19,7 +19,8 @@ const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
-const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+// esbuild requires an absolute path in the file namespace, and on Windows that needs a drive letter.
+const INTERNAL_ESM_INTERCEPTED_PREFIX = path.resolve('/_dd_esm_internal_') + path.sep
 // User bundles may not have dc-polyfill next to the target package.
 const DC_MODULE = require.resolve('dc-polyfill').replaceAll('\\', '/')
 const DC_MODULE_LITERAL = JSON.stringify(DC_MODULE)

@@ -52,7 +52,7 @@ function captureOnLoad (initialOptions = {}) {
 function loadBuiltinWrapper (initialOptions) {
   const onLoad = captureOnLoad(initialOptions)
   return onLoad({
-    path: '/_dd_esm_internal_/node:dns/promises._dd_esbuild_intercepted',
+    path: `${path.resolve('/_dd_esm_internal_')}${path.sep}node:dns/promises._dd_esbuild_intercepted`,
     pluginData: {
       internal: true,
       isESM: true,
@@ -93,6 +93,21 @@ describe('datadog-esbuild plugin', () => {
     })
 
     assert.strictEqual(result, undefined)
+  })
+
+  it('resolves ESM imports of builtins to an absolute path', () => {
+    const onResolve = captureOnResolve({ format: 'esm' })
+
+    const result = onResolve({
+      path: 'node:fs',
+      resolveDir: process.cwd(),
+      kind: 'import-statement',
+      namespace: 'file',
+      importer: path.resolve('app/index.mjs'),
+    })
+
+    // esbuild rejects a non-absolute path in the file namespace, and on Windows that needs a drive letter.
+    assert.strictEqual(result.path, path.resolve(result.path))
   })
 
   describe('Orchestrion rewrite targets', () => {
