@@ -3798,6 +3798,54 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(exitCode, 0)
     })
 
+    it('applies DD_TEST_OPTIMIZATION_RUNTIME_TAGS to every event level and to the skippable request', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      const overrides = {
+        'os.version': '6.12.0-test',
+        'runtime.name': 'runtime-test',
+        'runtime.version': 'v0.0.0-test',
+      }
+
+      const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const type of ['test_session_end', 'test_module_end', 'test_suite_end', 'test']) {
+            const levelEvents = events.filter(event => event.type === type)
+            assert.ok(levelEvents.length > 0, `no ${type} events`)
+            for (const { content } of levelEvents) {
+              assertObjectContains(content.meta, { ...overrides, 'os.platform': process.platform })
+            }
+          }
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/passing.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TEST_OPTIMIZATION_RUNTIME_TAGS: JSON.stringify({ ...overrides, 'runtime.vendor': 'ignored' }),
+          },
+        }
+      )
+      const [skippableRequest, , [exitCode]] = await Promise.all([
+        skippableRequestPromise,
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+      assert.strictEqual(exitCode, 0)
+      assertObjectContains(skippableRequest.payload.data.attributes.configurations, {
+        ...overrides,
+        'os.platform': process.platform,
+      })
+      assert.ok(!('runtime.vendor' in skippableRequest.payload.data.attributes.configurations))
+    })
+
     it('marks the test session as skipped if every suite is skipped', async () => {
       receiver.setSettings({
         itr_enabled: true,

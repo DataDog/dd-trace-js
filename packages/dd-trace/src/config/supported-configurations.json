@@ -2340,6 +2340,13 @@
         "description": "Internal: Absolute path to planning metadata supplied by ddtest run."
       }
     ],
+    "DD_TEST_OPTIMIZATION_RUNTIME_TAGS": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
