@@ -51,8 +51,9 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-The `:ci` script runs `npm run services` to install versioned dependencies and check services before testing.
-After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
+The `:ci` script installs versioned dependencies and checks services before testing.
+After setup, use `npm run test:plugins` with the same `PLUGINS` and `SPEC` to rerun the selected tests.
+Run `npm run services` with the new selectors before broadening the selection.
 For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
 Match its test action or script, `PLUGINS`, and any `SPEC` filter.
 Start the job's services locally, using matching `docker-compose.yml` entries when available.

@@ -134,40 +134,48 @@ describe('plugin fixture discovery', () => {
   for (const [plugin, spec, range] of [
     ['azure-functions', 'eventhubs', '4'],
     ['azure-durable-functions', 'client', '3'],
-    ['azure-functions|azure-durable-functions', 'client', ''],
+    ['azure-functions|azure-durable-functions', '', ''],
   ]) {
     it(`installs one trusted Core Tools workspace for ${plugin} integration tests`, () => {
-      const env = { PLUGINS: plugin, SPEC: spec, RANGE: range, DD_TEST_PLUGIN_INTEGRATION: '' }
+      const env = { PLUGINS: plugin, SPEC: spec, RANGE: range }
       withInstallerFixture(env, fixtureRoot => {
         const versions = join(fixtureRoot, 'versions')
         const name = 'azure-functions-core-tools'
+        const workspace = `${name}@fixture`
         const manifest = JSON.parse(readFileSync(join(versions, 'package.json'), 'utf8'))
-        assert.deepStrictEqual(manifest.workspaces.packages.filter(workspace => workspace.startsWith(name)), [name])
+        assert.deepStrictEqual(manifest.workspaces.packages.filter(folder => folder.startsWith(name)), [workspace])
         assert.ok(manifest.trustedDependencies.includes(name))
 
-        const dependency = JSON.parse(readFileSync(join(versions, name, 'package.json'), 'utf8'))
+        const dependency = JSON.parse(readFileSync(join(versions, workspace, 'package.json'), 'utf8'))
         const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
         assert.strictEqual(dependency.dependencies[name], getCappedRange(name, '4'))
-      })
+      }, ['scripts/run-plugin-tests.js', 'plugins', 'prepare'])
     })
   }
 
-  it('leaves Core Tools out of the Azure index specs', () => {
-    const env = { PLUGINS: 'azure-functions|azure-durable-functions', SPEC: 'index', DD_TEST_PLUGIN_INTEGRATION: '' }
-    withInstallerFixture(env, fixtureRoot => {
-      const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
-      assert.strictEqual(manifest.workspaces.packages.includes('azure-functions-core-tools'), false)
-      assert.strictEqual(manifest.trustedDependencies.includes('azure-functions-core-tools'), false)
+  for (const [suite, spec] of [
+    ['plugins', 'index'],
+    ['instrumentations', ''],
+    ['unit', ''],
+    ['integration', 'nonexistent'],
+  ]) {
+    it(`leaves Core Tools out of ${suite} setup with SPEC="${spec}"`, () => {
+      const env = { PLUGINS: 'azure-functions|azure-durable-functions', SPEC: spec }
+      withInstallerFixture(env, fixtureRoot => {
+        const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
+        assert.strictEqual(manifest.workspaces.packages.includes('azure-functions-core-tools@fixture'), false)
+        assert.strictEqual(manifest.trustedDependencies.includes('azure-functions-core-tools'), false)
+        assert.ok(manifest.workspaces.packages.length > 0)
+      }, ['scripts/run-plugin-tests.js', suite, 'prepare'])
     })
-  })
+  }
 
-  it('leaves Core Tools out of Azure instrumentation tests with no spec selector', () => {
-    const env = { PLUGINS: 'azure-functions', SPEC: '', DD_TEST_PLUGIN_INTEGRATION: '0' }
-    withInstallerFixture(env, fixtureRoot => {
-      const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
-      assert.strictEqual(manifest.workspaces.packages.includes('azure-functions-core-tools'), false)
-      assert.strictEqual(manifest.trustedDependencies.includes('azure-functions-core-tools'), false)
-    })
+  it('rejects an undeclared fixture before installing dependencies', () => {
+    assert.throws(() => withInstallerFixture(
+      { PLUGINS: 'azure-functions' },
+      assert.fail,
+      ['scripts/install_plugin_modules.js', 'toString']
+    ), /Unknown plugin test fixture: "toString"/)
   })
 })
 
@@ -176,8 +184,9 @@ describe('plugin fixture discovery', () => {
  *
  * @param {Record<string, string>} env
  * @param {(fixtureRoot: string) => void} assertions
+ * @param {string[]} [args]
  */
-function withInstallerFixture (env, assertions) {
+function withInstallerFixture (env, assertions, args = ['scripts/install_plugin_modules.js']) {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'dd-trace-plugin-installer-'))
   try {
     const scripts = join(fixtureRoot, 'scripts')
@@ -186,6 +195,7 @@ function withInstallerFixture (env, assertions) {
     symlinkSync(join(root, 'node_modules'), join(fixtureRoot, 'node_modules'), 'junction')
     symlinkSync(join(root, 'scripts', 'helpers'), join(scripts, 'helpers'), 'junction')
     copyFileSync(join(root, 'scripts', 'install_plugin_modules.js'), join(scripts, 'install_plugin_modules.js'))
+    copyFileSync(join(root, 'scripts', 'run-plugin-tests.js'), join(scripts, 'run-plugin-tests.js'))
 
     const preload = join(fixtureRoot, 'preload.cjs')
     writeFileSync(preload, String.raw`
@@ -202,10 +212,13 @@ require.cache[execPath] = {
 }
 `)
 
-    execFileSync(process.execPath, ['--require', preload, join(scripts, 'install_plugin_modules.js')], {
+    execFileSync(process.execPath, args, {
+      cwd: fixtureRoot,
       env: {
         ...process.env,
         DD_INSTALLER_EXEC_PATH: join(root, 'scripts/helpers/exec.js'),
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require="${preload}"`,
+        SERVICES: '',
         ...env,
       },
       stdio: 'pipe',

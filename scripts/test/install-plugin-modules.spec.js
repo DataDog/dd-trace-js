@@ -227,7 +227,7 @@ require('node:assert/strict').strictEqual(
     const preload = path.join(wrapperDirectory, 'missing-external-cap.js')
     fs.writeFileSync(preload, `
 const latests = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/versions/package.json'))})
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+const { externals } = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
 delete latests.dependencies.bluebird
 externals.moleculer = [{ name: 'bluebird', versions: ['3.7.2'], version: '*', dep: true, forced: true }]
 `)

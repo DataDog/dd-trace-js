@@ -27,12 +27,12 @@ const { markCoverageDirectory } = require('./c8-source-map-cache')
 const repoRoot = path.resolve(__dirname, '..')
 const sourceMapCacheFile = require.resolve('./c8-source-map-cache')
 
-const script = process.argv[2]
-if (!script) {
-  process.stderr.write('usage: node scripts/c8-ci.js <npm-script> [extra npm args...]\n')
+const directNode = process.argv[2] === '--node'
+const [script, ...extraArgs] = process.argv.slice(directNode ? 3 : 2)
+if (!script || (directNode && extraArgs.length === 0)) {
+  process.stderr.write('usage: node scripts/c8-ci.js [--node] <npm-script> [args...]\n')
   process.exit(1)
 }
-const extraArgs = process.argv.slice(3)
 
 const v8Dir = path.join(repoRoot, baseNycConfig.tempDir, 'v8')
 const reportDir = path.join(repoRoot, baseNycConfig.reportDir)
@@ -50,9 +50,10 @@ const coverageEnv = { ...process.env, NODE_OPTIONS: nodeOptions, NODE_V8_COVERAG
 
 /**
  * @param {string[]} command command + args to run with V8 coverage enabled
+ * @param {typeof process.env} [env]
  */
-function runCovered (command) {
-  const { status } = spawnSync(command[0], command.slice(1), { cwd: repoRoot, env: coverageEnv, stdio: 'inherit' })
+function runCovered (command, env = coverageEnv) {
+  const { status } = spawnSync(command[0], command.slice(1), { cwd: repoRoot, env, stdio: 'inherit' })
   return status ?? 1
 }
 
@@ -63,7 +64,9 @@ if (warmup !== 0) process.exit(warmup)
 // on the real CI path; direct invocations fall back to npm from PATH.
 const pmExecpath = process.env.npm_execpath
 const runner = pmExecpath ? [process.execPath, pmExecpath] : ['npm']
-const testStatus = runCovered([...runner, 'run', script, '--', ...extraArgs])
+const testStatus = directNode
+  ? runCovered([process.execPath, ...extraArgs], { ...coverageEnv, npm_lifecycle_event: script })
+  : runCovered([...runner, 'run', script, '--', ...extraArgs])
 
 convertV8DirToReport(v8Dir, reportDir)
   .then(({ scripts, profiles, files }) => {

@@ -6,6 +6,7 @@ const path = require('node:path')
 const { globSync } = require('glob')
 const YAML = require('yaml')
 
+const { getPluginTestRun, pluginTestPatterns } = require('./helpers/plugin-test-suites')
 const { TEST_FILE_GLOB, createTestFileIndex } = require('./helpers/test-file-index')
 
 /** @typedef {import('./helpers/test-file-index').TestFileIndex} TestFileIndex */
@@ -113,10 +114,8 @@ function looksLikeFileGlob (token) {
 /**
  * Converts some shell-specific patterns in scripts into a conservative file glob.
  * @param {string} raw
- * @param {{ preserveEnv?: boolean }} [opts]
  */
-function normalizeScriptGlob (raw, opts = {}) {
-  const preserveEnv = Boolean(opts.preserveEnv)
+function normalizeScriptGlob (raw) {
   let p = stripOuterQuotes(raw.trim())
 
   // Strip quotes that are meant for bash extglob options inside double-quoted strings.
@@ -128,25 +127,9 @@ function normalizeScriptGlob (raw, opts = {}) {
   // eslint-disable-next-line regexp/no-super-linear-backtracking -- Parses bounded repository package scripts.
   p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
-  // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
-  // we need to preserve them so they can be expanded with the provided env.
-  if (preserveEnv) {
-    // Unwrap extglob constructs that wrap a single env var so the env-aware expansion
-    // below still sees the variable. Without this, every glob of the form
-    // `@(${PLUGINS}).spec.js` would degrade to `*.spec.js` and a single-plugin CI job
-    // (e.g. `PLUGINS=bluebird`) would falsely appear to exercise every spec in the
-    // same directory.
-    p = p.replaceAll(/@\((\$\{[^}]+\})\)/g, '$1')
-    p = p.replaceAll(/@\((\$[A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
-  } else {
-    // Replace shell variable expansion with a wildcard for our analysis.
-    // Examples:
-    // - ${PLUGINS} -> *
-    // - ${SPEC:-*} -> *
-    // - $PLUGINS -> *
-    p = p.replaceAll(/\$\{[^}]+\}/g, '*')
-    p = p.replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
-  }
+  // Preserve an extglob's environment variable for expansion with the CI job's selectors.
+  p = p.replaceAll(/@\((\$\{[^}]+\})\)/g, '$1')
+  p = p.replaceAll(/@\((\$[A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
 
   // Replace remaining bash extglob constructs with a conservative wildcard to avoid
   // parsing issues. Examples: @(...), +(...), ?(...), !(...).
@@ -324,6 +307,49 @@ function findTestFiles (index) {
   return index.match(TEST_FILE_GLOB, DEFAULT_IGNORE_GLOBS)
 }
 
+/** @param {string[]} tokens */
+function pluginTestRunFromCommand (tokens) {
+  if (tokens[0] === 'node' && tokens[1] === 'scripts/run-plugin-tests.js') {
+    return getPluginTestRun(tokens[2], tokens[3])
+  }
+}
+
+/**
+ * @param {TestFileIndex} index
+ * @param {string} command
+ * @param {Record<string, string|undefined>} env
+ * @param {string[]} globs
+ * @param {Set<string>} files
+ */
+function addScriptTests (index, command, env, globs, files) {
+  const tokens = shellSplit(command)
+  const suite = pluginTestRunFromCommand(tokens)
+  if (suite?.prepareOnly) {
+    return
+  }
+
+  const { include, exclude } = suite
+    ? pluginTestPatterns(suite, splitPlugins(env.PLUGINS ?? '').join('|') || '*', formatEnvValue('SPEC', env.SPEC))
+    : {
+        include: tokens.filter(looksLikeFileGlob).map(token => expandEnvInString(normalizeScriptGlob(token), env)),
+        exclude: [],
+      }
+  const ignore = [...DEFAULT_IGNORE_GLOBS, ...exclude]
+  for (const pattern of include) {
+    globs.push(pattern)
+    let matched
+    try {
+      matched = index.match(pattern, ignore)
+    } catch {
+      // Keep reporting the pattern even when glob cannot parse it.
+      continue
+    }
+    for (const file of matched) {
+      files.add(file)
+    }
+  }
+}
+
 /**
  * @param {TestFileIndex} index
  * @param {Record<string, string>} scripts
@@ -340,25 +366,7 @@ function expandScriptGlobs (index, scripts, env = {}) {
     const script = scripts[scriptName]
     if (typeof script !== 'string') continue
 
-    const tokens = shellSplit(script)
-    for (const token of tokens) {
-      if (!looksLikeFileGlob(token)) continue
-
-      const normalized = expandEnvInString(normalizeScriptGlob(token), env)
-      allGlobs.push(normalized)
-
-      let expanded
-      try {
-        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
-      } catch {
-        // If a pattern can't be parsed by glob, skip expanding it. It still counts as an extracted glob.
-        continue
-      }
-
-      for (const file of expanded) {
-        matchedFiles.add(file)
-      }
-    }
+    addScriptTests(index, script, env, allGlobs, matchedFiles)
   }
 
   return { globs: allGlobs, matchedFiles }
@@ -450,20 +458,7 @@ function expandInvokedScript (index, scripts, knownScripts, scriptName, env) {
     const cmd = scripts[name]
     if (typeof cmd !== 'string') continue
 
-    // Extract and expand glob tokens from the script command.
-    const tokens = shellSplit(cmd)
-    for (const token of tokens) {
-      if (!looksLikeFileGlob(token)) continue
-      const normalized = expandEnvInString(normalizeScriptGlob(token, { preserveEnv: true }), env)
-      allGlobs.push(normalized)
-      let expanded
-      try {
-        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
-      } catch {
-        continue
-      }
-      for (const f of expanded) files.add(f)
-    }
+    addScriptTests(index, cmd, env, allGlobs, files)
 
     // Follow nested script invocations.
     const nested = extractScriptInvocations(cmd, knownScripts)
@@ -631,6 +626,9 @@ function collectStepEvents (stepValue, repoRoot, env, visiting) {
  */
 function invokesCoverageCollector (command) {
   const tokens = shellSplit(command)
+  if (pluginTestRunFromCommand(tokens)?.coverage) {
+    return true
+  }
   for (const token of tokens) {
     const normalized = token.startsWith('./') ? token.slice(2) : token
     if (COVERAGE_COLLECTORS.has(normalized)) return true

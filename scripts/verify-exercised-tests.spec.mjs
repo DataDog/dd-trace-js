@@ -311,6 +311,70 @@ describe('verify-exercised-tests', () => {
     assert.match(stderr, /generates coverage but does not upload it/)
   })
 
+  it('uses the plugin runner selectors to check which files a CI job exercises', () => {
+    const { status, stderr } = runVerifier({
+      scripts: {
+        'test:plugins:ci': 'node scripts/run-plugin-tests.js plugins ci',
+      },
+      workflows: {
+        'test.yml': {
+          plugins: [
+            { run: 'npm run test:plugins:ci', env: { PLUGINS: 'http', SPEC: 'index' } },
+            { uses: './.github/actions/coverage' },
+          ],
+        },
+      },
+      files: [
+        'packages/datadog-plugin-http/test/index.spec.js',
+        'packages/datadog-plugin-http/test/integration-test/client.spec.js',
+      ],
+    })
+
+    assert.strictEqual(status, 1)
+    assert.match(stderr, /exercise packages\/datadog-plugin-http\/test\/integration-test\/client\.spec\.js/)
+    assert.doesNotMatch(stderr, /exercise packages\/datadog-plugin-http\/test\/index\.spec\.js/)
+  })
+
+  it('excludes integration specs from unit runs and setup-only commands', () => {
+    const spec = 'packages/datadog-plugin-http/test/integration-test/client.spec.js'
+    const { status, stderr } = runVerifier({
+      scripts: {
+        services: 'node scripts/run-plugin-tests.js plugins prepare',
+        'test:unit:plugins': 'node scripts/run-plugin-tests.js unit run',
+      },
+      workflows: {
+        'test.yml': {
+          plugins: [
+            { run: 'npm run services', env: { PLUGINS: 'http' } },
+            { run: 'npm run test:unit:plugins', env: { PLUGINS: 'http' } },
+          ],
+        },
+      },
+      files: ['packages/datadog-plugin-http/test/index.spec.js', spec],
+    })
+
+    assert.strictEqual(status, 1)
+    assert.match(stderr, /Test files not covered by any package\.json script glob\./)
+    assert.ok(stderr.split('\n').includes(`- ${spec}`))
+  })
+
+  it('requires coverage upload for the integration plugin runner', () => {
+    const { status, stderr } = runVerifier({
+      scripts: {
+        'test:integration:plugins:coverage': 'node scripts/run-plugin-tests.js integration coverage',
+      },
+      workflows: {
+        'test.yml': {
+          plugins: [{ run: 'npm run test:integration:plugins:coverage', env: { PLUGINS: 'http' } }],
+        },
+      },
+      files: ['packages/datadog-plugin-http/test/integration-test/client.spec.js'],
+    })
+
+    assert.strictEqual(status, 1)
+    assert.match(stderr, /generates coverage but does not upload it/)
+  })
+
   describe('coverage upload ordering', () => {
     const scripts = { ...PASSING.scripts, 'test:cov:ci': 'node scripts/c8-ci.js test:unit:ci' }
     const upload = { uses: './.github/actions/coverage' }

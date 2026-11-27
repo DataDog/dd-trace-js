@@ -2,9 +2,7 @@
 
 const { DD_MAJOR } = require('../../../../version')
 
-const azureFunctionsCoreTools = [{ name: 'azure-functions-core-tools', version: '4', integrationOnly: true }]
-
-module.exports = {
+const externals = {
   elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
@@ -106,8 +104,6 @@ module.exports = {
       versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
-  'azure-durable-functions': azureFunctionsCoreTools,
-  'azure-functions': azureFunctionsCoreTools,
   bullmq: [
     {
       name: 'ioredis',
@@ -887,3 +883,12 @@ module.exports = {
     },
   ],
 }
+
+const fixtures = {
+  'azure-functions-core-tools': {
+    range: '4',
+    specs: 'packages/datadog-plugin-@(azure-functions|azure-durable-functions)/test/integration-test/**/*.spec.js',
+  },
+}
+
+module.exports = { externals, fixtures }
