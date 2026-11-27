@@ -46,6 +46,37 @@ const quantizedPeerTagValues = new Map()
 let agentInfoAgents
 
 /**
+ * Unreference the sockets of an agent while they are in use too, so an `/info` read never keeps a short-lived
+ * process alive. The agent itself only unreferences idle keep-alive sockets.
+ *
+ * @template {import('node:http').Agent} T
+ * @param {T} agent
+ * @returns {T}
+ */
+function unrefSockets (agent) {
+  const { createConnection, reuseSocket } = agent
+  agent.createConnection = function (...args) {
+    const socket = /** @type {import('node:net').Socket | undefined} */ (createConnection.apply(this, args))
+    socket?.unref?.()
+    return socket
+  }
+  agent.reuseSocket = function (socket, request) {
+    reuseSocket.call(this, socket, request)
+    const reused = /** @type {import('node:net').Socket} */ (socket)
+    reused.unref?.()
+  }
+  return agent
+}
+
+function getAgentInfoAgents () {
+  if (agentInfoAgents === undefined) {
+    const { httpAgent, httpsAgent } = createAgents(1)
+    agentInfoAgents = { httpAgent: unrefSockets(httpAgent), httpsAgent: unrefSockets(httpsAgent) }
+  }
+  return agentInfoAgents
+}
+
+/**
  * Whether stats are computed for spans of this kind even when they are neither top-level nor measured. Most spans
  * that get here carry no or an already lowercase kind, so only others pay for lowercasing.
  *
@@ -366,7 +397,6 @@ class SpanStatsProcessor {
   /** @type {string[]} Peer tag keys from the Agent's `/info`; none until it answered. */
   #peerTagKeys = NO_PEER_TAGS
   #fetchingAgentInfo = false
-  #agentInfoRequested = false
 
   /**
    * @param {import('./config/config-base')} config
@@ -408,6 +438,8 @@ class SpanStatsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
     }
+
+    this.#refreshPeerTagKeys()
   }
 
   onInterval () {
@@ -416,10 +448,8 @@ class SpanStatsProcessor {
   }
 
   /**
-   * Read the peer tag keys the Agent aggregates on from its `/info`, which the Agent information client caches. The
-   * first read waits for the first span stats are computed for or the first interval, so a short-lived process
-   * without such spans never waits for the Agent to answer. Stats computed before the first answer carry no peer
-   * tags; while the Agent does not answer, the last answer applies.
+   * Read the peer tag keys the Agent aggregates on from its `/info`, which the Agent information client caches. Stats
+   * computed before the first answer carry no peer tags; while the Agent does not answer, the last answer applies.
    */
   #refreshPeerTagKeys () {
     const { url } = this.#config
@@ -427,10 +457,9 @@ class SpanStatsProcessor {
     if (!this.enabled || this.otlpExporter || this.#fetchingAgentInfo || !url) return
 
     this.#fetchingAgentInfo = true
-    this.#agentInfoRequested = true
-    agentInfoAgents ??= createAgents(1)
     const agentUrl = /** @type {URL} */ (url)
-    const agent = agentUrl.protocol === 'https:' ? agentInfoAgents.httpsAgent : agentInfoAgents.httpAgent
+    const { httpAgent, httpsAgent } = getAgentInfoAgents()
+    const agent = agentUrl.protocol === 'https:' ? httpsAgent : httpAgent
     fetchAgentInfo(agentUrl, (error, agentInfo) => {
       this.#fetchingAgentInfo = false
       if (error) {
@@ -503,7 +532,6 @@ class SpanStatsProcessor {
     ) {
       return
     }
-    if (!this.#agentInfoRequested) this.#refreshPeerTagKeys()
 
     const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)

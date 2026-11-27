@@ -1104,24 +1104,13 @@ describe('SpanStatsProcessor', () => {
 
       const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
-      p.onSpanFinished(clientSpan)
       sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, {
         agent: sinon.match.instanceOf(http.Agent),
         retry: false,
       })
 
+      p.onSpanFinished(clientSpan)
       assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
-    })
-
-    it('should not read /info before the first span stats are computed for or the first interval', () => {
-      const p = new SpanStatsProcessor(config)
-      clearTimeout(p.timer)
-      p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'internal' } })
-      sinon.assert.notCalled(fetchAgentInfo)
-
-      p.onSpanFinished(clientSpan)
-      p.onSpanFinished(clientSpan)
-      sinon.assert.calledOnce(fetchAgentInfo)
     })
 
     it('should aggregate without peer tags until the Agent /info answered', () => {
@@ -1173,12 +1162,30 @@ describe('SpanStatsProcessor', () => {
     it('should read /info over its own connection, not the one shared by the exporters', () => {
       const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
-      p.onInterval()
 
       const { agent } = fetchAgentInfo.lastCall.args[2]
       assert.notStrictEqual(agent, sharedAgents.httpAgent)
       assert.notStrictEqual(agent, sharedAgents.httpsAgent)
       assert.strictEqual(agent.maxSockets, 1)
+    })
+
+    it('should not let the /info connection keep the process alive', () => {
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      const { agent } = fetchAgentInfo.lastCall.args[2]
+
+      const socket = { unref: sinon.spy() }
+      const createConnection = sinon.stub(http.Agent.prototype, 'createConnection').returns(socket)
+      const reuseSocket = sinon.stub(http.Agent.prototype, 'reuseSocket')
+      try {
+        assert.strictEqual(agent.createConnection({}), socket)
+        agent.reuseSocket(socket, {})
+      } finally {
+        createConnection.restore()
+        reuseSocket.restore()
+      }
+
+      sinon.assert.calledTwice(socket.unref)
     })
 
     it('should skip peer tag keys such as constructor that the span does not carry', () => {
