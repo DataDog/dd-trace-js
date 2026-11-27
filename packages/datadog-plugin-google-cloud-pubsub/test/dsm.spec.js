@@ -247,6 +247,63 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false', () => {
+        let topic
+        let subscription
+        let producerEdgeTags
+        let consumerEdgeTags
+
+        before(async () => {
+          process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED = 'false'
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: true })
+
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          pubsub = new PubSub({ projectId: project })
+          ;[topic] = await pubsub.createTopic(dsmTopicName)
+          ;[subscription] = await topic.createSubscription('DSM')
+
+          const processTagsForHash = propagationHash.isEnabled() ? processTags.serialized : undefined
+          const containerTagsHash = propagationHash.getContainerTagsHash()
+          const fullTopic = `projects/${project}/topics/${dsmTopicName}`
+          producerEdgeTags = ['direction:out', 'topic:' + fullTopic, 'type:google-pubsub']
+          consumerEdgeTags = ['direction:in', 'topic:' + fullTopic, 'type:google-pubsub']
+          expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            producerEdgeTags,
+            ENTRY_PARENT_HASH,
+            processTagsForHash,
+            containerTagsHash
+          )
+          expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            consumerEdgeTags,
+            expectedProducerHash,
+            processTagsForHash,
+            containerTagsHash
+          )
+        })
+
+        after(async () => {
+          delete process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+          await subscription?.close()
+        })
+
+        it('still sets the produce and consume checkpoints of one pathway', async () => {
+          const statsPromise = agent.expectPipelineStats(() => {
+            const producerHash = expectedProducerHash.readBigUInt64LE(0).toString()
+            const consumerHash = expectedConsumerHash.readBigUInt64LE(0).toString()
+            assert.strictEqual(agent.dsmStatsExist(agent, producerHash, producerEdgeTags), true)
+            assert.strictEqual(agent.dsmStatsExist(agent, consumerHash, consumerEdgeTags), true)
+          }, { timeoutMs: TIMEOUT })
+
+          subscription.on('message', msg => msg.ack())
+          await Promise.all([publish(topic, { data: Buffer.from('DSM without trace propagation') }), statsPromise])
+        })
+      })
     })
   })
 })

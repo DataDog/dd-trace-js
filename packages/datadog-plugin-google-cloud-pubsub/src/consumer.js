@@ -94,8 +94,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const subscription = message._subscriber._subscription
     const topic = subscription?.metadata?.topic || message.attributes?.['pubsub.topic']
 
-    const batchRequestTraceId = message.attributes?.['_dd.pubsub_request.trace_id']
-    const batchRequestSpanId = message.attributes?.['_dd.pubsub_request.span_id']
+    const propagationEnabled = this._tracerConfig.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+    const batchRequestTraceId = propagationEnabled ? message.attributes?.['_dd.pubsub_request.trace_id'] : undefined
+    const batchRequestSpanId = propagationEnabled ? message.attributes?.['_dd.pubsub_request.span_id'] : undefined
 
     // Parse batch metadata once upfront for reuse
     const batchSizeStr = message.attributes?.['_dd.batch.size']
@@ -103,7 +104,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const batchSize = batchSizeStr ? Number(batchSizeStr) : undefined
     const batchIndex = batchIndexStr ? Number(batchIndexStr) : undefined
 
-    let childOf = this.tracer.extract('text_map', message.attributes)
+    // `null` rather than `undefined`: startSpan would otherwise fall back to the active span as the parent.
+    let childOf = propagationEnabled ? this.tracer.extract('text_map', message.attributes) : null
 
     let pubsubRequestContext
     const isFirstMessage = batchIndex === 0

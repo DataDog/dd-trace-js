@@ -143,6 +143,50 @@ describe('Push Subscription Plugin', () => {
       })
     }
 
+    describe('with DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false', () => {
+      before(async () => {
+        process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED = 'false'
+        await agent.close()
+        await agent.load(['http'], { client: false })
+      })
+
+      after(async () => {
+        delete process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+        await agent.close()
+        await agent.load(['http'], { client: false })
+      })
+
+      it('starts a new trace without links and parents the request span to it', async () => {
+        appListener = createServer()
+        appListener.listen(0, 'localhost')
+        await once(appListener, 'listening')
+        const expected = agent.assertSomeTraces(traces => {
+          const span = findPubSubSpan(traces)
+          assert.strictEqual(span.parent_id.toString(), '0')
+          assert.notStrictEqual(span.trace_id.toString(), '42')
+          assert.strictEqual(span.meta['_dd.span_links'], undefined)
+          assert.ok(!('pubsub.batch.request_trace_id' in span.meta))
+          assert.strictEqual(span.meta['pubsub.batch.description'], 'Message 1 of 3')
+          assert.strictEqual(span.meta['pubsub.subscription_type'], 'push')
+
+          const requestSpan = traces.flat().find(s => s.name === 'web.request')
+          assert.ok(requestSpan)
+          assert.strictEqual(requestSpan.parent_id.toString(), span.span_id.toString())
+          assert.strictEqual(requestSpan.trace_id.toString(), span.trace_id.toString())
+        })
+        await Promise.all([sendPushRequest(appListener.address().port, {
+          'x-datadog-trace-id': '42',
+          'x-datadog-parent-id': '43',
+          'x-datadog-sampling-priority': '2',
+          traceparent: '00-0000000000000000000000000000002a-000000000000002b-01',
+          '_dd.batch.size': '3',
+          '_dd.batch.index': '0',
+          '_dd.pubsub_request.trace_id': '000000000000002a',
+          '_dd.pubsub_request.span_id': '000000000000002c',
+        }), expected])
+      })
+    })
+
     for (const [upper, batchUpper] of [
       [undefined, undefined],
       ['6af1eb9300000000', '6af1eb9300000000'],

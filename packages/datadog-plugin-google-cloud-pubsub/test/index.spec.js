@@ -733,6 +733,188 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED=false', () => {
+        const traceContextKeys = [
+          'x-datadog-trace-id',
+          'x-datadog-parent-id',
+          'x-datadog-sampling-priority',
+          'x-datadog-tags',
+          'traceparent',
+          'tracestate',
+          '_dd.p.tid',
+          '_dd.pubsub_request.trace_id',
+          '_dd.pubsub_request.span_id',
+          '_dd.pubsub_request.p.tid',
+        ]
+
+        before(() => {
+          process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED = 'false'
+        })
+
+        after(() => {
+          delete process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+        })
+
+        beforeEach(async () => {
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
+          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          topicName = getTopic()
+          resource = `projects/${project}/topics/${topicName}`
+          pubsub = new lib.PubSub({ projectId: project })
+        })
+
+        it('publishes without trace context and receives in a new trace', async () => {
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+          let publisherContext
+          const delivered = new Promise(resolve => {
+            sub.once('message', msg => {
+              msg.ack()
+              resolve(msg.attributes)
+            })
+          })
+
+          const published = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === expectedSchema.send.opName)
+            assert.ok(span)
+            assert.strictEqual(span.parent_id.toString(), publisherContext.toSpanId())
+            assert.strictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+          }, { spanResourceMatch: /^publish to Topic /, timeoutMs: TIMEOUT })
+          const received = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+            assert.ok(span)
+            assert.strictEqual(span.parent_id.toString(), '0')
+            assert.notStrictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+            assert.ok(!('_dd.span_links' in span.meta))
+            assert.ok(!('pubsub.batch.request_trace_id' in span.meta))
+            assert.strictEqual(span.meta['pubsub.topic'], resource)
+            assert.strictEqual(span.meta['pubsub.subscription'], sub.name)
+            assert.strictEqual(span.meta['messaging.operation'], 'receive')
+            assert.strictEqual(span.metrics['pubsub.batch.message_count'], 1)
+            assert.strictEqual(typeof span.metrics['pubsub.delivery_duration_ms'], 'number')
+          }, { spanResourceMatch: /^Message from /, timeoutMs: TIMEOUT })
+
+          const publishing = tracer.trace('publisher', span => {
+            publisherContext = span.context()
+            return publish(topic, { data: Buffer.from('hello') })
+          })
+          const [receivedAttributes] = await Promise.all([delivered, publishing, published, received])
+
+          for (const key of traceContextKeys) {
+            assert.ok(!(key in receivedAttributes), `unexpected attribute ${key}`)
+          }
+          assert.strictEqual(receivedAttributes['gcloud.project_id'], project)
+          assert.strictEqual(receivedAttributes['pubsub.topic'], resource)
+          assert.strictEqual(receivedAttributes['_dd.batch.size'], '1')
+          assert.strictEqual(receivedAttributes['_dd.batch.index'], '0')
+          assert.match(receivedAttributes['x-dd-publish-start-time'], /^\d+$/)
+        })
+
+        it('ignores incoming trace and batch context and the active span on receive', async () => {
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+
+          // Publish without the plugin so the subscriber receives the attributes exactly as written here.
+          tracer.use('google-cloud-pubsub', false)
+          try {
+            await publish(topic, {
+              data: Buffer.from('hello'),
+              attributes: {
+                'x-datadog-trace-id': '42',
+                'x-datadog-parent-id': '43',
+                'x-datadog-sampling-priority': '2',
+                traceparent: '00-0000000000000000000000000000002a-000000000000002b-01',
+                '_dd.pubsub_request.trace_id': '000000000000002a',
+                '_dd.pubsub_request.span_id': '000000000000002c',
+                '_dd.batch.size': '1',
+                '_dd.batch.index': '0',
+              },
+            })
+          } finally {
+            tracer.use('google-cloud-pubsub', { dsmEnabled: false })
+          }
+
+          const ambientSpan = tracer.startSpan('subscriber')
+          const ambientContext = ambientSpan.context()
+          const received = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+            assert.ok(span)
+            assert.strictEqual(span.parent_id.toString(), '0')
+            assert.notStrictEqual(span.trace_id.toString(), '42')
+            assert.notStrictEqual(span.trace_id.toString(), ambientContext.toTraceId())
+            assert.ok(!('_dd.span_links' in span.meta))
+            assert.ok(!('pubsub.batch.request_trace_id' in span.meta))
+            assert.strictEqual(span.metrics['pubsub.batch.message_index'], 0)
+          }, { spanResourceMatch: /^Message from /, timeoutMs: TIMEOUT })
+
+          // Opening the stream under an active span makes it the ambient span when the message is delivered.
+          const delivered = tracer.scope().activate(ambientSpan, () => new Promise(resolve => {
+            sub.once('message', msg => {
+              msg.ack()
+              resolve(msg.attributes)
+            })
+          }))
+          ambientSpan.finish()
+
+          try {
+            const [receivedAttributes] = await Promise.all([delivered, received])
+            assert.strictEqual(receivedAttributes['x-datadog-trace-id'], '42')
+            assert.strictEqual(receivedAttributes['_dd.pubsub_request.span_id'], '000000000000002c')
+          } finally {
+            await sub.close()
+          }
+        })
+
+        it('ignores Datadog context supplied in the message attributes', async () => {
+          const [topic] = await pubsub.createTopic(topicName)
+          topic.setPublishOptions({ batching: { maxMessages: 3 } })
+          const [sub] = await topic.createSubscription('foo')
+          sub.on('message', msg => msg.ack())
+          let publisherContext
+
+          const published = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === expectedSchema.send.opName)
+            assert.ok(span)
+            assert.strictEqual(span.parent_id.toString(), publisherContext.toSpanId())
+            assert.strictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+            assert.strictEqual(span.metrics['pubsub.batch.message_count'], 3)
+            assert.ok(!('_dd.span_links' in span.meta))
+            assert.ok(!('pubsub.linked_message_count' in span.meta))
+          }, { spanResourceMatch: /^publish to Topic /, timeoutMs: TIMEOUT })
+          const receiveSpans = new Map()
+          const received = agent.assertSomeTraces(traces => {
+            for (const span of traces.flat()) {
+              if (span.name === expectedSchema.receive.opName) receiveSpans.set(span.span_id.toString(), span)
+            }
+            assert.strictEqual(receiveSpans.size, 3)
+            for (const span of receiveSpans.values()) {
+              assert.strictEqual(span.parent_id.toString(), '0')
+              assert.notStrictEqual(span.trace_id.toString(), '42')
+              assert.notStrictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+              assert.ok(!('_dd.span_links' in span.meta))
+            }
+          }, { timeoutMs: TIMEOUT })
+
+          const publishing = tracer.trace('publisher', span => {
+            publisherContext = span.context()
+            return Promise.all(['43', '45', '47'].map(parentId => publish(topic, {
+              data: Buffer.from('hello'),
+              attributes: {
+                'x-datadog-trace-id': '42',
+                'x-datadog-parent-id': parentId,
+                'x-datadog-sampling-priority': '2',
+              },
+            })))
+          })
+          try {
+            await Promise.all([publishing, published, received])
+          } finally {
+            await sub.close()
+          }
+        })
+      })
+
       describe('garbage collection and memory leaks', function () {
         beforeEach(async () => {
           await agent.load('google-cloud-pubsub', { dsmEnabled: true })

@@ -28,8 +28,12 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   }
 
   handleMessagePublish ({ attributes, pubsub, topicName }) {
-    // Skip if message already has trace context from upstream
-    if (readDatadogTraceId(attributes) || readTraceparent(attributes)) return
+    // Skip if propagation is disabled or the message already has trace context from upstream
+    if (
+      !this._tracerConfig.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED ||
+      readDatadogTraceId(attributes) ||
+      readTraceparent(attributes)
+    ) return
 
     const activeSpan = this.tracer.scope().active()
     if (!activeSpan) return
@@ -69,7 +73,11 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const messages = request.messages || []
     const topic = request.topic
     const messageCount = messages.length
-    const hasTraceContext = messages[0]?.attributes && readDatadogTraceId(messages[0].attributes)
+    const propagationEnabled = this._tracerConfig.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED
+    // With propagation disabled, Datadog context already present in the attributes is ignored, so the batch span
+    // stays a child of the active span and no trace context is written into the messages.
+    const hasTraceContext = propagationEnabled && messages[0]?.attributes &&
+      readDatadogTraceId(messages[0].attributes)
     const parentContext = hasTraceContext && readDatadogParentId(messages[0].attributes)
       ? this.tracer.extract('text_map', messages[0].attributes)
       : undefined
@@ -113,13 +121,16 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       },
     }, ctx)
 
-    const spanCtx = batchSpan.context()
-    // Get 128-bit trace ID and span ID as hex strings
-    const fullTraceIdHex = spanCtx.toTraceId(true)
-    const batchSpanIdHex = spanCtx.toSpanId(true)
-    // Extract lower 64 bits (last 16 hex chars) for trace ID
-    const batchTraceIdHex = fullTraceIdHex.slice(-16)
-    const batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
+    let batchTraceIdHex
+    let batchSpanIdHex
+    let batchTraceIdUpper
+    if (propagationEnabled) {
+      const spanCtx = batchSpan.context()
+      // Extract lower 64 bits (last 16 hex chars) of the 128-bit trace ID
+      batchTraceIdHex = spanCtx.toTraceId(true).slice(-16)
+      batchSpanIdHex = spanCtx.toSpanId(true)
+      batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
+    }
 
     if (spanLinks.length) batchSpan.addLinks(spanLinks)
 
@@ -130,15 +141,18 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       const msg = messages[i]
       const attributes = msg.attributes ??= {}
 
-      if (!hasTraceContext) {
-        this.tracer.inject(batchSpan, 'text_map', attributes)
+      if (propagationEnabled) {
+        if (!hasTraceContext) {
+          this.tracer.inject(batchSpan, 'text_map', attributes)
+        }
+
+        attributes['_dd.pubsub_request.trace_id'] = batchTraceIdHex
+        attributes['_dd.pubsub_request.span_id'] = batchSpanIdHex
       }
 
       // Assign keys one-by-one rather than via `Object.assign({...})` so V8
       // keeps the attributes object on its existing hidden class instead of
       // allocating a fresh literal per message.
-      attributes['_dd.pubsub_request.trace_id'] = batchTraceIdHex
-      attributes['_dd.pubsub_request.span_id'] = batchSpanIdHex
       attributes['_dd.batch.size'] = messageCountStr
       attributes['_dd.batch.index'] = String(i)
       attributes['gcloud.project_id'] = projectId

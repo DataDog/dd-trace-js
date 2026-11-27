@@ -68,25 +68,27 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    const originalContext = this.#extractContext(messageData)
-    const pubsubRequestContext = reconstructPubSubRequestContext(
-      messageData.attrs, originalContext, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
-    ) || originalContext
-    const isSameTrace = pubsubRequestContext &&
-      originalContext?.toTraceId(true) === pubsubRequestContext.toTraceId(true)
+    let parentContext = null
+    let linkContext = null
+    if (this._tracerConfig.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED) {
+      const originalContext = this.#extractContext(messageData)
+      const pubsubRequestContext = reconstructPubSubRequestContext(
+        messageData.attrs, originalContext, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      ) || originalContext
+      const isSameTrace = pubsubRequestContext &&
+        originalContext?.toTraceId(true) === pubsubRequestContext.toTraceId(true)
 
-    /**
-     * Create receive span, choosing parent context:
-     * - Same trace: use batch context (message is part of the batch trace)
-     * - Different trace: use message context as parent, link to batch for observability
-     *
-     * this.enter() activates the span so the HTTP request span becomes its child.
-     */
-    const pushReceiveSpan = this.#createPushReceiveSpan(
-      messageData,
-      isSameTrace ? pubsubRequestContext : originalContext,
-      isSameTrace ? null : pubsubRequestContext
-    )
+      /**
+       * Choose the parent context:
+       * - Same trace: use batch context (message is part of the batch trace)
+       * - Different trace: use message context as parent, link to batch for observability
+       */
+      parentContext = isSameTrace ? pubsubRequestContext : originalContext
+      linkContext = isSameTrace ? null : pubsubRequestContext
+    }
+
+    // this.enter() activates the span so the HTTP request span becomes its child.
+    const pushReceiveSpan = this.#createPushReceiveSpan(messageData, parentContext, linkContext)
 
     if (!pushReceiveSpan) {
       return
@@ -180,7 +182,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
 
     const requestTraceId = attrs['_dd.pubsub_request.trace_id']
-    if (requestTraceId) {
+    if (requestTraceId && this._tracerConfig.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PROPAGATION_ENABLED) {
       span.setTag('pubsub.batch.request_trace_id', requestTraceId)
     }
   }
