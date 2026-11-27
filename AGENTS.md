@@ -128,6 +128,8 @@ Update every supported public TypeScript surface for new public APIs unless the 
 
 ## Cross-Cutting Configuration Changes
 
+Preserve Datadog Boolean parsing, including `1`/`0`, for OpenTelemetry settings.
+
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
