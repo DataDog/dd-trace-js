@@ -397,18 +397,24 @@ describe('computePathwayHash', () => {
       assert.strictEqual(again, first)
     })
 
-    it('recomputes the same hash after the cache fills with distinct parents', () => {
-      const edgeTags = ['direction:in', 'topic:t', 'type:kafka']
+    it('keeps recently used hashes when a new parent fills the cache past capacity', () => {
+      const hotTags = ['direction:in', 'topic:hot', 'type:kafka']
+      const coldTags = ['direction:in', 'topic:cold', 'type:kafka']
       const parent = u64(0n)
-      const first = computePathwayHash('svc-eviction', 'env', edgeTags, parent)
+      const hot = computePathwayHash('svc-eviction', 'env', hotTags, parent)
+      const cold = computePathwayHash('svc-eviction', 'env', coldTags, parent)
 
-      for (let index = 1n; index <= 500n; index++) {
-        computePathwayHash('svc-eviction', 'env', edgeTags, u64(index))
+      for (let index = 1n; index <= 498n; index++) {
+        computePathwayHash('svc-eviction', 'env', coldTags, u64(index))
       }
 
-      const recomputed = computePathwayHash('svc-eviction', 'env', edgeTags, parent)
-      assert.notStrictEqual(recomputed, first)
-      assert.deepStrictEqual(recomputed, first)
+      assert.strictEqual(computePathwayHash('svc-eviction', 'env', hotTags, parent), hot)
+      computePathwayHash('svc-eviction', 'env', coldTags, u64(499n))
+      assert.strictEqual(computePathwayHash('svc-eviction', 'env', hotTags, parent), hot)
+
+      const recomputed = computePathwayHash('svc-eviction', 'env', coldTags, parent)
+      assert.notStrictEqual(recomputed, cold)
+      assert.deepStrictEqual(recomputed, cold)
     })
 
     it('serves a cached hash only for the same process tags and container tags hash', () => {
