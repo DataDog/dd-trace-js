@@ -2,14 +2,21 @@
 
 const pick = require('../../datadog-core/src/utils/src/pick')
 const { DD_MAJOR } = require('../../../version')
+const { getDisabledInstrumentations } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLJitExecutePlugin = require('./jit')
+const { NativeExecutePlugin, NativeParsePlugin, NativeValidatePlugin } = require('./native')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLRequestPlugin = require('./request')
 const { GraphQLResolveErrorPlugin, GraphQLToolsResolveErrorPlugin } = require('./resolve-error')
 const GraphQLValidatePlugin = require('./validate')
+const { supportsNativeDiagnostics } = require('./utils')
+
+const nativePlugins = supportsNativeDiagnostics && !getDisabledInstrumentations().has('graphql')
+  ? { nativeExecute: NativeExecutePlugin, nativeParse: NativeParsePlugin, nativeValidate: NativeValidatePlugin }
+  : undefined
 
 class GraphQLPlugin extends CompositePlugin {
   static id = 'graphql'
@@ -26,6 +33,7 @@ class GraphQLPlugin extends CompositePlugin {
       resolveError: GraphQLResolveErrorPlugin,
       toolsResolveError: GraphQLToolsResolveErrorPlugin,
       validate: GraphQLValidatePlugin,
+      ...nativePlugins,
     }
   }
 
@@ -33,7 +41,13 @@ class GraphQLPlugin extends CompositePlugin {
    * @override
    */
   configure (config) {
-    return super.configure(validateConfig(config))
+    const validated = validateConfig(config)
+    if (nativePlugins) {
+      validated.nativeExecute = validated.execute
+      validated.nativeParse = validated.parse
+      validated.nativeValidate = validated.validate
+    }
+    return super.configure(validated)
   }
 }
 
@@ -72,7 +86,7 @@ function getDepth (config) {
 
 function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
-    return config.variables
+    return guardHook('variables', config.variables)
   } else if (Array.isArray(config.variables)) {
     return config.variables.length > 0 ? variables => pick(variables, config.variables) : null
   } else if (config.hasOwnProperty('variables')) {
@@ -106,7 +120,7 @@ function getHooks ({ hooks }) {
 }
 
 /**
- * @param {'execute' | 'parse' | 'resolve' | 'validate'} name
+ * @param {'execute' | 'parse' | 'resolve' | 'validate' | 'variables'} name
  * @param {((...args: unknown[]) => unknown) | undefined} hook
  * @returns {((...args: unknown[]) => unknown) | undefined}
  */

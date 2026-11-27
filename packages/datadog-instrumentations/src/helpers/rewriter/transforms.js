@@ -20,6 +20,7 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
+  bindGraphqlRootSelection,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
@@ -29,6 +30,25 @@ module.exports = {
   publishDurableOrchestrationFailure,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').CallExpression} node
+ * @param {import('estree').ReturnStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function bindGraphqlRootSelection (state, node, parent, ancestry) {
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const [boundSelection] = parse(`
+    ${channel}.start.hasSubscribers
+      ? ${channel}.start.runStores(undefined, executeRootSelectionSet, undefined)
+      : undefined
+  `).body
+  boundSelection.expression.consequent.arguments.push(...node.arguments)
+  boundSelection.expression.alternate = node
+  parent.argument = boundSelection.expression
 }
 
 /**
