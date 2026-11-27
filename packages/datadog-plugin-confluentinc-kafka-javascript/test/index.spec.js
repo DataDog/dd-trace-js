@@ -14,7 +14,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema } = require('./naming')
-const { waitForTopicReady } = require('./helpers')
+const { connectAndWaitForClusterId, waitForTopicReady } = require('./helpers')
 
 /** @typedef {Array<Record<string, string | Buffer>>} NativeHeaders */
 
@@ -162,7 +162,7 @@ describe('Plugin', () => {
               const consumer = kafka.consumer({
                 kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
               })
-              await consumer.connect()
+              await connectAndWaitForClusterId(consumer)
               await consumer.subscribe({ topic: testTopic })
 
               try {
@@ -196,6 +196,17 @@ describe('Plugin', () => {
 
             afterEach(async () => {
               await consumer.disconnect()
+            })
+
+            it('preserves run validation before the consumer starts', async () => {
+              await assert.rejects(consumer.run(), TypeError)
+              await assert.rejects(consumer.run(undefined), TypeError)
+
+              const options = { eachMessage: async () => {} }
+              Object.defineProperty(options, 'autoCommit', { value: false })
+              await assert.rejects(consumer.run(options), { code: ConfluentKafka.ErrorCodes.ERR__INVALID_ARG })
+
+              await consumer.run(Object.freeze({ eachMessage: async () => {} }))
             })
 
             it('should be instrumented', async () => {
@@ -814,7 +825,7 @@ function expectSpanWithDefaults (expected) {
 
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
-  await producer.connect()
+  await connectAndWaitForClusterId(producer)
   await producer.send({
     topic,
     messages,
