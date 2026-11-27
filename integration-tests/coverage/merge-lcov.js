@@ -11,7 +11,7 @@ const v8toIstanbul = require('v8-to-istanbul')
 const TestExclude = require('test-exclude')
 
 const baseNycConfig = require('../../nyc.config')
-const { REPO_ROOT, getMergedReportDir, getV8CoverageDir } = require('./runtime')
+const { REPO_ROOT, getIstanbulCoverageDir, getMergedReportDir, getV8CoverageDir } = require('./runtime')
 
 /** @typedef {import('node:inspector').Profiler.FunctionCoverage} FunctionCoverage */
 
@@ -163,19 +163,55 @@ async function mergeV8File (mergedScripts, inclusionCache, v8File) {
 }
 
 /**
+ * Merge the istanbul coverage Bun processes wrote (see `bun-bootstrap.js`) into `coverageMap`.
+ * Entries are already keyed at repo paths; malformed files and out-of-scope entries are skipped.
+ *
+ * @param {import('istanbul-lib-coverage').CoverageMap} coverageMap
+ * @param {string} istanbulDir
+ * @returns {Promise<number>} number of process coverage files merged
+ */
+async function mergeIstanbulDir (coverageMap, istanbulDir) {
+  let files
+  try {
+    files = await fs.readdir(istanbulDir)
+  } catch {
+    return 0
+  }
+  let merged = 0
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue
+    let parsed
+    try {
+      parsed = JSON.parse(await fs.readFile(path.join(istanbulDir, file), 'utf8'))
+    } catch {
+      continue
+    }
+    if (parsed === null || typeof parsed !== 'object') continue
+    for (const [filePath, fileCoverage] of Object.entries(parsed)) {
+      if (fileCoverage?.path !== filePath || !shouldInclude(filePath)) continue
+      try {
+        coverageMap.merge({ [filePath]: fileCoverage })
+      } catch {}
+    }
+    merged++
+  }
+  return merged
+}
+
+/**
  * Convert every raw V8 profile in `v8Dir` into a merged Istanbul report under `outputDir`.
  * CI emits only the LCOV artifact consumed by coverage uploaders by default, while local runs
  * retain HTML, text-summary, and JSON reports for debugging.
  *
  * @param {string} v8Dir directory of raw `NODE_V8_COVERAGE` JSON files
  * @param {string} outputDir report destination (`coverage/node-<version>-<label>`)
- * @param {{lcovOnly?: boolean}} [options]
+ * @param {{lcovOnly?: boolean, istanbulDir?: string}} [options] `istanbulDir` holds Bun's istanbul coverage
  * @returns {Promise<{scripts: number, profiles: number, files: number}>}
  */
 async function convertV8DirToReport (
   v8Dir,
   outputDir,
-  { lcovOnly = isLcovOnlyReport() } = {}
+  { lcovOnly = isLcovOnlyReport(), istanbulDir } = {}
 ) {
   await fs.mkdir(outputDir, { recursive: true })
 
@@ -217,10 +253,13 @@ async function convertV8DirToReport (
     }
   }
 
+  const istanbulProfiles = istanbulDir ? await mergeIstanbulDir(coverageMap, istanbulDir) : 0
+  const profiles = v8Files.length + istanbulProfiles
+
   if (coverageMap.files().length === 0) {
     // Sentinel for `verify-coverage.js` to skip upload when matrix filters drop every test.
     await fs.writeFile(path.join(outputDir, '.skipped'), '')
-    return { scripts: 0, profiles: v8Files.length, files: 0 }
+    return { scripts: 0, profiles, files: 0 }
   }
 
   const context = libReport.createContext({ coverageMap, dir: outputDir, defaultSummarizer: 'nested' })
@@ -231,7 +270,7 @@ async function convertV8DirToReport (
     await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
   }
 
-  return { scripts, profiles: v8Files.length, files: coverageMap.files().length }
+  return { scripts, profiles, files: coverageMap.files().length }
 }
 
 async function main () {
@@ -240,7 +279,7 @@ async function main () {
   const { scripts, profiles, files } = await convertV8DirToReport(
     getV8CoverageDir(),
     outputDir,
-    { lcovOnly }
+    { lcovOnly, istanbulDir: getIstanbulCoverageDir() }
   )
   if (files === 0) {
     process.stdout.write('No V8 coverage data found to merge.\n')
@@ -255,7 +294,7 @@ async function main () {
   )
 }
 
-module.exports = { convertV8DirToReport }
+module.exports = { convertV8DirToReport, rebaseSandboxPath, shouldInclude }
 
 if (require.main === module) {
   main().catch(err => {

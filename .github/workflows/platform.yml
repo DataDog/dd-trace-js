@@ -90,7 +90,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: npm run test:integration:bun
+      - run: npm run test:integration:bun:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-bun-runtime
       - name: Run existing unit tests with Bun
         run: |
           ./node_modules/.bin/bun run --bun test:core

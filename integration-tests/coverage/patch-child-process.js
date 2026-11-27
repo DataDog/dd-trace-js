@@ -1,6 +1,7 @@
 'use strict'
 
 const childProcess = require('node:child_process')
+const { promisify } = require('node:util')
 const workerThreads = require('node:worker_threads')
 
 const {
@@ -117,7 +118,10 @@ function installPatch () {
     const n = normalizeArgs(args, options)
     return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
   }
-  execFile.__promisify__ = originalExecFile.__promisify__
+  execFile[promisify.custom] = function (file, args, options) {
+    const n = normalizeArgs(args, options)
+    return originalExecFile[promisify.custom].call(this, file, n.args, patchSpawnOptions(n.options, file, n.args))
+  }
   childProcess.execFile = execFile
   function exec (command, options, callback) {
     if (typeof options === 'function') {
@@ -126,7 +130,9 @@ function installPatch () {
     }
     return originalExec.call(this, command, patchExecOptions(options), callback)
   }
-  exec.__promisify__ = originalExec.__promisify__
+  exec[promisify.custom] = function (command, options) {
+    return originalExec[promisify.custom].call(this, command, patchExecOptions(options))
+  }
   childProcess.exec = exec
 
   childProcess.execSync = function (command, options) {
