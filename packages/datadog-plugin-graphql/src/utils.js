@@ -2,6 +2,14 @@
 
 const { LRUCache } = require('../../../vendor/dist/lru-cache')
 
+// eslint-disable-next-line n/no-unsupported-features/node-builtins -- GraphQL gates native diagnostics on this API.
+const supportsNativeDiagnostics = typeof process.getBuiltinModule === 'function'
+
+/** @param {string} version */
+function usesNativeDiagnostics (version) {
+  return supportsNativeDiagnostics && Number.parseInt(version, 10) >= 17
+}
+
 /**
  * @typedef {{ signature: string, type: import('graphql').OperationTypeNode, name?: string }} RequestOperation
  */
@@ -358,13 +366,18 @@ function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
-        tools ||= require('./tools')
+        if (tools === undefined) {
+          const ddGlobal = globalThis[Symbol.for('dd-trace')]
+          if (ddGlobal?.graphql_printer && ddGlobal.graphql_visitor && ddGlobal.graphql_utilities) {
+            tools = require('./tools')
+          }
+        }
       } catch (e) {
         tools = false
         throw e
       }
 
-      return tools.defaultEngineReportingSignature(document, operationName)
+      if (tools) return tools.defaultEngineReportingSignature(document, operationName)
     } catch {
       // safety net
     }
@@ -387,4 +400,6 @@ module.exports = {
   isApolloHealthCheckSource,
   refineRequestSpan,
   refineRequestSpanMetadata,
+  supportsNativeDiagnostics,
+  usesNativeDiagnostics,
 }

@@ -247,10 +247,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const args = this.readExecutionArgs(ctx)
     if (!args) return ctx.currentStore
 
-    const { contextValue } = args
     const document = args.document
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
-    const operation = getOperation(document, args.operationName)
+    const operation = ctx.operation ?? getOperation(document, args.operationName)
 
     const type = operation?.operation
     const name = operation?.name?.value ?? args.operationName ?? undefined
@@ -295,16 +294,24 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }, ctx)
 
     addVariableTags(this.config, span, args.variableValues)
+    this.startExecution(ctx, args, span, docSource)
 
+    return ctx.currentStore
+  }
+
+  /**
+   * @param {object} ctx
+   * @param {ExecutionArguments} args
+   * @param {DatadogSpan} span
+   * @param {string | undefined} docSource
+   */
+  startExecution (ctx, args, span, docSource) {
     const abortController = resolverStartCh.hasSubscribers ? new AbortController() : undefined
-
     this.wrapExecutionResolvers(ctx, args)
 
     const rootCtx = createRootContext(this, span, docSource, abortController, ctx.ddPlan, args.variableValues)
     ctx.ddRootCtx = rootCtx
-    this.storeRootContext(ctx, contextValue, rootCtx)
-
-    return ctx.currentStore
+    this.storeRootContext(ctx, args.contextValue, rootCtx)
   }
 
   end (ctx) {
@@ -325,7 +332,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     const result = ctx.result
-
     if (typeof result?.then === 'function') {
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
@@ -354,7 +360,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
    * @param {boolean} [finishPendingFields]
    */
   #finishSpan (ctx, span, res, error, incrementalComplete = false, finishPendingFields = false) {
-    if (!incrementalComplete && error === undefined && ctx.ddOperationType !== 'subscription') {
+    const rootCtx = ctx.ddRootCtx
+    if (rootCtx && !incrementalComplete && error === undefined && ctx.ddOperationType !== 'subscription') {
       const iterator = getIncrementalIterator(res)
       if (iterator) {
         tagIncrementalResult(this.config, span, res?.initialResult)
@@ -372,8 +379,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
       span.setTag('error', error)
     }
 
-    if (res?.errors?.length) {
-      tagExecutionErrors(this.config, span, res.errors)
+    const errors = (rootCtx ? res : res?.initialResult ?? res)?.errors
+    if (errors?.length) {
+      tagExecutionErrors(this.config, span, errors)
     }
 
     if (ctx.ddContextValue) {
@@ -383,7 +391,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
 
-    const rootCtx = ctx.ddRootCtx
     const releaseBeforeExecuteHook = rootCtx?.resolveHooksPending === true
     if (releaseBeforeExecuteHook) {
       releaseRootContext(rootCtx, finishPendingFields)
@@ -391,7 +398,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       runResolveHooks(rootCtx)
     }
     this.config.hooks.execute(span, ctx.ddArgs, res)
-    if (!releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
+    if (rootCtx && !releaseBeforeExecuteHook) releaseRootContext(rootCtx, finishPendingFields)
     span.finish()
   }
 
@@ -1587,8 +1594,12 @@ function defaultFieldResolver (source, args, contextValue, info) {
 function addVariableTags (config, span, variableValues) {
   if (!variableValues || !config.variables) return
 
-  const tags = {}
   const variables = config.variables(variableValues)
+  if (variables == null) {
+    return
+  }
+
+  const tags = {}
   for (const [param, value] of Object.entries(variables)) {
     tags[`graphql.variables.${param}`] = value
   }

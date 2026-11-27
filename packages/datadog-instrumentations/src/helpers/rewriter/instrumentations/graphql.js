@@ -1,5 +1,8 @@
 'use strict'
 
+const ROOT_SELECTION_CALL = 'FunctionDeclaration[id.name="executeImpl"] > BlockStatement > ReturnStatement > ' +
+  'CallExpression[callee.name="executeRootSelectionSet"]'
+
 const instrumentations = [
   {
     module: {
@@ -24,6 +27,26 @@ const instrumentations = [
       kind: 'Sync',
     },
     channelName: 'apm:graphql:execute',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10',
+      filePath: 'execution/execute.js',
+    },
+    astQuery: ROOT_SELECTION_CALL,
+    transform: 'bindGraphqlRootSelection',
+    channelName: 'apm:graphql:execute:root',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10',
+      filePath: 'execution/execute.mjs',
+    },
+    astQuery: ROOT_SELECTION_CALL,
+    transform: 'bindGraphqlRootSelection',
+    channelName: 'apm:graphql:execute:root',
   },
   {
     module: {
@@ -238,7 +261,7 @@ const instrumentations = [
 
 const fastPathInstrumentations = []
 for (const instrumentation of instrumentations) {
-  if (instrumentation.functionQuery?.functionName === '__module_export__') continue
+  if (instrumentation.transform || instrumentation.functionQuery?.functionName === '__module_export__') continue
 
   fastPathInstrumentations.push({
     ...instrumentation,

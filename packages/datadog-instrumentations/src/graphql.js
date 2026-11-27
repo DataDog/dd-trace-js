@@ -1,5 +1,6 @@
 'use strict'
 
+const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
@@ -28,6 +29,29 @@ function addRewriterHooks (name) {
 addRewriterHooks('graphql')
 addRewriterHooks('@graphql-tools/executor')
 addRewriterHooks('graphql-jit')
+
+// Capture the public helpers when require(esm) loads GraphQL without a loader.
+for (const file of [undefined, 'index.js', 'index.mjs', '__dev__/index.js', '__dev__/index.mjs']) {
+  addHook({ name: 'graphql', versions: ['>=0.10'], file }, capturePublicHelpers)
+}
+
+/**
+ * @param {typeof import('graphql')} graphql
+ * @param {string} version
+ */
+function capturePublicHelpers (graphql, version) {
+  if (!satisfies(version, '>=17')) {
+    return graphql
+  }
+
+  const ddGlobal = globalThis[Symbol.for('dd-trace')]
+  if (ddGlobal) {
+    ddGlobal.graphql_printer = graphql
+    ddGlobal.graphql_visitor = graphql
+    ddGlobal.graphql_utilities = graphql
+  }
+  return graphql
+}
 
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can
