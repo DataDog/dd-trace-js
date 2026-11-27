@@ -132,6 +132,8 @@ async function addBreakpoint (probe) {
     }
   }
 
+  // Always reset: the probe comes from the wire, and a supplied value would be evaluated without `compile`
+  probe.compiledCaptureExpressions = undefined
   if (probe.captureExpressions?.length > 0) {
     probe.compiledCaptureExpressions = []
     for (const captureExpr of probe.captureExpressions) {
