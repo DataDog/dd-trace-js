@@ -12,7 +12,9 @@ const {
   isRewriteActivationEnabled,
   isRewriteTargetName,
 } = require('../../../datadog-instrumentations/src/helpers/rewriter/targets')
+const { isSupportedConfiguration } = require('../../src/config/helper')
 const plugins = require('../../src/plugins')
+const { normalizePluginEnvName } = require('../../src/util')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -92,11 +94,6 @@ function extractPluginsInterfaceKeys (dtsSource) {
 
   const body = m[1]
   return extractPluginIds(body, /^[ \t]*"([^"]+)"[ \t]*:[ \t]*/gm, 1)
-}
-
-function extractRuntimePluginPackageNames (pluginsIndexSource) {
-  // Example: require('../../../datadog-plugin-express/src')
-  return extractPluginIds(pluginsIndexSource, /datadog-plugin-[a-z0-9_-]+/gi, 0)
 }
 
 function extractDocsApiPluginList (apiMdSource) {
@@ -253,29 +250,21 @@ describe('Plugin Structure Validation', () => {
     assert.strictEqual(plugins['@graphql-tools/executor'], plugins.graphql)
   })
 
-  it('should include all canonical plugin ids used by the runtime plugin registry in public declarations', () => {
-    const pluginsIndexPath = path.join(packagesDir, 'dd-trace', 'src', 'plugins', 'index.js')
-
-    const pluginsIndexSource = fs.readFileSync(pluginsIndexPath, 'utf8')
-
-    const runtimePluginPackages = extractRuntimePluginPackageNames(pluginsIndexSource)
-
-    // Runtime may load internal plugins that are not meant to be configured via the public API.
-    const internalPluginIds = new Set([
-      'dd-trace-api',
-    ])
-
-    for (const pkgName of runtimePluginPackages) {
-      const pluginPath = path.join(packagesDir, pkgName, 'src', 'index.js')
-      const Plugin = require(pluginPath)
+  it('keeps registered plugin ids aligned with public declarations and enable flags', () => {
+    for (const [name, Plugin] of Object.entries(plugins)) {
       const id = Plugin?.id
 
-      assert.ok(typeof id === 'string' && id.length > 0, `Invalid plugin id: ${pkgName}`)
+      assert.ok(typeof id === 'string' && id.length > 0, `Invalid plugin id: ${name}`)
 
-      if (!internalPluginIds.has(id)) {
-        assert.ok(dtsPluginKeys.has(id), `Missing plugin in index.d.ts: ${id}`)
-        assert.ok(v5DtsPluginKeys.has(id), `Missing plugin in index.d.v5.ts: ${id}`)
-      }
+      if (id === 'dd-trace-api') continue
+
+      assert.ok(dtsPluginKeys.has(id), `Missing plugin in index.d.ts: ${id}`)
+      assert.ok(v5DtsPluginKeys.has(id), `Missing plugin in index.d.v5.ts: ${id}`)
+
+      if (id === 'elevenlabs') continue
+
+      const envName = normalizePluginEnvName(`DD_TRACE_${id.toUpperCase()}_ENABLED`)
+      assert.ok(isSupportedConfiguration(envName), `${envName} is missing from supported-configurations.json`)
     }
   })
 
