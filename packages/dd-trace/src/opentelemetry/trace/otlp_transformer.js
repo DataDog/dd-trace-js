@@ -53,7 +53,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  * @property {string} [type] - Span type
  * @property {number} error - Error flag (0 or 1)
  * @property {{[key: string]: string}} meta - String key-value tags
- * @property {{[key: string]: number}} metrics - Numeric key-value tags
+ * @property {import('../../span_format').FormattedSpan['metrics']} metrics - Tag values produced by the formatter
  * @property {Record<string, unknown>} [meta_struct] - Structured tags (one MessagePack value per key)
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds

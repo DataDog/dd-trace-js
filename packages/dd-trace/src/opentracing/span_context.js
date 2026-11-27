@@ -16,6 +16,7 @@ class DatadogSpanContext {
     this._parentId = props.parentId || null
     this._name = props.name
     this._isFinished = props.isFinished || false
+    /** @type {Record<string, unknown>} */
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._spanSampling = undefined
@@ -124,7 +125,7 @@ class DatadogSpanContext {
    * additional sync side effects on the individual `setTag` / `deleteTag`
    * setters; mutating the returned map bypasses those.
    *
-   * @returns {object}
+   * @returns {Record<string, unknown>}
    */
   getTags () {
     return this._tags

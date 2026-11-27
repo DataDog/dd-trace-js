@@ -1283,6 +1283,34 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
 
+    for (const protocol of ['http/json', 'http/protobuf']) {
+      it(`exports Buffer and URL tags as OTLP string attributes with ${protocol}`, () => {
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
+        process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = protocol
+        const DatadogTracer = require('../../src/opentracing/tracer')
+        const tracer = new DatadogTracer(getConfigFresh({ flushMinSpans: 1, sampleRate: 1 }))
+        const sendPayload = sinon.stub(tracer._exporter, 'sendPayload')
+        const endpoint = new URL('https://example.com/tags')
+        const span = tracer.startSpan('tags', { tags: { payload: Buffer.from('hello'), endpoint } })
+        span.addTags({ nested: { payload: Buffer.from('world'), endpoint } })
+        span.finish()
+
+        sinon.assert.calledOnce(sendPayload)
+        const [body] = sendPayload.firstCall.args
+        const payload = protocol === 'http/protobuf' ? decodeProtobufPayload(body) : JSON.parse(body.toString())
+        const attributes = payload.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        for (const [key, value] of Object.entries({
+          payload: 'hello',
+          endpoint: endpoint.toString(),
+          'nested.payload': 'world',
+          'nested.endpoint': endpoint.toString(),
+        })) {
+          const attribute = attributes.find(attribute => attribute.key === key)
+          assert.deepStrictEqual(attribute?.value, { stringValue: value })
+        }
+      })
+    }
+
     it('exports HTTP spans over OTLP when only OTel semantics is enabled', () => {
       process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
       const DatadogTracer = require('../../src/opentracing/tracer')
