@@ -397,6 +397,26 @@ describe('computePathwayHash', () => {
       assert.strictEqual(again, first)
     })
 
+    it('keeps recently used hashes when a new parent fills the cache past capacity', () => {
+      const hotTags = ['direction:in', 'topic:hot', 'type:kafka']
+      const coldTags = ['direction:in', 'topic:cold', 'type:kafka']
+      const parent = u64(0n)
+      const hot = computePathwayHash('svc-eviction', 'env', hotTags, parent)
+      const cold = computePathwayHash('svc-eviction', 'env', coldTags, parent)
+
+      for (let index = 1n; index <= 498n; index++) {
+        computePathwayHash('svc-eviction', 'env', coldTags, u64(index))
+      }
+
+      assert.strictEqual(computePathwayHash('svc-eviction', 'env', hotTags, parent), hot)
+      computePathwayHash('svc-eviction', 'env', coldTags, u64(499n))
+      assert.strictEqual(computePathwayHash('svc-eviction', 'env', hotTags, parent), hot)
+
+      const recomputed = computePathwayHash('svc-eviction', 'env', coldTags, parent)
+      assert.notStrictEqual(recomputed, cold)
+      assert.deepStrictEqual(recomputed, cold)
+    })
+
     it('serves a cached hash only for the same process tags and container tags hash', () => {
       const processTags = 'entrypoint.basedir:src,entrypoint.name:server,entrypoint.type:script,' +
         'entrypoint.workdir:orders,package.json.name:orders-api,svc.user:true'

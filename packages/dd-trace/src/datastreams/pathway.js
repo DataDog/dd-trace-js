@@ -17,6 +17,7 @@ const { encodeVarintInto, decodeVarint } = require('./encoding')
 const { writeFnv64LE } = require('./fnv')
 
 const cache = new LRUCache({ max: 500 })
+const nodeHashes = new LRUCache({ max: 500 })
 const seeds = new LRUCache({ max: 100 })
 const ENTRY_PARENT_HASH = Buffer.alloc(8)
 let nextSeedId = 0
@@ -156,8 +157,8 @@ function computeHash (service, env, edgeTags, parentHash, processTags, container
     }
   }
   const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
-  const key = pathwayCachePrefix(seed, edgeTags.join('\0')) + parentHash.toString('hex')
-  return cache.get(key) ?? cachePathwayHash(key, seed, Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), parentHash)
+  const keyPrefix = pathwayCachePrefix(seed, edgeTags.join('\0'))
+  return cachePathwayHash(keyPrefix, seed, edgeTags, parentHash)
 }
 
 /**
@@ -169,14 +170,26 @@ function pathwayCachePrefix (seed, edgeKey) {
 }
 
 /**
- * @param {string} key
+ * @param {string} keyPrefix
  * @param {HashSeed} seed
- * @param {Buffer} tagBytes
+ * @param {string[] | Buffer} tags Sorted edge tags or precomputed HTTP tag bytes.
  * @param {Buffer} parentHash
  */
-function cachePathwayHash (key, seed, tagBytes, parentHash) {
+function cachePathwayHash (keyPrefix, seed, tags, parentHash) {
+  const key = keyPrefix + parentHash.toString('latin1')
+  const cached = cache.get(key)
+  if (cached !== undefined) return cached
+
+  let nodeHash = nodeHashes.get(keyPrefix)
+  if (nodeHash === undefined) {
+    const tagBytes = Array.isArray(tags) ? Buffer.from(hashedEdgeTags(tags), 'utf8') : tags
+    nodeHash = Buffer.allocUnsafe(8)
+    writeFnv64LE(tagBytes, nodeHash, 0, seed.state)
+    nodeHashes.set(keyPrefix, nodeHash)
+  }
+
   const pathwayInput = Buffer.alloc(16)
-  writeFnv64LE(tagBytes, pathwayInput, 0, seed.state)
+  nodeHash.copy(pathwayInput, 0)
   parentHash.copy(pathwayInput, 8)
   const value = Buffer.allocUnsafe(8)
   writeFnv64LE(pathwayInput, value, 0)
@@ -205,8 +218,7 @@ function prepareHttpEdgeTags (direction) {
     const isRoot = parentHash === ENTRY_PARENT_HASH
     if (isRoot && rootHash !== undefined) return rootHash
 
-    const key = keyPrefix + parentHash.toString('hex')
-    const hash = cache.get(key) ?? cachePathwayHash(key, seed, tagBytes, parentHash)
+    const hash = cachePathwayHash(keyPrefix, seed, tagBytes, parentHash)
     if (isRoot) rootHash = hash
     return hash
   })
