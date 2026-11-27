@@ -6679,7 +6679,7 @@ rules:
       for (const [remote, inject, extract] of [
         [undefined, 'b3,tracecontext', 'b3,tracecontext'],
         [{ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' }, 'b3', 'b3,tracecontext'],
-        [{ DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' }, 'b3,tracecontext,b3multi', 'b3,tracecontext,b3multi'],
+        [{ DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' }, 'b3,tracecontext', 'b3,tracecontext'],
         [null, 'b3,tracecontext', 'b3,tracecontext'],
       ]) {
         if (remote !== undefined) config.setRemoteConfig(remote)

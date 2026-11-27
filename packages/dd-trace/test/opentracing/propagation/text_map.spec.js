@@ -2362,11 +2362,19 @@ describe('TextMapPropagator', () => {
           linkStyle: 'b3',
         },
         {
-          name: 'experimental B3 with an OTel fallback',
-          env: { OTEL_PROPAGATORS: 'b3', DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' },
+          name: 'experimental B3 with both formats already configured',
+          options: {
+            experimental: { b3: true },
+            tracePropagationStyle: ['b3 single header', 'b3multi'],
+          },
           single: true,
           multi: true,
           linkStyle: 'b3multi',
+        },
+        {
+          name: 'OTel fallback over the experimental B3 flag',
+          env: { OTEL_PROPAGATORS: 'b3', DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' },
+          single: true,
         },
         {
           name: 'experimental B3 when OTel already selects both formats',
@@ -2429,21 +2437,29 @@ describe('TextMapPropagator', () => {
         }
       })
 
-      it('should apply and withdraw remote OTel B3 with no startup propagation style', () => {
-        configure()
+      for (const [name, remote, multi] of [
+        ['OTel B3', { OTEL_PROPAGATORS: 'b3' }, false],
+        ['experimental B3', { DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'true' }, true],
+      ]) {
+        it(`should apply and withdraw remote ${name} on a default config`, () => {
+          configure()
 
-        config.setRemoteConfig({ OTEL_PROPAGATORS: 'b3' })
-        const carrier = inject()
-        assert.strictEqual(carrier['x-b3-traceid'], undefined)
-        assert.strictEqual(carrier.b3, incoming.b3)
-        assert.strictEqual(propagator.extract(incoming).toTraceId(), '291')
+          config.setRemoteConfig(remote)
+          const carrier = inject()
+          assert.strictEqual(carrier['x-b3-traceid'], multi ? '0000000000000123' : undefined)
+          assert.strictEqual(carrier.b3, incoming.b3)
 
-        config.setRemoteConfig(null)
-        const restored = inject()
-        assert.strictEqual(restored.b3, undefined)
-        assert.strictEqual(restored['x-b3-traceid'], undefined)
-        assert.strictEqual(propagator.extract(incoming), null)
-      })
+          const { b3, ...multiHeaders } = incoming
+          assert.strictEqual(propagator.extract({ b3 }).toTraceId(), '291')
+          assert.strictEqual(propagator.extract(multiHeaders)?.toTraceId(), multi ? '1929' : undefined)
+
+          config.setRemoteConfig(null)
+          const restored = inject()
+          assert.strictEqual(restored.b3, undefined)
+          assert.strictEqual(restored['x-b3-traceid'], undefined)
+          assert.strictEqual(propagator.extract(incoming), null)
+        })
+      }
 
       it('should preserve B3 labels on conflicting inbound contexts', () => {
         configure({ OTEL_PROPAGATORS: 'tracecontext,b3' })

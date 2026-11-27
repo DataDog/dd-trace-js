@@ -26,7 +26,7 @@ const {
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
-const { OTEL_B3_LABEL, OTEL_B3_STYLE, formatPropagationStyles } = require('../opentracing/propagation/styles')
+const { OTEL_B3_LABEL, OTEL_B3_STYLE } = require('../opentracing/propagation/styles')
 const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
@@ -385,27 +385,25 @@ class Config extends ConfigBase {
    * @param {string[]} styles
    */
   #applyExperimentalB3 (path, styles) {
-    const otelB3 = styles.includes(OTEL_B3_STYLE)
-    // Shared styles take precedence. The legacy flag can add multi-header B3 to OTel B3.
-    if (!otelB3 && trackedConfigOrigins.get(path) === 'calculated') {
+    // Shared styles take precedence over the experimental flag.
+    if (trackedConfigOrigins.get(path) === 'calculated') {
       return
     }
 
     const hasMulti = styles.includes('b3') || styles.includes('b3multi')
-    const hasSingle = otelB3 || styles.includes('b3 single header')
+    const hasSingle = styles.includes('b3 single header')
     if (hasMulti && hasSingle) {
       return
     }
 
     const expanded = [...styles]
     if (!hasMulti) {
-      expanded.push(otelB3 ? 'b3multi' : 'b3')
+      expanded.push('b3')
     }
     if (!hasSingle) {
       expanded.push('b3 single header')
     }
-    const reported = otelB3 ? formatPropagationStyles(expanded, ',') : expanded
-    setAndTrack(this, path, expanded, reported)
+    setAndTrack(this, path, expanded)
   }
 
   // Handles values calculated from a mixture of options and env vars

@@ -45,7 +45,7 @@ const { DD_MAJOR } = require('../../../../../version')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
-const { OTEL_B3_LABEL, OTEL_B3_STYLE, formatPropagationStyles } = require('./styles')
+const { OTEL_B3_LABEL, OTEL_B3_STYLE } = require('./styles')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -395,7 +395,7 @@ class TextMapPropagator {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pickTextMap(carrier))
-      const styles = formatPropagationStyles(this.#config.tracePropagationStyle.extract, ', ')
+      const styles = this.#config.tracePropagationStyle.extract.join(', ').replaceAll(OTEL_B3_STYLE, OTEL_B3_LABEL)
 
       return `Extract from carrier (${styles}): ${keys}.`
     })
