@@ -138,11 +138,11 @@ class DatadogTracer {
    * @returns {object | undefined}
    */
   inject (context, format, carrier) {
-    if (context instanceof Span) {
-      context = context.context()
-    }
-
     try {
+      if (context instanceof Span || typeof context?.context === 'function') {
+        context = context.context()
+      }
+
       if (format !== 'text_map_dsm' && format !== formats.LOG) {
         this._prioritySampler.sample(context)
       }
