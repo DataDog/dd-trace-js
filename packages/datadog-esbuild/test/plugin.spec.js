@@ -375,7 +375,7 @@ describe('datadog-esbuild plugin', () => {
       assert.strictEqual(result.resolveDir, path.dirname(modulePath))
     })
 
-    it('generates setters for cyclic star exports', async () => {
+    it('exports the bindings of cyclic star exports', async () => {
       const onLoad = captureOnLoad()
       const modulePath = path.join(FIXTURES, 'export-cycle-a.mjs')
 
@@ -390,11 +390,10 @@ describe('datadog-esbuild plugin', () => {
         },
       })
 
-      assert.match(result.contents, /set\["fromA"\]/)
-      assert.match(result.contents, /set\["fromB"\]/)
+      assert.match(result.contents, /export \{ \$\d+ as "fromA", \$\d+ as "fromB" \}/)
     })
 
-    it('generates setters for TypeScript module exports', async () => {
+    it('exports the bindings of TypeScript modules', async () => {
       const onLoad = captureOnLoad()
       const modulePath = path.join(FIXTURES, 'typescript-export.mts')
 
@@ -409,7 +408,7 @@ describe('datadog-esbuild plugin', () => {
         },
       })
 
-      assert.match(result.contents, /set\["Client"\]/)
+      assert.match(result.contents, /export \{ \$\d+ as "Client" \}/)
     })
   })
 

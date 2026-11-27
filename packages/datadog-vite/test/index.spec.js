@@ -683,13 +683,15 @@ describe('datadogVite', () => {
       const wrapperId = `\0dd-trace-vite:${honoPath}`
 
       await runResolveId(plugin, './hono.js', indexPath, honoPath, {}, ssr)
+      // The wrapper reports the specifier of the first import of the build.
+      await runResolveId(plugin, 'hono/dist/hono.js', indexPath, honoPath, {}, ssr)
       await runResolveId(plugin, 'hono/dist/hono.js', indexPath, honoPath, {}, main)
       const ssrCode = await plugin.load.handler.call(createResolveContext(ssr), wrapperId)
       const mainCode = await plugin.load.handler.call(createResolveContext(main), wrapperId)
 
-      assert.ok(ssrCode.includes('_, set, get, "./hono.js")'))
-      assert.ok(mainCode.includes('_, set, get, "hono/dist/hono.js")'))
-      assert.match(mainCode, /export \{ \$dd\w+ as "star" \}/)
+      assert.ok(ssrCode.includes('__binder, "./hono.js", "module")'))
+      assert.ok(mainCode.includes('__binder, "hono/dist/hono.js", "module")'))
+      assert.match(mainCode, /export \{[^}]*\$\d+ as "star"[^}]*\}/)
       assert.equal(resolvers.length, 2)
 
       await plugin.buildEnd.call({ environment: ssr })
@@ -701,8 +703,8 @@ describe('datadogVite', () => {
       // Rebuilds retain each environment's original specifier but analyze changed exports again.
       write(path.dirname(honoPath), 'nested.js', 'export const changed = "changed";\n')
       const rebuilt = await plugin.load.handler.call(createResolveContext(ssr), wrapperId)
-      assert.ok(rebuilt.includes('_, set, get, "./hono.js")'))
-      assert.match(rebuilt, /export \{ \$dd\w+ as "changed" \}/)
+      assert.ok(rebuilt.includes('__binder, "./hono.js", "module")'))
+      assert.match(rebuilt, /export \{[^}]*\$\d+ as "changed"[^}]*\}/)
       assert.doesNotMatch(rebuilt, /as "star"/)
       assert.equal(resolvers.length, 3)
     })

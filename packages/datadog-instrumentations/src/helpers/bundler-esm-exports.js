@@ -1,9 +1,10 @@
 'use strict'
 
-// Export analysis of ES modules for bundler plugins. processModule is copied from the `import-in-the-middle` package
-// with minor modifications (https://www.npmjs.com/package/import-in-the-middle).
+// IITM facades for the ES modules bundler plugins intercept. import-in-the-middle analyzes the exports and generates
+// the facade; this module gives it access to the module graph the way Node.js would resolve it at runtime.
 const childProcess = require('node:child_process')
 const fs = require('node:fs')
+const { builtinModules, createRequire } = require('node:module')
 const readline = require('node:readline')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 
@@ -12,8 +13,6 @@ const { isESMFile } = require('./bundler-utils')
 
 const MAX_PENDING_REQUESTS = 1024
 const MAX_STDERR_LENGTH = 16 * 1024
-const LOAD_OPERATION = 0
-const RESOLVE_OPERATION = 1
 const RESOLVER_SOURCE = String.raw`
 import { createReadStream, createWriteStream } from 'node:fs'
 import readline from 'node:readline'
@@ -40,31 +39,6 @@ for await (const line of lines) {
 }
 responses.end()
 `
-
-/** @typedef {{ specifier: string, parentURL: string }} StarReexport */
-
-/**
- * @typedef {{ exportNames: Iterable<string>, starReexports?: StarReexport[] }} ModuleExports
- */
-
-/**
- * @typedef {Set<string>|ModuleExports} GetExportsValue
- */
-
-/**
- * @typedef {[typeof LOAD_OPERATION, URL, object] | [typeof RESOLVE_OPERATION, string, object]} GetExportsOperation
- */
-
-/**
- * @typedef {{ done: false, value: GetExportsOperation } | { done: true, value: GetExportsValue }} GetExportsResult
- */
-
-/**
- * @typedef {{
- *   next: (value?: unknown) => GetExportsResult,
- *   throw: (error?: unknown) => GetExportsResult,
- * }} GetExportsGenerator
- */
 
 class EsmResolver {
   #child
@@ -250,333 +224,153 @@ function createEsmResolver () {
 }
 
 /**
- * Drives the generator returned by import-in-the-middle >=3.1.0 export discovery.
- *
- * @param {GetExportsGenerator} exportsGenerator
- * @param {(url: URL, context: object) => { source: string, format: string }} getSource
- * @param {(specifier: string, context: object) => Promise<{ format: string, url: URL }>} resolve
- * @returns {Promise<ModuleExports>}
+ * @typedef {(source: string, options: { loader: 'ts' }) => { code: string }} Transform
  */
-async function driveGetExportsGenerator (exportsGenerator, getSource, resolve) {
-  let next = exportsGenerator.next()
-  while (next.done === false) {
-    let result
-    let failure
-    let threw = false
-
-    try {
-      const operation = next.value
-      const operationType = operation[0]
-
-      if (operationType === LOAD_OPERATION) {
-        result = getSource(operation[1], operation[2])
-      } else if (operationType === RESOLVE_OPERATION) {
-        // eslint-disable-next-line no-await-in-loop
-        result = await resolve(operation[1], operation[2])
-      } else {
-        throw new Error(`Unsupported import-in-the-middle getExports operation: ${operationType}`)
-      }
-    } catch (error) {
-      threw = true
-      failure = error
-    }
-
-    next = threw ? exportsGenerator.throw(failure) : exportsGenerator.next(result)
-  }
-  return next.value instanceof Set ? { exportNames: next.value } : next.value
-}
-
-const getExportsImporting = (url) => import(url).then(Object.keys)
-let getExportsModulePromise
-
-const loadGetExportsModule = () => {
-  if (!getExportsModulePromise) {
-    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
-  }
-  return getExportsModulePromise
-}
 
 /**
- * @param {URL} srcUrl
- * @param {object} context
- * @param {(url: URL, context: object) => { source: string, format: string }} getSource
- * @param {EsmResolver} resolver
- * @returns {Promise<{
- *   exportNames: Iterable<string>,
- *   hasModuleExportsCJSDefault: boolean,
- *   starReexports?: Array<{ specifier: string, parentURL: string }>
- * }>}
+ * @typedef {{ code: string, imports: Array<{ specifier: string, url: string }> }} WrapperModule
  */
-const getExports = async (srcUrl, context, getSource, resolver) => {
-  const mod = await loadGetExportsModule()
-  const exportsGenerator = mod.getExports(srcUrl, context, getSource)
-  /**
-   * @param {string} specifier
-   * @param {{ parentURL: URL }} operationContext
-   * @returns {Promise<{ format: string, url: URL }>}
-   */
-  const resolve = (specifier, operationContext) => resolveModule(specifier, operationContext, resolver)
-  const result = await driveGetExportsGenerator(exportsGenerator, getSource, resolve)
-  return {
-    exportNames: result.exportNames,
-    hasModuleExportsCJSDefault: mod.hasModuleExportsCJSDefault,
-    starReexports: result.starReexports,
-  }
-}
 
-function isStarExportLine (line) {
-  return /^\* from /.test(line)
-}
+/**
+ * @typedef {{ createWrapperModule: (options: object) => Promise<WrapperModule> }} WrapperApi
+ */
 
-function isBareSpecifier (specifier) {
-  // Relative and absolute paths are not bare specifiers.
-  if (
-    specifier.startsWith('.') ||
-    specifier.startsWith('/')) {
-    return false
-  }
+/** @type {Promise<WrapperApi> | undefined} */
+let wrapperModulePromise
 
-  // Valid URLs are not bare specifiers. (file:, http:, node:, etc.)
-
-  if (URL.hasOwnProperty('canParse')) {
-    // eslint-disable-next-line n/no-unsupported-features/node-builtins
-    return !URL.canParse(specifier)
-  }
-
-  try {
-    // eslint-disable-next-line no-new
-    new URL(specifier)
-    return false
-  } catch {
-    return true
-  }
+function loadWrapperModule () {
+  wrapperModulePromise ??= import('import-in-the-middle/wrapper.mjs')
+  return wrapperModulePromise
 }
 
 /**
  * @param {string} modulePath
- * @param {string} format
  */
-function getModuleFormat (modulePath, format) {
-  if (modulePath.endsWith('.mts')) return 'module-typescript'
-  if (modulePath.endsWith('.cts')) return 'commonjs-typescript'
-  if (modulePath.endsWith('.ts')) return `${format}-typescript`
-  return format
+function isTypeScript (modulePath) {
+  return modulePath.endsWith('.ts') || modulePath.endsWith('.mts') || modulePath.endsWith('.cts')
 }
 
 /**
- * Resolves a module with the import conditions used by ESM instrumentation.
+ * @param {string} modulePath
+ */
+function getModuleFormat (modulePath) {
+  const format = isESMFile(modulePath) ? 'module' : 'commonjs'
+  return isTypeScript(modulePath) ? `${format}-typescript` : format
+}
+
+/**
+ * Resolves a re-export the way Node.js resolves it at runtime: star exports with the import conditions, CommonJS
+ * re-exports with the require conditions.
  *
  * @param {string} specifier
- * @param {{ parentURL: URL }} context
+ * @param {{ parentURL: string, kind: 'import' | 'require' }} context
  * @param {EsmResolver} resolver
- * @returns {Promise<{ format: string, url: URL }>}
+ * @returns {Promise<{ url: string, format: string }>}
  */
-async function resolveModule (specifier, context, resolver) {
-  const url = new URL(await resolver.resolve(specifier, context.parentURL))
-  if (url.protocol === 'node:') return { format: 'builtin', url }
-  if (url.protocol !== 'file:') throw new Error(`Unsupported ESM resolution URL: ${url.href}`)
+async function resolveModule (specifier, { parentURL, kind }, resolver) {
+  const url = kind === 'require'
+    ? resolveRequire(specifier, parentURL)
+    : await resolver.resolve(specifier, parentURL)
+  if (url.startsWith('node:')) return { url, format: 'builtin' }
+  if (!url.startsWith('file:')) throw new Error(`Unsupported ESM resolution URL: ${url}`)
 
-  const resolved = fileURLToPath(url)
-  if (resolved.endsWith('.node')) {
-    throw new Error(`Unsupported ESM analysis target: ${resolved}`)
+  const modulePath = fileURLToPath(url)
+  // import-in-the-middle skips native CommonJS re-exports, but Node.js cannot import them.
+  if (kind !== 'require' && modulePath.endsWith('.node')) {
+    throw new Error(`Unsupported ESM analysis target: ${modulePath}`)
   }
-  const format = isESMFile(resolved) ? 'module' : 'commonjs'
-  return { format, url }
+  return { url, format: getModuleFormat(modulePath) }
 }
 
 /**
- * Generates the pieces of code for the proxy module before the path
+ * @param {string} specifier
+ * @param {string} parentURL
+ */
+function resolveRequire (specifier, parentURL) {
+  const resolved = createRequire(parentURL).resolve(specifier)
+  if (resolved.startsWith('node:')) return resolved
+  return builtinModules.includes(resolved) ? `node:${resolved}` : pathToFileURL(resolved).href
+}
+
+/**
+ * @param {string} url
+ * @param {string | undefined} format
+ * @param {(modulePath: string) => string} readSource
+ * @param {Transform} [transform]
+ * @returns {{ source: string, format: string | undefined }}
+ */
+function loadModule (url, format, readSource, transform) {
+  const modulePath = fileURLToPath(url)
+  // JSON modules only export their default, which star exports do not re-export.
+  if (modulePath.endsWith('.json')) return { source: '', format: 'module' }
+
+  const source = readSource(modulePath)
+  if (transform && (format === 'module-typescript' || format === 'commonjs-typescript')) {
+    return {
+      source: transform(source, { loader: 'ts' }).code,
+      format: format === 'module-typescript' ? 'module' : 'commonjs',
+    }
+  }
+  return { source, format }
+}
+
+/**
+ * The facade imports its dependencies through placeholders. Absolute paths let bundlers resolve them like any other
+ * import, while builtins keep their `node:` URLs and stay external.
  *
- * @param {object} moduleData
- * @param {string} moduleData.path
- * @param {boolean} [moduleData.internal]
- * @param {object} moduleData.context
- * @param {boolean} [moduleData.excludeDefault]
- * @param {Map<string, string>} [moduleData.moduleSources]
- * @param {EsmResolver} [moduleData.resolver]
- * @param {(source: string, options: { loader: 'ts' }) => { code: string }} [moduleData.transform]
- * @param {Set<string>} [activeModules]
- * @returns {Promise<Map>}
+ * @param {WrapperModule} wrapper
  */
-async function processModule (
-  { path, internal = false, context, excludeDefault = false, moduleSources = new Map(), resolver, transform },
-  activeModules
-) {
-  const ownsResolver = resolver === undefined
-  resolver ??= createEsmResolver()
-  try {
-    return await processModuleWithResolver(
-      { path, internal, context, excludeDefault, moduleSources, transform },
-      activeModules,
-      resolver
-    )
-  } finally {
-    if (ownsResolver) await resolver.close()
+function mapImports ({ code, imports }) {
+  for (const { specifier, url } of imports) {
+    const placeholder = `from ${JSON.stringify(specifier)}`
+    if (!code.includes(placeholder)) throw new Error(`The IITM facade does not import ${specifier}`)
+    const target = `from ${JSON.stringify(url.startsWith('file:') ? fileURLToPath(url) : url)}`
+    code = code.replaceAll(placeholder, () => target)
   }
+  return code
 }
 
 /**
- * @param {object} moduleData
- * @param {string} moduleData.path
- * @param {boolean} moduleData.internal
- * @param {object} moduleData.context
- * @param {boolean} moduleData.excludeDefault
- * @param {Map<string, string>} moduleData.moduleSources
- * @param {(source: string, options: { loader: 'ts' }) => { code: string }} [moduleData.transform]
- * @param {Set<string>} [activeModules]
- * @param {EsmResolver} resolver
- * @returns {Promise<Map>}
+ * Generates the import-in-the-middle facade of an ES module or builtin for bundlers. IITM analyzes the exports and
+ * owns the export bindings and hook semantics, as it does for modules wrapped by its Node.js loader. The facade
+ * registers the module under the URL Node.js would load it from, and imports it, any module defining a re-exported
+ * name and the IITM runtime by absolute path.
+ *
+ * @param {object} options
+ * @param {string} options.path The file path of the module, or the name of the builtin.
+ * @param {boolean} [options.internal] Whether the module is a Node.js builtin.
+ * @param {string} options.specifier The specifier the module was imported by, reported to hooks.
+ * @param {EsmResolver} options.resolver Resolves star exports with the import conditions.
+ * @param {Map<string, string>} [options.moduleSources] Sources read so far by file path, shared across calls.
+ * @param {Transform} [options.transform] Strips TypeScript before analysis.
+ * @returns {Promise<string>}
  */
-async function processModuleWithResolver (
-  { path, internal, context, excludeDefault, moduleSources, transform },
-  activeModules,
-  resolver
-) {
-  let moduleExports, srcUrl
+async function createEsmWrapper ({ path, internal, specifier, resolver, moduleSources = new Map(), transform }) {
+  const { createWrapperModule } = await loadWrapperModule()
   if (internal) {
-    // we can not read and parse of internal modules
-    moduleExports = { exportNames: await getExportsImporting(path) }
-  } else {
-    context = { ...context, format: getModuleFormat(path, context.format) }
-    srcUrl = pathToFileURL(path)
-    const readSource = (url) => {
-      const modulePath = fileURLToPath(url)
-      let source = moduleSources.get(modulePath)
-      if (source === undefined) {
-        source = fs.readFileSync(modulePath, 'utf8')
-        moduleSources.set(modulePath, source)
-      }
-      return source
-    }
-    const loadSource = (url, { format }) => {
-      let source = readSource(url)
-      if (transform && (format === 'module-typescript' || format === 'commonjs-typescript')) {
-        source = transform(source, { loader: 'ts' }).code
-        format = format === 'module-typescript' ? 'module' : 'commonjs'
-      }
-      return { format, source }
-    }
-    readSource(srcUrl)
-    moduleExports = await getExports(srcUrl, context, loadSource, resolver)
+    const url = /** @type {`node:${string}`} */ (path.startsWith('node:') ? path : `node:${path}`)
+    return mapImports(await createWrapperModule({ url, specifier }))
   }
 
-  const starExports = new Set()
-  const setters = new Map()
-
-  const addSetter = (name, setter, isStarExport = false) => {
-    if (setters.has(name)) {
-      if (isStarExport) {
-        // If there's already a matching star export, delete it
-        if (starExports.has(name)) {
-          setters.delete(name)
-        }
-        // and return so this is excluded
-        return
-      }
-
-      // if we already have this export but it is from a * export, overwrite it
-      if (starExports.has(name)) {
-        starExports.delete(name)
-        setters.set(name, setter)
-      }
-    } else {
-      // Store export * exports so we know they can be overridden by explicit
-      // named exports
-      if (isStarExport) {
-        starExports.add(name)
-      }
-
-      setters.set(name, setter)
+  /** @param {string} modulePath */
+  const readSource = (modulePath) => {
+    let source = moduleSources.get(modulePath)
+    if (source === undefined) {
+      source = fs.readFileSync(modulePath, 'utf8')
+      moduleSources.set(modulePath, source)
     }
+    return source
   }
+  let source = readSource(path)
+  if (transform && isTypeScript(path)) source = transform(source, { loader: 'ts' }).code
 
-  let starReexports = moduleExports.starReexports
-  for (const n of moduleExports.exportNames) {
-    const isDefault = n === 'default' || (
-      n === 'module.exports' &&
-      moduleExports.hasModuleExportsCJSDefault &&
-      (context.format === 'commonjs' || context.format === 'commonjs-typescript')
-    )
-    if (isDefault && excludeDefault) continue
-
-    if (isStarExportLine(n)) {
-      starReexports ??= []
-      starReexports.push({ parentURL: srcUrl.href, specifier: n.slice('* from '.length) })
-      continue
-    }
-
-    const variableName = `$dd${Buffer.from(n).toString('hex')}`
-    const objectKey = JSON.stringify(n)
-    const reExportedName = n === 'default' ? n : objectKey
-
-    addSetter(n, `
-      let ${variableName}
-      try {
-        ${variableName} = _[${objectKey}] = namespace[${objectKey}]
-      } catch (error) {
-        if (!(error instanceof ReferenceError)) throw error
-      }
-      export { ${variableName} as ${reExportedName} }
-      set[${objectKey}] = (v) => {
-        ${variableName} = v
-        return true
-      }
-      get[${objectKey}] = () => ${variableName}
-      `)
-  }
-
-  if (starReexports) {
-    for (const { parentURL, specifier } of starReexports) {
-      const baseUrl = new URL(parentURL)
-      const resolvedSpecifier = isBareSpecifier(specifier) ? specifier : new URL(specifier, baseUrl).href
-      // The runtime's import conditions and the declaring module's URL own star-export resolution.
-      // eslint-disable-next-line no-await-in-loop
-      const result = await resolveModule(resolvedSpecifier, { parentURL: baseUrl }, resolver)
-
-      activeModules ??= new Set([srcUrl.href])
-      if (activeModules.has(result.url.href)) continue
-      activeModules.add(result.url.href)
-
-      // eslint-disable-next-line no-await-in-loop
-      const subSetters = await processModuleWithResolver({
-        path: result.format === 'builtin' ? result.url.href : fileURLToPath(result.url),
-        internal: result.format === 'builtin',
-        context: { ...context, format: result.format },
-        excludeDefault: true,
-        moduleSources,
-        transform,
-      }, activeModules, resolver)
-      activeModules.delete(result.url.href)
-
-      for (const [name, setter] of subSetters.entries()) {
-        addSetter(name, setter, true)
-      }
-    }
-  }
-
-  return setters
+  return mapImports(await createWrapperModule({
+    url: pathToFileURL(path).href,
+    source,
+    specifier,
+    resolve: (request, context) => resolveModule(request, context, resolver),
+    load: (url, context) => loadModule(url, context.format, readSource, transform),
+  }))
 }
 
-/**
- * Generates the IITM registration wrapper used by bundlers. Export bindings come from processModule; IITM owns the
- * export proxy and hook semantics, just as it does for modules wrapped by its Node.js loader.
- *
- * @param {{ path: string, internal?: boolean, specifier?: string, setters: Iterable<string> }} options
- */
-function createEsmWrapper ({ path, internal, specifier, setters }) {
-  const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-  const toRegister = internal ? path : pathToFileURL(path)
-  return `
-import { register } from ${JSON.stringify(iitmPath)};
-import * as namespace from ${JSON.stringify(path)};
-const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
-const set = {};
-const get = {};
-
-${[...setters].join(';\n')};
-
-register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(specifier)});
-`
-}
-
-module.exports = { createEsmResolver, createEsmWrapper, driveGetExportsGenerator, processModule }
+module.exports = { createEsmResolver, createEsmWrapper }
