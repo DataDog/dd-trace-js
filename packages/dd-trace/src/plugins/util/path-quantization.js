@@ -114,10 +114,14 @@ function clientResourceName (method, path, enabled) {
   }
 
   if (path && path[0] !== '/') {
-    const prefix = path.slice(0, 8).toLowerCase()
-    if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
-      const pathStart = path.indexOf('/', path.indexOf(':') + 3)
-      path = pathStart === -1 ? '/' : path.slice(pathStart)
+    const firstChar = path[0]
+    // Both http:// and https:// have a slash at index 6.
+    if ((firstChar === 'h' || firstChar === 'H') && path[6] === '/') {
+      const prefix = path.slice(0, 8).toLowerCase()
+      if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
+        const pathStart = path.indexOf('/', path.indexOf(':') + 3)
+        path = pathStart === -1 ? '/' : path.slice(pathStart)
+      }
     }
   }
 

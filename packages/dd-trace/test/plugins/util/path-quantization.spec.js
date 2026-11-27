@@ -123,6 +123,8 @@ describe('plugins/util/path-quantization', () => {
       assert.strictEqual(clientResourceName('POST', '/users/123', true), 'POST /users/*')
       assert.strictEqual(clientResourceName('GET', '/health/status', true), 'GET /health/status')
       assert.strictEqual(clientResourceName('GET', 'users/123', true), 'GET /users/*')
+      assert.strictEqual(clientResourceName('GET', 'health/status', true), 'GET /health/status')
+      assert.strictEqual(clientResourceName('GET', 'home/status', true), 'GET /home/status')
       assert.strictEqual(clientResourceName('GET', '', true), 'GET /')
     })
 
