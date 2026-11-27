@@ -31,6 +31,7 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
+const Tracer = require('../src/tracer')
 const { getConfigFresh } = require('./helpers/config')
 
 // Mock spans use the post-format field name `start` (nanoseconds), matching
@@ -1060,16 +1061,32 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(p.buckets.size, 1)
   })
 
-  for (const spanKind of ['server', 'client', 'producer', 'consumer', 'Client']) {
-    it(`should record ${spanKind} spans that are neither top-level nor measured`, () => {
-      const p = new SpanStatsProcessor(config)
-      clearTimeout(p.timer)
+  it('should respect measured: false on child spans with a span kind', () => {
+    const tracerConfig = getConfigFresh({ service: 'service' })
+    tracerConfig.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    tracerConfig.url = undefined
+    const tracer = new Tracer(tracerConfig)
+    const stats = tracer._processor._stats
+    clearInterval(stats.timer)
+    sinon.stub(tracer._exporter, 'export')
+    const exportStats = sinon.stub(stats.exporter, 'export')
+    const kinds = ['client', 'consumer', 'producer', 'server']
 
-      p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: spanKind } })
-
-      assert.strictEqual(p.buckets.size, 1)
+    tracer.trace('root', {}, () => {
+      for (const kind of kinds) {
+        const tags = { [SPAN_KIND]: kind }
+        tracer.trace(kind, { tags }, () => {})
+        tracer.trace(`${kind}-unmeasured`, { tags, measured: false }, () => {})
+      }
     })
-  }
+
+    stats.onInterval()
+
+    sinon.assert.calledOnce(exportStats)
+    const { Stats: buckets } = exportStats.firstCall.args[0]
+    const names = buckets.flatMap(bucket => bucket.Stats.map(stat => stat.Name)).sort()
+    assert.deepStrictEqual(names, ['client', 'consumer', 'producer', 'root', 'server'])
+  })
 
   it('should not record internal spans that are neither top-level nor measured', () => {
     const p = new SpanStatsProcessor(config)
@@ -1085,6 +1102,7 @@ describe('SpanStatsProcessor', () => {
     const clientSpan = {
       ...basicSpan,
       meta: { ...basicSpan.meta, [SPAN_KIND]: 'client', 'peer.service': 'billing' },
+      metrics: { [MEASURED]: 1 },
     }
 
     beforeEach(() => {
@@ -1220,43 +1238,6 @@ describe('SpanStatsProcessor', () => {
 
       sinon.assert.notCalled(fetchAgentInfo)
       assert.deepStrictEqual(exportedPeerTags(p), [[]])
-    })
-
-    describe('span kinds', () => {
-      const kinds = ['server', 'client', 'producer', 'consumer', 'internal']
-
-      /**
-       * @param {object} agentInfo The Agent /info answer.
-       * @param {object} [otlp] The OTLP exporter, if any.
-       * @returns {string[]} The span kinds of the recorded spans that are neither top-level nor measured.
-       */
-      function recordedSpanKinds (agentInfo, otlp) {
-        fetchAgentInfo.callsFake((url, callback) => callback(null, agentInfo))
-
-        const p = new SpanStatsProcessor(config, otlp)
-        clearTimeout(p.timer)
-        for (const spanKind of kinds) {
-          p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: spanKind } })
-        }
-        return [...p.buckets.values()].flatMap(bucket => [...bucket.values()].map(stats => stats.aggKey.spanKind))
-      }
-
-      for (const spanKinds of [undefined, null, [], ['client']]) {
-        it(`should compute stats for the default span kinds for span_kinds_stats_computed ${spanKinds}`, () => {
-          assert.deepStrictEqual(
-            recordedSpanKinds({ span_kinds_stats_computed: spanKinds }),
-            ['server', 'client', 'producer', 'consumer']
-          )
-        })
-      }
-
-      it('should compute stats for the default span kinds for OTLP span metrics', () => {
-        assert.deepStrictEqual(
-          recordedSpanKinds({ span_kinds_stats_computed: null }, otlpExporter),
-          ['server', 'client', 'producer', 'consumer']
-        )
-        sinon.assert.notCalled(fetchAgentInfo)
-      })
     })
 
     it('should not read /info when agent stats are disabled', () => {

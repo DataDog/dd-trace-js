@@ -30,9 +30,6 @@ const BLOCKED_PEER_TAGS = ['tracer_blocked_value']
 const BLOCKED_PEER_TAGS_KEY = BLOCKED_PEER_TAGS.join('\0')
 // Distinct peer tag combinations per bucket, the default of libdatadog's span concentrator.
 const PEER_TAGS_CARDINALITY_LIMIT = 512
-// Span kinds stats are computed for even when a span is neither top-level nor measured, the Agent's default. Like
-// dd-trace-go and dd-trace-java, the tracer does not read `span_kinds_stats_computed` from the Agent's `/info`.
-const STATS_SPAN_KINDS = new Set(['server', 'client', 'producer', 'consumer'])
 // Peer tag values have a low cardinality, so the quantized form of each raw value is kept, up to this many.
 const QUANTIZED_PEER_TAG_VALUES_LIMIT = 1000
 /** @type {Map<string, string>} */
@@ -74,17 +71,6 @@ function getAgentInfoAgents () {
     agentInfoAgents = { httpAgent: unrefSockets(httpAgent), httpsAgent: unrefSockets(httpsAgent) }
   }
   return agentInfoAgents
-}
-
-/**
- * Whether stats are computed for spans of this kind even when they are neither top-level nor measured. Most spans
- * that get here carry no or an already lowercase kind, so only others pay for lowercasing.
- *
- * @param {unknown} spanKind
- */
-function isStatsSpanKind (spanKind) {
-  if (typeof spanKind !== 'string') return false
-  return STATS_SPAN_KINDS.has(spanKind) || STATS_SPAN_KINDS.has(spanKind.toLowerCase())
 }
 
 /**
@@ -525,13 +511,7 @@ class SpanStatsProcessor {
 
   onSpanFinished (span) {
     if (!this.enabled && !this.otlpExporter) return
-    if (
-      !span.metrics[TOP_LEVEL_KEY] &&
-      !span.metrics[MEASURED] &&
-      !isStatsSpanKind(span.meta[SPAN_KIND])
-    ) {
-      return
-    }
+    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
     const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)

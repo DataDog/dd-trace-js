@@ -46,13 +46,18 @@ function quantizeIp (raw) {
 
   let host = hostPort
   let port = ''
+  let ipEnd
   const portSeparator = getPortSeparatorIndex(hostPort)
   if (portSeparator !== -1) {
     host = hostPort[0] === '[' ? hostPort.slice(1, portSeparator - 1) : hostPort.slice(0, portSeparator)
     port = hostPort.slice(portSeparator + 1)
+  } else if (hostPort[0] === '[' && hostPort.endsWith(']')) {
+    host = hostPort.slice(1, -1)
+    if (!isIPv6WithOptionalZone(host)) return raw
+    ipEnd = host.length
   }
 
-  const ipEnd = getIpEnd(host)
+  ipEnd ??= getIpEnd(host)
   if (ipEnd === -1 || ALLOWED_IP_ADDRESSES.has(host.slice(0, ipEnd))) return raw
 
   let replacement = raw.slice(0, prefixLength) + BLOCKED_IP_ADDRESS
