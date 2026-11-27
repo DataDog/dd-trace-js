@@ -39,6 +39,9 @@ A composite root such as `ai/index.js` extends `CompositePlugin` and selects lea
 On the usual promise-backed channel, `start(ctx)` registers the span and captures context, `end(ctx)` restores the
 parent after the wrapped call returns, and `asyncEnd(ctx)` calls `setLLMObsTags()` after the operation settles.
 
+Set `tracer.use('<integration>', { llmobs: false })` when an integration must retain its APM span and trace-context
+propagation but opt out of its LLMObs layer. The base class disables only its LLMObs subscriptions for that setting.
+
 See [references/plugin-architecture.md](references/plugin-architecture.md) for the full implementation surface.
 
 ### 2. Package Shape
@@ -65,7 +68,7 @@ See [references/category-detection.md](references/category-detection.md) for heu
 ### 3. LLM Span Kinds
 
 `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` lists `llm`, `agent`, `workflow`, `task`, `tool`,
-`embedding`, `retrieval`. Chat completions and text generation are `llm`; graph or chain execution is `workflow`;
+`embedding`, `retrieval`, `experiment`. Chat completions and text generation are `llm`; graph or chain execution is `workflow`;
 agent runs are `agent`; vector-DB and RAG lookups are `retrieval`. Only the public SDK validates against that list,
 so a plugin may register a kind outside it — `ai` v7 and claude-agent-sdk both use `step`.
 
@@ -73,9 +76,11 @@ so a plugin may register a kind outside it — `ai` v7 and claude-agent-sdk both
 
 `llm` operations convert provider-specific messages to the tagger's message shape:
 
-**Common shape:** `[{ content?: string, role: string, toolCalls?: object[], toolResults?: object[] }]`
+**Common shape:** `[{ content?: string, role?: string, toolCalls?: object[], toolResults?: object[],
+audioParts?: object[], imageParts?: object[] }]`
 
 `role` defaults to an empty string. Tool-call or tool-result-only messages may omit `content`.
+Audio and image parts each require a `mimeType` plus exactly one of base64 `content` or `attachmentKey`.
 
 **Provider-specific handling:**
 - OpenAI: Direct format match, handle `function_call` and `tool_calls`
