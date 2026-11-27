@@ -2,6 +2,16 @@
 
 const telemetryMetrics = require('../telemetry/metrics')
 
+// Capture the native monotonic clock at module load so customer fake timers
+// (Jest, Vitest, Sinon patching Date.now, performance.now, or process.hrtime)
+// cannot skew telemetry durations, including on Node.js 18 where performance.now reads process.hrtime.
+const hrtimeBigint = process.hrtime.bigint
+const clockOriginNs = hrtimeBigint()
+
+function monotonicNow () {
+  return Number(hrtimeBigint() - clockOriginNs) / 1e6
+}
+
 const ciVisibilityMetrics = telemetryMetrics.manager.namespace('civisibility')
 
 const formattedTags = {
@@ -163,6 +173,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   recordDynamicAtrRetries,
   TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,

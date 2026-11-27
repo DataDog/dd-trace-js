@@ -7,6 +7,7 @@ const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('.
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_GIT_REQUESTS_SETTINGS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
@@ -268,9 +269,9 @@ function getLibraryConfiguration ({
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
 
-  const startTime = Date.now()
+  const startTime = monotonicNow()
   request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, monotonicNow() - startTime)
     if (err) {
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { statusCode })
       done(err)

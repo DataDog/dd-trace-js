@@ -5,6 +5,7 @@ const log = require('../../log')
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_ITR_SKIPPABLE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_MS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS,
@@ -253,10 +254,10 @@ function fetchFromApi ({
   })
   incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS)
 
-  const startTime = Date.now()
+  const startTime = monotonicNow()
 
   request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, Date.now() - startTime)
+    distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, monotonicNow() - startTime)
     if (err) {
       incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS, { statusCode })
       done(err)

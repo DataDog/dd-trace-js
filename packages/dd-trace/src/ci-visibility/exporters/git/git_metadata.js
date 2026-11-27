@@ -27,6 +27,7 @@ const {
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS,
   TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS,
   TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS,
@@ -103,9 +104,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
   })
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
-  const startTime = Date.now()
+  const startTime = monotonicNow()
   request(localCommitData, options, (err, response, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, monotonicNow() - startTime)
     if (err) {
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { statusCode })
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
@@ -195,9 +196,9 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
 
   const uploadSize = form.size()
 
-  const startTime = Date.now()
+  const startTime = monotonicNow()
   request(form, options, (err, _, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, monotonicNow() - startTime)
     if (err) {
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { statusCode })
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)

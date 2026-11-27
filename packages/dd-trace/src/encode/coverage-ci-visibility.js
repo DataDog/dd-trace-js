@@ -3,6 +3,7 @@ const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 
 const {
   distributionMetric,
+  monotonicNow,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
@@ -38,7 +39,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   encode (coverage) {
-    const startTime = Date.now()
+    const startTime = monotonicNow()
 
     this._coveragesCount++
     try {
@@ -63,7 +64,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
       { endpoint: 'code_coverage' },
-      Date.now() - startTime
+      monotonicNow() - startTime
     )
   }
 

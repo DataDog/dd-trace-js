@@ -1,13 +1,12 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
-
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_KNOWN_TESTS,
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
@@ -182,8 +181,7 @@ function fetchFromApi ({
 
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
 
-  const startTime = Date.now()
-  const totalFetchStartTime = performance.now()
+  const startTime = monotonicNow()
   let aggregateTests = null
   let totalResponseBytes = 0
   let pageNumber = 0
@@ -194,7 +192,7 @@ function fetchFromApi ({
 
     if (pageNumber > MAX_KNOWN_TESTS_PAGES) {
       log.error('Known tests pagination exceeded maximum of %d pages. Aborting.', MAX_KNOWN_TESTS_PAGES)
-      distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+      distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, monotonicNow() - startTime)
       return done(new Error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages`))
     }
 
@@ -215,11 +213,11 @@ function fetchFromApi ({
       },
     })
 
-    const pageStartTime = performance.now()
+    const pageStartTime = monotonicNow()
     request(data, options, (err, res, statusCode) => {
-      totalRequestMs += performance.now() - pageStartTime
+      totalRequestMs += monotonicNow() - pageStartTime
       if (err) {
-        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, monotonicNow() - startTime)
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
         return done(err)
       }
@@ -239,19 +237,19 @@ function fetchFromApi ({
             log.error(
               'Known tests response has has_next=true but no cursor on page %d. Aborting pagination.', pageNumber
             )
-            distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+            distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, monotonicNow() - startTime)
             return done(new Error('Known tests pagination: has_next=true but no cursor'))
           }
           return fetchPage(responsePageInfo.cursor)
         }
 
         // Done — no more pages
-        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, monotonicNow() - startTime)
         const numTests = getNumFromKnownTests(aggregateTests)
 
         // Request time includes transport retries and backoff, but excludes parsing and merging pages.
         distributionMetric(TELEMETRY_KNOWN_TESTS_PAGES_FETCHED, {}, pageNumber)
-        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS, {}, performance.now() - totalFetchStartTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS, {}, monotonicNow() - startTime)
         distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS, {}, totalRequestMs)
 
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
@@ -263,7 +261,7 @@ function fetchFromApi ({
 
         done(null, aggregateTests)
       } catch (err) {
-        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, monotonicNow() - startTime)
         done(err)
       }
     })

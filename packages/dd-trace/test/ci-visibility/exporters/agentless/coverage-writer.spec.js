@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -14,6 +16,7 @@ let encoder
 let url
 let log
 let incrementCountMetric
+let distributionMetric
 let agent
 let getAgent
 
@@ -40,6 +43,7 @@ describe('CI Visibility Coverage Writer', () => {
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
+    distributionMetric = sinon.stub()
     agent = {}
     getAgent = sinon.stub().returns(agent)
 
@@ -51,7 +55,7 @@ describe('CI Visibility Coverage Writer', () => {
       '../agents': { getAgent },
       '../request': request,
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
-      '../../../ci-visibility/telemetry': { incrementCountMetric },
+      '../../../ci-visibility/telemetry': { incrementCountMetric, distributionMetric },
       '../../../log': log,
     })
     coverageWriter = new CoverageWriter({ url })
@@ -133,6 +137,35 @@ describe('CI Visibility Coverage Writer', () => {
         )
         done()
       })
+    })
+
+    it('should not skew request duration telemetry when fake timers shift Date.now mid-request', () => {
+      const clock = sinon.useFakeTimers({
+        now: 0,
+        toFake: ['Date', 'performance', 'hrtime'],
+      })
+
+      try {
+        request.callsFake((_data, _options, callback) => {
+          clock.restore()
+          callback(null, 'OK', 200)
+        })
+        encoder.count.returns(1)
+
+        coverageWriter.flush()
+
+        const durationCall = distributionMetric.getCalls()
+          .find(call => call.args[0] === 'endpoint_payload.requests_ms')
+
+        assert.ok(durationCall)
+        assert.deepStrictEqual(durationCall.args[1], { endpoint: 'code_coverage' })
+        assert.ok(
+          durationCall.args[2] >= 0 && durationCall.args[2] < 10_000,
+          `Expected unskewed duration ms, got ${durationCall.args[2]}`
+        )
+      } finally {
+        clock.restore()
+      }
     })
   })
 })
