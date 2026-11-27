@@ -830,6 +830,34 @@ describe('spanFormat', () => {
         assert.strictEqual(trace.error, 0)
       })
 
+      it('should not set the error flag when error is false before error-related tags', () => {
+        spanContext._tags.error = false
+        spanContext._tags[ERROR_TYPE] = 'Error'
+        spanContext._tags[ERROR_MESSAGE] = 'boom'
+        spanContext._tags[ERROR_STACK] = 'stack'
+
+        trace = spanFormat(span)
+
+        assert.strictEqual(trace.error, 0)
+        assert.strictEqual(trace.meta[ERROR_TYPE], 'Error')
+        assert.strictEqual(trace.meta[ERROR_MESSAGE], 'boom')
+        assert.strictEqual(trace.meta[ERROR_STACK], 'stack')
+      })
+
+      it('should not set the error flag when error is false after error-related tags', () => {
+        spanContext._tags[ERROR_TYPE] = 'Error'
+        spanContext._tags[ERROR_MESSAGE] = 'boom'
+        spanContext._tags[ERROR_STACK] = 'stack'
+        spanContext._tags.error = false
+
+        trace = spanFormat(span)
+
+        assert.strictEqual(trace.error, 0)
+        assert.strictEqual(trace.meta[ERROR_TYPE], 'Error')
+        assert.strictEqual(trace.meta[ERROR_MESSAGE], 'boom')
+        assert.strictEqual(trace.meta[ERROR_STACK], 'stack')
+      })
+
       it('should not extract error to meta', () => {
         spanContext._tags.error = true
 
