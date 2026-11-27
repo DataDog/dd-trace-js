@@ -57,7 +57,6 @@ const {
   TEST_COMMAND,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { FINAL_FLUSH_TIMEOUT } = require('../../packages/dd-trace/src/ci-visibility/final-flush')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { version: ddTraceVersion } = require('../../package.json')
 const { getBabelDependencies } = require('./babel-dependencies')
@@ -1577,18 +1576,21 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
-        const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
-        assert.strictEqual(testSpans.length, 2)
-        const spanTypes = testSpans.map(span => span.type)
-        assertObjectContains(spanTypes, ['test'])
-        assert.ok(
-          !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
-          `Got: ${inspect(spanTypes)}`
-        )
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
-        done()
-      }).catch(done)
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/v0.4/traces',
+        tracesRequests => {
+          const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
+          assert.strictEqual(testSpans.length, 2)
+          const spanTypes = testSpans.map(span => span.type)
+          assertObjectContains(spanTypes, ['test'])
+          assert.ok(
+            !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
+            `Got: ${inspect(spanTypes)}`
+          )
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+        }
+      ).then(() => done(), done)
     })
 
     it('reports tests when using agentless', (done) => {
@@ -1602,21 +1604,23 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        eventsRequests => {
+          const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
 
-        // it propagates test session name to the test and test suite events in parallel mode
-        metadataDicts.forEach(metadata => {
-          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
-        })
+          // it propagates test session name to the test and test suite events in parallel mode
+          metadataDicts.forEach(metadata => {
+            assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+          })
 
-        const events = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-        const eventTypes = events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-
-        done()
-      }).catch(done)
+          const events = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+          const eventTypes = events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+        }
+      ).then(() => done(), done)
     })
 
     it('reports tests when using evp proxy', (done) => {
@@ -1629,15 +1633,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
-        .then(eventsRequests => {
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle',
+        eventsRequests => {
           const eventTypes = eventsRequests.map(({ payload }) => payload)
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
           assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-          done()
-        }).catch(done)
+        }
+      ).then(() => done(), done)
     })
 
     // older versions handle retries differently
@@ -1729,9 +1735,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         di_enabled: true,
       })
 
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
+      childProcess = exec(runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/concurrent-ftr-disabled',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            RUN_IN_PARALLEL: 'true',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/logs'),
+        (payloads) => {
+          const logs = payloads.filter(({ url }) => url.endsWith('/api/v2/logs'))
+          assert.strictEqual(logs.length, 0, 'Unexpected logs')
+
+          const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+            .flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
@@ -1747,31 +1771,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
             )
           assert.strictEqual(hasDebugTags, false)
-        })
-
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
-
-      childProcess = exec(runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/concurrent-ftr-disabled',
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            RUN_IN_PARALLEL: 'true',
-          },
         }
       )
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
-        logsPromise,
       ])
       assert.strictEqual(exitCode, 0)
     })
@@ -1854,19 +1859,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       Promise.all([
         once(childProcess, 'message'),
-        receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000),
-      ]).then(([, eventsRequests]) => {
-        const tests = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-          .filter(event => event.type === 'test')
-          .map(event => event.content)
+        // 'close' waits for stdio, so the TypeError check below sees all output.
+        once(childProcess, 'close'),
+        receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url === '/api/v2/citestcycle',
+          eventsRequests => {
+            const tests = eventsRequests.map(({ payload }) => payload)
+              .flatMap(({ events }) => events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
 
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(
-          tests[0].meta[TEST_NAME],
-          'jest-worker-message passes after sending a non-array worker message'
-        )
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(
+              tests[0].meta[TEST_NAME],
+              'jest-worker-message passes after sending a non-array worker message'
+            )
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+          }
+        ),
+      ]).then(() => {
         assert.doesNotMatch(testOutput, /TypeError/)
         done()
       }).catch(done)
@@ -1882,20 +1894,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const events = eventsRequests.map(({ payload }) => payload)
-          .flatMap(({ events }) => events)
-        const eventTypes = events.map(event => event.type)
-        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        eventsRequests => {
+          const events = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+          const eventTypes = events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
-        tests.forEach(testEvent => {
-          assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
-        })
-
-        done()
-      }).catch(done)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
+          tests.forEach(testEvent => {
+            assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+          })
+        }
+      ).then(() => done(), done)
     })
 
     onlyLatestIt('reports tests when using evp proxy', (done) => {
@@ -1909,15 +1923,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'pipe',
       })
 
-      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
-        .then(eventsRequests => {
+      receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle',
+        eventsRequests => {
           const eventTypes = eventsRequests.map(({ payload }) => payload)
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
           assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
-          done()
-        }).catch(done)
+        }
+      ).then(() => done(), done)
     })
   })
 
@@ -2743,9 +2759,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   it('bounds the final flush if the server is not available and logs an error', async function () {
-    this.timeout(FINAL_FLUSH_TIMEOUT + 20_000)
+    // Shortens the default one-minute deadline so the case does not wait for it.
+    const finalFlushTimeoutMs = 2000
+    this.timeout(finalFlushTimeoutMs + 20_000)
     // Very slow intake
-    receiver.setWaitingTime(FINAL_FLUSH_TIMEOUT + 30_000)
+    receiver.setWaitingTime(finalFlushTimeoutMs + 30_000)
     // Needs to run with the CLI if we want --forceExit to work
     childProcess = exec(
       'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
@@ -2755,6 +2773,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_TRACE_DEBUG: '1',
           DD_TRACE_LOG_LEVEL: 'warn',
+          _DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS: String(finalFlushTimeoutMs),
         },
       }
     )

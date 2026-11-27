@@ -66,6 +66,66 @@ class FakeCiVisIntake extends FakeAgent {
   #testManagementResponses = []
   #testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
   #skippableSuitesResponseStatusCode = 200
+  /** @type {Set<import('net').Socket>} */
+  #sockets = new Set()
+  #pendingRequests = 0
+  /** @type {Set<() => void>} */
+  #drainListeners = new Set()
+
+  /**
+   * @param {() => void} respond
+   * @param {number} delayMs
+   * @returns {ReturnType<typeof setTimeout>}
+   */
+  #delay (respond, delayMs) {
+    // A delayed response is still emitted after the client disconnects,
+    // so it stays pending until then.
+    this.#pendingRequests++
+    return setTimeout(() => {
+      respond()
+      this.#settleRequest()
+    }, delayMs)
+  }
+
+  #settleRequest () {
+    this.#pendingRequests--
+    this.#notifyDrain()
+  }
+
+  #notifyDrain () {
+    for (const listener of this.#drainListeners) listener()
+  }
+
+  /**
+   * Waits until every connection is closed and every request has been answered or aborted.
+   *
+   * @param {number} timeoutMs - Upper bound for connections that outlive the exited child.
+   * @returns {Promise<void>}
+   */
+  #waitForDrain (timeoutMs) {
+    return new Promise(resolve => {
+      let immediate
+      const check = () => {
+        if (this.#sockets.size === 0 && this.#pendingRequests <= 0) finish()
+      }
+      const finish = () => {
+        clearTimeout(timer)
+        clearTimeout(poll)
+        clearImmediate(immediate)
+        this.#drainListeners.delete(check)
+        resolve()
+      }
+      const timer = setTimeout(finish, timeoutMs)
+      // An exited child's loopback connections are already queued, so let
+      // one poll phase accept them before checking.
+      const poll = setTimeout(() => {
+        immediate = setImmediate(() => {
+          this.#drainListeners.add(check)
+          check()
+        })
+      })
+    })
+  }
 
   #getSkippableResponse () {
     const meta = { correlation_id: this.#correlationId }
@@ -183,7 +243,14 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   async start () {
+    // A previous run's delayed responses may have been cleared by stop().
+    this.#pendingRequests = 0
     const app = express()
+    app.use((req, res, next) => {
+      this.#pendingRequests++
+      res.once('close', () => this.#settleRequest())
+      next()
+    })
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
 
     const handleV04Traces = (req, res) => {
@@ -216,7 +283,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     // It can be slowed down with setWaitingTime
     app.post(['/api/v2/citestcycle', '/evp_proxy/:version/api/v2/citestcycle'], (req, res) => {
-      this.waitingTimeoutId = setTimeout(() => {
+      this.waitingTimeoutId = this.#delay(() => {
         res.status(200).send('OK')
         this.emit('message', {
           headers: req.headers,
@@ -327,7 +394,7 @@ class FakeCiVisIntake extends FakeAgent {
         return
       }
       if (this.#mediaResponseDelayMs > 0) {
-        setTimeout(respond, this.#mediaResponseDelayMs)
+        this.#delay(respond, this.#mediaResponseDelayMs)
       } else {
         respond()
       }
@@ -360,7 +427,7 @@ class FakeCiVisIntake extends FakeAgent {
       }
 
       if (this.#settingsResponseDelayMs > 0) {
-        setTimeout(respond, this.#settingsResponseDelayMs)
+        this.#delay(respond, this.#settingsResponseDelayMs)
       } else {
         respond()
       }
@@ -474,6 +541,13 @@ class FakeCiVisIntake extends FakeAgent {
       }, 10000)
       this.server = http.createServer(app)
       this.server.on('error', reject)
+      this.server.on('connection', (socket) => {
+        this.#sockets.add(socket)
+        socket.once('close', () => {
+          this.#sockets.delete(socket)
+          this.#notifyDrain()
+        })
+      })
       this.server.listen(this.port, () => {
         this.port = (/** @type {import('net').AddressInfo} */ (this.server.address())).port
         clearTimeout(timeoutObj)
@@ -509,13 +583,15 @@ class FakeCiVisIntake extends FakeAgent {
       clearTimeout(this.waitingTimeoutId)
     }
     this.#waitingTime = 0
+    this.#drainListeners.clear()
     return super.stop()
   }
 
   // Gather payloads while childProcess runs, then run onPayload once on the
-  // accumulated buffer after the child emits `'exit'` plus `gracePeriod` ms of HTTP
-  // drain. `hardTimeout` is a backstop for a genuinely hung child — bump it per-call
-  // only when a workload's child runtime is provably above the default.
+  // accumulated buffer after the child emits `'exit'` and the intake has drained its
+  // connections, waiting at most `gracePeriod` ms for that drain. `hardTimeout`
+  // is a backstop for a genuinely hung child — bump it per-call only when a
+  // workload's child runtime is provably above the default.
   /**
    * @param {import('child_process').ChildProcess | import('node:events').EventEmitter} childProcess
    *   Source of the `'exit'` event. `exitCode` / `signalCode` are read synchronously
@@ -535,7 +611,6 @@ class FakeCiVisIntake extends FakeAgent {
 
     return new Promise((resolve, reject) => {
       let settled = false
-      let graceTimer = null
 
       const stdoutHandler = chunk => { stdout = (stdout + chunk.toString()).slice(-64 * 1024) }
       const stderrHandler = chunk => { stderr = (stderr + chunk.toString()).slice(-64 * 1024) }
@@ -549,7 +624,6 @@ class FakeCiVisIntake extends FakeAgent {
           childProcess.stderr?.off('data', stderrHandler)
         }
         clearTimeout(hardTimer)
-        clearTimeout(graceTimer)
       }
 
       const messageHandler = (message) => {
@@ -567,13 +641,13 @@ class FakeCiVisIntake extends FakeAgent {
         // wrong "child still running" message instead of running the
         // assertion.
         clearTimeout(hardTimer)
-        graceTimer = setTimeout(() => {
+        this.#waitForDrain(gracePeriod).then(() => {
           if (settled) return
           if (payloads.length === 0) {
             cleanup()
             reject(new Error(
               'gatherPayloadsUntilChildExit: child exited with no matching payloads ' +
-              `(after ${gracePeriod}ms grace period)`
+              `(after draining the intake for at most ${gracePeriod}ms)`
             ))
             return
           }
@@ -585,7 +659,7 @@ class FakeCiVisIntake extends FakeAgent {
             cleanup()
             reject(error)
           }
-        }, gracePeriod)
+        })
       }
 
       const hardTimer = setTimeout(() => {

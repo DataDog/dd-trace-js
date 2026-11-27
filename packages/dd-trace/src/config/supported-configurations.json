@@ -757,6 +757,15 @@
         "namespace": "testOptimization"
       }
     ],
+    "_DD_CIVISIBILITY_FINAL_FLUSH_TIMEOUT_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "60000",
+        "allowed": "[1-9]\\d*",
+        "description": "Internal: Overrides how long Test Optimization waits for its final flush."
+      }
+    ],
     "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": [
       {
         "implementation": "A",
