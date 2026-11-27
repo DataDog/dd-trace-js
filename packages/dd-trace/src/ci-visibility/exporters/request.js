@@ -6,6 +6,7 @@ const commonRequest = require('../../exporters/common/request')
 const {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRequestEndpointKey,
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
@@ -33,29 +34,46 @@ let ownedBackpressureWaiters = 0
 const backpressureWaiters = new Set()
 
 /**
- * Attempts handed to one HTTP agent, and the attempts waiting for one of its sockets.
+ * Attempts handed to one origin's socket pool in an HTTP agent, and the attempts waiting for one of its sockets.
  *
  * @typedef {object} SocketSlots
  * @property {number} active
+ * @property {boolean} draining
  * @property {number} limit
  * @property {Set<() => void>} waiting
  */
 
-/** @type {WeakMap<import('node:http').Agent, SocketSlots>} */
+/** @type {WeakMap<import('node:http').Agent, Map<string, SocketSlots>>} */
 const agentSocketSlots = new WeakMap()
 
 /**
- * Returns the socket accounting shared by every request sent through an agent with a bounded pool.
+ * Returns the socket accounting shared by every request to one origin through an agent with a bounded pool.
+ * Node.js applies `maxSockets` to each origin separately.
  *
- * @param {import('node:http').Agent} [agent]
+ * @param {import('../../exporters/common/retry').EndpointOptions & { agent?: import('node:http').Agent }} options
  * @returns {SocketSlots | undefined}
  */
-function getSocketSlots (agent) {
+function getSocketSlots (options) {
+  const { agent } = options
   if (!Number.isFinite(agent?.maxSockets)) return
-  let slots = agentSocketSlots.get(agent)
+
+  let origin
+  try {
+    origin = getRequestEndpointKey(options)
+  } catch {
+    // The transport reports the invalid target.
+    return
+  }
+
+  let origins = agentSocketSlots.get(agent)
+  if (origins === undefined) {
+    origins = new Map()
+    agentSocketSlots.set(agent, origins)
+  }
+  let slots = origins.get(origin)
   if (slots === undefined) {
-    slots = { active: 0, limit: agent.maxSockets, waiting: new Set() }
-    agentSocketSlots.set(agent, slots)
+    slots = { active: 0, draining: false, limit: agent.maxSockets, waiting: new Set() }
+    origins.set(origin, slots)
   }
   return slots
 }
@@ -67,11 +85,19 @@ function getSocketSlots (agent) {
  */
 function releaseSocketSlot (slots) {
   slots.active--
-  // A woken request can settle or wait for exporter backpressure instead, leaving the socket to the next one.
-  while (slots.active < slots.limit && slots.waiting.size > 0) {
-    const [next] = slots.waiting
-    slots.waiting.delete(next)
-    next()
+  // An attempt that fails synchronously releases its socket inside the loop below, which hands it on.
+  if (slots.draining) return
+
+  slots.draining = true
+  try {
+    // A woken request can settle or wait for exporter backpressure instead, leaving the socket to the next one.
+    while (slots.active < slots.limit && slots.waiting.size > 0) {
+      const [next] = slots.waiting
+      slots.waiting.delete(next)
+      next()
+    }
+  } finally {
+    slots.draining = false
   }
 }
 
@@ -329,7 +355,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   let lastError
   let waitingForBackpressure = false
   let socketWaiter
-  const slots = getSocketSlots(options.agent)
+  const slots = getSocketSlots(options)
 
   const backpressureWaiter = {
     attempt,

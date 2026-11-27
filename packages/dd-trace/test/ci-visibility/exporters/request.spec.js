@@ -799,6 +799,38 @@ describe('Test Optimization exporter request', () => {
       sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
     })
 
+    it('limits each origin to its own agent sockets', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const testCycleUrl = new URL('https://citestcycle-intake.datadoghq.com')
+      request('first', { agent, url: testCycleUrl }, sinon.spy())
+      request('second', { agent, url: testCycleUrl }, sinon.spy())
+      request('coverage', { agent, url: new URL('https://citestcov-intake.datadoghq.com') }, sinon.spy())
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'coverage'])
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'coverage', 'second'])
+    })
+
+    it('hands a free socket on without recursion when woken attempts fail synchronously', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      let firstCallback
+      let attempts = 0
+      const transport = (data, options, callback) => {
+        attempts++
+        if (attempts === 1) {
+          firstCallback = callback
+          return
+        }
+        callback(Object.assign(new Error('request buffer full'), { code: 'ERR_DD_REQUEST_BUFFER_FULL' }))
+      }
+      transport.writable = true
+      for (let index = 0; index <= 10_000; index++) request('payload', { agent, transport }, sinon.spy())
+
+      firstCallback(null, 'ok', 200, {})
+
+      assert.strictEqual(attempts, 10_001)
+    })
+
     it('starts the attempt timeout when the attempt gets an agent socket', () => {
       const agent = new http.Agent({ maxSockets: 1 })
       request('first', { agent, timeout: 1000 }, sinon.spy())
@@ -949,4 +981,13 @@ describe('Test Optimization request with the common transport', () => {
       assert.strictEqual(callback.firstCall.args[0].code, code)
     })
   }
+
+  it('settles an invalid target sent through a socket-limited agent', () => {
+    const callback = sinon.spy()
+    request('payload', { url: 'not a URL', method: 'POST', agent: new http.Agent({ maxSockets: 1 }) }, callback)
+
+    sinon.assert.notCalled(httpRequest)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_INVALID_URL')
+  })
 })
