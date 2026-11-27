@@ -79,6 +79,35 @@ describe('bundler rewriter', () => {
     }
   })
 
+  it('preserves Hono route registration with an unrecognized argument layout', () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
+    const packageDirectory = path.join(directory, 'node_modules', 'hono')
+    const filename = path.join(packageDirectory, 'dist', 'hono-base.js')
+    fs.mkdirSync(path.dirname(filename), { recursive: true })
+    fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({ version: '4.0.0' }))
+    const rewrite = createBundlerRewriter('/absolute/dc-polyfill.js')
+    const target = { moduleName: 'hono', filePath: 'dist/hono-base.js' }
+
+    for (const [useExtra, copyExtra] of [[', true', ''], ['', ', true']]) {
+      const source = `class HonoBase {
+        constructor () {
+          this.use = handler => this.addRoute('ALL', '*', handler${useExtra})
+        }
+        route (app) {
+          for (const route of app.routes) this.addRoute(route.method, route.path, route.handler${copyExtra})
+        }
+        addRoute (method, path, handler) {
+          const route = { method, path, handler }
+          this.router.add(method, path, [handler, route])
+        }
+      }`
+      const { code } = rewrite(source, filename, 'module', target)
+      assert.strictEqual(typeof code, 'string')
+      assert.doesNotMatch(code, /__apm\$sourceRoute|middlewareRoute/)
+      assert.match(code, /addRoute\([^)]*, true\)/)
+    }
+  })
+
   it('skips transformation when a hashed target lacks its source marker', () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
     const packageDirectory = path.join(directory, 'node_modules', 'ai')

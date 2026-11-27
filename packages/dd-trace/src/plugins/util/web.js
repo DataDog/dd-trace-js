@@ -154,8 +154,8 @@ const web = {
    * @param {import('../../http-resource').RouteReader} reader
    */
   setSamplingRouteReader (context, reader) {
+    if (!context.samplingRouteReader) trackSamplingContext(context.span.context(), context)
     context.samplingRouteReader = reader
-    trackSamplingContext(context.span.context(), context)
   },
 
   setRoute (req, path) {

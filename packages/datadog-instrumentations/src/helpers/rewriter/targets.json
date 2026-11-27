@@ -94,6 +94,8 @@
   "graphql/utilities/index.js": "graphql",
   "graphql/validation/validate.js": "graphql",
   "graphql/validation/validate.mjs": "graphql",
+  "hono/dist/cjs/hono-base.js": "hono",
+  "hono/dist/hono-base.js": "hono",
   "jasmine-core/lib/jasmine-core/jasmine.js": "jasmine-core",
   "jest-runner/build/index.js": "jest-runner",
   "jest-runner/build/runTest.js": "jest-runner",

@@ -9,12 +9,15 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
   static id = 'router'
+  /** @type {((reader?: import('../../dd-trace/src/http-resource').RouteReader) => boolean) | undefined} */
+  static shouldPublishMiddlewareRoute
 
   #contexts = new WeakMap()
 
   constructor (...args) {
     super(...args)
 
+    const shouldPublishMiddlewareRoute = this.constructor.shouldPublishMiddlewareRoute
     this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
       // One ALS hop covers both the parent-span fallback (when no
       // per-request context exists yet) and the `storeStack` push below.
@@ -41,8 +44,8 @@ class RouterPlugin extends WebPlugin {
       context.storeStack.push(store)
       this.enter(span, store)
 
-      web.patch(req)
-      web.setRoute(req, context.route)
+      const request = web.patch(req)
+      if (shouldPublishMiddlewareRoute?.(request.samplingRouteReader) !== false) web.setRoute(req, context.route)
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
