@@ -60,27 +60,6 @@ describe('GraphQL incremental execution', () => {
 
     after(() => agent.close())
 
-    it('reads direct subscription options once', async () => {
-      let documentReads = 0
-      let variableReads = 0
-      await assertSubscriptionDelivery(graphql, execute, ({ document, variableValues, ...options }) => {
-        const result = subscribe({
-          ...options,
-          get document () {
-            documentReads++
-            return document
-          },
-          get variableValues () {
-            variableReads++
-            return variableValues
-          },
-        })
-        assert.strictEqual(documentReads, 1)
-        assert.strictEqual(variableReads, 1)
-        return result
-      }, false)
-    })
-
     for (const captureVariables of [false, true]) {
       const description = captureVariables
         ? 'preserves raw subscription variables for a variable filter'

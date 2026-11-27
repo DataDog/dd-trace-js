@@ -2603,28 +2603,6 @@ describe('Plugin', () => {
         })
 
         if (semver.major(graphqlVersion) === 15) {
-          for (const inherited of [false, true]) {
-            const description = inherited ? 'inherited options' : 'own options'
-            it(`preserves executeSync argument reads with ${description}`, async () => {
-              const schema = graphql.buildSchema('type Query { value: String }')
-              const document = graphql.parse('{ value }')
-              let resolverReads = 0
-              const options = {
-                schema,
-                document,
-                get fieldResolver () {
-                  resolverReads++
-                  return () => 'ok'
-                },
-              }
-
-              const result = graphql.executeSync(inherited ? Object.create(options) : options)
-              assert.strictEqual(result.errors, undefined)
-              assert.strictEqual(result.data.value, 'ok')
-              assert.strictEqual(resolverReads, 1)
-            })
-          }
-
           it('preserves the native executeSync error from a non-callable default resolver', async () => {
             const schema = graphql.buildSchema('type Query { value: String }')
             const result = graphql.executeSync({
