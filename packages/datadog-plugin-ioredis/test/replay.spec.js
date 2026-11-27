@@ -272,10 +272,20 @@ describe('ioredis replay', () => {
     for (const [error, pipeline, delay] of retryCases) {
       const kind = pipeline ? 'pipeline command' : 'command'
       it(`traces each native promise for a Cluster ${kind} after ${error.split(' ')[0]}, delay=${delay}`, async () => {
+        // ioredis 6.1 retries redirected commands without rebuilding the pipeline promises.
+        const retriesPipeline = pipeline &&
+          (semver.lt(resolvedVersion, '6.1.0') || error.startsWith('CLUSTERDOWN'))
+        const expectedSpans = retriesPipeline ? 2 : 1
+        const expectedSiblingAttempts = pipeline ? expectedSpans : 0
         let attempts = 0
+        let siblingAttempts = 0
         await withServer(Parser, (args, port, socket) => {
           const name = args[0].toString().toLowerCase()
-          if (name === 'get' && ['replay-cluster', 'replay-untraced'].includes(args[1].toString())) {
+          const key = args[1]?.toString()
+          if (name === 'get' && (key === '{replay-cluster}-sibling' || key === '{replay-untraced}-sibling')) {
+            siblingAttempts++
+          }
+          if (name === 'get' && (key === 'replay-cluster' || key === 'replay-untraced')) {
             attempts++
             if (error === 'CONNECTION_CLOSED' && attempts === 1) {
               socket.destroy()
@@ -295,21 +305,23 @@ describe('ioredis replay', () => {
           if (pipeline || !error.startsWith('TRYAGAIN')) await once(redis, 'ready')
           assert.equal(await getClusterValue(redis, 'replay-cluster', pipeline), 'value')
           assert.equal(attempts, 2)
-          await assertSpans('GET replay-cluster', pipeline ? 2 : 1)
+          assert.equal(siblingAttempts, expectedSiblingAttempts)
+          await assertSpans('GET replay-cluster', expectedSpans)
           assert.deepEqual(spans.filter(span => span.meta['redis.raw_command'] === 'GET replay-cluster')
-            .map(span => span.error).sort(), pipeline ? [0, 1] : [0])
+            .map(span => span.error).sort(), retriesPipeline ? [0, 1] : [0])
           if (pipeline) {
-            await assertSpans('GET {replay-cluster}-sibling', 2)
+            await assertSpans('GET {replay-cluster}-sibling', expectedSpans)
             assert.ok(spans.filter(span => span.meta['redis.raw_command'] === 'GET {replay-cluster}-sibling')
               .every(span => span.error === 0))
           }
           if (error.startsWith('TRYAGAIN') || error === 'CONNECTION_CLOSED') {
             tracer.use('ioredis', { enabled: false })
-            attempts = 0
+            attempts = siblingAttempts = 0
             assert.equal(await getClusterValue(redis, 'replay-untraced', pipeline), 'value')
             assert.equal(attempts, 2)
+            assert.equal(siblingAttempts, expectedSiblingAttempts)
             tracer.use('ioredis', { enabled: true })
-            await assertSpans('GET replay-cluster', pipeline ? 2 : 1)
+            await assertSpans('GET replay-cluster', expectedSpans)
             assert.equal(spans.filter(span => span.meta['redis.raw_command'] === 'GET replay-untraced').length, 0)
           }
           redis.disconnect()
