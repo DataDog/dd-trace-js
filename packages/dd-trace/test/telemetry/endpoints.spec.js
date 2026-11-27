@@ -16,6 +16,7 @@ describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
   const expressRouteCh = dc.channel('apm:express:route:added')
   const routerRouteCh = dc.channel('apm:router:route:added')
+  const nextRouteCh = dc.channel('apm:next:route:added')
   const application = 'test'
   const host = 'host'
 
@@ -34,7 +35,7 @@ describe('endpoints telemetry', () => {
       const config = { appsec: { DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true } }
       endpoints.start(config)
 
-      sinon.assert.calledThrice(subscribe)
+      sinon.assert.callCount(subscribe, 4)
     })
 
     it('should not subscribe', () => {
@@ -226,6 +227,172 @@ describe('endpoints telemetry', () => {
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
       assert.deepStrictEqual(resources, ['GET /router-test', 'HEAD /router-test'])
+    })
+
+    describe('next routes', () => {
+      /**
+       * @param {object} route
+       */
+      function publishNextRoute (route) {
+        nextRouteCh.publish(route)
+      }
+
+      function flushResources () {
+        scheduledCallbacks.splice(0).forEach(cb => cb())
+        return sendData.getCalls().map(call => call.args[4].endpoints.map(e => e.resource_name))
+      }
+
+      it('should record pages, pages API routes and app pages with next.request as operation_name', () => {
+        publishNextRoute({ page: '/hello/[name]', isAppPath: false, kind: 'PAGES', pathname: '/hello/[name]' })
+        // Statically optimized pages and Pages API routes can load without a route module.
+        publishNextRoute({ page: '/hello', isAppPath: false })
+        publishNextRoute({ page: '/api/hello/[name]', isAppPath: false })
+        publishNextRoute({ page: '/api', isAppPath: false })
+        publishNextRoute({ page: '/apiary', isAppPath: false })
+        publishNextRoute({
+          page: '/(group)/appDir/[name]/page',
+          isAppPath: true,
+          kind: 'APP_PAGE',
+          pathname: '/appDir/[name]',
+        })
+
+        scheduledCallbacks.forEach(cb => cb())
+
+        sinon.assert.calledOnce(sendData)
+        const { endpoints } = sendData.firstCall.args[4]
+        assert.deepStrictEqual(endpoints.map(e => e.resource_name), [
+          'GET /hello/[name]', 'HEAD /hello/[name]',
+          'GET /hello', 'HEAD /hello',
+          '* /api/hello/[name]',
+          '* /api',
+          'GET /apiary', 'HEAD /apiary',
+          'GET /appDir/[name]', 'HEAD /appDir/[name]',
+        ])
+        assertObjectContains(endpoints[0], {
+          type: 'REST',
+          method: 'GET',
+          path: '/hello/[name]',
+          operation_name: 'next.request',
+          resource_name: 'GET /hello/[name]',
+        })
+      })
+
+      it('should record the methods an app route handler exports', () => {
+        publishNextRoute({
+          isAppPath: true,
+          kind: 'APP_ROUTE',
+          pathname: '/api/items',
+          userland: { GET () {}, POST () {}, dynamic: 'force-dynamic', default () {} },
+        })
+        const allMethods = {}
+        for (const method of ['PATCH', 'DELETE', 'PUT', 'POST', 'OPTIONS', 'HEAD', 'GET']) allMethods[method] = () => {}
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/all', userland: allMethods })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/post', userland: { POST () {} } })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/favicon.ico', userland: { GET () {} } })
+
+        assert.deepStrictEqual(flushResources(), [[
+          'GET /api/items', 'HEAD /api/items', 'POST /api/items',
+          'GET /api/all', 'HEAD /api/all', 'OPTIONS /api/all', 'POST /api/all', 'PUT /api/all', 'DELETE /api/all',
+          'PATCH /api/all',
+          'POST /api/post',
+          'GET /favicon.ico', 'HEAD /favicon.ico',
+        ]])
+      })
+
+      it('should record a placeholder for a route handler without known methods', () => {
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/lazy' })
+        const userland = { GET: 'not a function' }
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/none', userland })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/null', userland: null })
+
+        assert.deepStrictEqual(flushResources(), [['* /api/lazy', '* /api/none', '* /api/null']])
+      })
+
+      it('should replace a pending placeholder with the exported methods', () => {
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/items' })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/other' })
+        const userland = { GET () {}, POST () {} }
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/items', userland })
+
+        assert.deepStrictEqual(flushResources(), [
+          ['* /api/other', 'GET /api/items', 'HEAD /api/items', 'POST /api/items'],
+        ])
+      })
+
+      it('should send only the exported methods once the placeholder was sent', () => {
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/items' })
+        flushResources()
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/items', userland: { GET () {} } })
+
+        assert.deepStrictEqual(flushResources(), [['* /api/items'], ['GET /api/items', 'HEAD /api/items']])
+        assert.strictEqual(sendData.secondCall.args[4].is_first, false)
+      })
+
+      it('should record each path once', () => {
+        publishNextRoute({ page: '/once', isAppPath: false })
+        publishNextRoute({ page: '/once', isAppPath: false })
+        // Parallel route slots share their route path.
+        publishNextRoute({ page: '/dashboard/page', isAppPath: true, kind: 'APP_PAGE', pathname: '/dashboard' })
+        publishNextRoute({ page: '/dashboard/@team/page', isAppPath: true, kind: 'APP_PAGE', pathname: '/dashboard' })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/known', userland: { POST () {} } })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/known' })
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/known', userland: { GET () {} } })
+        flushResources()
+
+        publishNextRoute({ page: '/once', isAppPath: false })
+
+        assert.deepStrictEqual(flushResources(), [[
+          'GET /once', 'HEAD /once', 'GET /dashboard', 'HEAD /dashboard', 'POST /api/known',
+        ]])
+      })
+
+      it('should skip internal pages', () => {
+        for (const page of ['/_app', '/_document', '/_error', '/404', '/500']) {
+          publishNextRoute({ page, isAppPath: false })
+        }
+        publishNextRoute({ page: '/_not-found/page', isAppPath: true, kind: 'APP_PAGE', pathname: '/_not-found' })
+        publishNextRoute({ page: '/_global-error/page', isAppPath: true, kind: 'APP_PAGE', pathname: '/_global-error' })
+        publishNextRoute({ page: '/4040', isAppPath: false })
+
+        assert.deepStrictEqual(flushResources(), [['GET /4040', 'HEAD /4040']])
+      })
+
+      it('should ignore invalid routes', () => {
+        publishNextRoute(null)
+        publishNextRoute('/hello')
+        publishNextRoute({})
+        publishNextRoute({ page: 1, isAppPath: false })
+        // An app entry without a route module has no route path.
+        publishNextRoute({ page: '/orphan/page', isAppPath: true })
+        const userland = { get GET () { throw new Error('unreadable') } }
+        publishNextRoute({ isAppPath: true, kind: 'APP_ROUTE', pathname: '/api/broken', userland })
+
+        assert.deepStrictEqual(flushResources(), [['* /api/broken']])
+      })
+
+      it('should forget the recorded routes on stop', () => {
+        publishNextRoute({ page: '/again', isAppPath: false })
+        flushResources()
+        endpoints.stop()
+        endpoints.start({
+          appsec: {
+            DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+            DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 100,
+          },
+        }, application, host, getRetryData, updateRetryData)
+
+        publishNextRoute({ page: '/again', isAppPath: false })
+
+        assert.deepStrictEqual(flushResources(), [['GET /again', 'HEAD /again'], ['GET /again', 'HEAD /again']])
+      })
+
+      it('should stop recording next routes after stop', () => {
+        endpoints.stop()
+        publishNextRoute({ page: '/stopped', isAppPath: false })
+
+        assert.deepStrictEqual(flushResources(), [])
+        assert.strictEqual(nextRouteCh.hasSubscribers, false)
+      })
     })
 
     describe('on failed request', () => {

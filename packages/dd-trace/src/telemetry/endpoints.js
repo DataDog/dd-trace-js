@@ -21,6 +21,7 @@ const { sendData } = require('./send-data')
 const fastifyRouteCh = dc.channel('apm:fastify:route:added')
 const expressRouteCh = dc.channel('apm:express:route:added')
 const routerRouteCh = dc.channel('apm:router:route:added')
+const nextRouteCh = dc.channel('apm:next:route:added')
 
 /** @type {TelemetryConfig} */
 let config
@@ -112,6 +113,66 @@ function onExpressRoute ({ method, path }) {
   }
 }
 
+const NEXT_HANDLER_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'DELETE', 'PATCH']
+const NEXT_INTERNAL_PAGE = /^\/(?:_|404$|500$)/
+const NEXT_PAGES_API = /^\/api(?:\/|$)/
+
+/**
+ * Next.js paths already recorded: `false` for a `*` placeholder, `true` once the exported methods are known.
+ *
+ * @type {Map<string, boolean>}
+ */
+const nextRoutes = new Map()
+
+/**
+ * @param {unknown} userland
+ * @returns {string[]}
+ */
+function getNextHandlerMethods (userland) {
+  if (userland === null || (typeof userland !== 'object' && typeof userland !== 'function')) return []
+
+  const methods = NEXT_HANDLER_METHODS.filter(method => typeof userland[method] === 'function')
+  // Next.js answers HEAD with the GET handler when the module does not export HEAD.
+  if (methods[0] === 'GET' && methods[1] !== 'HEAD') methods.splice(1, 0, 'HEAD')
+  return methods
+}
+
+/**
+ * Maps a Next.js page or route module to its endpoints. Pages use their manifest key, because Pages API routes and
+ * static pages load without a route module; app entries use their route path. A route handler whose module is not
+ * loaded yet (Next.js 16) is recorded as `*` until its exported methods arrive.
+ *
+ * @param {{ page?: unknown, isAppPath?: unknown, kind?: unknown, pathname?: unknown, userland?: unknown } | null} route
+ */
+function onNextRoute (route) {
+  if (route === null || typeof route !== 'object') return
+
+  const isAppPath = route.isAppPath === true
+  const isRouteHandler = isAppPath && route.kind === 'APP_ROUTE'
+  const path = isAppPath ? route.pathname : route.page
+  if (typeof path !== 'string' || NEXT_INTERNAL_PAGE.test(path) || nextRoutes.get(path) === true) return
+
+  let methods
+  try {
+    methods = isRouteHandler ? getNextHandlerMethods(route.userland) : []
+  } catch {
+    methods = []
+  }
+
+  if (methods.length > 0) {
+    nextRoutes.set(path, true)
+    pendingEndpoints.delete(endpointKey('*', path))
+  } else {
+    if (nextRoutes.has(path)) return
+    nextRoutes.set(path, false)
+    methods = isRouteHandler || (!isAppPath && NEXT_PAGES_API.test(path)) ? ['*'] : ['GET', 'HEAD']
+  }
+
+  for (const method of methods) {
+    recordEndpoint(method, path, 'next.request')
+  }
+}
+
 /**
  * @param {{ method: string, path: string, operationName: string }[]} endpoints
  */
@@ -187,14 +248,17 @@ function start (_config, _application, _host, getRetryDataFunction, updateRetryD
   fastifyRouteCh.subscribe(onFastifyRoute)
   expressRouteCh.subscribe(onExpressRoute)
   routerRouteCh.subscribe(onExpressRoute)
+  nextRouteCh.subscribe(onNextRoute)
 }
 
 function stop () {
   fastifyRouteCh.unsubscribe(onFastifyRoute)
   expressRouteCh.unsubscribe(onExpressRoute)
   routerRouteCh.unsubscribe(onExpressRoute)
+  nextRouteCh.unsubscribe(onNextRoute)
 
   pendingEndpoints.clear()
+  nextRoutes.clear()
   flushScheduled = false
 }
 
