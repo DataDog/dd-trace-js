@@ -14,6 +14,8 @@ const { TEST_NAME, TEST_STATUS } = require('../../packages/dd-trace/src/plugins/
 const { getVitestVersions } = require('./versions')
 
 const TEST_FILE = 'ci-visibility/vitest-line-coverage/line-coverage.test.ts'
+const PATCHED_GLOBALS_TEST_FILE = 'ci-visibility/vitest-line-coverage/patched-globals.test.ts'
+const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
 
@@ -70,15 +72,16 @@ for (const version of getVitestVersions()) {
      * @param {boolean} isLineCoverageEnabled
      * @param {string} pool
      * @param {boolean} [isCodeCoverageEnabled] whether the settings ask for coverage, which line coverage needs
+     * @param {string} [testFile]
      */
-    async function runFixtureSuite (isLineCoverageEnabled, pool, isCodeCoverageEnabled = true) {
+    async function runFixtureSuite (isLineCoverageEnabled, pool, isCodeCoverageEnabled = true, testFile = TEST_FILE) {
       receiver.setSettings({ itr_enabled: true, code_coverage: isCodeCoverageEnabled, tests_skipping: false })
       childProcess = exec('./node_modules/.bin/vitest run', {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-          TEST_DIR: TEST_FILE,
+          TEST_DIR: testFile,
           POOL_CONFIG: pool,
           ...(isLineCoverageEnabled ? { DD_TEST_LINE_COVERAGE_ENABLED: '1' } : {}),
         },
@@ -159,6 +162,23 @@ for (const version of getVitestVersions()) {
         const multipliesConcurrently = coverageOf('multiplies concurrently')
         assert.ok(getLines(multipliesConcurrently, ARITHMETIC).has(MULTIPLY_LINE), testOutput)
         assert.ok(!getLines(multipliesConcurrently, ARITHMETIC).has(DIVIDE_LINE), testOutput)
+      })
+
+      it(`reports the lines of tests that replace fs, path and timers (${pool})`, async () => {
+        const { tests, coverages } = await runFixtureSuite(true, pool, true, PATCHED_GLOBALS_TEST_FILE)
+
+        assert.strictEqual(tests.length, 2, testOutput)
+        const filesOf = name => {
+          const test = tests.find(test => test.meta[TEST_NAME].endsWith(name))
+          assert.ok(test, `no test named ${name}`)
+          assert.strictEqual(test.meta[TEST_STATUS], 'pass', testOutput)
+          const matching = coverages.filter(coverage => coverage.span_id === Number(test.span_id))
+          assert.strictEqual(matching.length, 1, `${name}: ${matching.length} records\n${testOutput}`)
+          return matching[0].files
+        }
+        // The body of `double`, loaded while fs and path functions were replaced.
+        assert.ok(getLines(filesOf('fs and path functions are replaced'), LAZY).has(2), testOutput)
+        assert.ok(getLines(filesOf('with every timer faked'), ARITHMETIC).has(ADD_LINE), testOutput)
       })
 
       it(`reports the same tests whether or not line coverage is on (${pool})`, async () => {
