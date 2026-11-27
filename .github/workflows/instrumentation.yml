@@ -234,8 +234,7 @@ jobs:
   # The couchbase native binding ships libcouchbase: the 3.x line has no
   # prebuilt binary for Node 18+ and its bundled sources do not compile under
   # modern gcc (missing <cstdint> for std::uint8_t). Pin one Node version per
-  # range instead of using the composite action that runs both oldest+latest,
-  # mirroring the existing plugin job's matrix.
+  # range instead of using the composite action that runs both oldest+latest.
   instrumentation-couchbase:
     strategy:
       fail-fast: false
@@ -244,7 +243,7 @@ jobs:
           - node-version: eol
             range: "^3.0.7"
           - node-version: 18
-            range: ">=4.2.0"
+            range: ">=4.2.0 <4.8.0"
     runs-on: ubuntu-latest
     permissions:
       id-token: write

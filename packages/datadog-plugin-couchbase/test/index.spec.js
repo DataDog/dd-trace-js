@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -142,30 +143,38 @@ describe('Plugin', () => {
         })
 
         describe('operations still work with callbacks', () => {
-          it('should perform normal cluster query operation with callback', done => {
-            const query = 'SELECT 1+1'
-            agent
-              .assertFirstTraceSpan({
-                name: expectedSchema.query.opName,
-                service: expectedSchema.query.serviceName,
-                resource: query,
-                type: 'sql',
-                meta: {
-                  'span.kind': 'client',
-                  component: 'couchbase',
-                },
-              })
-              .then(done)
-              .catch(done)
+          const callbackDeprecationCode = 'CBJS_DEP_CALLBACK'
 
-            cluster.query(query, (err, rows) => {
-              if (err) done(err)
+          it('should perform normal cluster query operation with callback', async () => {
+            const query = 'SELECT 1+1'
+            const trace = agent.assertFirstTraceSpan({
+              name: expectedSchema.query.opName,
+              service: expectedSchema.query.serviceName,
+              resource: query,
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                component: 'couchbase',
+              },
             })
+            const result = new Promise((resolve, reject) => {
+              temporaryWarningExceptions.add(callbackDeprecationCode)
+              cluster.query(query, (error, response) => {
+                if (error) {
+                  reject(error)
+                } else {
+                  resolve(response)
+                }
+              })
+            })
+            const [response] = await Promise.all([result, trace])
+            assert.strictEqual(response.rows.length, 1)
           })
 
           describe('errors are handled correctly in callbacks', () => {
             it('should catch error in callback for non-traced functions', done => {
               const invalidIndex = '-1'
+              temporaryWarningExceptions.add(callbackDeprecationCode)
               collection.get(invalidIndex, (err) => { if (err) done() })
             })
 
@@ -181,6 +190,7 @@ describe('Plugin', () => {
                     // different couchbase sdk versions will have different error messages/types
                     assert.strictEqual(span.error, 1)
                   }).then(done).catch(done)
+                temporaryWarningExceptions.add(callbackDeprecationCode)
                 cluster.query(invalidQuery, cb)
               })
             }

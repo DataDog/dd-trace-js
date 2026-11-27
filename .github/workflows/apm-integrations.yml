@@ -364,7 +364,9 @@ jobs:
           - ">=4.0.0 <4.2.0"
         include:
           - node-version: oldest
-            range: ">=4.2.0"
+            range: ">=4.2.0 <4.8.0"
+          - node-version: active
+            range: ">=4.8.0"
     runs-on: ubuntu-latest
     permissions:
       id-token: write

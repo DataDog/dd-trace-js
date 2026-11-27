@@ -3,6 +3,7 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const { normalizeRabbitMQName } = require('../../dd-trace/src/datastreams/rabbitmq')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
@@ -19,7 +20,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
     const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
     this.tracer.decodeDataStreamsContext(message.properties.headers)
     this.tracer
-      .setCheckpoint(['direction:in', `topic:${queueName}`, 'type:rabbitmq'], span, payloadSize)
+      .setCheckpoint(['direction:in', `topic:${normalizeRabbitMQName(queueName)}`, 'type:rabbitmq'], span, payloadSize)
   }
 
   bindStart (ctx) {

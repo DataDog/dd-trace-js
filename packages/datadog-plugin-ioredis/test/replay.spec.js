@@ -13,7 +13,21 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const Parser = require('../../../versions/ioredis@5').get('redis-parser')
 
+const replayHost = 'localhost'
+const replayAddress = '::1'
+
 describe('ioredis replay', () => {
+  it('accepts connections on IPv6 loopback', async () => {
+    await withServer(Parser, () => assert.fail('unexpected Redis command'), async port => {
+      const socket = net.createConnection({ host: '::1', port })
+      try {
+        await once(socket, 'connect')
+      } finally {
+        socket.destroy()
+      }
+    })
+  })
+
   withVersions('ioredis', 'ioredis', (version, moduleName, resolvedVersion) => {
     let Redis
     let tracer
@@ -21,6 +35,19 @@ describe('ioredis replay', () => {
     let other
     let spans
     let collect
+
+    /**
+     * @param {number} port
+     * @param {import('ioredis').ClusterOptions} options
+     */
+    function createReplayCluster (port, options = {}) {
+      return new Redis.Cluster([{ host: replayHost, port }], {
+        ...options,
+        enableReadyCheck: false,
+        dnsLookup: (hostname, callback) => callback(null, hostname),
+        redisOptions: { ...options.redisOptions, enableReadyCheck: false, disableClientInfo: true, family: 6 },
+      })
+    }
 
     beforeEach(async () => {
       redis = other = undefined
@@ -179,9 +206,9 @@ describe('ioredis replay', () => {
             })
             socket.on('data', data => parser.execute(data))
           })
-          server.listen(0, '127.0.0.1', () => {
+          server.listen(0, '${replayAddress}', () => {
             const client = new Redis({
-              host: '127.0.0.1', port: server.address().port, lazyConnect: true,
+              host: '${replayAddress}', port: server.address().port, lazyConnect: true,
               retryStrategy: null, enableReadyCheck: ${!ready}, disableClientInfo: true,
             })
             client.on('error', () => {})
@@ -254,18 +281,16 @@ describe('ioredis replay', () => {
               socket.destroy()
               return
             }
-            const reply = error === 'MOVED' ? `MOVED 0 127.0.0.1:${port}` : error
+            const reply = error === 'MOVED' ? `MOVED 0 ${replayHost}:${port}` : error
             return attempts === 1 ? `-${reply}\r\n` : '$5\r\nvalue\r\n'
           }
           return '+OK\r\n'
         }, async port => {
-          redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
-            enableReadyCheck: false,
+          redis = createReplayCluster(port, {
             retryDelayOnTryAgain: delay,
             retryDelayOnClusterDown: delay,
             retryDelayOnMoved: delay,
             retryDelayOnFailover: delay,
-            redisOptions: { enableReadyCheck: false, disableClientInfo: true },
           })
           if (pipeline || !error.startsWith('TRYAGAIN')) await once(redis, 'ready')
           assert.equal(await getClusterValue(redis, 'replay-cluster', pipeline), 'value')
@@ -302,10 +327,9 @@ describe('ioredis replay', () => {
         }
         return '+OK\r\n'
       }, async port => {
-        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
-          enableReadyCheck: false,
+        redis = createReplayCluster(port, {
           retryDelayOnTryAgain: 1,
-          redisOptions: { enableReadyCheck: false, disableClientInfo: true, reconnectOnError: () => observed() },
+          redisOptions: { reconnectOnError: () => observed() },
         })
         other = new Redis()
         await Promise.all([once(redis, 'ready'), once(other, 'ready')])
@@ -363,7 +387,7 @@ describe('ioredis replay', () => {
         return '+OK\r\n'
       }, async port => {
         redis = new Redis({
-          host: '127.0.0.1',
+          host: replayAddress,
           port,
           enableReadyCheck: false,
           disableClientInfo: true,
@@ -402,11 +426,8 @@ describe('ioredis replay', () => {
             himportFieldsets: [{ name: 'review', fields: ['field'] }],
           }
           redis = cluster
-            ? new Redis.Cluster([{ host: '127.0.0.1', port }], {
-              ...options,
-              redisOptions: { enableReadyCheck: false, disableClientInfo: true },
-            })
-            : new Redis({ ...options, host: '127.0.0.1', port })
+            ? createReplayCluster(port, options)
+            : new Redis({ ...options, host: replayAddress, port })
           await once(redis, 'ready')
           await redis.call('reset')
           const prepared = preparations
@@ -424,10 +445,7 @@ describe('ioredis replay', () => {
     it('traces each native HIMPORT control command sent to a Cluster master', async function () {
       if (semver.lt(resolvedVersion, '6.0.0')) this.skip()
       await withServer(Parser, () => '+OK\r\n', async port => {
-        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
-          enableReadyCheck: false,
-          redisOptions: { enableReadyCheck: false, disableClientInfo: true },
-        })
+        redis = createReplayCluster(port)
         await once(redis, 'ready')
         for (const args of [['PREPARE', 'review', 'field'], ['DISCARD', 'review'], ['DISCARDALL']]) {
           assert.equal(await redis.call('himport', ...args), 'OK')
@@ -441,14 +459,12 @@ describe('ioredis replay', () => {
       let attempts = 0
       await withServer(Parser, (args, port) => {
         if (args[0].toString().toLowerCase() === 'himport' && args[1].toString().toLowerCase() === 'set') {
-          return ++attempts === 1 ? `-ASK 0 127.0.0.1:${port}\r\n` : ':1\r\n'
+          return ++attempts === 1 ? `-ASK 0 ${replayHost}:${port}\r\n` : ':1\r\n'
         }
         return '+OK\r\n'
       }, async port => {
-        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
-          enableReadyCheck: false,
+        redis = createReplayCluster(port, {
           himportFieldsets: [{ name: 'review', fields: ['field'] }],
-          redisOptions: { enableReadyCheck: false, disableClientInfo: true },
         })
         await once(redis, 'ready')
         assert.equal(await redis.call('himport', 'SET', 'replay-himport-ask', 'review', 'value'), 1)
@@ -487,7 +503,7 @@ async function withServer (Parser, reply, run) {
       returnReply: args => {
         const port = server.address().port
         const response = args[0].toString().toLowerCase() === 'cluster'
-          ? `*1\r\n*3\r\n:0\r\n:16383\r\n*3\r\n$9\r\n127.0.0.1\r\n:${port}\r\n$4\r\nnode\r\n`
+          ? `*1\r\n*3\r\n:0\r\n:16383\r\n*3\r\n$${replayHost.length}\r\n${replayHost}\r\n:${port}\r\n$4\r\nnode\r\n`
           : reply(args, port, socket)
         if (response !== undefined) socket.write(response)
       },
@@ -495,10 +511,12 @@ async function withServer (Parser, reply, run) {
     })
     socket.on('data', data => parser.execute(data))
   })
-  server.listen(0, '127.0.0.1')
+  server.listen(0, replayAddress)
   await once(server, 'listening')
   try {
-    await run(server.address().port)
+    const { address, port } = server.address()
+    assert.equal(address, '::1')
+    await run(port)
   } finally {
     for (const socket of sockets) socket.destroy()
     const closed = once(server, 'close')
