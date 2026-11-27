@@ -732,6 +732,11 @@ class MochaPlugin extends CiPlugin {
       if (lineCoverage.isActive()) lineCoverage.finishSuiteSetup()
     })
 
+    this.addBind('ci:mocha:suite-setup:fn', () => {
+      const store = storage('legacy').getStore()
+      return lineCoverage.isActive() ? lineCoverage.suiteSetupStore(store) : store
+    })
+
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
@@ -779,7 +784,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
       if (lineCoverage.isActive()) {
-        this.#lineCoverageTests.set(span, { coverage: lineCoverage.startTest(), suite: ctx.suite })
+        this.#lineCoverageTests.set(span, { coverage: lineCoverage.startTest(span), suite: ctx.suite })
       }
       const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
       if (!isDisabled || isAttemptToFix) this.#startWebdriverioVideo(span)

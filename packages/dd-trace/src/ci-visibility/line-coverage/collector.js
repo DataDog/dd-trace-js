@@ -1,16 +1,23 @@
 'use strict'
 
-// Collects the lines that instrumented modules executed, and routes them at every boundary to the
-// set of the window that was open since the previous boundary.
+// Collects the lines that instrumented modules executed and routes them to their owner: a test, a
+// suite setup, or nobody. The API in index.js says what owns the running context.
 //
-// An instrumented module pushes its reader onto `q` the first time it runs after a boundary (see
-// instrument.js). A boundary calls those readers, and also the ones it called at the previous
-// boundary: a function that was still running when a boundary happened (it called the code that
-// ended the window) keeps recording lines without queueing itself again.
+// An instrumented module records the slots that ran in module-scope words. At the first probe of
+// an activation it calls `touch` unless its touched flag is set (see instrument.js). `touch` asks
+// who owns the running context. When the module's words were recorded for another owner, they go
+// to that owner first. The module's reader is queued, so the next reset moves its words to its
+// owner and clears its flag.
+//
+// While at most one window is open, `touch` sets the module's flag, and the module skips `touch`
+// until the next reset. Resets happen at window boundaries, when a macrotask starts, and when a
+// touch finds a different owner than the touches before it. Code that may start a job calls
+// `touch` even when the flag is set, so a job that runs in another context is noticed. While
+// several windows are open, the flag is never set, and every activation asks.
 //
 // A reader reports the slots of its module that ran, as bits of 30-slot words. The module's table,
 // given when it was instrumented, says which file and line each slot stands for, and whether the
-// line is initialiser code. Initialiser lines never belong to a window: they go to the per-file
+// line is initialiser code. Initialiser lines belong to no owner: they go to the per-file
 // initialiser set, which the API adds to every test that ran other code of the file, and to the
 // initialiser part of Shared.
 
@@ -79,8 +86,25 @@ function grow (bitmap, minLength) {
   return larger
 }
 
+/**
+ * Slots recorded for one owner, as 30-slot words per module id.
+ */
+class Owner {
+  open = true
+
+  /** @type {Array<Int32Array | undefined>} */
+  words = []
+
+  /** @type {number[]} ids of the modules with words */
+  modules = []
+}
+
+/**
+ * @typedef {{ files: Int32Array, lines: Int32Array, initMasks: Int32Array }} ModuleTable
+ */
+
 class LineCoverageCollector {
-  /** @type {Function[]} readers queued since the previous boundary; instrumented code pushes here */
+  /** @type {Function[]} readers of the modules touched since the last reset */
   q = []
 
   /** initialiser lines executed so far, wherever they ran */
@@ -89,24 +113,46 @@ class LineCoverageCollector {
   /** initialiser lines executed since Shared was last taken */
   sharedInit = new LineSet()
 
+  /** what runs in no window, or in a context whose window has closed */
+  unowned = new Owner()
+
+  /** @type {() => Owner} returns the owner of the running context */
+  resolveOwner = () => this.unowned
+
   /** @type {string[]} */
   #filenames = []
 
   /** @type {Map<string, number>} */
   #fileIndexes = new Map()
 
-  /** @type {Function[]} */
+  /** @type {Function[]} readers queued at the previous window boundary */
   #previous = []
 
-  /** @type {Array<{ files: Int32Array, lines: Int32Array } | undefined>} slot tables by module id */
+  /** @type {Array<ModuleTable | undefined>} */
   #modules = []
+
+  /** @type {Array<Owner | undefined>} the owner each module's words were recorded for */
+  #owners = []
+
+  /** @type {Uint8Array} 1 for each module whose reader is in `q` */
+  #queued = new Uint8Array(64)
+
+  /** @type {Owner | undefined} the owner the touches since the last reset found */
+  #segmentOwner
+
+  #concurrent = false
 
   /** @type {number[]} */
   #scratch = []
 
   #generation = 0
 
-  stats = { boundaries: 0, readerCalls: 0, lines: 0, takeNs: 0n }
+  /** @type {(() => void) | undefined} arranges a reset before the next macrotask */
+  #scheduleReset
+
+  #resetScheduled = false
+
+  stats = { resets: 0, touches: 0, switches: 0, readerCalls: 0 }
 
   /**
    * @param {string} filename
@@ -132,7 +178,13 @@ class LineCoverageCollector {
    * Returns the id of a module about to be instrumented. Its slots are given by `defineModule`.
    */
   reserveModule () {
-    return this.#modules.push(undefined) - 1
+    const id = this.#modules.push(undefined) - 1
+    if (id >= this.#queued.length) {
+      const queued = new Uint8Array(this.#queued.length * 2)
+      queued.set(this.#queued)
+      this.#queued = queued
+    }
+    return id
   }
 
   /**
@@ -141,7 +193,15 @@ class LineCoverageCollector {
    * @param {Int32Array} lines the line of each slot, negated for initialiser lines
    */
   defineModule (id, files, lines) {
-    this.#modules[id] = { files, lines }
+    const initMasks = new Int32Array(Math.ceil(lines.length / SLOTS_PER_WORD))
+    for (let slot = 0; slot < lines.length; slot++) {
+      if (lines[slot] < 0) initMasks[Math.floor(slot / SLOTS_PER_WORD)] |= 1 << (slot % SLOTS_PER_WORD)
+    }
+    this.#modules[id] = { files, lines, initMasks }
+  }
+
+  createOwner () {
+    return new Owner()
   }
 
   /**
@@ -160,61 +220,177 @@ class LineCoverageCollector {
   }
 
   /**
-   * Moves what ran since the previous boundary into `target`, initialiser lines excepted.
-   *
-   * @param {LineSet} target
+   * @param {() => void} scheduleReset called when a module is queued after a reset; it must make
+   *   `reset` run before the next macrotask
    */
-  take (target) {
-    const start = process.hrtime.bigint()
-    const queued = this.q
-    const previous = this.#previous
-    const scratch = this.#scratch
-    const init = this.init
-    const sharedInit = this.sharedInit
-    const generation = ++this.#generation
-    let readerCalls = 0
-    let lineCount = 0
+  setResetScheduler (scheduleReset) {
+    this.#scheduleReset = scheduleReset
+  }
 
-    for (let pass = 0; pass < 2; pass++) {
-      const readers = pass === 0 ? queued : previous
-      for (let r = 0; r < readers.length; r++) {
-        const count = readers[r](scratch, generation)
-        if (count === 0) continue
-        readerCalls++
-        const module = this.#modules[scratch[0]]
-        if (module === undefined) continue
-        const { files, lines } = module
-        for (let i = 1; i < count; i += 2) {
-          const base = scratch[i] * SLOTS_PER_WORD
-          let bits = scratch[i + 1]
-          while (bits !== 0) {
-            const lowest = bits & -bits
-            bits ^= lowest
-            const slot = base + 31 - Math.clz32(lowest)
-            const file = files[slot]
-            if (file === -1) continue
-            const line = lines[slot]
-            if (line > 0) {
-              target.add(file, line)
-            } else {
-              init.add(file, -line)
-              sharedInit.add(file, -line)
-            }
-            lineCount++
-          }
-        }
+  /**
+   * @param {boolean} concurrent whether several windows are open
+   */
+  setConcurrent (concurrent) {
+    this.#concurrent = concurrent
+  }
+
+  /**
+   * Called by instrumented code. Returns the value of the module's touched flag.
+   *
+   * @param {number} id
+   * @param {Function} reader
+   */
+  touch (id, reader) {
+    let owner
+    try {
+      owner = this.resolveOwner()
+    } catch {
+      owner = this.unowned
+    }
+    this.stats.touches++
+    if (owner !== this.#segmentOwner) {
+      // The context changed since the modules in `q` were touched: they must ask again.
+      if (this.#segmentOwner !== undefined && !this.#concurrent) {
+        this.stats.switches++
+        this.reset()
+      }
+      this.#segmentOwner = owner
+    }
+    const current = this.#owners[id]
+    if (current !== owner) {
+      if (current !== undefined) this.#read(reader, ++this.#generation)
+      this.#owners[id] = owner
+    }
+    if (this.#queued[id] === 0) {
+      this.#queued[id] = 1
+      this.q.push(reader)
+      if (!this.#resetScheduled && this.#scheduleReset !== undefined) {
+        this.#resetScheduled = true
+        this.#scheduleReset()
       }
     }
+    return this.#concurrent ? 0 : 1
+  }
 
+  /**
+   * Moves the words of the modules touched since the last reset to their owners, and clears their
+   * touched flags.
+   */
+  reset () {
+    this.#resetScheduled = false
+    this.#segmentOwner = undefined
+    const queued = this.q
+    if (queued.length === 0) return
+    this.stats.resets++
+    const generation = ++this.#generation
+    for (let i = 0; i < queued.length; i++) this.#unqueue(this.#read(queued[i], generation))
+    queued.length = 0
+  }
+
+  /**
+   * A reset at a window boundary. It also reads the modules queued at the previous boundary: a
+   * function that was running when that boundary happened keeps recording without touching.
+   */
+  boundary () {
+    this.#resetScheduled = false
+    this.#segmentOwner = undefined
+    const queued = this.q
+    const previous = this.#previous
+    const generation = ++this.#generation
+    for (let i = 0; i < queued.length; i++) this.#unqueue(this.#read(queued[i], generation))
+    for (let i = 0; i < previous.length; i++) this.#read(previous[i], generation)
     previous.length = 0
     this.#previous = queued
     this.q = previous
+  }
 
-    const stats = this.stats
-    stats.boundaries++
-    stats.readerCalls += readerCalls
-    stats.lines += lineCount
-    stats.takeNs += process.hrtime.bigint() - start
+  /**
+   * @param {number} id a module id, or -1
+   */
+  #unqueue (id) {
+    if (id !== -1) this.#queued[id] = 0
+  }
+
+  /**
+   * Calls `reader` and moves the slots it reports to the module's owner. Returns the module id, or
+   * -1 when the reader already ran for `generation`.
+   *
+   * @param {Function} reader
+   * @param {number} generation
+   */
+  #read (reader, generation) {
+    const scratch = this.#scratch
+    const count = reader(scratch, generation)
+    if (count === 0) return -1
+    const id = scratch[0]
+    this.stats.readerCalls++
+    if (count === 1) return id
+    const module = this.#modules[id]
+    if (module === undefined) return id
+    let owner = this.#owners[id]
+    if (owner === undefined || !owner.open) owner = this.unowned
+    let words = owner.words[id]
+    if (words === undefined) {
+      words = new Int32Array(module.initMasks.length)
+      owner.words[id] = words
+      owner.modules.push(id)
+    }
+    const initMasks = module.initMasks
+    for (let i = 1; i < count; i += 2) {
+      const word = scratch[i]
+      const bits = scratch[i + 1]
+      const init = bits & initMasks[word]
+      if (init !== 0) this.#addInit(module, word, init)
+      words[word] |= bits & ~init
+    }
+    return id
+  }
+
+  /**
+   * @param {ModuleTable} module
+   * @param {number} word
+   * @param {number} bits
+   */
+  #addInit (module, word, bits) {
+    const { files, lines } = module
+    const base = word * SLOTS_PER_WORD
+    while (bits !== 0) {
+      const lowest = bits & -bits
+      bits ^= lowest
+      const slot = base + 31 - Math.clz32(lowest)
+      const file = files[slot]
+      if (file === -1) continue
+      this.init.add(file, -lines[slot])
+      this.sharedInit.add(file, -lines[slot])
+    }
+  }
+
+  /**
+   * Adds the lines recorded for `owner` to `target`, and forgets them.
+   *
+   * @param {Owner} owner
+   * @param {LineSet} target
+   */
+  takeLines (owner, target) {
+    for (const id of owner.modules) {
+      const words = owner.words[id]
+      const module = this.#modules[id]
+      owner.words[id] = undefined
+      if (words === undefined || module === undefined) continue
+      const { files, lines } = module
+      for (let word = 0; word < words.length; word++) {
+        let bits = words[word]
+        const base = word * SLOTS_PER_WORD
+        while (bits !== 0) {
+          const lowest = bits & -bits
+          bits ^= lowest
+          const slot = base + 31 - Math.clz32(lowest)
+          const file = files[slot]
+          if (file !== -1) target.add(file, lines[slot])
+        }
+      }
+    }
+    owner.modules.length = 0
   }
 }
 
@@ -229,4 +405,4 @@ function getCollector () {
   return collector
 }
 
-module.exports = { getCollector, LineCoverageCollector, LineSet, GLOBAL_KEY }
+module.exports = { getCollector, LineCoverageCollector, LineSet, Owner, GLOBAL_KEY }
