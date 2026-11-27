@@ -39,6 +39,7 @@ describe('AgentlessConfigurationSource', () => {
   let count
   let increment
   let log
+  let getEvaluatorCapabilities
   let random
   let request
   let requests
@@ -46,6 +47,7 @@ describe('AgentlessConfigurationSource', () => {
   let sources
 
   beforeEach(() => {
+    getEvaluatorCapabilities = sinon.stub().returns([])
     clock = sinon.useFakeTimers()
     applyConfiguration = sinon.stub()
     config = {
@@ -115,6 +117,10 @@ describe('AgentlessConfigurationSource', () => {
     AgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
       '../exporters/common/request': request,
       '../log': log,
+      './evaluator-capabilities': {
+        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
+        getEvaluatorCapabilities,
+      },
       './flag-selection': flagSelection,
     })
   })
@@ -143,6 +149,67 @@ describe('AgentlessConfigurationSource', () => {
     await clock.tickAsync(milliseconds)
     await flush()
   }
+
+  for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
+    it(`gates initial and conditional capability parameters for ${JSON.stringify(capabilities)}`, async () => {
+      getEvaluatorCapabilities.returns(capabilities)
+      config.endpoint.searchParams.set('token', 'preserved')
+      responses.push(
+        { statusCode: 200, headers: { etag: '"v1"' }, body: responseBody() },
+        { statusCode: 304 }
+      )
+      source().start()
+      await flush()
+      await tick(30_000)
+      assert.strictEqual(requests.length, 2)
+      for (const request of requests) {
+        const expected = capabilities.includes('dependent-flag-variant-key-v1') ? 'v1' : null
+        assert.strictEqual(request.options.url.searchParams.get('cap_dependent-flags-variant-key'), expected)
+        assert.deepStrictEqual(
+          request.options.url.searchParams.getAll('cap_dependent-flags-variant-key'),
+          expected === null ? [] : [expected]
+        )
+        assert.strictEqual(request.options.url.searchParams.get('token'), 'preserved')
+        assert.strictEqual(Object.hasOwn(request.options.headers, 'X-DD-FEATURE-FLAGS-CAPABILITIES'), false)
+      }
+      assert.strictEqual(requests[1].options.headers['If-None-Match'], '"v1"')
+    })
+  }
+
+  it('composes dependent flag negotiation with service and flag-selection requests', async () => {
+    getEvaluatorCapabilities.returns(['dependent-flag-variant-key-v1'])
+    config.endpoint.searchParams.set('selected_flag_tags', 'mobile')
+    config.flagSelectionSent = true
+    config.service = 'checkout'
+    responses.push(
+      {
+        statusCode: 200,
+        headers: { etag: '"selected"', 'dd-flag-selection-ignored': 'tag_load_failed' },
+        body: responseBody(),
+      },
+      { statusCode: 304 }
+    )
+
+    source().start()
+    await flush()
+    await tick(30_000)
+
+    assert.strictEqual(requests.length, 2)
+    for (const request of requests) {
+      assert.strictEqual(request.options.url.searchParams.get('cap_dependent-flags-variant-key'), 'v1')
+      assert.strictEqual(request.options.url.searchParams.get('selected_flag_tags'), 'mobile')
+      assert.strictEqual(request.options.headers['DD-Service'], 'checkout')
+      assert.strictEqual(Object.hasOwn(request.options.headers, 'X-DD-FEATURE-FLAGS-CAPABILITIES'), false)
+    }
+    assert.strictEqual(requests[1].options.headers['If-None-Match'], '"selected"')
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      'featureFlags.flagSelection was ignored by the server (%s). Loaded the full flag configuration.',
+      'tag_load_failed'
+    )
+    sinon.assert.calledOnceWithExactly(count, 'flag_selection.ignored', { reason: 'tag_load_failed' })
+    sinon.assert.calledOnceWithExactly(increment)
+  })
 
   it('fetches, applies, and reuses an accepted ETag', async () => {
     responses.push(
