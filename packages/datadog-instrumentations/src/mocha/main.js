@@ -22,6 +22,7 @@ const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper'
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const {
   getTestSuitePath,
+  MOCHA_WORKER_LINE_COVERAGE_ENV,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
@@ -140,6 +141,57 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+const lineCoverageStartCh = channel('ci:mocha:line-coverage:start')
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
+
+/**
+ * The library configuration requested before the run loaded any module, waiting for the run's
+ * configuration step to take it.
+ *
+ * @type {{ ctx: Record<string, unknown>, response: Promise<object | undefined> } | undefined}
+ */
+let earlyLibraryConfiguration
+
+/**
+ * Requests the library configuration before the required modules and test files load: per-test line
+ * coverage has to start before the code it covers is compiled, and only when the settings ask for code
+ * coverage. The run's configuration step reuses the response, so a run still sends one request.
+ *
+ * @param {string} frameworkVersion
+ * @returns {Promise<object | undefined> | undefined}
+ */
+function requestLibraryConfigurationEarly (frameworkVersion) {
+  if (!isLineCoverageRequested || !testFinishCh.hasSubscribers || !lineCoverageStartCh.hasSubscribers) return
+  if (earlyLibraryConfiguration === undefined) {
+    const ctx = { frameworkVersion }
+    const response = new Promise(resolve => {
+      runStoresWithCompletion(libraryConfigurationCh, ctx, resolve)
+    }).then(response => {
+      if (isCodeCoverageRequested(response)) lineCoverageStartCh.publish({})
+      return response
+    })
+    earlyLibraryConfiguration = { ctx, response }
+  }
+  return earlyLibraryConfiguration.response
+}
+
+/**
+ * @param {{ err?: Error, libraryConfig?: { isItrEnabled?: boolean, isCodeCoverageEnabled?: boolean } }} [response]
+ */
+function isCodeCoverageRequested (response) {
+  return !response?.err && !!response?.libraryConfig?.isItrEnabled && !!response.libraryConfig.isCodeCoverageEnabled
+}
+
+/**
+ * @param {Record<string, string | undefined> | undefined} env The environment workerpool would fork the worker with.
+ * @param {Record<string, string> | undefined} variables
+ * @returns {Record<string, string | undefined>}
+ */
+function getWorkerEnv (env, variables) {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  return { ...(env || process.env), ...variables }
+}
 
 function warnDeprecatedMochaVersion (frameworkVersion) {
   if (DD_MAJOR >= 6 || hasWarnedDeprecatedMochaVersion || !frameworkVersion ||
@@ -1126,7 +1178,15 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     })
   }
 
-  runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
+  const early = earlyLibraryConfiguration
+  if (early === undefined) {
+    runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
+  } else {
+    earlyLibraryConfiguration = undefined
+    // Later requests run in the store the configuration request ran in.
+    ctx.currentStore = early.ctx.currentStore
+    early.response.then(onReceivedConfiguration)
+  }
 }
 
 /**
@@ -1211,6 +1271,15 @@ function wrapMochaRun (Mocha, frameworkVersion, hookMeta) {
     return result
   })
 
+  // The programmatic API loads test files here without going through `handleRequires`.
+  if (typeof Mocha.prototype.loadFilesAsync === 'function') {
+    shimmer.wrap(Mocha.prototype, 'loadFilesAsync', loadFilesAsync => function () {
+      const libraryConfiguration = requestLibraryConfigurationEarly(frameworkVersion)
+      if (libraryConfiguration === undefined) return loadFilesAsync.apply(this, arguments)
+      return libraryConfiguration.then(() => loadFilesAsync.apply(this, arguments))
+    })
+  }
+
   // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
@@ -1278,7 +1347,16 @@ addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
   filePattern: String.raw`lib/cli/run-helpers\.(?:c?js)$`,
-}, (run) => {
+}, (run, frameworkVersion) => {
+  // `handleRequires` loads the `--require` modules, before any test file, and is async from Mocha 8.0.0.
+  if (satisfies(frameworkVersion, '>=8.0.0')) {
+    shimmer.wrap(run, 'handleRequires', handleRequires => function () {
+      const libraryConfiguration = requestLibraryConfigurationEarly(frameworkVersion)
+      if (libraryConfiguration === undefined) return handleRequires.apply(this, arguments)
+      return libraryConfiguration.then(() => handleRequires.apply(this, arguments))
+    })
+  }
+
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
     if (!testFinishCh.hasSubscribers) {
@@ -1837,30 +1915,39 @@ addHook({
 }, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
-  if (satisfies(frameworkVersion, '<9.2.0')) {
-    // Shimmer is required because the worker environment must be changed before workerpool forks,
-    // before any test lifecycle hook can run. Mocha added this worker ID itself in 9.2.0.
-    shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
-      const pool = create.apply(this, arguments)
+  // Shimmer is required because the worker environment must be changed before workerpool forks,
+  // before any test lifecycle hook can run.
+  shimmer.wrap(BufferedWorkerPool, 'create', create => function () {
+    const pool = create.apply(this, arguments)
 
-      if (!testFinishCh.hasSubscribers) return pool
+    if (!testFinishCh.hasSubscribers) return pool
 
+    // The pool is created once the run's configuration is known, and workers load their test files.
+    const lineCoverageEnv = isLineCoverageRequested && config.isItrEnabled && config.isCodeCoverageEnabled
+      ? { [MOCHA_WORKER_LINE_COVERAGE_ENV]: '1' }
+      : undefined
+
+    if (satisfies(frameworkVersion, '<9.2.0')) {
+      // Mocha added this worker ID itself in 9.2.0.
       let workerId = 0
       shimmer.wrap(pool._pool, '_createWorkerHandler', createWorkerHandler => function () {
         this.forkOpts = {
           ...this.forkOpts,
-          env: {
-            // eslint-disable-next-line eslint-rules/eslint-process-env
-            ...(this.forkOpts.env || process.env),
-            MOCHA_WORKER_ID: String(workerId++),
-          },
+          env: getWorkerEnv(this.forkOpts.env, { MOCHA_WORKER_ID: String(workerId++), ...lineCoverageEnv }),
         }
         return createWorkerHandler.apply(this, arguments)
       })
+    } else if (lineCoverageEnv) {
+      // Mocha builds each worker's environment from process.env here, replacing the pool's.
+      shimmer.wrap(pool._pool, 'onCreateWorker', onCreateWorker => function (options) {
+        const overrides = onCreateWorker.apply(this, arguments) || {}
+        const forkOpts = overrides.forkOpts || options.forkOpts
+        return { ...overrides, forkOpts: { ...forkOpts, env: getWorkerEnv(forkOpts.env, lineCoverageEnv) } }
+      })
+    }
 
-      return pool
-    })
-  }
+    return pool
+  })
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
