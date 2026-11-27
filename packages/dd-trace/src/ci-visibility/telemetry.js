@@ -1,12 +1,16 @@
 'use strict'
 
-const { performance } = require('node:perf_hooks')
-
 const telemetryMetrics = require('../telemetry/metrics')
 
 // Capture the native monotonic clock at module load so customer fake timers
-// (Jest, Vitest, Sinon patching Date.now or globalThis.performance) cannot skew telemetry durations.
-const monotonicNow = performance.now.bind(performance)
+// (Jest, Vitest, Sinon patching Date.now, performance.now, or process.hrtime)
+// cannot skew telemetry durations, including on Node.js 18 where performance.now reads process.hrtime.
+const hrtimeBigint = process.hrtime.bigint
+const clockOriginNs = hrtimeBigint()
+
+function monotonicNow () {
+  return Number(hrtimeBigint() - clockOriginNs) / 1e6
+}
 
 const ciVisibilityMetrics = telemetryMetrics.manager.namespace('civisibility')
 

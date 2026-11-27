@@ -74,6 +74,7 @@ describe('Test Optimization telemetry', () => {
       const start = monotonicNow()
       const fakeDateStart = Date.now()
       const fakePerfStart = globalThis.performance.now()
+      const fakeHrtimeStart = process.hrtime.bigint()
 
       clock.tick(1_000_000_000)
 
@@ -81,6 +82,7 @@ describe('Test Optimization telemetry', () => {
 
       assert.strictEqual(Date.now() - fakeDateStart, 1_000_000_000)
       assert.strictEqual(globalThis.performance.now() - fakePerfStart, 1_000_000_000)
+      assert.strictEqual(process.hrtime.bigint() - fakeHrtimeStart, 1_000_000_000_000_000n)
       assert.ok(elapsed >= 0 && elapsed < 10_000, `Expected real monotonic elapsed ms, got ${elapsed}`)
     } finally {
       clock.restore()
