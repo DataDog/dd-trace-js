@@ -55,6 +55,13 @@ class McpPropagationPlugin extends Plugin {
     this.addSub('apm:mcp:client:request:inject', this.injectTraceContext.bind(this))
   }
 
+  /**
+   * @param {Parameters<Plugin['configure']>[0]} config
+   */
+  configure (config) {
+    super.configure(this._tracerConfig.mcp.DD_MCP_DISTRIBUTED_TRACING ? config : false)
+  }
+
   injectTraceContext (ctx) {
     const span = this.tracer.scope().active()
     if (!span) return
@@ -121,12 +128,20 @@ class McpServerRequestPlugin extends McpPlugin {
   static kind = 'server'
   getResource (ctx) { return getServerRequestResource(ctx.request) }
   getChildOf (ctx) {
+    if (!this._tracerConfig.mcp.DD_MCP_DISTRIBUTED_TRACING) {
+      return
+    }
+
     const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
-    if (!traceContext || typeof traceContext !== 'object') return
+    if (!traceContext || typeof traceContext !== 'object') {
+      return
+    }
 
     const childOf = this.tracer.extract('text_map', traceContext)
     const activeSpan = this.activeSpan
-    if (!childOf || activeSpan?.context().toTraceId() === childOf.toTraceId()) return
+    if (!childOf || activeSpan?.context().toTraceId() === childOf.toTraceId()) {
+      return
+    }
 
     return childOf
   }

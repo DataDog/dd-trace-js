@@ -502,6 +502,7 @@ export interface GeneratedConfig {
   logLevel: "debug" | "info" | "warn" | "error";
   mcp: {
     DD_MCP_CAPTURE_INTENT: boolean;
+    DD_MCP_DISTRIBUTED_TRACING: boolean;
   };
   middlewareTracingEnabled: boolean;
   openai: {
@@ -833,6 +834,7 @@ export interface GeneratedEnvVarConfig {
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
   DD_MCP_CAPTURE_INTENT: boolean;
+  DD_MCP_DISTRIBUTED_TRACING: boolean;
   DD_MERGE_XRAY_TRACES: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MIN_COLD_START_DURATION: number;

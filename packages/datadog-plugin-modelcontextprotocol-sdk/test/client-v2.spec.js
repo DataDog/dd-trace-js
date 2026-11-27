@@ -130,6 +130,31 @@ describe('Plugin', () => {
           const [, result] = await Promise.all([traceAssertion, client.callTool({ name: 'error-tool', arguments: {} })])
           assert.equal(result.isError, true)
         })
+
+        it('preserves strict custom request parameters with an active span', async () => {
+          const schema = {
+            '~standard': {
+              version: 1,
+              vendor: 'test',
+              validate (value) {
+                if (Object.keys(value).length === 1 && typeof value.value === 'string') return { value }
+                return { issues: [{ message: 'Expected only a string value' }] }
+              },
+            },
+          }
+          server.server.setRequestHandler('acme/echo', { params: schema, result: schema }, params => params)
+
+          const parent = tracer.startSpan('custom-request')
+          try {
+            const params = { value: 'echo' }
+            const result = await tracer.scope().activate(parent, () => {
+              return client.request({ method: 'acme/echo', params }, schema)
+            })
+            assert.deepStrictEqual(result, params)
+          } finally {
+            parent.finish()
+          }
+        })
       })
 
       describe('stateless', () => {
