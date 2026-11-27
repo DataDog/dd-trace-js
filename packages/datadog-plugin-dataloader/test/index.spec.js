@@ -1,11 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
+
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const TestSetup = require('./test-setup')
+
+const loadStart = channel('tracing:orchestrion:dataloader:DataLoader_load:start')
 
 describe('Plugin', () => {
   describe('dataloader', () => {
@@ -94,13 +99,23 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].meta.component, 'dataloader')
             })
 
-            // Execute operation via test setup
-            await testSetup.dataLoaderLoadMany()
+            let delegatedLoads = 0
+            const recordLoad = () => { delegatedLoads++ }
+            loadStart.subscribe(recordLoad)
+            try {
+              const [values] = await Promise.all([testSetup.dataLoaderLoadMany(), traceAssertion])
+              assert.strictEqual(delegatedLoads, 0)
+              assert.deepStrictEqual(values, [
+                { key: 'b', value: 'value-b' },
+                { key: 'c', value: 'value-c' },
+              ])
+            } finally {
+              loadStart.unsubscribe(recordLoad)
+              traceAssertion.cancel()
+            }
             /** @type {{ span?: { context: () => { _name?: string } } } | undefined} */
             const batchStore = testSetup.batchStore
             assert.strictEqual(batchStore?.span?.context()._name, 'dataloader.loadMany')
-
-            return traceAssertion
           })
 
           it('should preserve per-item errors without marking the span failed', async () => {
@@ -108,6 +123,7 @@ describe('Plugin', () => {
               {
                 name: 'dataloader.loadMany',
                 resource: loadManyErrorResource,
+                error: 0,
                 meta: {
                   'span.kind': 'internal',
                   component: 'dataloader',
