@@ -1104,13 +1104,24 @@ describe('SpanStatsProcessor', () => {
 
       const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
+      p.onSpanFinished(clientSpan)
       sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, {
         agent: sinon.match.instanceOf(http.Agent),
         retry: false,
       })
 
-      p.onSpanFinished(clientSpan)
       assert.deepStrictEqual(exportedPeerTags(p), [['peer.service:billing']])
+    })
+
+    it('should not read /info before the first span stats are computed for or the first interval', () => {
+      const p = new SpanStatsProcessor(config)
+      clearTimeout(p.timer)
+      p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'internal' } })
+      sinon.assert.notCalled(fetchAgentInfo)
+
+      p.onSpanFinished(clientSpan)
+      p.onSpanFinished(clientSpan)
+      sinon.assert.calledOnce(fetchAgentInfo)
     })
 
     it('should aggregate without peer tags until the Agent /info answered', () => {
@@ -1162,6 +1173,7 @@ describe('SpanStatsProcessor', () => {
     it('should read /info over its own connection, not the one shared by the exporters', () => {
       const p = new SpanStatsProcessor(config)
       clearTimeout(p.timer)
+      p.onInterval()
 
       const { agent } = fetchAgentInfo.lastCall.args[2]
       assert.notStrictEqual(agent, sharedAgents.httpAgent)
@@ -1207,13 +1219,14 @@ describe('SpanStatsProcessor', () => {
       const kinds = ['server', 'client', 'producer', 'consumer', 'internal']
 
       /**
-       * @param {object} [agentInfo] The Agent /info answer; none when omitted.
+       * @param {object} agentInfo The Agent /info answer.
+       * @param {object} [otlp] The OTLP exporter, if any.
        * @returns {string[]} The span kinds of the recorded spans that are neither top-level nor measured.
        */
-      function recordedSpanKinds (agentInfo) {
-        if (agentInfo) fetchAgentInfo.callsFake((url, callback) => callback(null, agentInfo))
+      function recordedSpanKinds (agentInfo, otlp) {
+        fetchAgentInfo.callsFake((url, callback) => callback(null, agentInfo))
 
-        const p = new SpanStatsProcessor(config)
+        const p = new SpanStatsProcessor(config, otlp)
         clearTimeout(p.timer)
         for (const spanKind of kinds) {
           p.onSpanFinished({ ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: spanKind } })
@@ -1221,38 +1234,21 @@ describe('SpanStatsProcessor', () => {
         return [...p.buckets.values()].flatMap(bucket => [...bucket.values()].map(stats => stats.aggKey.spanKind))
       }
 
-      it('should compute stats for the default span kinds until the Agent /info answered', () => {
-        assert.deepStrictEqual(recordedSpanKinds(), ['server', 'client', 'producer', 'consumer'])
-      })
-
-      it('should compute stats for the default span kinds for an Agent without span_kinds_stats_computed', () => {
-        assert.deepStrictEqual(
-          recordedSpanKinds({ peer_tags: [] }),
-          ['server', 'client', 'producer', 'consumer']
-        )
-      })
-
-      it('should compute stats for the span kinds of the Agent /info', () => {
-        assert.deepStrictEqual(
-          recordedSpanKinds({ span_kinds_stats_computed: ['CLIENT', 'consumer', 42] }),
-          ['client', 'consumer']
-        )
-      })
-
-      for (const spanKinds of [null, []]) {
-        it(`should compute no stats by span kind for span_kinds_stats_computed ${JSON.stringify(spanKinds)}`, () => {
-          assert.deepStrictEqual(recordedSpanKinds({ span_kinds_stats_computed: spanKinds }), [])
+      for (const spanKinds of [undefined, null, [], ['client']]) {
+        it(`should compute stats for the default span kinds for span_kinds_stats_computed ${spanKinds}`, () => {
+          assert.deepStrictEqual(
+            recordedSpanKinds({ span_kinds_stats_computed: spanKinds }),
+            ['server', 'client', 'producer', 'consumer']
+          )
         })
       }
 
-      it('should still compute stats for top-level spans without span kinds', () => {
-        fetchAgentInfo.callsFake((url, callback) => callback(null, { span_kinds_stats_computed: null }))
-
-        const p = new SpanStatsProcessor(config)
-        clearTimeout(p.timer)
-        p.onSpanFinished(topLevelSpan)
-
-        assert.strictEqual(p.buckets.size, 1)
+      it('should compute stats for the default span kinds for OTLP span metrics', () => {
+        assert.deepStrictEqual(
+          recordedSpanKinds({ span_kinds_stats_computed: null }, otlpExporter),
+          ['server', 'client', 'producer', 'consumer']
+        )
+        sinon.assert.notCalled(fetchAgentInfo)
       })
     })
 
