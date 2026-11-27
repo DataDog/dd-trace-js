@@ -1,5 +1,6 @@
 'use strict'
 
+const { normalizeRouteSegment } = require('../../dd-trace/src/http-resource')
 const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
@@ -123,9 +124,7 @@ class RouterPlugin extends WebPlugin {
   }
 
   #updateContext (req, context, route, span) {
-    if (!route || route === '/' || route === '*') {
-      route = ''
-    }
+    route = normalizeRouteSegment(route)
 
     if (context) {
       context.stack.push(route)

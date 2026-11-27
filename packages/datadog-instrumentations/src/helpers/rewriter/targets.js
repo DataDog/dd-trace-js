@@ -18,6 +18,7 @@ const NODE_MODULES = '/node_modules/'
  * @property {string} moduleName
  * @property {string} filePath
  * @property {boolean} [activate]
+ * @property {boolean} [esmHook]
  * @property {string} [sourceMatch]
  */
 
@@ -41,13 +42,14 @@ function getRewriteTarget (filename) {
     }
   }
   if (typeof moduleName !== 'string') return
-  const activate = isRewriteActivationEnabled(moduleName)
+  const registry = require('./instrumentation-registry')
 
   const rewriteTarget = {
     moduleName,
     filePath: modulePath.slice(moduleName.length + 1),
   }
-  if (activate) rewriteTarget.activate = true
+  if (registry.isRewriteActivationEnabled(moduleName)) rewriteTarget.activate = true
+  if (registry.needsEsmHook(moduleName)) rewriteTarget.esmHook = true
   if (sourceMatch) rewriteTarget.sourceMatch = sourceMatch
   return rewriteTarget
 }

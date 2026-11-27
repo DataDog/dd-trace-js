@@ -349,6 +349,7 @@
 /packages/dd-trace/test/opentracing/propagation/otel-sampling.spec.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/*sampler.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/*sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/http-resource.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/custom-metrics.spec.js @DataDog/apm-sdk-capabilities
