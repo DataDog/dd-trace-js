@@ -76,4 +76,30 @@ describe('line coverage parsing', () => {
     assert.equal(withNeither.parserBefore, 'none')
     assert.equal(withNeither.parser, 'meriyah')
   })
+
+  it('keys code instrumented for other processes by the parser that runs, before anything is parsed', function () {
+    if (!['linux', 'darwin'].includes(process.platform) || !['x64', 'arm64'].includes(process.arch)) this.skip()
+
+    const script = `
+      const { getInstrumentedCodeKey, getParserInUse } = require(${JSON.stringify(LINE_COVERAGE)})
+      const key = getInstrumentedCodeKey('/repository/node_modules/.cache')
+      process.stdout.write(JSON.stringify({ key, parser: getParserInUse(), noDirectory: getInstrumentedCodeKey() }))
+    `
+    const keyInChild = (env) => {
+      const output = execFileSync(process.execPath, ['-e', script], { env: { ...process.env, ...env } })
+      return JSON.parse(output.toString())
+    }
+
+    const withBinding = keyInChild()
+    assert.match(withBinding.key, /^[0-9a-f]{40}$/)
+    assert.equal(withBinding.parser, 'oxc-binding')
+    // Without a cache directory, module keys are numbered per process, so the code cannot be shared.
+    assert.equal(withBinding.noDirectory, null)
+
+    // oxc-parser's package is there but does not load: the key names meriyah, which instruments instead.
+    const withNeither = keyInChild({ NAPI_RS_NATIVE_LIBRARY_PATH: path.join(__dirname, 'missing-binding.node') })
+    assert.equal(withNeither.parser, 'meriyah')
+    assert.match(withNeither.key, /^[0-9a-f]{40}$/)
+    assert.notEqual(withNeither.key, withBinding.key)
+  })
 })

@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const {
   assertObjectContains,
@@ -16,6 +18,7 @@ const { getVitestVersions } = require('./versions')
 
 const TEST_FILE = 'ci-visibility/vitest-line-coverage/line-coverage.test.ts'
 const PATCHED_GLOBALS_TEST_FILE = 'ci-visibility/vitest-line-coverage/patched-globals.test.ts'
+const FUNCTION_SOURCE_TEST_FILE = 'ci-visibility/vitest-line-coverage/function-source.test.ts'
 const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
@@ -38,6 +41,27 @@ const IN_TEST_LINE = 18
 
 // The parsers a line coverage record can name: none when its process ran only cached code.
 const PARSERS = ['oxc-binding', 'oxc-parser', 'meriyah', 'none']
+
+// What every instrumented module looks its collector up with.
+const COLLECTOR_LOOKUP = "globalThis[Symbol.for('dd-trace.line-coverage')]"
+
+/**
+ * Counts the files under the directory that hold instrumented code.
+ *
+ * @param {string} directory
+ */
+function countInstrumentedFiles (directory) {
+  let count = 0
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      count += countInstrumentedFiles(entryPath)
+    } else if (fs.readFileSync(entryPath, 'utf8').includes(COLLECTOR_LOOKUP)) {
+      count++
+    }
+  }
+  return count
+}
 
 /**
  * @param {{ filename: string, bitmap?: Uint8Array }[]} files
@@ -280,5 +304,31 @@ for (const version of getVitestVersions()) {
       assert.strictEqual(tests.length, 7, testOutput)
       assert.deepStrictEqual(coverages, [], testOutput)
     })
+
+    // Vitest 5 keeps transformed modules on disk across runs by default.
+    if (version === 'latest') {
+      it('reuses modules instrumented in an earlier run only in runs that collect line coverage', async () => {
+        const cacheDirectory = path.join(cwd, 'node_modules', '.vitest-cache')
+        fs.rmSync(cacheDirectory, { recursive: true, force: true })
+        const linesOf = ({ tests, coverages }) => {
+          assert.strictEqual(tests.length, 1, testOutput)
+          const matching = coverages.filter(coverage => coverage.span_id === Number(tests[0].span_id))
+          assert.strictEqual(matching.length, 1, testOutput)
+          return [...getLines(matching[0].files, ARITHMETIC)].sort((a, b) => a - b)
+        }
+
+        const first = await runFixtureSuite(true, 'forks', true, FUNCTION_SOURCE_TEST_FILE)
+        assert.ok(linesOf(first).includes(ADD_LINE), testOutput)
+        assert.ok(countInstrumentedFiles(cacheDirectory) > 0, testOutput)
+
+        // The fixture test fails if this run's workers are given the instrumented modules.
+        const off = await runFixtureSuite(true, 'forks', false, FUNCTION_SOURCE_TEST_FILE)
+        assert.strictEqual(off.tests[0].meta[TEST_STATUS], 'pass', testOutput)
+        assert.deepStrictEqual(off.coverages, [], testOutput)
+
+        const second = await runFixtureSuite(true, 'forks', true, FUNCTION_SOURCE_TEST_FILE)
+        assert.deepStrictEqual(linesOf(second), linesOf(first), testOutput)
+      })
+    }
   })
 }

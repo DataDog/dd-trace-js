@@ -693,12 +693,33 @@ class VitestPlugin extends CiPlugin {
   }
 
   #subscribeToLineCoverage () {
+    // In the main process, as Vite transforms a module for the workers: they then run it as it comes.
+    this.addSub('ci:vitest:line-coverage:instrument-main', (ctx) => {
+      this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+      const lineCoverage = this.#lineCoverage
+      lineCoverage.setRoot(ctx.repositoryRoot)
+      if (!lineCoverage.shouldInstrument(ctx.filename)) return
+      ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, {
+        isModule: true,
+        importsRun: true,
+        sourceMap: ctx.sourceMap,
+        cacheDirectory: lineCoverage.getDefaultCacheDirectory(),
+      })
+    })
+
+    this.addSub('ci:vitest:line-coverage:cache-key', (ctx) => {
+      this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+      const lineCoverage = this.#lineCoverage
+      lineCoverage.setRoot(ctx.repositoryRoot)
+      ctx.key = lineCoverage.getInstrumentedCodeKey(lineCoverage.getDefaultCacheDirectory()) ?? undefined
+    })
+
     this.addSub('ci:vitest:line-coverage:instrument', (ctx) => {
       this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
       const lineCoverage = this.#lineCoverage
       if (!lineCoverage.isActive()) lineCoverage.enable({ root: ctx.repositoryRoot })
       if (ctx.realm) lineCoverage.installGlobal(ctx.realm)
-      if (!lineCoverage.shouldInstrument(ctx.filename)) return
+      if (!lineCoverage.shouldInstrument(ctx.filename) || lineCoverage.isInstrumented(ctx.code)) return
       // Without the map, lines of the transformed module cannot be mapped to lines of the file.
       const sourceMap = ctx.sourceMap ?? getInlineSourceMap(ctx.code)
       if (sourceMap === undefined) return

@@ -23,6 +23,8 @@
 //   startTest(span) / finishTest(test, suites)
 //   startSuiteSetup(suite) / finishSuiteSetup(), and runs each suite setup hook in suiteSetupStore()
 //   takeShared()                        after the last test, or after each test file
+// A process that instruments code for other processes and runs no tests calls setRoot(root), then
+// instrumentSource. Code it instrumented passes isInstrumented, and is run as it comes.
 
 // Functions that tests replace (fake timers, fs mocks, stubs) are taken before any test runs. What
 // runs for each test calls no path function, since path functions call each other through the module.
@@ -46,7 +48,7 @@ const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
 const { showOriginalFunctionSource } = require('./function-source')
-const { instrument } = require('./instrument')
+const { instrument, isInstrumented } = require('./instrument')
 const { createPositionTable, isOriginalInitialiser } = require('./original-positions')
 const { createPositionMapper, getSourceMappingUrl, readSourceMapUrl } = require('./source-map')
 const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
@@ -882,6 +884,20 @@ function getCacheSalt () {
 }
 
 /**
+ * What code this process instruments for others depends on besides its input, for a cache outside the
+ * tracer that keeps the code across runs. The parser is loaded first, so the parser the salt names is the
+ * one that runs.
+ *
+ * @param {string | undefined} cacheDirectory the directory given to instrumentSource
+ * @returns {string | null} null when the code carries module keys that only this process tells apart
+ */
+function getInstrumentedCodeKey (cacheDirectory) {
+  if (cacheDirectory === undefined) return null
+  getOxcParse()
+  return getCacheSalt()
+}
+
+/**
  * @param {string} directory
  * @param {string} key
  */
@@ -943,11 +959,12 @@ function writeCachedCode (directory, key, code) {
  * @param {string} code
  * @param {string} filename
  * @param {boolean} isModule
+ * @param {boolean} importsRun
  * @param {object | string | undefined} sourceMap
  */
-function getCacheKey (salt, code, filename, isModule, sourceMap) {
+function getCacheKey (salt, code, filename, isModule, importsRun, sourceMap) {
   return createHash('sha1')
-    .update(`${salt}\0${rootPrefix}\0${filename}\0${isModule}\0`)
+    .update(`${salt}\0${rootPrefix}\0${filename}\0${isModule}\0${importsRun}\0`)
     .update(typeof sourceMap === 'string' ? sourceMap : JSON.stringify(sourceMap ?? null))
     .update('\0')
     .update(code)
@@ -970,12 +987,16 @@ function getCacheKey (salt, code, filename, isModule, sourceMap) {
  *   is not probed.
  * @param {string} [options.cacheDirectory] a directory to keep instrumented code in, for other
  *   processes that instrument the same code
+ * @param {boolean} [options.importsRun] the module's imports and re-exports will run as calls, as Vite's module
+ *   runner makes them, so their lines count
  */
-function instrumentSource (code, filename, { isModule = false, reuse = false, sourceMap, cacheDirectory } = {}) {
+function instrumentSource (code, filename, {
+  isModule = false, reuse = false, sourceMap, cacheDirectory, importsRun = false,
+} = {}) {
   if (reuse) {
     const cached = instrumentedByFilename.get(filename)
     if (cached !== undefined && cached.code === code) return cached.instrumented
-    const instrumented = instrumentSource(code, filename, { isModule, sourceMap, cacheDirectory })
+    const instrumented = instrumentSource(code, filename, { isModule, sourceMap, cacheDirectory, importsRun })
     instrumentedByFilename.set(filename, { code, instrumented })
     return instrumented
   }
@@ -993,7 +1014,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
     if (salt === null) {
       key = String(nextModuleKey++)
     } else {
-      key = getCacheKey(salt, code, filename, isModule, sourceMap)
+      key = getCacheKey(salt, code, filename, isModule, importsRun, sourceMap)
       const cached = readCachedCode(cacheDirectory, key)
       if (cached !== undefined) {
         stats.cacheHits++
@@ -1024,6 +1045,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
       sources,
       mapPosition,
       isSourceInitialiser,
+      importsRun,
     })
     // The salt is dropped when the parser it names fails to load.
     if (salt !== null && cacheSalt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
@@ -1090,15 +1112,7 @@ function startCollecting (root, patchModuleLoader) {
   collector.resolveOwner = resolveOwner
   showOriginalFunctionSource(globalThis)
   scheduleResets(collector)
-  let realRoot = root
-  try {
-    realRoot = realpathSync(root)
-  } catch {}
-  rootPrefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep
-  try {
-    const modules = `${rootPrefix}node_modules`
-    if (statSync(modules, { throwIfNoEntry: false })?.isDirectory()) defaultCacheDirectory = join(modules, '.cache')
-  } catch {}
+  setRoot(root)
   if (patchModuleLoader) {
     const compile = Module.prototype._compile
     Module.prototype._compile = function (content, filename, ...rest) {
@@ -1130,6 +1144,30 @@ function startCollecting (root, patchModuleLoader) {
       }))
     })
   }
+}
+
+/** @type {string | undefined} the root `setRoot` was last called with */
+let rootSet
+
+/**
+ * Sets the repository whose files are instrumented. A process that only instruments code for other
+ * processes to run calls it instead of `enable`, and collects nothing.
+ *
+ * @param {string} root
+ */
+function setRoot (root) {
+  if (root === rootSet) return
+  rootSet = root
+  let realRoot = root
+  try {
+    realRoot = realpathSync(root)
+  } catch {}
+  rootPrefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep
+  defaultCacheDirectory = undefined
+  try {
+    const modules = `${rootPrefix}node_modules`
+    if (statSync(modules, { throwIfNoEntry: false })?.isDirectory()) defaultCacheDirectory = join(modules, '.cache')
+  } catch {}
 }
 
 /**
@@ -1231,10 +1269,13 @@ module.exports = {
   finishTest,
   getCollector,
   getDefaultCacheDirectory,
+  getInstrumentedCodeKey,
   getParserInUse,
   installGlobal,
   instrumentSource,
   isActive,
+  isInstrumented,
+  setRoot,
   shouldInstrument,
   startSuiteSetup,
   startTest,

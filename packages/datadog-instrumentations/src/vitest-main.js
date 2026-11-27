@@ -120,6 +120,88 @@ const suitesWithNewTests = new Set()
 const tinyPoolClassWrappers = new WeakMap()
 const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
 const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
+const lineCoverageInstrumentMainCh = channel('ci:vitest:line-coverage:instrument-main')
+const lineCoverageCacheKeyCh = channel('ci:vitest:line-coverage:cache-key')
+
+/** @type {string | undefined} the repository whose modules are instrumented for line coverage, while it is on */
+let lineCoverageRoot
+
+/** @type {{ root: string, key: string | false } | undefined} */
+let lineCoverageCacheKey
+
+const QUERY_START_RE = /[?#]/
+
+/**
+ * Part of the key Vitest files a transformed module under in its module cache, which outlives the run. While
+ * modules are instrumented, it names the instrumenter and the repository, so instrumented code is never served to
+ * a run that does not collect line coverage, nor code instrumented by another tracer build.
+ *
+ * @returns {string | false | undefined} false, so the module is not cached, when the instrumenter cannot be named
+ */
+function getLineCoverageCacheKey () {
+  if (lineCoverageRoot === undefined || !lineCoverageInstrumentMainCh.hasSubscribers) return
+  if (lineCoverageCacheKey?.root !== lineCoverageRoot) {
+    const ctx = { repositoryRoot: lineCoverageRoot, key: undefined }
+    lineCoverageCacheKeyCh.publish(ctx)
+    lineCoverageCacheKey = {
+      root: lineCoverageRoot,
+      key: typeof ctx.key === 'string' ? `datadog:line-coverage\0${ctx.key}\0${lineCoverageRoot}` : false,
+    }
+  }
+  return lineCoverageCacheKey.key
+}
+
+/**
+ * Instruments each repository module for line coverage once, as Vite transforms it for the workers, instead of
+ * in every worker that runs it. It runs after the other plugins, so it sees the code the workers get, before Vite
+ * rewrites its imports and exports. A module transformed before line coverage is on, or by a server without this
+ * plugin, reaches the workers as it is, and they instrument it.
+ */
+const LINE_COVERAGE_VITE_PLUGIN = {
+  name: 'datadog:line-coverage',
+  enforce: 'post',
+  /**
+   * @param {{ defineCacheKeyGenerator?: Function, experimental_defineCacheKeyGenerator?: Function }} context
+   */
+  configureVitest (context) {
+    // Vitest 4.1 has only the experimental name; Vitest 5 has both and warns on the experimental one.
+    const defineCacheKeyGenerator = context.defineCacheKeyGenerator ?? context.experimental_defineCacheKeyGenerator
+    if (typeof defineCacheKeyGenerator === 'function') defineCacheKeyGenerator(getLineCoverageCacheKey)
+  },
+  /**
+   * @this {{ originalCode?: string, getCombinedSourcemap?: () => object }}
+   * @param {string} code
+   * @param {string} id
+   */
+  transform (code, id) {
+    if (lineCoverageRoot === undefined || !lineCoverageInstrumentMainCh.hasSubscribers) return
+    const queryStart = id.search(QUERY_START_RE)
+    const filename = queryStart === -1 ? id : id.slice(0, queryStart)
+    if (!path.isAbsolute(filename)) return
+    // Code no plugin changed is the file itself, and needs no map.
+    const hasMap = code !== this.originalCode && typeof this.getCombinedSourcemap === 'function'
+    const ctx = {
+      code,
+      filename,
+      repositoryRoot: lineCoverageRoot,
+      sourceMap: hasMap ? () => this.getCombinedSourcemap() : undefined,
+    }
+    lineCoverageInstrumentMainCh.publish(ctx)
+    // Probes add no line, so the map of the code before them still gives every line.
+    if (ctx.code !== code) return { code: ctx.code, map: null }
+  },
+}
+
+/**
+ * @param {object} [viteOverrides]
+ */
+function addLineCoveragePlugin (viteOverrides = {}) {
+  if (!viteOverrides.plugins || !Object.isExtensible(viteOverrides) || !Object.isExtensible(viteOverrides.plugins)) {
+    viteOverrides = { ...viteOverrides, plugins: [...(viteOverrides.plugins || [])] }
+  }
+  if (!viteOverrides.plugins.includes(LINE_COVERAGE_VITE_PLUGIN)) viteOverrides.plugins.push(LINE_COVERAGE_VITE_PLUGIN)
+  return viteOverrides
+}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`
@@ -810,6 +892,7 @@ async function runMainProcessSetup (
     }
   }
   tiaRepositoryRoot = realpath(repositoryRoot)
+  lineCoverageRoot = isLineCoverageEnabled ? repositoryRoot : undefined
 
   const {
     knownTestsResponse,
@@ -1315,6 +1398,7 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
         const isLegacySignature = typeof args[0] === 'string'
         const overridesIndex = isCreate ? (isLegacySignature ? 2 : 1) : (isLegacySignature ? 3 : 2)
         args[overridesIndex] = noWorkerInit.addBrowserAnnotationPlugin(args[overridesIndex])
+        if (isLineCoverageRequested) args[overridesIndex] = addLineCoveragePlugin(args[overridesIndex])
       }
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
         return oldCliOrStartVitest.apply(this, args)

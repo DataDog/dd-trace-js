@@ -49,6 +49,9 @@ const RANK_REPLACE = 3
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])
 
+// How instrumented code finds the collector. Code that contains it is instrumented already.
+const COLLECTOR_LOOKUP = "globalThis[Symbol.for('dd-trace.line-coverage')]"
+
 /**
  * @typedef {object} InstrumentOptions
  * @property {(code: string) => object} parse returns an ESTree Program with UTF-16 `start` and `end`
@@ -62,6 +65,8 @@ const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'Ar
  * @property {(source: number, line: number, column: number, isInitialiser: boolean) => (boolean | undefined)}
  *   [isSourceInitialiser] whether a mapped position is initialiser code by the structure of its source,
  *   given whether the structure of the code makes it initialiser code; undefined keeps the latter
+ * @property {boolean} [importsRun] whether the module's imports and re-exports will run as calls, as Vite's module
+ *   runner makes them, so their lines count when the module starts
  *
  * @typedef {{ source: number, line: number, column?: number, start?: number, end?: number }} MappedPosition
  *   `column` is the position's column in the source; `start` and `end` are the columns of the generated
@@ -86,9 +91,11 @@ class Instrumenter {
    * @param {object} program
    * @param {InstrumentOptions} options
    */
-  constructor (code, program, { moduleKey = '', sources = [null], mapPosition, isSourceInitialiser }) {
+  constructor (code, program, options) {
+    const { moduleKey = '', sources = [null], mapPosition, isSourceInitialiser, importsRun = false } = options
     this.code = code
     this.program = program
+    this.importsRun = importsRun
     this.moduleKey = moduleKey
     this.sources = sources
     this.mapPosition = mapPosition
@@ -397,7 +404,9 @@ class Instrumenter {
     for (let i = from; i < list.length; i++) {
       const statement = list[i]
       if (isProgram && isModuleDeclaration(statement)) {
-        this.moduleDeclaration(statement, { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) })
+        const opener = { kind: 'prefix', at: listInsertOffset(this.code, statement.start, floor) }
+        if (this.importsRun && statement.source) this.position(statement, opener)
+        this.moduleDeclaration(statement, opener)
       } else if (statement.type !== 'FunctionDeclaration' && !(isProgram && isViteExportDefinition(statement))) {
         // Code with no source map is its own source, so a getter in it is code of that file.
         if (isProgram && this.mapPosition !== undefined) this.skipExportGetters(statement)
@@ -1310,7 +1319,7 @@ class Instrumenter {
       names += `,${p}${word}=0`
     }
     reader += `${p}t=0;return n}`
-    const touch = `function ${p}r(){var c=${p}c||(${p}c=globalThis[Symbol.for('dd-trace.line-coverage')]);` +
+    const touch = `function ${p}r(){var c=${p}c||(${p}c=${COLLECTOR_LOOKUP});` +
       `if(c){if(${p}m===void 0)${p}m=${p}d(c);${p}t=c.touch(${p}m,${p}x)}else ${p}t=1}`
     const define = `function ${p}d(c){return c.define(${this.describe()})}`
     // Passes a value on, so probes can run right after the expression that computes it.
@@ -1709,4 +1718,13 @@ function containsSuspension (node) {
   return false
 }
 
-module.exports = { instrument }
+/**
+ * Whether `code` is instrumented already, as when another process instrumented it before handing it over.
+ *
+ * @param {string} code
+ */
+function isInstrumented (code) {
+  return code.includes(COLLECTOR_LOOKUP)
+}
+
+module.exports = { instrument, isInstrumented }
