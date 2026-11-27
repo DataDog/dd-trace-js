@@ -942,10 +942,6 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 Options can be configured as a parameter to the [init()](./interfaces/Tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
-Set `DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE=true` to group outbound HTTP spans by method and quantized path.
-For example, `GET /users/123?view=full` has the resource name `GET /users/*`. The default is `false`.
-OTel resource naming takes precedence when `DD_TRACE_OTEL_SEMANTICS_ENABLED=true`.
-
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
 Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.

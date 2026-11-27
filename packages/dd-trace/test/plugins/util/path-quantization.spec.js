@@ -122,6 +122,8 @@ describe('plugins/util/path-quantization', () => {
     it('appends the quantized path when enabled', () => {
       assert.strictEqual(clientResourceName('POST', '/users/123', true), 'POST /users/*')
       assert.strictEqual(clientResourceName('GET', '/health/status', true), 'GET /health/status')
+      assert.strictEqual(clientResourceName('GET', 'users/123', true), 'GET /users/*')
+      assert.strictEqual(clientResourceName('GET', '', true), 'GET /')
     })
 
     it('uses the raw path from an absolute-form request target', () => {

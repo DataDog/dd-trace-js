@@ -1,7 +1,5 @@
 'use strict'
 
-const ABSOLUTE_HTTP_ORIGIN = /^https?:\/\/[^/]*/i
-
 // Segments made up only of letters, hyphens and underscores carry no
 // request-specific value, so they survive quantization. Anything containing a
 // digit, a special character or a non-ASCII byte is replaced.
@@ -115,8 +113,15 @@ function clientResourceName (method, path, enabled) {
     return method
   }
 
-  const pathname = path?.replace(ABSOLUTE_HTTP_ORIGIN, '')
-  return `${method} ${quantizePath(pathname)}`
+  if (path && path[0] !== '/') {
+    const prefix = path.slice(0, 8).toLowerCase()
+    if (prefix.startsWith('http://') || prefix.startsWith('https://')) {
+      const pathStart = path.indexOf('/', path.indexOf(':') + 3)
+      path = pathStart === -1 ? '/' : path.slice(pathStart)
+    }
+  }
+
+  return `${method} ${quantizePath(path)}`
 }
 
 module.exports = {
