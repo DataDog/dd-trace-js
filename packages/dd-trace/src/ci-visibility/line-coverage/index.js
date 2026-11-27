@@ -116,6 +116,7 @@ let nextModuleKey = 0
 
 /** @type {string | null | undefined} what cached code depends on besides its input; null without a cache */
 let cacheSalt
+let isOxcInCacheSalt = false
 
 /** @type {Set<string>} cache directories known to exist */
 const cacheDirectories = new Set()
@@ -651,6 +652,8 @@ function getOxc () {
       oxc = require('oxc-parser')
     } catch {
       oxc = null
+      // What meriyah parses instead is not cached under a salt that names oxc.
+      if (isOxcInCacheSalt) cacheSalt = null
     }
   }
   return oxc
@@ -706,7 +709,16 @@ function getCacheSalt () {
     for (const file of ['./index', './collector', './instrument', './source-map']) {
       hash.update(fs.readFileSync(require.resolve(file)))
     }
-    hash.update(getOxc() ? `oxc-parser ${require('oxc-parser/package.json').version}` : 'meriyah')
+    // The parser is named from its package rather than loaded: when every module comes from the
+    // cache, nothing is parsed.
+    let parser = 'meriyah'
+    if (oxc !== null) {
+      try {
+        parser = `oxc-parser ${require('oxc-parser/package.json').version}`
+        isOxcInCacheSalt = true
+      } catch {}
+    }
+    hash.update(parser)
     cacheSalt = hash.digest('hex')
   } catch {
     cacheSalt = null
@@ -851,7 +863,8 @@ function instrumentSource (code, filename, { isModule = false, reuse = false, so
       sources,
       mapPosition,
     })
-    if (salt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
+    // The salt is dropped when the parser it names fails to load.
+    if (salt !== null && cacheSalt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
     if (!result) return code
     stats.files++
     stats.bytesIn += code.length
