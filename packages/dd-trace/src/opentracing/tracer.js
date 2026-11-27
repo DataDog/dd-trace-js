@@ -8,6 +8,7 @@ const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
+const NoopSpanContext = require('../noop/span_context')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -141,6 +142,10 @@ class DatadogTracer {
     try {
       if (context instanceof Span || typeof context?.context === 'function') {
         context = context.context()
+      }
+
+      if (format !== formats.LOG && context instanceof NoopSpanContext) {
+        return
       }
 
       if (format !== 'text_map_dsm' && format !== formats.LOG) {

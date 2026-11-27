@@ -546,7 +546,7 @@ describe('Tracer', () => {
       sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
 
-    it('should unwrap a NoopSpan before delegating to the propagator', () => {
+    it('should unwrap a NoopSpan before delegating to the log propagator', () => {
       LogPropagator.returns(propagator)
       const noopSpan = new NoopSpan()
 
@@ -558,15 +558,48 @@ describe('Tracer', () => {
       sinon.assert.notCalled(log.error)
     })
 
-    it('should unwrap a NoopSpan for text map propagation as well', () => {
+    for (const [label, format, getPropagatorStub] of [
+      ['text map', opentracing.FORMAT_TEXT_MAP, () => TextMapPropagator],
+      ['http headers', opentracing.FORMAT_HTTP_HEADERS, () => HttpPropagator],
+    ]) {
+      it(`should not inject distributed trace headers for a NoopSpan in ${label} format`, () => {
+        getPropagatorStub().returns(propagator)
+        const noopSpan = new NoopSpan()
+
+        tracer = new Tracer(config)
+        const result = tracer.inject(noopSpan, format, carrier)
+
+        assert.strictEqual(result, undefined)
+        assert.deepStrictEqual(carrier, {})
+        sinon.assert.notCalled(prioritySampler.sample)
+        sinon.assert.notCalled(propagator.inject)
+        sinon.assert.notCalled(log.error)
+      })
+
+      it(`should not inject distributed trace headers for a NoopSpanContext in ${label} format`, () => {
+        getPropagatorStub().returns(propagator)
+        const noopSpan = new NoopSpan()
+
+        tracer = new Tracer(config)
+        const result = tracer.inject(noopSpan.context(), format, carrier)
+
+        assert.strictEqual(result, undefined)
+        assert.deepStrictEqual(carrier, {})
+        sinon.assert.notCalled(prioritySampler.sample)
+        sinon.assert.notCalled(propagator.inject)
+        sinon.assert.notCalled(log.error)
+      })
+    }
+
+    it('should unwrap a custom span-like object for text map propagation', () => {
       TextMapPropagator.returns(propagator)
-      const noopSpan = new NoopSpan()
+      const customSpan = { context: () => spanContext }
 
       tracer = new Tracer(config)
-      tracer.inject(noopSpan, opentracing.FORMAT_TEXT_MAP, carrier)
+      tracer.inject(customSpan, opentracing.FORMAT_TEXT_MAP, carrier)
 
-      sinon.assert.calledOnceWithExactly(prioritySampler.sample, noopSpan.context())
-      sinon.assert.calledOnceWithExactly(propagator.inject, noopSpan.context(), carrier)
+      sinon.assert.calledOnceWithExactly(prioritySampler.sample, spanContext)
+      sinon.assert.calledOnceWithExactly(propagator.inject, spanContext, carrier)
       sinon.assert.notCalled(log.error)
     })
 
