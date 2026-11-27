@@ -295,6 +295,7 @@
 
 # Data Streams Monitoring
 /benchmark/sirun/datastreams/ @DataDog/data-streams-monitoring
+/benchmark/sirun/plugin-amqplib/ @DataDog/data-streams-monitoring
 /packages/dd-trace/src/datastreams/ @DataDog/data-streams-monitoring
 /packages/dd-trace/test/datastreams/ @DataDog/data-streams-monitoring
 /packages/**/dsm.spec.js @DataDog/data-streams-monitoring
