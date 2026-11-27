@@ -5,6 +5,7 @@ const { exec } = require('node:child_process')
 const { once } = require('node:events')
 
 const {
+  assertObjectContains,
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
@@ -34,6 +35,9 @@ const BEFORE_EACH_LINE = 6
 const AFTER_EACH_LINE = 10
 const AFTER_ALL_LINE = 14
 const IN_TEST_LINE = 18
+
+// The parsers a line coverage record can name: none when its process ran only cached code.
+const PARSERS = ['oxc-binding', 'oxc-parser', 'meriyah', 'none']
 
 /**
  * @param {{ filename: string, bitmap?: Uint8Array }[]} files
@@ -193,6 +197,11 @@ for (const version of getVitestVersions()) {
         const skippedBeforeStart = tests.find(test => test.meta[TEST_NAME].endsWith('is skipped before it starts'))
         assert.ok(skippedBeforeStart, testOutput)
         assert.ok(!coverages.some(coverage => coverage.span_id === Number(skippedBeforeStart.span_id)), testOutput)
+
+        // Each record names the parser of the worker that sent it.
+        const lineRecords = coverages.filter(coverage => coverage.span_id !== undefined || coverage.shared)
+        assert.ok(lineRecords.length > 0, testOutput)
+        for (const coverage of lineRecords) assertObjectContains(PARSERS, [coverage.parser])
       })
 
       it(`reports the lines of hooks declared at a file's top level (${pool})`, async () => {

@@ -588,6 +588,7 @@ class VitestPlugin extends CiPlugin {
         suiteId: coverage.suiteId && id(coverage.suiteId),
         testId: coverage.testId && id(coverage.testId),
         shared: coverage.shared,
+        parser: coverage.parser,
         files: coverage.files,
       }))
       for (const formattedCoverage of formattedCoverages) {
@@ -744,6 +745,7 @@ class VitestPlugin extends CiPlugin {
       sessionId: context._traceId,
       suiteId: context._parentId,
       testId: context._spanId,
+      parser: this.#lineCoverage.getParserInUse(),
       files,
     })
   }
@@ -755,8 +757,9 @@ class VitestPlugin extends CiPlugin {
    */
   #exportSharedLineCoverage (testSuiteSpan) {
     const sessionId = testSuiteSpan.context()._traceId
+    const parser = this.#lineCoverage.getParserInUse()
     for (const { shared, files } of this.#lineCoverage.takeShared()) {
-      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, parser, files })
     }
   }
 

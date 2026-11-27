@@ -84,6 +84,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     if (coverage.suiteId) keysLength++
     if (coverage.testId) keysLength++
     if (coverage.shared) keysLength++
+    if (coverage.parser) keysLength++
 
     bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'test_session_id')
@@ -100,6 +101,12 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     if (coverage.shared) {
       this._encodeString(bytes, 'shared')
       this._encodeString(bytes, coverage.shared)
+    }
+    // The parser the producing process instruments with: 'oxc-binding', 'oxc-parser', 'meriyah', or
+    // 'none' while it has parsed nothing.
+    if (coverage.parser) {
+      this._encodeString(bytes, 'parser')
+      this._encodeString(bytes, coverage.parser)
     }
     this._encodeString(bytes, 'files')
     bytes.writeArrayPrefix(coverage.files)
