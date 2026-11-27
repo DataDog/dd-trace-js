@@ -679,20 +679,88 @@ function getRepositoryFile (filename) {
   return shouldInstrument(real) ? real : undefined
 }
 
-/** @type {typeof import('oxc-parser') | null | undefined} */
-let oxc
+/**
+ * @typedef {(code: string, options: { sourceType: string, preserveParens: boolean }) => object} OxcParse
+ *   returns an ESTree Program, and throws on a syntax error
+ */
 
-function getOxc () {
-  if (oxc === undefined) {
-    try {
-      oxc = require('oxc-parser')
-    } catch {
-      oxc = null
-      // What meriyah parses instead is not cached under a salt that names oxc.
-      if (isOxcInCacheSalt) cacheSalt = null
-    }
+/** @type {OxcParse | null | undefined} */
+let oxcParse
+
+/** @returns {OxcParse | null} null when oxc-parser cannot be loaded */
+function getOxcParse () {
+  if (oxcParse === undefined) {
+    oxcParse = loadOxcBinding() ?? loadOxcPackage() ?? null
+    // What meriyah parses instead is not cached under a salt that names oxc.
+    if (oxcParse === null && isOxcInCacheSalt) cacheSalt = null
   }
-  return oxc
+  return oxcParse
+}
+
+/**
+ * oxc-parser's own entry is an ES module that also loads its visitor and raw transfer support. In a
+ * process that instruments a few files, loading it costs more than the parsing, and twice what
+ * loading the native binding it picks costs. The binding parses on its own.
+ *
+ * @returns {OxcParse | undefined} undefined where the binding cannot be picked as oxc-parser picks it
+ */
+function loadOxcBinding () {
+  const target = getOxcBindingTarget()
+  if (target === undefined) return
+  let binding
+  try {
+    const oxcDirectory = dirname(require.resolve('oxc-parser/package.json'))
+    binding = require(require.resolve(`@oxc-parser/binding-${target}`, { paths: [oxcDirectory] }))
+  } catch {
+    return
+  }
+  const parseWithBinding = (code, options) => {
+    const { program, errors } = binding.parseSync('index.js', code, options)
+    if (errors.length > 0) throw new Error(errors[0].message)
+    // The JSON leaves out the values of BigInt and RegExp literals, which instrumenting does not read.
+    return JSON.parse(program).node
+  }
+  // The binding is not oxc-parser's API: a release that changes what it returns gets the package.
+  try {
+    if (parseWithBinding('0', { sourceType: 'commonjs', preserveParens: false }).type === 'Program') {
+      return parseWithBinding
+    }
+  } catch {}
+}
+
+/**
+ * @returns {string | undefined} the platform part of the name of oxc-parser's binding package, where
+ *   oxc-parser picks it from the platform alone
+ */
+function getOxcBindingTarget () {
+  const { platform, arch } = process
+  if (arch !== 'x64' && arch !== 'arm64') return
+  if (getEnvironmentVariable('NAPI_RS_NATIVE_LIBRARY_PATH')) return
+  if (platform === 'darwin') return `darwin-${arch}`
+  if (platform !== 'linux') return
+  // How oxc-parser tells musl from glibc first.
+  let ldd
+  try {
+    ldd = readFileSync('/usr/bin/ldd', 'utf8')
+  } catch {
+    return
+  }
+  return `linux-${arch}-${ldd.includes('musl') ? 'musl' : 'gnu'}`
+}
+
+/** @returns {OxcParse | undefined} */
+function loadOxcPackage () {
+  let oxc
+  try {
+    oxc = require('oxc-parser')
+  } catch {
+    return
+  }
+  return (code, options) => {
+    const { program, errors } = oxc.parseSync('index.js', code, options)
+    if (errors.length > 0) throw new Error(errors[0].message)
+    return program
+  }
 }
 
 /**
@@ -701,14 +769,10 @@ function getOxc () {
  * @returns {object} an ESTree Program
  */
 function parse (code, isModule) {
-  if (getOxc()) {
-    const { program, errors } = oxc.parseSync('index.js', code, {
-      // CommonJS allows a top-level `return`.
-      sourceType: isModule ? 'module' : 'commonjs',
-      preserveParens: false,
-    })
-    if (errors.length > 0) throw new Error(errors[0].message)
-    return program
+  const parseWithOxc = getOxcParse()
+  if (parseWithOxc !== null) {
+    // CommonJS allows a top-level `return`.
+    return parseWithOxc(code, { sourceType: isModule ? 'module' : 'commonjs', preserveParens: false })
   }
   return require('../../../../../vendor/dist/meriyah').parse(code, {
     module: isModule,
@@ -748,7 +812,7 @@ function getCacheSalt () {
     // The parser is named from its package rather than loaded: when every module comes from the
     // cache, nothing is parsed.
     let parser = 'meriyah'
-    if (oxc !== null) {
+    if (oxcParse !== null) {
       try {
         parser = `oxc-parser ${require('oxc-parser/package.json').version}`
         isOxcInCacheSalt = true

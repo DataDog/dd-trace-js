@@ -102,6 +102,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'TINYPOOL_WORKER_ID',
   'npm_config_user_agent',
   'npm_lifecycle_script',
+  // CI-visibility line coverage: which oxc-parser binding to load
+  'NAPI_RS_NATIVE_LIBRARY_PATH',
   // GitHub Actions CI plugin metadata
   'GITHUB_EVENT_PATH',
   'RUNNER_TEMP',
