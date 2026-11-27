@@ -358,8 +358,6 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
-    // Remove calculated fallbacks before applying and resolving the replacement settings.
-    undo(this, 'calculated')
     // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
@@ -382,52 +380,38 @@ class Config extends ConfigBase {
     return trackedConfigOrigins.get(name) ?? 'default'
   }
 
-  #applyPropagationStyles () {
-    let sharedStyles = trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE')
-      ? this.DD_TRACE_PROPAGATION_STYLE
-      : undefined
-    // A startup DD_TRACE_PROPAGATION_STYLE takes precedence even if its value was invalid.
-    if (sharedStyles === undefined &&
-        !this.#hasConfiguredDatadogPropagationStyle &&
-        trackedConfigOrigins.has('OTEL_PROPAGATORS')) {
-      const otelStyles = this.OTEL_PROPAGATORS
-      sharedStyles = DD_MAJOR < 6
-        ? otelStyles.map(style => style === OTEL_B3_LABEL ? OTEL_B3_STYLE : style)
-        : otelStyles
-      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', sharedStyles, otelStyles)
+  /**
+   * @param {'tracePropagationStyle.inject' | 'tracePropagationStyle.extract'} path
+   * @param {string[]} styles
+   */
+  #applyExperimentalB3 (path, styles) {
+    const otelB3 = styles.includes(OTEL_B3_STYLE)
+    // Shared styles take precedence. The legacy flag can add multi-header B3 to OTel B3.
+    if (!otelB3 && trackedConfigOrigins.get(path) === 'calculated') {
+      return
     }
 
-    const experimentalB3 = this.experimental?.b3
-    if (sharedStyles === undefined && !experimentalB3) return
-
-    const sharedOtelB3 = sharedStyles?.includes(OTEL_B3_STYLE)
-    for (const direction of /** @type {const} */ (['inject', 'extract'])) {
-      const path = `tracePropagationStyle.${direction}`
-      const configured = this.tracePropagationStyle[direction]
-      const inherited = trackedConfigOrigins.has(path) ? undefined : sharedStyles
-      let styles = inherited ?? configured
-      const otelB3 = inherited !== undefined && sharedOtelB3
-
-      // Shared styles take precedence over the legacy flag. The flag can add multi-header B3 to OTel B3.
-      if (experimentalB3 && (inherited === undefined || otelB3)) {
-        const hasMulti = styles.includes('b3') || styles.includes('b3multi')
-        const hasSingle = otelB3 || styles.includes('b3 single header')
-        if (!hasMulti || !hasSingle) {
-          styles = [...styles]
-          if (!hasMulti) styles.push(otelB3 ? 'b3multi' : 'b3')
-          if (!hasSingle) styles.push('b3 single header')
-        }
-      }
-
-      if (inherited !== undefined || styles !== configured) {
-        const reported = otelB3 ? formatPropagationStyles(styles, ',') : styles
-        setAndTrack(this, path, styles, reported)
-      }
+    const hasMulti = styles.includes('b3') || styles.includes('b3multi')
+    const hasSingle = otelB3 || styles.includes('b3 single header')
+    if (hasMulti && hasSingle) {
+      return
     }
+
+    const expanded = [...styles]
+    if (!hasMulti) {
+      expanded.push(otelB3 ? 'b3multi' : 'b3')
+    }
+    if (!hasSingle) {
+      expanded.push('b3 single header')
+    }
+    const reported = otelB3 ? formatPropagationStyles(expanded, ',') : expanded
+    setAndTrack(this, path, expanded, reported)
   }
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
+    undo(this, 'calculated')
+
     if (this.isCiVisibility) {
       setAndTrack(this, 'appsec.DD_APPSEC_ENABLED', false)
       setAndTrack(this, 'iast.DD_IAST_ENABLED', false)
@@ -759,14 +743,32 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
+    /** @type {Partial<Record<ConfigPath, string[]>> | undefined} */
+    let fallbackTelemetry
+    // A startup DD_TRACE_PROPAGATION_STYLE takes precedence even if its value was invalid.
+    if (trackedConfigOrigins.has('OTEL_PROPAGATORS') &&
+        !this.#hasConfiguredDatadogPropagationStyle &&
+        !trackedConfigOrigins.has('DD_TRACE_PROPAGATION_STYLE')) {
+      const otelStyles = this.OTEL_PROPAGATORS
+      let styles = otelStyles
+      if (DD_MAJOR < 6 && otelStyles.includes(OTEL_B3_LABEL)) {
+        styles = otelStyles.map(style => style === OTEL_B3_LABEL ? OTEL_B3_STYLE : style)
+        fallbackTelemetry = { DD_TRACE_PROPAGATION_STYLE: otelStyles }
+      }
+      setAndTrack(this, 'DD_TRACE_PROPAGATION_STYLE', styles, otelStyles)
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
-        setAndTrack(this, configName, this[alias])
+        setAndTrack(this, configName, this[alias], fallbackTelemetry?.[alias])
       }
     }
 
-    this.#applyPropagationStyles()
+    if (this.experimental?.b3) {
+      this.#applyExperimentalB3('tracePropagationStyle.inject', this.tracePropagationStyle.inject)
+      this.#applyExperimentalB3('tracePropagationStyle.extract', this.tracePropagationStyle.extract)
+    }
 
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       let warning
