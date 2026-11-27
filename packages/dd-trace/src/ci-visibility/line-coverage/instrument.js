@@ -12,6 +12,10 @@
 // the modules that ran since the previous one. Async functions and generators check it on every
 // probe, because they can resume after a boundary.
 //
+// Initialiser code (the module's top level, and the static blocks and static field initialisers of
+// classes defined there) stores into a separate set of variables, which the reader reports as
+// negative line numbers.
+//
 // Inserted text never contains a newline, so line numbers stay intact. A probe goes right after
 // the previous statement when only whitespace separates the two, so most statements keep their
 // columns too.
@@ -84,7 +88,8 @@ const SKIPPED_KEYS = new Set(['type', 'start', 'end', 'range', 'loc'])
 /**
  * @param {string} code
  * @param {InstrumentOptions} options
- * @returns {{ code: string, lines: number[] } | undefined} undefined when there is nothing to probe
+ * @returns {{ code: string, lines: number[], initLines: number[] } | undefined} undefined when there is
+ *   nothing to probe
  */
 function instrument (code, { parse, isModule = false, fileIndex, originalLine }) {
   const program = parse(code, isModule)
@@ -95,11 +100,12 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
   /** @type {Array<[number, number, number, string]>} offset, order, sequence, text */
   const inserts = []
   const lineSet = new Set()
+  const initLineSet = new Set()
   let sequence = 0
   let syntheticNames = 0
 
   // State of the function whose own body is being visited.
-  let fn = { touchEveryProbe: false, touched: false }
+  let fn = { init: false, touchEveryProbe: false, touched: false }
 
   function lineAt (offset) {
     let lo = 0
@@ -119,12 +125,19 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
   }
 
   function probeText (line) {
-    lineSet.add(line)
+    let store
+    if (fn.init) {
+      initLineSet.add(line)
+      store = `${prefix}i${line}=1`
+    } else {
+      lineSet.add(line)
+      store = `${prefix}${line}=1`
+    }
     if (fn.touchEveryProbe || !fn.touched) {
       fn.touched = true
-      return `${touch},${prefix}${line}=1`
+      return `${touch},${store}`
     }
-    return `${prefix}${line}=1`
+    return store
   }
 
   function insert (offset, order, text) {
@@ -319,8 +332,6 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
           visitStatementList(stmt.handler.body.body, stmt.handler.body.start + 1, -1)
         }
         if (stmt.finalizer) visitStatementList(stmt.finalizer.body, stmt.finalizer.start + 1, -1)
-        return
-      default:
     }
   }
 
@@ -344,10 +355,20 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
   function visitFunction (node) {
     for (const param of node.params) visitNode(param)
     const outer = fn
-    fn = { touchEveryProbe: (node.async || node.generator) && containsSuspension(node.body), touched: false }
+    fn = {
+      init: false,
+      touchEveryProbe: (node.async || node.generator) && containsSuspension(node.body),
+      touched: false,
+    }
     const body = node.body
     if (body.type === 'BlockStatement') {
-      visitStatementList(body.body, body.start + 1, -1)
+      // A probe before 'use strict' would turn the directive into a plain expression.
+      const directives = countDirectives(body.body, code)
+      if (directives === 0) {
+        visitStatementList(body.body, body.start + 1, -1)
+      } else {
+        visitStatementList(body.body.slice(directives), body.body[directives - 1].end, -1)
+      }
     } else {
       // Arrow function with an expression body.
       const line = recordedLine(body.start)
@@ -360,21 +381,24 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
     fn = outer
   }
 
-  // Class field initializers and static blocks run as functions of their own.
+  // Class field initializers and static blocks run as functions of their own. Static ones run when
+  // the class is defined, so they are initialiser code when the class is.
   function visitClassMember (node) {
     if (node.type === 'StaticBlock') {
       const outer = fn
-      fn = { touchEveryProbe: false, touched: false }
+      fn = { init: outer.init, touchEveryProbe: false, touched: false }
       visitStatementList(node.body, skipTrivia(node.start + 6) + 1, -1)
       fn = outer
       return
     }
-    for (const decorator of node.decorators || []) visitNode(decorator)
+    if (node.decorators) {
+      for (const decorator of node.decorators) visitNode(decorator)
+    }
     if (node.computed) visitNode(node.key)
     const value = node.value
     if (!value) return
     const outer = fn
-    fn = { touchEveryProbe: false, touched: false }
+    fn = { init: node.static && outer.init, touchEveryProbe: false, touched: false }
     const line = recordedLine(value.start)
     if (line !== 0) {
       if (NAMED_BY_BINDING.has(value.type)) {
@@ -420,19 +444,17 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
 
   // The header goes after the hashbang line and the directive prologue.
   const body = program.body
+  const index = countDirectives(body, code)
   let headerOffset = code.startsWith('#!') ? (lineStarts[1] ?? code.length) : 0
-  let index = 0
-  while (index < body.length && body[index].type === 'ExpressionStatement' && body[index].directive) {
-    headerOffset = body[index].end
-    index++
-  }
-  fn = { touchEveryProbe: isModule && containsSuspension(body), touched: false }
+  if (index > 0) headerOffset = body[index - 1].end
+  fn = { init: true, touchEveryProbe: isModule && containsSuspension(body), touched: false }
   visitStatementList(index === 0 ? body : body.slice(index), headerOffset, -1)
 
-  if (lineSet.size === 0) return
+  if (lineSet.size === 0 && initLineSet.size === 0) return
 
   const lines = [...lineSet].sort((a, b) => a - b)
-  inserts.push([headerOffset, -1, -1, header(prefix, lines, fileIndex)])
+  const initLines = [...initLineSet].sort((a, b) => a - b)
+  inserts.push([headerOffset, -1, -1, header(prefix, lines, initLines, fileIndex)])
   inserts.sort(compareInserts)
 
   let out = ''
@@ -442,7 +464,24 @@ function instrument (code, { parse, isModule = false, fileIndex, originalLine })
     last = offset
   }
   out += code.slice(last)
-  return { code: out, lines }
+  return { code: out, lines, initLines }
+}
+
+// Number of leading statements that form a directive prologue, like 'use strict'.
+function countDirectives (statements, code) {
+  let count = 0
+  while (count < statements.length) {
+    const statement = statements[count]
+    if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'Literal' ||
+      typeof statement.expression.value !== 'string') {
+      break
+    }
+    // A parenthesized string is an expression, not a directive.
+    const quote = code.charCodeAt(statement.start)
+    if (quote !== 39 && quote !== 34) break
+    count++
+  }
+  return count
 }
 
 function isDeclaration (node) {
@@ -459,18 +498,24 @@ function compareInserts (a, b) {
 
 // Declares the line variables, the touch function and the reader. Both functions are hoisted, so
 // code that runs before the header (hoisted functions called through a circular import) still works.
-// The reader writes the file index and then the executed lines into `o`, clears them, and returns the
-// number of entries it wrote.
-function header (prefix, lines, fileIndex) {
-  let reader = `function ${prefix}x(o){o[0]=${fileIndex};var n=1;`
+// The reader writes the file index and then the executed lines into `o`, initialiser lines negated,
+// clears them, and returns the number of entries it wrote. It returns 0 when it already ran for
+// boundary `g`.
+function header (prefix, lines, initLines, fileIndex) {
+  let reader = `function ${prefix}x(o,g){if(${prefix}g===g)return 0;${prefix}g=g;o[0]=${fileIndex};var n=1;`
   for (const line of lines) {
     reader += `if(${prefix}${line}){o[n++]=${line};${prefix}${line}=0}`
+  }
+  for (const line of initLines) {
+    reader += `if(${prefix}i${line}){o[n++]=${-line};${prefix}i${line}=0}`
   }
   reader += `${prefix}t=0;return n}`
   const touch = `function ${prefix}r(){${prefix}t=1;var c=${prefix}c||(${prefix}c=` +
     `globalThis[Symbol.for('dd-trace.line-coverage')]);if(c)c.q.push(${prefix}x)}`
-  const names = lines.map(line => prefix + line).join(',')
-  return `;var ${prefix}t=0,${prefix}c,${names};${touch}${reader}`
+  let names = `${prefix}t=0,${prefix}g=0,${prefix}c`
+  for (const line of lines) names += `,${prefix}${line}`
+  for (const line of initLines) names += `,${prefix}i${line}`
+  return `;var ${names};${touch}${reader}`
 }
 
 function choosePrefix (code) {
