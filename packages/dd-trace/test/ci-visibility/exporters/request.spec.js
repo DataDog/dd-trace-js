@@ -775,6 +775,100 @@ describe('Test Optimization exporter request', () => {
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
     assert.strictEqual(pendingRequests.length, 0)
   })
+
+  describe('agent socket pool', () => {
+    /**
+     * @returns {unknown[]}
+     */
+    function sentBodies () {
+      return pendingRequests.map(({ data }) => data)
+    }
+
+    it('sends one attempt per agent socket and starts a waiting one when an attempt ends', () => {
+      const agent = new http.Agent({ maxSockets: 2 })
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent }, sinon.spy())
+      request('third', { agent }, done)
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'second'])
+      pendingRequests[1].callback(Object.assign(new Error('bad request'), { status: 400 }), null, 400, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'second', 'third'])
+
+      pendingRequests[2].callback(null, 'ok', 200, {})
+      sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+    })
+
+    it('starts the attempt timeout when the attempt gets an agent socket', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      request('first', { agent, timeout: 1000 }, sinon.spy())
+      request('second', { agent, timeout: 1000 }, sinon.spy())
+
+      clock.tick(900)
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      const secondRequest = pendingRequests[1]
+
+      clock.tick(999)
+      assert.strictEqual(secondRequest.options.signal.aborted, false)
+      clock.tick(1)
+      clock.next()
+      assert.strictEqual(secondRequest.options.signal.aborted, true)
+      assert.strictEqual(secondRequest.options.signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT')
+    })
+
+    it('reports backpressure when finalization aborts a request waiting for an agent socket', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const controller = new AbortController()
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent, deadline: Date.now() + 10_000, signal: controller.signal }, done)
+      request('third', { agent }, sinon.spy())
+
+      controller.abort(Object.assign(new Error('finalization expired'), {
+        code: 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+      }))
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT')
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'third'])
+    })
+
+    it('passes a free agent socket on when the woken request has reached its deadline', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent, deadline: Date.now() + 1000 }, done)
+      request('third', { agent }, sinon.spy())
+
+      clock.tick(1000)
+      pendingRequests[0].callback(null, 'ok', 200, {})
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT')
+      assert.deepStrictEqual(sentBodies(), ['first', 'third'])
+    })
+
+    it('frees the agent socket when the body factory throws', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const error = new Error('body unavailable')
+      const done = sinon.spy()
+      request(() => { throw error }, { agent }, done)
+      request('next', { agent }, sinon.spy())
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0], error)
+      assert.deepStrictEqual(sentBodies(), ['next'])
+    })
+
+    it('does not hold attempts for an agent without a socket limit', () => {
+      const agent = new http.Agent()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent }, sinon.spy())
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'second'])
+    })
+  })
 })
 
 /**
