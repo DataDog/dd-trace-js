@@ -50,8 +50,8 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
-const lineCoverage = require('../../dd-trace/src/ci-visibility/line-coverage')
 const { getInlineSourceMap } = require('../../dd-trace/src/ci-visibility/line-coverage/inline-source-map')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
@@ -64,6 +64,8 @@ const {
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
+
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
 
 // Milliseconds that we subtract from the error test duration
 // so that they do not overlap with the following test
@@ -104,6 +106,13 @@ function setBrowserTags (tags, browserEnvironment, includeParameters) {
 class VitestPlugin extends CiPlugin {
   static id = 'vitest'
 
+  /**
+   * The line-coverage module, loaded when the first module is instrumented for per-test line coverage.
+   *
+   * @type {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined}
+   */
+  #lineCoverage
+
   /** @type {WeakMap<object, object>} line coverage of running tests, by span */
   #lineCoverageTests = new WeakMap()
 
@@ -112,7 +121,7 @@ class VitestPlugin extends CiPlugin {
 
     this.filterDiBreakpointHitByStack = true
 
-    if (lineCoverage.isEnabled()) this.#subscribeToLineCoverage()
+    if (isLineCoverageRequested) this.#subscribeToLineCoverage()
 
     this.taskToFinishTime = new WeakMap()
 
@@ -222,7 +231,7 @@ class VitestPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
 
-      if (lineCoverage.isActive()) this.#lineCoverageTests.set(span, lineCoverage.startTest(span))
+      if (this.#lineCoverage?.isActive()) this.#lineCoverageTests.set(span, this.#lineCoverage.startTest(span))
 
       if (mightHitProbe) {
         this.queueDiBreakpointHitSpan(span)
@@ -554,7 +563,7 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
-        if (lineCoverage.isActive()) this.#exportSharedLineCoverage(testSuiteSpan)
+        if (this.#lineCoverage?.isActive()) this.#exportSharedLineCoverage(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -680,6 +689,8 @@ class VitestPlugin extends CiPlugin {
 
   #subscribeToLineCoverage () {
     this.addSub('ci:vitest:line-coverage:instrument', (ctx) => {
+      this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+      const lineCoverage = this.#lineCoverage
       if (!lineCoverage.isActive()) lineCoverage.enable({ root: ctx.repositoryRoot })
       if (ctx.realm) lineCoverage.installGlobal(ctx.realm)
       if (!lineCoverage.shouldInstrument(ctx.filename)) return
@@ -691,13 +702,13 @@ class VitestPlugin extends CiPlugin {
 
     this.addBind('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
       const store = storage('legacy').getStore()
-      if (!lineCoverage.isActive()) return store
-      lineCoverage.startSuiteSetup(suite)
-      return lineCoverage.suiteSetupStore(store)
+      if (!this.#lineCoverage?.isActive()) return store
+      this.#lineCoverage.startSuiteSetup(suite)
+      return this.#lineCoverage.suiteSetupStore(store)
     })
 
     this.addSub('ci:vitest:line-coverage:suite-setup:finish', () => {
-      if (lineCoverage.isActive()) lineCoverage.finishSuiteSetup()
+      if (this.#lineCoverage?.isActive()) this.#lineCoverage.finishSuiteSetup()
     })
 
     // Fires after the afterEach hooks, once per attempt.
@@ -705,7 +716,7 @@ class VitestPlugin extends CiPlugin {
       const test = this.#lineCoverageTests.get(span)
       if (test === undefined) return
       this.#lineCoverageTests.delete(span)
-      const files = lineCoverage.finishTest(test, enclosingSuites(task))
+      const files = this.#lineCoverage.finishTest(test, enclosingSuites(task))
       if (files.length === 0) return
       const context = span.context()
       this.tracer._exporter.exportCoverage({
@@ -724,7 +735,7 @@ class VitestPlugin extends CiPlugin {
    */
   #exportSharedLineCoverage (testSuiteSpan) {
     const sessionId = testSuiteSpan.context()._traceId
-    for (const { shared, files } of lineCoverage.takeShared()) {
+    for (const { shared, files } of this.#lineCoverage.takeShared()) {
       if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
     }
   }

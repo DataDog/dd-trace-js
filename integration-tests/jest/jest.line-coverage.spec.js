@@ -107,6 +107,8 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
 
       const sharedRecords = coverageRecords.filter(({ shared }) => shared !== undefined)
       assert.ok(sharedRecords.length > 0)
+      // Line coverage takes the place of the per-suite coverage.
+      assert.strictEqual(coverageRecords.length, testRecords.length + sharedRecords.length)
       for (const record of sharedRecords) {
         assertObjectContains(['init', 'suiteSetup', 'unowned'], [record.shared])
         assert.strictEqual(record.span_id, undefined)
@@ -138,5 +140,32 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
 
     assert.ok(coverageRecords.length > 0, 'the per-suite coverage is still reported')
     assert.ok(coverageRecords.every(({ span_id: spanId, shared }) => spanId === undefined && shared === undefined))
+  })
+
+  it('reports no coverage when the settings do not ask for coverage', async () => {
+    receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: false })
+    const coverageRecords = []
+    receiver.on('message', ({ url, payload }) => {
+      if (url !== '/api/v2/citestcov') return
+      coverageRecords.push(...payload.flatMap(({ content: { coverages } }) => coverages))
+    })
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        assert.ok(payloads.length > 0)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    childProcess = exec('node ./ci-visibility/run-jest.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_TEST_LINE_COVERAGE_ENABLED: '1',
+      },
+    })
+    await Promise.all([eventsPromise, once(childProcess, 'exit')])
+
+    assert.deepStrictEqual(coverageRecords, [])
   })
 })
