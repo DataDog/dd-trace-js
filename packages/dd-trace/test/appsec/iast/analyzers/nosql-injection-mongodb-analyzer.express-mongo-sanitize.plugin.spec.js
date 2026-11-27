@@ -69,8 +69,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -96,8 +96,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -123,8 +123,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
           })
 
@@ -142,8 +142,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
           })
 
@@ -168,8 +168,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
           })
 
@@ -177,8 +177,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with path params',
             fn: function noop () {},
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/path/parameterValue`)
             },
           })
 
@@ -194,8 +194,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
             occurrences: {
               occurrences: 1,
@@ -225,8 +225,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -263,8 +263,8 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
-            makeRequest: (done, config) => {
-              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            makeRequest: config => {
+              return httpRequest.get(`http://localhost:${config.port}/?key=value`)
             },
           })
         })

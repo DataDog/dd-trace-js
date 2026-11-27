@@ -127,8 +127,8 @@ describe('ssrf analyzer', () => {
                   const https = require(pluginName)
                   requestMethodData.methodToExecute(https, url)
                   res.end()
-                }, 'SSRF', (done, config) => {
-                  httpRequest.get(`http://localhost:${config.port}`, {
+                }, 'SSRF', config => {
+                  return httpRequest.get(`http://localhost:${config.port}`, {
                     headers: {
                       hash: 'taintedHash',
                     },

@@ -16,21 +16,14 @@ describe('hsts header missing analyzer', () => {
 
   prepareTestServerForIast('hsts header missing analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config) => {
-      /**
-       * @param {(error?: Error) => void} done
-       */
-      async function makeRequestWithXFordwardedProtoHeader (done) {
-        try {
-          const response = await fetch(`http://localhost:${config.port}/`, {
-            headers: {
-              'X-Forwarded-Proto': 'https',
-            },
-          })
-          await response.arrayBuffer()
-          assert.strictEqual(response.ok, true)
-        } catch (error) {
-          done(error)
-        }
+      async function makeRequestWithXFordwardedProtoHeader () {
+        const response = await fetch(`http://localhost:${config.port}/`, {
+          headers: {
+            'X-Forwarded-Proto': 'https',
+          },
+        })
+        await response.arrayBuffer()
+        assert.strictEqual(response.ok, true)
       }
 
       testThatRequestHasVulnerability((req, res) => {

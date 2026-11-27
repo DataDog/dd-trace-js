@@ -173,21 +173,25 @@ function endResponse (res, appResult) {
   }
 }
 
-function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
-  agent
-    .assertSomeTraces(traces => {
+/**
+ * @param {{ port: number }} config
+ * @param {((config: { port: number }) => ReturnType<typeof httpRequest.get> | Promise<void>) | undefined} makeRequest
+ * @param {import('../../plugins/agent').TracesCallback} callback
+ */
+function assertRequestTraces (config, makeRequest, callback) {
+  return agent.assertSomeTraces(callback, {
+    operation: () => makeRequest ? makeRequest(config) : httpRequest.get(`http://localhost:${config.port}/`),
+  })
+}
+
+function checkNoVulnerabilityInRequest (vulnerability, config, makeRequest) {
+  return assertRequestTraces(config, makeRequest,
+    traces => {
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
       assert.ok(!(iastJson).includes(`"${vulnerability}"`), `Got: ${inspect(iastJson)}`)
     })
-    .then(done)
-    .catch(done)
-  if (makeRequest) {
-    makeRequest(done, config)
-  } else {
-    httpRequest.get(`http://localhost:${config.port}/`).catch(done)
-  }
 }
 
 function checkVulnerabilityInRequest (
@@ -196,7 +200,6 @@ function checkVulnerabilityInRequest (
   cb,
   makeRequest,
   config,
-  done,
   matchLocation
 ) {
   let location
@@ -205,8 +208,8 @@ function checkVulnerabilityInRequest (
     location = occurrencesAndLocation.location
     occurrences = occurrencesAndLocation.occurrences
   }
-  agent
-    .assertSomeTraces(traces => {
+  return assertRequestTraces(config, makeRequest,
+    traces => {
       const span = getWebSpan(traces)
       assert.strictEqual(span.metrics['_dd.iast.enabled'], 1)
       assert.ok('_dd.iast.json' in span.meta)
@@ -258,13 +261,6 @@ function checkVulnerabilityInRequest (
         cb(vulnerabilitiesTrace.vulnerabilities.filter(v => v.type === vulnerability))
       }
     })
-    .then(done)
-    .catch(done)
-  if (makeRequest) {
-    makeRequest(done, config)
-  } else {
-    httpRequest.get(`http://localhost:${config.port}/`).catch(done)
-  }
 }
 
 function prepareTestServerForIast (description, tests, iastConfig, pluginsToConfigure = []) {
@@ -319,17 +315,17 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
       description,
       matchLocation = true
     ) {
-      it(description || `should have ${vulnerability} vulnerability`, function (done) {
+      it(description || `should have ${vulnerability} vulnerability`, function () {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done, matchLocation)
+        return checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, matchLocation)
       })
     }
 
     function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest, description) {
-      it(description || `should not have ${vulnerability} vulnerability`, function (done) {
+      it(description || `should not have ${vulnerability} vulnerability`, () => {
         app = fn
-        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
+        return checkNoVulnerabilityInRequest(vulnerability, config, makeRequest)
       })
     }
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
@@ -351,11 +347,11 @@ function createIastVulnerabilityHelpers (config, setApp) {
 
     testDescription = testDescription || `should have ${vulnerability} vulnerability`
 
-    it(testDescription, function (done) {
+    it(testDescription, function () {
       this.timeout(5000)
       setApp(fn)
 
-      checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
+      return checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config)
     })
   }
 
@@ -371,9 +367,9 @@ function createIastVulnerabilityHelpers (config, setApp) {
 
     testDescription = testDescription || `should not have ${vulnerability} vulnerability`
 
-    it(testDescription, function (done) {
+    it(testDescription, () => {
       setApp(fn)
-      checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
+      return checkNoVulnerabilityInRequest(vulnerability, config, makeRequest)
     })
   }
 

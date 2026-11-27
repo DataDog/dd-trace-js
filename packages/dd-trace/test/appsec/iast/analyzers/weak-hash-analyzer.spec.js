@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { before, describe, it } = require('mocha')
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -151,11 +151,34 @@ describe('weak-hash-analyzer', () => {
   })
 
   describe('full feature', () => {
-    prepareTestServerForIast('inside request', (testThatRequestHasVulnerability) => {
+    prepareTestServerForIast('inside request', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability(() => {
         const crypto = require('crypto')
         crypto.createHash(VULNERABLE_ALGORITHM)
       }, 'WEAK_HASH')
+
+      describe('when the request takes the full trace timeout', () => {
+        let clock
+
+        beforeEach(() => {
+          clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+        })
+
+        afterEach(() => clock.restore())
+
+        async function elapseTraceTimeout () {
+          const requestClock = clock
+          await requestClock.tickAsync(1000)
+          requestClock.restore()
+        }
+
+        testThatRequestHasVulnerability(async () => {
+          await elapseTraceTimeout()
+          require('node:crypto').createHash(VULNERABLE_ALGORITHM)
+        }, 'WEAK_HASH')
+
+        testThatRequestHasNoVulnerability(elapseTraceTimeout, 'WEAK_HASH')
+      })
     })
 
     describe('outside request', () => {
