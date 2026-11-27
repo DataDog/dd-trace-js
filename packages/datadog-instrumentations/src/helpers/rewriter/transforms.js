@@ -27,8 +27,87 @@ module.exports = {
   configureGraphqlFastPath,
   configureMercuriusRequest,
   publishDurableOrchestrationFailure,
+  publishRoutingStart,
+  scopeRoutingSelection,
   publishTrpcRequestInfo,
   waitForAsyncEnd,
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').Statement} node
+ * @param {import('estree').BlockStatement} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishRoutingStart (state, node, parent, ancestry) {
+  state.transforms.tracingChannelDeclaration(state, ancestry.at(-1))
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const dispatch = state.channelName.split(':').at(-1) === 'dispatch'
+  const guard = dispatch ? ' && this.lookup === Router.prototype._lookupCompiled' : ''
+  const message = dispatch ? '{ req, router: this }' : 'req'
+  parent.body.splice(parent.body.indexOf(node), 0, ...parse(`
+    if (${channel}.start.hasSubscribers${guard}) {
+      ${channel}.start.publish(${message})
+    }
+  `).body)
+}
+
+/**
+ * @param {{ channelName: string, transforms: { tracingChannelDeclaration: Function } }} state
+ * @param {import('estree').CallExpression} node
+ * @param {import('estree').Node} parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function scopeRoutingSelection (state, node, parent, ancestry) {
+  const program = /** @type {import('estree').Program} */ (ancestry.at(-1))
+  state.transforms.tracingChannelDeclaration(state, program)
+  const channel = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const callee = /** @type {import('estree').MemberExpression | import('estree').Identifier} */ (node.callee)
+  const method = callee.type === 'Identifier' ? callee : /** @type {import('estree').Identifier} */ (callee.property)
+  const defaultRoute = method.name === '_defaultRoute'
+  const terminal = defaultRoute || method.name === 'frameworkErrors'
+  const lookup = method.name === 'lookup'
+  const versioning = query(node, 'CallExpression[callee.property.name="deriveVersion"]').length !== 0
+  let gate = versioning
+    ? 'this.versioning !== acceptVersionStrategy && this.versioning.disabled !== true'
+    : 'this.constrainer?.strategiesInUse.size || this.constrainer?.asyncStrategiesInUse?.size'
+  if (lookup || method.name === 'find') {
+    const [parser] = query(program, 'Program > FunctionDeclaration[id.name="Router"] > BlockStatement > ' +
+      'IfStatement[test.object.name="opts"][test.property.name="querystringParser"]')
+    if (parser) {
+      const parsers = '__apm$routersWithQuerystringParser'
+      if (query(program, `Program > VariableDeclaration > VariableDeclarator[id.name="${parsers}"]`).length === 0) {
+        const [constructor] = query(program, 'Program > FunctionDeclaration[id.name="Router"]')
+        program.body.splice(program.body.indexOf(constructor), 0, ...parse(`let ${parsers}`).body)
+        parser.consequent.body.push(...parse(`(${parsers} ??= new WeakSet()).add(this)`).body)
+      }
+      gate += ` || ${parsers}?.has(this)`
+    }
+  }
+  const callback = method.name === 'deriveConstraints' && node.arguments.length === 3
+  const context = lookup || defaultRoute ? '{ req, router: this }' : '{ req }'
+  const traced = callback
+    ? `${channel}.traceCallback(DD_DERIVE, 2, { req }, DD_RECEIVER)`
+    : `${channel}.traceSync(() => DD_CALL, ${context})`
+  const [statement] = parse(`
+    ${channel}.start.hasSubscribers${terminal ? '' : ` && (${gate})`} ? ${traced} : DD_CALL
+  `).body
+  const expression = statement.expression
+  if (callback) {
+    expression.consequent.arguments.push(...node.arguments)
+    replaceIdentifier(expression, 'DD_DERIVE', callee)
+    replaceIdentifier(expression, 'DD_RECEIVER', callee.object)
+  }
+  replaceIdentifier(expression, 'DD_CALL', node)
+
+  if (parent.type === 'VariableDeclarator') {
+    parent.init = expression
+  } else if (parent.type === 'ExpressionStatement') {
+    parent.expression = expression
+  } else {
+    const returned = /** @type {import('estree').ReturnStatement} */ (parent)
+    returned.argument = expression
+  }
 }
 
 /**

@@ -231,7 +231,7 @@ module.exports = {
   fastify: [
     {
       name: 'express',
-      versions: ['5'],
+      versions: ['4.0.0', '4', '5'],
     },
     {
       name: 'fastify',
