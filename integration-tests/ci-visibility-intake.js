@@ -1,6 +1,7 @@
 'use strict'
 
 const http = require('http')
+const { PassThrough } = require('stream')
 const zlib = require('zlib')
 const express = require('express')
 const bodyParser = require('body-parser')
@@ -184,6 +185,23 @@ class FakeCiVisIntake extends FakeAgent {
 
   async start () {
     const app = express()
+    // Coverage forms can arrive gzipped: multer reads the request stream, so hand it the inflated body.
+    app.use((req, res, next) => {
+      if (req.headers['content-encoding'] !== 'gzip' || !req.is('multipart/form-data')) return next()
+      const chunks = []
+      req.pipe(zlib.createGunzip())
+        .on('data', chunk => { chunks.push(chunk) })
+        .on('error', next)
+        .on('end', () => {
+          const body = new PassThrough()
+          body.end(Buffer.concat(chunks))
+          req.on = body.on.bind(body)
+          req.pipe = body.pipe.bind(body)
+          req.read = body.read.bind(body)
+          delete req.headers['content-encoding']
+          next()
+        })
+    })
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
 
     const handleV04Traces = (req, res) => {
