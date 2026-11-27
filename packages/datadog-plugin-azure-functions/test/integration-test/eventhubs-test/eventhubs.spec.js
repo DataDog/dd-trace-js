@@ -12,6 +12,7 @@ const {
   useSandbox,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
+const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 const azureInvokeGroup = (resource) => (group) =>
@@ -21,10 +22,11 @@ const azureCreateGroup = (group) =>
   group.some(s => s.name === 'azure.eventhubs.create')
 
 describe('esm', () => {
+  const func = useAzureFunctionsCoreTools()
+
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
-      'azure-functions-core-tools@4',
       '@azure/event-hubs@6.0.0',
     ],
     false,
@@ -38,9 +40,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        })
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port)
       })
 
       after(async () => {
@@ -330,8 +330,7 @@ describe('esm', () => {
       before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port, undefined, {
           DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: 'false',
         })
       })
@@ -381,6 +380,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   const env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
+    PATH: process.env.PATH,
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
     ...additionalEnvArgs,
   }

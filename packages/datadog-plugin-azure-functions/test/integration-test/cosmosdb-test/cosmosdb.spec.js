@@ -14,13 +14,15 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
+const { useAzureFunctionsCoreTools } = require('../../../../../integration-tests/helpers/azure-functions-core-tools')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
+  const func = useAzureFunctionsCoreTools()
+
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
-      'azure-functions-core-tools@4',
       '@azure/cosmos@4.9.2',
     ],
     false,
@@ -43,10 +45,7 @@ describe('esm', () => {
         agent = await new FakeAgent().start()
         cosmosClient = await setup()
 
-        const envArgs = {
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        }
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port)
       })
 
       after(async () => {
@@ -109,10 +108,9 @@ describe('esm', () => {
         cosmosClient = await setup()
 
         const envArgs = {
-          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
           CONTAINER_APP_NAME: 'my-container-app',
         }
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), func, ['start'], agent.port, undefined, envArgs)
       })
 
       after(async () => {
@@ -158,6 +156,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   let env = {
     NODE_OPTIONS: `--loader=${hookFile} --experimental-global-webcrypto`,
     DD_TRACE_AGENT_PORT: agentPort,
+    PATH: process.env.PATH,
     DD_TRACE_DISABLED_PLUGINS: 'http,dns,net',
   }
   env = { ...env, ...additionalEnvArgs }
