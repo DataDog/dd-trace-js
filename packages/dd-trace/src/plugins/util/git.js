@@ -10,6 +10,7 @@ const { getEnvironmentVariables } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_GIT_COMMAND,
   TELEMETRY_GIT_COMMAND_MS,
   TELEMETRY_GIT_COMMAND_ERRORS,
@@ -75,7 +76,7 @@ function sanitizedExec (
       incrementCountMetric(operationMetric.name, operationMetric.tags)
     }
     if (durationMetric) {
-      startTime = Date.now()
+      startTime = monotonicNow()
     }
     try {
       const exec = executionOptions?.uncached ? execFileSync : cachedExec
@@ -94,7 +95,7 @@ function sanitizedExec (
       }
 
       if (durationMetric) {
-        distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
+        distributionMetric(durationMetric.name, durationMetric.tags, monotonicNow() - startTime)
       }
       return result
     } catch (err) {
@@ -191,7 +192,8 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
   ]
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
-  const start = Date.now()
+  const start = monotonicNow()
+  const deadlineStart = Date.now()
   let flags = [
     ...baseGitOptions,
     revParseHead,
@@ -207,7 +209,7 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
     if (targetedRecovery) {
-      const timeout = 5000 - (Date.now() - start)
+      const timeout = 5000 - (Date.now() - deadlineStart)
       if (timeout > 0 && !hasLocalGitObject(revParseHead, cwd)) {
         sanitizedExec(
           ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
@@ -248,7 +250,7 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
       )
     }
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, monotonicNow() - start)
 }
 
 function getRepositoryUrl (cwd) {
@@ -269,7 +271,7 @@ function getRepositoryUrl (cwd) {
 function getLatestCommits (commitSha, cwd) {
   if (commitSha && !validateGitCommitSha(commitSha)) return []
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
-  const startTime = Date.now()
+  const startTime = monotonicNow()
   try {
     const flags = ['log', '--format=%H', '-n 1000', '--since="1 month ago"']
     if (commitSha) flags.push(commitSha, '--')
@@ -288,7 +290,7 @@ function getLatestCommits (commitSha, cwd) {
       if (selectedCommit !== commitSha) return []
       result.unshift(commitSha)
     }
-    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, monotonicNow() - startTime)
     return result
   } catch (err) {
     log.error('Get latest commits failed', err)
@@ -487,7 +489,8 @@ function getCommitsRevList (commitsToExclude, commitsToInclude, allowLazyFetch =
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
-  const startTime = Date.now()
+  const startTime = monotonicNow()
+  const deadlineStart = Date.now()
   try {
     const env = allowLazyFetch
       ? getGitEnvironment()
@@ -518,7 +521,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude, allowLazyFetch =
     if (validateGitCommitSha(selectedCommit) && !objects.has(selectedCommit) &&
       !commitsToExclude.includes(selectedCommit)) {
       if (allowLazyFetch) {
-        options.timeout = 5000 - (Date.now() - startTime)
+        options.timeout = 5000 - (Date.now() - deadlineStart)
         if (options.timeout <= 0) throw new Error('Git object hydration timed out')
       }
       const selectedObjects = execFileSync('git', [
@@ -535,7 +538,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude, allowLazyFetch =
       { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
     )
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, Date.now() - startTime)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, monotonicNow() - startTime)
   return result
 }
 
@@ -554,7 +557,7 @@ function generatePackFilesForCommits (commitsToUpload, cwd) {
   const cwdPath = path.join(cwd || process.cwd(), randomPrefix)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'pack_objects' })
-  const startTime = Date.now()
+  const startTime = monotonicNow()
   // Generates pack files to upload and
   // returns the ordered list of packfiles' paths
   function execGitPackObjects (targetPath) {
@@ -603,7 +606,7 @@ function generatePackFilesForCommits (commitsToUpload, cwd) {
       )
     }
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, Date.now() - startTime)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, monotonicNow() - startTime)
 
   return result
 }

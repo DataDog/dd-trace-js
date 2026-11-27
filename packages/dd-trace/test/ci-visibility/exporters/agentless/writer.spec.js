@@ -18,6 +18,7 @@ let coverageEncoder
 let url
 let log
 let incrementCountMetric
+let distributionMetric
 let agent
 let getAgent
 let tags
@@ -43,6 +44,7 @@ describe('CI Visibility Writer', () => {
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
+    distributionMetric = sinon.stub()
     agent = {}
     getAgent = sinon.stub().returns(agent)
 
@@ -66,7 +68,7 @@ describe('CI Visibility Writer', () => {
       '../request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
-      '../../../ci-visibility/telemetry': { incrementCountMetric },
+      '../../../ci-visibility/telemetry': { incrementCountMetric, distributionMetric },
       '../../../log': log,
     })
     tags = { 'runtime-id': 'runtime-id' }
@@ -157,6 +159,35 @@ describe('CI Visibility Writer', () => {
         })
       })
     }
+
+    it('should not skew request duration telemetry when fake timers shift Date.now mid-request', () => {
+      const clock = sinon.useFakeTimers({
+        now: 0,
+        toFake: ['Date', 'performance', 'hrtime'],
+      })
+
+      try {
+        request.callsFake((_data, _options, callback) => {
+          clock.restore()
+          callback(null, 'OK', 200)
+        })
+        encoder.count.returns(1)
+
+        writer.flush()
+
+        const durationCall = distributionMetric.getCalls()
+          .find(call => call.args[0] === 'endpoint_payload.requests_ms')
+
+        assert.ok(durationCall)
+        assert.deepStrictEqual(durationCall.args[1], { endpoint: 'test_cycle' })
+        assert.ok(
+          durationCall.args[2] >= 0 && durationCall.args[2] < 10_000,
+          `Expected unskewed duration ms, got ${durationCall.args[2]}`
+        )
+      } finally {
+        clock.restore()
+      }
+    })
 
     describe('when request fails', function () {
       it('should log request errors', done => {

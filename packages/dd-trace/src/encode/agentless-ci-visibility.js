@@ -4,6 +4,7 @@ const { ITR_CORRELATION_ID, TEST_LEVELS_METADATA } = require('../../src/plugins/
 const id = require('../../src/id')
 const {
   distributionMetric,
+  monotonicNow,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
@@ -330,7 +331,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    const startTime = Date.now()
+    const startTime = monotonicNow()
 
     const events = trace.map(formatSpan)
 
@@ -346,7 +347,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
       { endpoint: 'test_cycle' },
-      Date.now() - startTime
+      monotonicNow() - startTime
     )
   }
 

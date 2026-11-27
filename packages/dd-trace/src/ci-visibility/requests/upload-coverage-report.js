@@ -12,6 +12,7 @@ const log = require('../../log')
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_COVERAGE_UPLOAD,
   TELEMETRY_COVERAGE_UPLOAD_MS,
   TELEMETRY_COVERAGE_UPLOAD_ERRORS,
@@ -112,10 +113,10 @@ function uploadCoverageReport (
   incrementCountMetric(TELEMETRY_COVERAGE_UPLOAD)
   distributionMetric(TELEMETRY_COVERAGE_UPLOAD_BYTES, {}, compressedCoverage.length)
 
-  const startTime = Date.now()
+  const startTime = monotonicNow()
 
   request(form, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_COVERAGE_UPLOAD_MS, {}, Date.now() - startTime)
+    distributionMetric(TELEMETRY_COVERAGE_UPLOAD_MS, {}, monotonicNow() - startTime)
     if (err) {
       incrementCountMetric(TELEMETRY_COVERAGE_UPLOAD_ERRORS, { statusCode })
       log.error('Error uploading coverage report: %s', err.message)

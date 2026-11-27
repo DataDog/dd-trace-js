@@ -399,9 +399,8 @@ describe('known-tests pagination telemetry', () => {
     distributionMetric = sinon.spy()
     writeToCache = sinon.spy()
     fetchKnownTests = proxyquire('../../../src/ci-visibility/early-flake-detection/get-known-tests', {
-      'node:perf_hooks': { performance: { now: () => clock.now } },
       '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
-      '../../ci-visibility/telemetry': { distributionMetric },
+      '../../ci-visibility/telemetry': { distributionMetric, monotonicNow: () => clock.now },
       '../../plugins/util/test': {
         getNumFromKnownTests: () => {
           clock.tick(11)

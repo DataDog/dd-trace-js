@@ -1,6 +1,12 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const telemetryMetrics = require('../telemetry/metrics')
+
+// Capture the native monotonic clock at module load so customer fake timers
+// (Jest, Vitest, Sinon patching Date.now or globalThis.performance) cannot skew telemetry durations.
+const monotonicNow = performance.now.bind(performance)
 
 const ciVisibilityMetrics = telemetryMetrics.manager.namespace('civisibility')
 
@@ -163,6 +169,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   recordDynamicAtrRetries,
   TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,

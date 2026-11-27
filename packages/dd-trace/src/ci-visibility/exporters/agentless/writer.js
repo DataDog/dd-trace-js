@@ -8,6 +8,7 @@ const log = require('../../../log')
 const {
   incrementCountMetric,
   distributionMetric,
+  monotonicNow,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS,
   TELEMETRY_ENDPOINT_PAYLOAD_BYTES,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
@@ -70,7 +71,7 @@ class Writer extends BaseWriter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the intake: ${safeJSONStringify({ ...options, agent: undefined })}`)
 
-    const startRequestTime = Date.now()
+    const startRequestTime = monotonicNow()
 
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
@@ -84,7 +85,7 @@ class Writer extends BaseWriter {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
-        Date.now() - startRequestTime
+        monotonicNow() - startRequestTime
       )
       if (err) {
         incrementCountMetric(
