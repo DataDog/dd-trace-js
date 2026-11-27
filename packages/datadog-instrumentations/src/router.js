@@ -1,10 +1,12 @@
 'use strict'
 
+const { join } = require('node:path')
+
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 const ROUTE_RESOLUTION_FAILED = Symbol('routeResolutionFailed')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
-const { getCompileToRegexp } = require('./path-to-regexp')
+const { getCompileToRegexp, getRouterRouteCompiler } = require('./path-to-regexp')
 
 const {
   getRouterMountPaths,
@@ -35,7 +37,7 @@ function isFastSlash (layer, matchers) {
  *
  * @param {{ handle: Function, name?: string, path?: string,
  *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
- * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
+ * @param {import('./helpers/router-helper').LayerMatchers} matchers
  */
 function annotateLayer (layer, matchers) {
   const handle = layer.handle
@@ -59,7 +61,7 @@ function annotateLayer (layer, matchers) {
  * host's request-local pattern when available, or match its legacy `layer.path`.
  *
  * @param {{ captureRoute?: string, needMultiMatch: boolean,
- *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
+ *   matchers: import('./helpers/router-helper').LayerMatchers }} meta
  * @param {{ path?: string }} layer
  * @param {import('node:http').IncomingMessage} [req]
  * @param {symbol} [matchedRoute]
@@ -72,7 +74,9 @@ function resolveLayerRoute (meta, layer, req, matchedRoute) {
   if (typeof pattern === 'string') return pattern
 
   for (const matcher of meta.matchers) {
-    if (matchedRoute ? matcher.regex === pattern : matcher.regex?.test(layer.path)) return matcher.path
+    if (matchedRoute ? matcher.regex === pattern : (matcher.rematch ?? matcher.regex)?.test(layer.path)) {
+      return matcher.path
+    }
   }
 }
 
@@ -81,7 +85,7 @@ function resolveLayerRoute (meta, layer, req, matchedRoute) {
  * dispatch method. This path runs only for multi-pattern layers.
  *
  * @param {{ captureRoute?: string, needMultiMatch: boolean,
- *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
+ *   matchers: import('./helpers/router-helper').LayerMatchers }} meta
  * @param {{ path?: string }} layer
  * @param {Function} next
  * @param {import('node:http').IncomingMessage} req
@@ -426,7 +430,7 @@ function hasLayerDispatch (layer) {
 // TODO: Move this function to a shared file between Express and Router
 /**
  * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
- * @param {((pattern: string | RegExp) => RegExp | undefined) | undefined} compile
+ * @param {import('./path-to-regexp').RouteCompiler | undefined} compile
  *   Host-resolved path-to-regexp compile adapter, or undefined when the host
  *   instance ships no path-to-regexp. Captured here so each express/router
  *   instance keeps the dialect it actually loaded.
@@ -463,7 +467,12 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
     }
   }
 
-  function extractMatchers (fn) {
+  /**
+   * @param {string | RegExp | Function | Array<string | RegExp>} fn
+   * @param {{ caseSensitive?: boolean, strict?: boolean }} router
+   * @param {{ route?: object, matchers?: Function[] }} layer
+   */
+  function extractMatchers (fn, router, layer) {
     const arg = Array.isArray(fn) ? fn.flat(Infinity) : [fn]
 
     if (typeof arg[0] === 'function') {
@@ -483,6 +492,10 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
     // would otherwise re-run on every request.
     let hasStarPath = false
     let hasSlashPath = false
+    const end = layer.route !== undefined
+    const options = layer.matchers === undefined
+      ? undefined
+      : { sensitive: router.caseSensitive, end, trailing: !end || !router.strict }
     const matchers = arg.map(pattern => {
       const isRegExp = pattern instanceof RegExp
       const path = isRegExp ? `(${pattern})` : pattern
@@ -491,10 +504,30 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
       } else if (path === '/') {
         hasSlashPath = true
       }
-      return {
-        path,
-        regex: isRegExp ? pattern : compile?.(pattern),
+      if (isRegExp && (pattern.global || pattern.sticky)) {
+        // Keep the original RegExp for native match identity and leave its lastIndex with the router.
+        const copy = new RegExp(pattern.source, pattern.flags)
+        return {
+          path,
+          regex: pattern,
+          rematch: {
+            /** @param {string} value */
+            test (value) {
+              copy.lastIndex = 0
+              return copy.test(value)
+            },
+          },
+        }
       }
+      let candidate = pattern
+      if (options?.trailing && typeof pattern === 'string' && pattern !== '/') {
+        let length = pattern.length
+        while (pattern[length - 1] === '/') {
+          length--
+        }
+        candidate = pattern.slice(0, length)
+      }
+      return { path, regex: isRegExp ? pattern : compile?.(candidate, options) }
     })
     matchers.hasStarPath = hasStarPath
     matchers.hasSlashPath = hasSlashPath
@@ -564,7 +597,7 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
       }
 
       if (this.stack?.length > offset) {
-        wrapStack(this.stack.slice(offset), extractMatchers(fn))
+        wrapStack(this.stack.slice(offset), extractMatchers(fn, this, this.stack[offset]))
       }
 
       return router
@@ -595,8 +628,11 @@ addHook({ name: 'router', file: 'lib/layer.js', versions: ['>=1 <2'] }, Layer =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 const routeCreateCh = channel('datadog:router:route:create')
 
-addHook({ name: 'router', versions: ['>=2'] }, Router => {
-  const wrapRouterMethod = createWrapRouterMethod('router', getCompileToRegexp())
+addHook({ name: 'router', versions: ['>=2'] }, (Router, version, isIitm, { moduleBaseDir } = {}) => {
+  const compile = moduleBaseDir === undefined
+    ? getCompileToRegexp()
+    : getRouterRouteCompiler(join(moduleBaseDir, 'lib/layer.js'))
+  const wrapRouterMethod = createWrapRouterMethod('router', compile)
 
   const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
     return function wrappedMethod (...args) {

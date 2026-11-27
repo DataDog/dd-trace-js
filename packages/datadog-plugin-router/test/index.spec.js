@@ -51,6 +51,68 @@ describe('Plugin', () => {
           Router = require(`../../../versions/router@${version}`).get()
         })
 
+        for (const { title, method, options, paths, url } of [
+          {
+            title: 'caseSensitive',
+            method: 'get',
+            options: { caseSensitive: true },
+            paths: ['/Items/:alternate', '/items/:id//'],
+            url: '/items/42',
+          },
+          {
+            title: 'strict',
+            method: 'get',
+            options: { strict: true },
+            paths: ['/items/:alternate', '/items/:id/'],
+            url: '/items/42/',
+          },
+          {
+            title: 'prefix matching on a strict router',
+            method: 'use',
+            options: { strict: true, caseSensitive: true },
+            paths: ['/Items/:alternate', '/items/:id//'],
+            url: '/items/42/tail',
+          },
+        ]) {
+          it('uses ' + title + ' for a grouped path', async function () {
+            if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+            const router = Router(options)
+            router[method]([paths, '/health'], (req, res) => res.end(req.params.id))
+            appListener = server(router).listen(0, '127.0.0.1')
+            await once(appListener, 'listening')
+            let resource
+            const [response] = await Promise.all([
+              httpRequest.get('http://127.0.0.1:' + appListener.address().port + url),
+              agent.assertFirstTraceSpan(span => { resource = span.resource }),
+            ])
+            assert.strictEqual(response.status, 200)
+            assert.strictEqual(String(response.data), '42')
+            assert.strictEqual(resource, 'GET ' + paths[1])
+          })
+        }
+
+        for (const flag of ['g', 'y']) {
+          it('preserves a grouped RegExp with the ' + flag + ' flag', async function () {
+            if (semver.lt(resolvedVersion, '2.0.0')) this.skip()
+
+            const pattern = new RegExp('^/items/([^/]+)$', flag)
+            const router = Router({ caseSensitive: true })
+            router.get(['/Items/:id', pattern], (_req, res) => res.end(String(pattern.lastIndex)))
+            appListener = server(router).listen(0, '127.0.0.1')
+            await once(appListener, 'listening')
+            const url = 'http://127.0.0.1:' + appListener.address().port + '/items/42'
+            const [first] = await Promise.all([
+              httpRequest.get(url),
+              agent.assertFirstTraceSpan({ resource: 'GET (' + pattern + ')' }),
+            ])
+            assert.strictEqual(String(first.data), '9')
+
+            const second = await httpRequest.get(url, { validateStatus: () => true })
+            assert.strictEqual(second.status, 404)
+          })
+        }
+
         it('should still set the route on the request span with nested routers', done => {
           const router = Router()
           const childRouter = Router()

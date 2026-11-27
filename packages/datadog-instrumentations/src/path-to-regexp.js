@@ -1,9 +1,15 @@
 'use strict'
 
+const { createRequire } = require('node:module')
+
 const { addHook } = require('./helpers/instrument')
 
 /** @type {((pattern: string | RegExp) => RegExp | undefined) | undefined} */
 let compileToRegexp
+
+/** @typedef {{ sensitive?: boolean, end: boolean, trailing: boolean }} RouteOptions */
+/** @typedef {RegExp | { test: (path: string) => object | boolean }} CompiledRoute */
+/** @typedef {(pattern: string | RegExp, options?: RouteOptions) => CompiledRoute | undefined} RouteCompiler */
 
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
@@ -107,4 +113,19 @@ function getMatch () {
   return makeMatcher
 }
 
-module.exports = { getCompileToRegexp, getParse, getMatch }
+/**
+ * Router 2 uses match(), including with path-to-regexp 8.0.0.
+ * @param {string} hostFile
+ * @returns {RouteCompiler}
+ */
+function getRouterRouteCompiler (hostFile) {
+  const requireFromRouter = createRequire(hostFile)
+  const { pathToRegexp, match } = requireFromRouter('path-to-regexp')
+  // The native layer has already compiled these patterns with the same options.
+  if (typeof pathToRegexp === 'function') {
+    return (pattern, options) => pathToRegexp(pattern, options).regexp
+  }
+  return (pattern, options) => ({ test: match(pattern, { ...options, decode: false }) })
+}
+
+module.exports = { getCompileToRegexp, getRouterRouteCompiler, getParse, getMatch }
