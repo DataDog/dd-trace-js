@@ -118,7 +118,7 @@ describe('Koa resource selection', () => {
             /** @param {import('koa').Middleware[]} stack */
             compose (stack) {
               assert.strictEqual(this, app)
-              return nativeCompose(stack.toReversed())
+              return nativeCompose(stack.slice().reverse())
             },
           }
         }
