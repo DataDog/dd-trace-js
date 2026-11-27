@@ -8,11 +8,16 @@ const {
 } = require('./plugins/util/http-otel-semantics')
 
 /** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
-/** @typedef {{ readSamplingRoute: (displayedRoute: string | undefined) => string | false | undefined }} RouteReader */
+/**
+ * @typedef {(displayedRoute: string | undefined, source: HttpResourceSource) => string | false | undefined}
+ *   ReadSamplingRoute
+ * @typedef {{ readSamplingRoute: ReadSamplingRoute }} RouteReader
+ */
 /**
  * @typedef {{
  *   req: { method: string },
  *   config: { DD_TRACE_OTEL_SEMANTICS_ENABLED?: boolean },
+ *   span: import('./opentracing/span'),
  *   paths: string[],
  *   generatedRoute?: string,
  *   samplingRouteReader?: RouteReader,
@@ -64,7 +69,7 @@ function getSamplingResource (context) {
   const taggedRoute = context.getTag(HTTP_ROUTE)
   const route = typeof taggedRoute === 'string' && taggedRoute !== generatedRoute
     ? taggedRoute
-    : samplingRouteReader.readSamplingRoute(joinRoute(paths))
+    : samplingRouteReader.readSamplingRoute(joinRoute(paths), source)
 
   if (route === false) return
   if (route === undefined) return resource

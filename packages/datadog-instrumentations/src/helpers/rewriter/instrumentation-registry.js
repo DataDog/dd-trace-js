@@ -42,6 +42,7 @@ const registry = [
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { instrumentations: require('./instrumentations/jest') },
+  { instrumentations: require('./instrumentations/restify') },
   { esmHooks: ['@koa/router'], instrumentations: require('./instrumentations/koa') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
   { activate: true, instrumentations: require('./instrumentations/langgraph') },

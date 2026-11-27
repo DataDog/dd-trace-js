@@ -128,6 +128,7 @@
   "react-router/dist/production/index.js": "react-router",
   "react-router/dist/production/lib/server-runtime/routeMatching.js": "react-router",
   "react-router/dist/production/lib/server-runtime/server.js": "react-router",
+  "restify/lib/server.js": "restify",
   "webdriver/build/index.js": "webdriver",
   "webdriver/build/node.js": "webdriver",
   "webdriverio/build/index.js": "webdriverio",
