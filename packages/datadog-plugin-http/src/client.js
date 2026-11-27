@@ -55,20 +55,21 @@ class HttpClientPlugin extends ClientPlugin {
       const otelBase = `${protocol}//${auth}${otelHost}`
       otelUrl = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
     }
+    const resource = otelSemantics
+      ? otelHttpResourceName(method)
+      : clientResourceName(method, path, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const meta = {
       [COMPONENT]: this.component,
       'span.kind': 'client',
-      'resource.name': clientResourceName(method, path, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE),
+      'resource.name': resource,
       'span.type': 'http',
       'http.method': method,
       'http.url': otelUrl,
       'out.host': hostname,
     }
     if (otelSemantics) {
-      const resource = otelHttpResourceName(method)
-      meta['resource.name'] = resource
       meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
     }
 

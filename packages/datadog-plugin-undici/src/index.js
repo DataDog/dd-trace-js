@@ -79,7 +79,9 @@ class UndiciPlugin extends HttpClientPlugin {
 
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    let resource = clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
+    const resource = otelSemantics
+      ? otelHttpResourceName(method)
+      : clientResourceName(method, pathname, this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
     const childOf = store && allowed ? store.span : null
 
     const meta = {
@@ -89,7 +91,6 @@ class UndiciPlugin extends HttpClientPlugin {
       'out.host': hostname,
     }
     if (otelSemantics) {
-      resource = otelHttpResourceName(method)
       meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
     }
 
