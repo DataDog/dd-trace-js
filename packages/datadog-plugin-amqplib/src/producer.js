@@ -4,6 +4,7 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
+const { normalizeRabbitMQName } = require('../../dd-trace/src/datastreams/rabbitmq')
 const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
@@ -22,8 +23,8 @@ class AmqplibProducerPlugin extends ProducerPlugin {
     // 1. using an exchange and a routing key in which DSM connects via the exchange
     // 2. using an unnamed exchange and a routing key in which DSM connects via the topic
     const exchangeOrTopicTag = hasRoutingKey && !fields.exchange
-      ? `topic:${fields.routingKey}`
-      : `exchange:${fields.exchange}`
+      ? `topic:${normalizeRabbitMQName(fields.routingKey)}`
+      : `exchange:${normalizeRabbitMQName(fields.exchange)}`
 
     const dataStreamsContext = this.tracer.setCheckpoint(
       ['direction:out', exchangeOrTopicTag, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq'],

@@ -1,5 +1,7 @@
 'use strict'
 
+const { toUSVString } = require('node:util')
+
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 const propagationHash = require('../propagation-hash')
@@ -36,10 +38,8 @@ class DatabasePlugin extends StoragePlugin {
    */
   configure (config) {
     super.configure(config)
-    // Match the previous shape exactly: `dde` is `encode`d; `ddps` / `ddpv` are template-literal
-    // coerced so `undefined` renders as the literal `'undefined'` the way the original did.
     this.#dbmEnvFragment = `,dde='${encode(this.tracer._env)}',`
-    this.#dbmEndFragment = `,ddps='${this.tracer._service ?? ''}',ddpv='${this.tracer._version}'`
+    this.#dbmEndFragment = `,ddps='${encode(this.tracer._service)}',ddpv='${encode(String(this.tracer._version))}'`
     this.#dbmPrefixCache.clear()
   }
 
@@ -147,7 +147,7 @@ class DatabasePlugin extends StoragePlugin {
  */
 function encode (value) {
   if (!value) return ''
-  return SAFE_ENCODE_RE.test(value) ? value : encodeURIComponent(value)
+  return SAFE_ENCODE_RE.test(value) ? value : encodeURIComponent(toUSVString(String(value)))
 }
 
 module.exports = DatabasePlugin

@@ -121,10 +121,42 @@ describe('CI Visibility Writer', () => {
             'Content-Type': 'application/msgpack',
           },
           agent,
+          gzip: true,
         })
         done()
       })
     })
+
+    for (const [label, options, expectedGzip] of [
+      ['EVP proxy without gzip support', { evpProxyPrefix: '/evp_proxy/v2' }, false],
+      ['EVP proxy with gzip support', { evpProxyPrefix: '/evp_proxy/v4', isGzipCompatible: true }, true],
+    ]) {
+      it(`passes gzip=${expectedGzip} for ${label}`, done => {
+        const evpWriter = new Writer({ url, tags, ...options })
+        encoder.count.returns(1)
+
+        evpWriter.flush(() => {
+          sinon.assert.calledWithMatch(request, sinon.match.any, { gzip: expectedGzip })
+          done()
+        })
+      })
+    }
+
+    for (const compressed of [false, true]) {
+      it(`counts ${compressed ? 'a compressed' : 'an uncompressed'} request with its compression tag`, done => {
+        request.returns(compressed)
+        encoder.count.returns(1)
+
+        writer.flush(() => {
+          sinon.assert.calledOnceWithExactly(
+            incrementCountMetric.withArgs('endpoint_payload.requests'),
+            'endpoint_payload.requests',
+            compressed ? { endpoint: 'test_cycle', rq_compressed: 'true' } : { endpoint: 'test_cycle' }
+          )
+          done()
+        })
+      })
+    }
 
     describe('when request fails', function () {
       it('should log request errors', done => {

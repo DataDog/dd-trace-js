@@ -15,7 +15,8 @@ async function main () {
           '../../packages/datadog-instrumentations/test/fixtures/ai-activation.js'
         const check = checkActivation('dd-trace:bundler:load')
         const ai = await import('ai')
-        check(1)
+        // The entry point and the chunk that defines resolveLanguageModel are both rewritten.
+        check(2)
         await checkStream(ai)
       `,
       resolveDir: __dirname,

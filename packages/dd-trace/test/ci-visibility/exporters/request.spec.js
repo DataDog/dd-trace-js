@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const http = require('node:http')
 const { Readable } = require('node:stream')
+const { gunzipSync } = require('node:zlib')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -39,6 +40,14 @@ describe('Test Optimization exporter request', () => {
   afterEach(() => {
     clock.restore()
   })
+
+  /**
+   * Counts fake timers after draining microtasks, which the queue uses to mark the end of a synchronous run.
+   */
+  function countPendingTimers () {
+    clock.runMicrotasks()
+    return clock.countTimers()
+  }
 
   it('lets the transport process a ready response before aborting on timeout', () => {
     const done = sinon.spy()
@@ -625,7 +634,7 @@ describe('Test Optimization exporter request', () => {
       request('third', {}, done[2])
 
       sinon.assert.calledOnce(setTimeoutSpy)
-      assert.strictEqual(clock.countTimers(), 1)
+      assert.strictEqual(countPendingTimers(), 1)
 
       commonRequest.writable = true
       clock.tick(50)
@@ -676,12 +685,12 @@ describe('Test Optimization exporter request', () => {
     const done = sinon.spy()
 
     request('payload', { signal: controller.signal }, done)
-    assert.strictEqual(clock.countTimers(), 1)
+    assert.strictEqual(countPendingTimers(), 1)
 
     const abortError = Object.assign(new Error('request cancelled'), { code: 'ABORT_ERR' })
     controller.abort(abortError)
 
-    assert.strictEqual(clock.countTimers(), 0)
+    assert.strictEqual(countPendingTimers(), 0)
     sinon.assert.calledOnceWithExactly(done, abortError, null, undefined, undefined)
   })
 
@@ -694,7 +703,7 @@ describe('Test Optimization exporter request', () => {
     clock.tick(40)
     request('deadline', { deadline: Date.now() + 5 }, deadlineDone)
 
-    assert.strictEqual(clock.countTimers(), 1)
+    assert.strictEqual(countPendingTimers(), 1)
     clock.tick(5)
 
     sinon.assert.calledOnce(deadlineDone)
@@ -735,6 +744,107 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnceWithExactly(firstDone, null, 'ok', 200, {})
   })
 
+  it('compacts a gzip view and reuses the compressed body on retry', () => {
+    const done = sinon.spy()
+    const payload = Buffer.alloc(2 * 1024 * 1024, 'test event metadata')
+    const headers = { 'Content-Type': 'application/msgpack' }
+
+    assert.strictEqual(request(payload, { gzip: true, headers }, done), true)
+
+    assert.strictEqual(pendingRequests.length, 1)
+    const first = pendingRequests[0]
+    assert.strictEqual(first.options.headers['Content-Encoding'], 'gzip')
+    // zlib returns this body as a view over a 16 KiB chunk; the queued body must own only its bytes.
+    assert.strictEqual(first.data.buffer.byteLength, first.data.length)
+    assert.deepStrictEqual(gunzipSync(first.data), payload)
+    assert.strictEqual(headers['Content-Encoding'], undefined)
+
+    const unavailable = Object.assign(new Error('unavailable'), { status: 503 })
+    first.callback(unavailable, null, 503, {})
+    clock.tick(6000)
+    const retry = pendingRequests[1]
+    assert.strictEqual(retry.data, first.data)
+    assert.strictEqual(retry.options.headers['Content-Encoding'], 'gzip')
+    retry.callback(null, 'ok', 202, {})
+    sinon.assert.calledOnceWithExactly(done, null, 'ok', 202, {})
+
+    // Completion must release the compressed bytes so the full 64 MiB queue is available again.
+    const fullDone = sinon.spy()
+    request(Buffer.alloc(64 * 1024 * 1024), {}, fullDone)
+    assert.strictEqual(pendingRequests.length, 3)
+    pendingRequests[2].callback(null, 'ok', 202, {})
+    sinon.assert.calledOnceWithExactly(fullDone, null, 'ok', 202, {})
+  })
+
+  it('charges the queue only for the compressed bytes of a pending gzipped payload', () => {
+    const payload = Buffer.alloc(2 * 1024 * 1024, 'test event metadata')
+    const filledDone = sinon.spy()
+    const rejectedDone = sinon.spy()
+
+    assert.strictEqual(request(payload, { gzip: true, headers: {} }, sinon.spy()), true)
+    const compressedLength = pendingRequests[0].data.length
+    request(Buffer.alloc(64 * 1024 * 1024 - compressedLength), {}, filledDone)
+    request(Buffer.alloc(1), {}, rejectedDone)
+
+    sinon.assert.notCalled(filledDone)
+    assert.strictEqual(pendingRequests.length, 2)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE')
+    pendingRequests[1].callback(null, 'ok', 202, {})
+    pendingRequests[0].callback(null, 'ok', 202, {})
+    sinon.assert.calledOnceWithExactly(filledDone, null, 'ok', 202, {})
+  })
+
+  it('keeps an opted-in payload uncompressed below 1024 bytes and compresses at 1024 bytes', () => {
+    const belowThreshold = Buffer.alloc(1023, 'a')
+    const atThreshold = Buffer.alloc(1024, 'a')
+
+    assert.strictEqual(request(belowThreshold, { gzip: true, headers: {} }, sinon.spy()), false)
+    assert.strictEqual(pendingRequests[0].options.headers['Content-Encoding'], undefined)
+    assert.strictEqual(pendingRequests[0].data, belowThreshold)
+
+    assert.strictEqual(request(atThreshold, { gzip: true, headers: {} }, sinon.spy()), true)
+    assert.strictEqual(pendingRequests[1].options.headers['Content-Encoding'], 'gzip')
+    assert.deepStrictEqual(gunzipSync(pendingRequests[1].data), atThreshold)
+
+    pendingRequests[1].callback(null, 'ok', 202, {})
+    pendingRequests[0].callback(null, 'ok', 202, {})
+  })
+
+  function createIncompressibleBuffer (size) {
+    const data = Buffer.allocUnsafe(size)
+    let state = 0x12345678
+    for (let i = 0; i < data.length; i++) {
+      state ^= state << 13
+      state ^= state >>> 17
+      state ^= state << 5
+      data[i] = state & 0xff
+    }
+    return data
+  }
+
+  it('keeps the original body if gzip would increase its size and the original fits', () => {
+    const data = createIncompressibleBuffer(1024)
+
+    assert.strictEqual(request(data, { gzip: true, headers: {} }, sinon.spy()), false)
+
+    assert.strictEqual(pendingRequests[0].options.headers['Content-Encoding'], undefined)
+    assert.strictEqual(pendingRequests[0].data, data)
+    pendingRequests[0].callback(null, 'ok', 202, {})
+  })
+
+  it('reports a burst when an opted-in payload cannot fit in the queue after compression', () => {
+    const data = createIncompressibleBuffer(1024)
+    const rejectedDone = sinon.spy()
+    request(Buffer.alloc(64 * 1024 * 1024 - data.length + 1), {}, sinon.spy())
+    assert.strictEqual(request(data, { gzip: true, headers: {} }, rejectedDone), false)
+
+    assert.strictEqual(pendingRequests.length, 1)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE')
+    pendingRequests[0].callback(null, 'ok', 202, {})
+  })
+
   it('accepts exactly 64 MiB of payloads and rejects the first byte over the cap', () => {
     const firstDone = sinon.spy()
     const secondDone = sinon.spy()
@@ -746,12 +856,44 @@ describe('Test Optimization exporter request', () => {
 
     assert.strictEqual(pendingRequests.length, 2)
     sinon.assert.calledOnce(rejectedDone)
-    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL')
+    // The run started with an empty queue, so the run's own payloads filled it.
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE')
 
     pendingRequests[0].callback(null, 'ok', 200, {})
     pendingRequests[1].callback(null, 'ok', 200, {})
     sinon.assert.calledOnceWithExactly(firstDone, null, 'ok', 200, {})
     sinon.assert.calledOnceWithExactly(secondDone, null, 'ok', 200, {})
+  })
+
+  it('reports a full queue when earlier requests hold the space a smaller run needs', () => {
+    request(Buffer.alloc(48 * 1024 * 1024), {}, sinon.spy())
+    // Draining microtasks ends the run, so the next request starts a new one with the earlier request queued.
+    clock.runMicrotasks()
+    const rejectedDone = sinon.spy()
+    request(Buffer.alloc(17 * 1024 * 1024), {}, rejectedDone)
+
+    assert.strictEqual(pendingRequests.length, 1)
+    sinon.assert.calledOnce(rejectedDone)
+    assert.strictEqual(rejectedDone.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL')
+    pendingRequests[0].callback(null, 'ok', 202, {})
+  })
+
+  it('reports a burst once one run would hold more of the queue than earlier requests', () => {
+    request(Buffer.alloc(40 * 1024 * 1024), {}, sinon.spy())
+    clock.runMicrotasks()
+    const rejected = [sinon.spy(), sinon.spy()]
+    request(Buffer.alloc(8 * 1024 * 1024), {}, sinon.spy())
+    // With the admitted 8 MiB, this run would hold exactly the 40 MiB that earlier requests hold.
+    request(Buffer.alloc(32 * 1024 * 1024), {}, rejected[0])
+    request(Buffer.alloc(32 * 1024 * 1024 + 1), {}, rejected[1])
+
+    assert.strictEqual(pendingRequests.length, 2)
+    assert.deepStrictEqual(rejected.map(done => done.firstCall.args[0].code), [
+      'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
+      'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE',
+    ])
+    pendingRequests[1].callback(null, 'ok', 202, {})
+    pendingRequests[0].callback(null, 'ok', 202, {})
   })
 
   it('fails at the deadline while exporter backpressure remains active', () => {
@@ -774,6 +916,132 @@ describe('Test Optimization exporter request', () => {
     sinon.assert.calledOnce(done)
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
     assert.strictEqual(pendingRequests.length, 0)
+  })
+
+  describe('agent socket pool', () => {
+    /**
+     * @returns {unknown[]}
+     */
+    function sentBodies () {
+      return pendingRequests.map(({ data }) => data)
+    }
+
+    it('sends one attempt per agent socket and starts a waiting one when an attempt ends', () => {
+      const agent = new http.Agent({ maxSockets: 2 })
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent }, sinon.spy())
+      request('third', { agent }, done)
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'second'])
+      pendingRequests[1].callback(Object.assign(new Error('bad request'), { status: 400 }), null, 400, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'second', 'third'])
+
+      pendingRequests[2].callback(null, 'ok', 200, {})
+      sinon.assert.calledOnceWithExactly(done, null, 'ok', 200, {})
+    })
+
+    it('limits each origin to its own agent sockets', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const testCycleUrl = new URL('https://citestcycle-intake.datadoghq.com')
+      request('first', { agent, url: testCycleUrl }, sinon.spy())
+      request('second', { agent, url: testCycleUrl }, sinon.spy())
+      request('coverage', { agent, url: new URL('https://citestcov-intake.datadoghq.com') }, sinon.spy())
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'coverage'])
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'coverage', 'second'])
+    })
+
+    it('hands a free socket on without recursion when woken attempts fail synchronously', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      let firstCallback
+      let attempts = 0
+      const transport = (data, options, callback) => {
+        attempts++
+        if (attempts === 1) {
+          firstCallback = callback
+          return
+        }
+        callback(Object.assign(new Error('request buffer full'), { code: 'ERR_DD_REQUEST_BUFFER_FULL' }))
+      }
+      transport.writable = true
+      for (let index = 0; index <= 10_000; index++) request('payload', { agent, transport }, sinon.spy())
+
+      firstCallback(null, 'ok', 200, {})
+
+      assert.strictEqual(attempts, 10_001)
+    })
+
+    it('starts the attempt timeout when the attempt gets an agent socket', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      request('first', { agent, timeout: 1000 }, sinon.spy())
+      request('second', { agent, timeout: 1000 }, sinon.spy())
+
+      clock.tick(900)
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      const secondRequest = pendingRequests[1]
+
+      clock.tick(999)
+      assert.strictEqual(secondRequest.options.signal.aborted, false)
+      clock.tick(1)
+      clock.next()
+      assert.strictEqual(secondRequest.options.signal.aborted, true)
+      assert.strictEqual(secondRequest.options.signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT')
+    })
+
+    it('reports backpressure when finalization aborts a request waiting for an agent socket', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const controller = new AbortController()
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent, deadline: Date.now() + 10_000, signal: controller.signal }, done)
+      request('third', { agent }, sinon.spy())
+
+      controller.abort(Object.assign(new Error('finalization expired'), {
+        code: 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+      }))
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT')
+      pendingRequests[0].callback(null, 'ok', 200, {})
+      assert.deepStrictEqual(sentBodies(), ['first', 'third'])
+    })
+
+    it('passes a free agent socket on when the woken request has reached its deadline', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const done = sinon.spy()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent, deadline: Date.now() + 1000 }, done)
+      request('third', { agent }, sinon.spy())
+
+      clock.tick(1000)
+      pendingRequests[0].callback(null, 'ok', 200, {})
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT')
+      assert.deepStrictEqual(sentBodies(), ['first', 'third'])
+    })
+
+    it('frees the agent socket when the body factory throws', () => {
+      const agent = new http.Agent({ maxSockets: 1 })
+      const error = new Error('body unavailable')
+      const done = sinon.spy()
+      request(() => { throw error }, { agent }, done)
+      request('next', { agent }, sinon.spy())
+
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(done.firstCall.args[0], error)
+      assert.deepStrictEqual(sentBodies(), ['next'])
+    })
+
+    it('does not hold attempts for an agent without a socket limit', () => {
+      const agent = new http.Agent()
+      request('first', { agent }, sinon.spy())
+      request('second', { agent }, sinon.spy())
+
+      assert.deepStrictEqual(sentBodies(), ['first', 'second'])
+    })
   })
 })
 
@@ -855,4 +1123,13 @@ describe('Test Optimization request with the common transport', () => {
       assert.strictEqual(callback.firstCall.args[0].code, code)
     })
   }
+
+  it('settles an invalid target sent through a socket-limited agent', () => {
+    const callback = sinon.spy()
+    request('payload', { url: 'not a URL', method: 'POST', agent: new http.Agent({ maxSockets: 1 }) }, callback)
+
+    sinon.assert.notCalled(httpRequest)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_INVALID_URL')
+  })
 })

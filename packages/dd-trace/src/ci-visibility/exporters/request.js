@@ -1,11 +1,13 @@
 'use strict'
 
 const { Readable } = require('node:stream')
+const { constants: { Z_BEST_SPEED }, gzipSync } = require('node:zlib')
 
 const commonRequest = require('../../exporters/common/request')
 const {
   RATE_LIMIT_MAX_WAIT_MS,
   getMaxAttempts,
+  getRequestEndpointKey,
   getRetryDelay,
   isRetriableNetworkError,
 } = require('../../exporters/common/retry')
@@ -13,10 +15,19 @@ const { FINAL_FLUSH_TIMEOUT_CODE } = require('../final-flush')
 const { getRateLimitResetDelay } = require('../requests/rate-limit')
 const { MAX_REQUEST_BUFFERED_BYTES } = require('./limits')
 
+// Capture the real scheduler at module load time, before any test can install fake timers.
+const realQueueMicrotask = queueMicrotask
+
 const BACKPRESSURE_RETRY_MS = 50
+const MIN_GZIP_BYTES = 1024
 const REQUEST_BUFFER_FULL_CODE = 'ERR_DD_REQUEST_BUFFER_FULL'
 
 let bufferedBytes = 0
+/** @type {number | undefined} Queued bytes when the current synchronous run submitted its first payload. */
+let runStartBufferedBytes
+const resetRunStart = () => {
+  runStartBufferedBytes = undefined
+}
 let backpressureTimer
 let backpressureTimerDue
 let ownedBackpressureWaiters = 0
@@ -31,6 +42,74 @@ let ownedBackpressureWaiters = 0
 
 /** @type {Set<BackpressureWaiter>} */
 const backpressureWaiters = new Set()
+
+/**
+ * Attempts handed to one origin's socket pool in an HTTP agent, and the attempts waiting for one of its sockets.
+ *
+ * @typedef {object} SocketSlots
+ * @property {number} active
+ * @property {boolean} draining
+ * @property {number} limit
+ * @property {Set<() => void>} waiting
+ */
+
+/** @type {WeakMap<import('node:http').Agent, Map<string, SocketSlots>>} */
+const agentSocketSlots = new WeakMap()
+
+/**
+ * Returns the socket accounting shared by every request to one origin through an agent with a bounded pool.
+ * Node.js applies `maxSockets` to each origin separately.
+ *
+ * @param {import('../../exporters/common/retry').EndpointOptions & { agent?: import('node:http').Agent }} options
+ * @returns {SocketSlots | undefined}
+ */
+function getSocketSlots (options) {
+  const { agent } = options
+  if (!Number.isFinite(agent?.maxSockets)) return
+
+  let origin
+  try {
+    origin = getRequestEndpointKey(options)
+  } catch {
+    // The transport reports the invalid target.
+    return
+  }
+
+  let origins = agentSocketSlots.get(agent)
+  if (origins === undefined) {
+    origins = new Map()
+    agentSocketSlots.set(agent, origins)
+  }
+  let slots = origins.get(origin)
+  if (slots === undefined) {
+    slots = { active: 0, draining: false, limit: agent.maxSockets, waiting: new Set() }
+    origins.set(origin, slots)
+  }
+  return slots
+}
+
+/**
+ * Hands a finished attempt's socket to the oldest attempt waiting for one.
+ *
+ * @param {SocketSlots} slots
+ */
+function releaseSocketSlot (slots) {
+  slots.active--
+  // An attempt that fails synchronously releases its socket inside the loop below, which hands it on.
+  if (slots.draining) return
+
+  slots.draining = true
+  try {
+    // A woken request can settle or wait for exporter backpressure instead, leaving the socket to the next one.
+    while (slots.active < slots.limit && slots.waiting.size > 0) {
+      const [next] = slots.waiting
+      slots.waiting.delete(next)
+      next()
+    }
+  } finally {
+    slots.draining = false
+  }
+}
 
 /**
  * Keeps the shared polling timer alive only while an owned request is waiting.
@@ -143,6 +222,16 @@ function createQueueFullError () {
 /**
  * @returns {Error & { code: string }}
  */
+function createBurstTooLargeError () {
+  return Object.assign(
+    new Error('Test Optimization payloads submitted together exceeded the request queue limit'),
+    { code: 'ERR_DD_TEST_OPTIMIZATION_BURST_TOO_LARGE' }
+  )
+}
+
+/**
+ * @returns {Error & { code: string }}
+ */
 function createBackpressureTimeoutError () {
   const error = new Error('Test Optimization request remained blocked by exporter backpressure')
   error.code = 'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT'
@@ -242,7 +331,8 @@ function bufferReadable (data, signal, callback) {
 
 /**
  * Sends Test Optimization exporter data through the common single-attempt transport while
- * keeping retry and finalization policy scoped to Test Optimization.
+ * keeping retry and finalization policy scoped to Test Optimization. Returns true when the body
+ * was compressed.
  *
  * @param {Buffer|string|Readable|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -251,21 +341,25 @@ function bufferReadable (data, signal, callback) {
  */
 function request (data, options, callback) {
   const { signal } = options
-  if (signal?.aborted) return callback(getAbortError(signal))
+  if (signal?.aborted) {
+    callback(getAbortError(signal))
+    return false
+  }
 
   if (data instanceof Readable) {
     bufferReadable(data, signal, (error, bufferedData, payloadSize) => {
       if (error) return callback(error)
       requestBuffered(bufferedData, options, callback, payloadSize)
     })
-    return
+    return false
   }
 
-  requestBuffered(data, options, callback)
+  return requestBuffered(data, options, callback)
 }
 
 /**
- * Applies the Test Optimization retry policy to replayable request data.
+ * Applies the Test Optimization retry policy to replayable request data. Returns true when the body
+ * was compressed.
  *
  * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
  * @param {object} options
@@ -277,7 +371,26 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   const { signal } = options
   const transport = options.transport || commonRequest
   const timeout = options.timeout || 2000
-  const payloadSize = reservedPayloadSize ?? getPayloadSize(data)
+  const availableBytes = MAX_REQUEST_BUFFERED_BYTES - bufferedBytes
+  let payloadSize = reservedPayloadSize ?? getPayloadSize(data)
+  let gzipped = false
+
+  if (options.gzip && Buffer.isBuffer(data) && payloadSize >= MIN_GZIP_BYTES) {
+    const maxOutputLength = Math.min(availableBytes, payloadSize - 1)
+    if (maxOutputLength > 0) {
+      try {
+        const compressed = gzipSync(data, { level: Z_BEST_SPEED, maxOutputLength })
+        const { buffer, byteOffset, length } = compressed
+        // zlib can return a view over a larger allocation; charge the queue for the bytes the body retains.
+        data = buffer.byteLength === length ? compressed : Buffer.from(buffer.slice(byteOffset, byteOffset + length))
+        payloadSize = length
+        gzipped = true
+      } catch {
+        // Gzip stops early if the output cannot save space or fit in the queue.
+      }
+    }
+  }
+
   let retryTimer
   let attemptTimer
   let attemptTimerImmediate
@@ -285,6 +398,8 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   let settled = false
   let lastError
   let waitingForBackpressure = false
+  let socketWaiter
+  const slots = getSocketSlots(options)
 
   const backpressureWaiter = {
     attempt,
@@ -294,9 +409,15 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   if (reservedPayloadSize === undefined) {
-    if (payloadSize > MAX_REQUEST_BUFFERED_BYTES - bufferedBytes) {
-      callback(createQueueFullError())
-      return
+    if (runStartBufferedBytes === undefined) {
+      runStartBufferedBytes = bufferedBytes
+      realQueueMicrotask(resetRunStart)
+    }
+    if (payloadSize > availableBytes) {
+      // It is a burst when this run, including the rejected payload, would hold more than earlier requests do.
+      const runBytes = bufferedBytes - runStartBufferedBytes + payloadSize
+      callback(runBytes > runStartBufferedBytes ? createBurstTooLargeError() : createQueueFullError())
+      return gzipped
     }
     bufferedBytes += payloadSize
   }
@@ -308,6 +429,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     clearTimeout(attemptTimer)
     clearImmediate(attemptTimerImmediate)
     removeBackpressureWaiter(backpressureWaiter)
+    if (socketWaiter) slots.waiting.delete(socketWaiter)
     signal?.removeEventListener('abort', onAbort)
     bufferedBytes -= payloadSize
     callback(error, result, statusCode, headers)
@@ -330,7 +452,10 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   signal?.addEventListener('abort', onAbort, { once: true })
-  if (signal?.aborted) return onAbort()
+  if (signal?.aborted) {
+    onAbort()
+    return gzipped
+  }
 
   /**
    * @param {number} attemptIndex
@@ -365,10 +490,27 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     }
     waitingForBackpressure = false
 
+    // Hold the attempt until one of the agent's sockets is free. Otherwise its timeout also counts the wait behind
+    // other requests, and an attempt that times out after sending its body is uploaded again by the retry.
+    if (slots) {
+      if (slots.active >= slots.limit) {
+        waitingForBackpressure = true
+        socketWaiter = () => {
+          socketWaiter = undefined
+          attempt(attemptIndex)
+        }
+        slots.waiting.add(socketWaiter)
+        return
+      }
+      slots.active++
+    }
+
+    const headers = options.headers || gzipped ? { ...options.headers } : undefined
+    if (gzipped) headers['Content-Encoding'] = 'gzip'
     const attemptOptions = {
       ...options,
       deferTimeoutAbort: true,
-      headers: options.headers ? { ...options.headers } : undefined,
+      headers,
       retry: false,
     }
     delete attemptOptions.transport
@@ -378,6 +520,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     try {
       attemptData = typeof data === 'function' ? data() : data
     } catch (error) {
+      if (slots) releaseSocketSlot(slots)
       complete(error)
       return
     }
@@ -402,6 +545,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
     }
 
     transport(attemptData, attemptOptions, (error, result, statusCode, headers) => {
+      if (slots) releaseSocketSlot(slots)
       clearTimeout(attemptTimer)
       clearImmediate(attemptTimerImmediate)
       if (attemptController === controller) attemptController = undefined
@@ -476,6 +620,7 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
   }
 
   attempt(1)
+  return gzipped
 }
 
 module.exports = request
