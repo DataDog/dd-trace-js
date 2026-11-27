@@ -8,14 +8,25 @@ const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resol
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
 
 /**
+ * @typedef {object} RouteMatcher
+ * @property {string} [path]
+ * @property {import('../path-to-regexp').CompiledRoute} [regex]
+ * @property {import('../path-to-regexp').CompiledRoute} [rematch]
+ */
+
+/**
+ * @typedef {Array<RouteMatcher> & {
+ *   hasStarPath?: boolean,
+ *   hasSlashPath?: boolean
+ * }} LayerMatchers
+ */
+
+/**
  * @typedef {object} LayerMeta
  * @property {string} [name]
  * @property {string} [captureRoute]
  * @property {boolean} [needMultiMatch]
- * @property {Array<{ path?: string, regex?: RegExp }> & {
- *   hasStarPath?: boolean,
- *   hasSlashPath?: boolean
- * }} [matchers]
+ * @property {LayerMatchers} [matchers]
  */
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
