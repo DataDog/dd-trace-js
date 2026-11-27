@@ -111,6 +111,9 @@ class Tracer extends NoopProxy {
   /** @type {boolean} */
   #iastUnavailable = false
 
+  /** @type {import('./remote_config') | undefined} */
+  #remoteConfig
+
   constructor () {
     super()
 
@@ -200,13 +203,12 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      let rc
       if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
-        rc = new RemoteConfig(config)
+        const rc = this.#remoteConfig = new RemoteConfig(config)
 
         const tracingRemoteConfig = require('./config/remote_config')
-        tracingRemoteConfig.enable(rc, config)
+        tracingRemoteConfig.enable(rc, config, () => this.#updateConfig(config))
 
         // Subscribe even when profiling is off so RC can enable it.
         require('./profiling/remote-config').enable(rc, config, profiler.getRunningProfileTypes)
@@ -273,20 +275,7 @@ class Tracer extends NoopProxy {
         registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
-      /** @param {ReturnType<typeof getConfig>} config */
-      const updateConfig = config => {
-        let tracing
-        try {
-          if (rc) rc.url = config.url
-          tracing = this.#updateTracing(config)
-          if (rc) this.#updateDebugger(config, rc)
-        } catch (error) {
-          log.error(this.#configPublished ? 'Error reconfiguring tracer' : 'Error initializing tracer', error)
-        }
-        return tracing
-      }
-      config.setUpdateHandler(updateConfig)
-      const tracing = updateConfig(config)
+      const tracing = this.#updateConfig(config)
       configUpdateChannel.publish(config)
       this.#configPublished = true
       setStartupLogConfig(config, { ...tracing, logs, metrics })
@@ -414,6 +403,34 @@ class Tracer extends NoopProxy {
   }
 
   /**
+   * @param {ReturnType<typeof getConfig>} config
+   * @param {(config: ReturnType<typeof getConfig>) =>
+   *   import('./opentelemetry/startup-config').Pipelines | void} [configure]
+   */
+  #updateConfig (config, configure = this.#updateTracing) {
+    const rc = this.#remoteConfig
+    let tracing
+    try {
+      if (rc) rc.url = config.url
+      tracing = configure.call(this, config)
+      if (rc) this.#updateDebugger(config, rc)
+    } catch (error) {
+      log.error(this.#configPublished ? 'Error reconfiguring tracer' : 'Error initializing tracer', error)
+    }
+    return tracing
+  }
+
+  /** @param {ReturnType<typeof getConfig>} config */
+  #updateAgent (config) {
+    if (!this._tracingInitialized) return
+
+    this._tracer.configureAgent(config)
+    if (config.DD_TRACE_ENABLED !== false && config.llmobs.DD_LLMOBS_ENABLED) {
+      this._modules.llmobs.enable(config)
+    }
+  }
+
+  /**
    * @param {import('./config/config-base')} config - Tracer configuration
    * @returns {import('./opentelemetry/startup-config').Pipelines | undefined}
    */
@@ -445,7 +462,7 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         if (!config.isCiVisibility) {
           lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-          lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, config,
+          lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
             () => this.openfeature)
         }
 
@@ -555,7 +572,9 @@ class Tracer extends NoopProxy {
     if (this.#configPublished) {
       const parsedUrl = toURL(url)
       if (parsedUrl) {
-        getConfig().setProgrammaticConfig({ url: parsedUrl })
+        const config = getConfig()
+        config.setProgrammaticConfig({ url: parsedUrl })
+        this.#updateConfig(config, this.#updateAgent)
       } else {
         log.error('Invalid Agent URL: %s', url)
       }

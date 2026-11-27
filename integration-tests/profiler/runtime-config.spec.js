@@ -12,6 +12,48 @@ const { describe, it } = require('mocha')
 const run = promisify(execFile)
 const tracerPath = path.resolve(__dirname, '../..')
 const configPath = path.join(tracerPath, 'packages/dd-trace/src/config')
+const remoteConfigPath = path.join(tracerPath, 'packages/dd-trace/src/remote_config')
+
+const remoteConfigSetup = `
+  const RemoteConfig = require(${JSON.stringify(remoteConfigPath)})
+  const { createHash } = require('node:crypto')
+  const setBatchHandler = RemoteConfig.prototype.setBatchHandler
+  let remoteConfig
+  RemoteConfig.prototype.setBatchHandler = function (products, handler) {
+    if (products.includes('APM_TRACING')) {
+      remoteConfig = this
+      RemoteConfig.prototype.setBatchHandler = setBatchHandler
+    }
+    return setBatchHandler.call(this, products, handler)
+  }
+
+  let version = 0
+  function applyRemoteConfig (files) {
+    const targets = {}
+    const targetFiles = []
+    const encode = value => Buffer.from(JSON.stringify(value)).toString('base64')
+    version++
+    for (const [name, file] of Object.entries(files)) {
+      const path = 'datadog/2/' + name + '/config'
+      const json = JSON.stringify(file)
+      targets[path] = {
+        custom: { v: version },
+        hashes: { sha256: createHash('sha256').update(json).digest('hex') },
+        length: Buffer.byteLength(json),
+      }
+      targetFiles.push({ path, raw: encode(file) })
+    }
+    remoteConfig.parseConfig({
+      client_configs: Object.keys(targets),
+      targets: encode({ signed: { targets, version, custom: { opaque_backend_state: 'runtime' } } }),
+      target_files: targetFiles,
+    })
+  }
+
+  function applyTracingConfig (config) {
+    applyRemoteConfig(config === null ? {} : { 'APM_TRACING/runtime': { sdk_config: { config } } })
+  }
+`
 
 /** @param {(urls: string[], requests: { path: string, body: string }[][]) => Promise<void>} test */
 async function withAgents (test) {
@@ -40,32 +82,33 @@ async function withAgents (test) {
   }
 }
 
-/**
- * @param {string} script
- * @param {import('node:child_process').ExecFileOptions['env']} [env]
- */
-async function runTracer (script, env = {}) {
-  await run(process.execPath, ['-e', script], {
-    env: {
-      ...process.env,
-      DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-      DD_CRASHTRACKING_ENABLED: 'false',
-      DD_PROFILING_HEAP_ENABLED: 'false',
-      DD_PROFILING_TIMELINE_ENABLED: 'false',
-      ...env,
-    },
-  })
-}
-
 for (const remote of [false, true]) {
   describe(`runtime Agent configuration via ${remote ? 'remote configuration' : 'setUrl'}`, function () {
     this.timeout(30000)
 
+    /**
+     * @param {string} script
+     * @param {import('node:child_process').ExecFileOptions['env']} [env]
+     */
+    async function runTracer (script, env = {}) {
+      const remoteEnabled = env.DD_REMOTE_CONFIGURATION_ENABLED ?? String(remote)
+      await run(process.execPath, ['-e', remoteEnabled === 'true' ? remoteConfigSetup + script : script], {
+        env: {
+          ...process.env,
+          DD_REMOTE_CONFIGURATION_ENABLED: remoteEnabled,
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_CRASHTRACKING_ENABLED: 'false',
+          DD_PROFILING_HEAP_ENABLED: 'false',
+          DD_PROFILING_TIMELINE_ENABLED: 'false',
+          ...env,
+        },
+      })
+    }
+
     /** @param {string} url */
     function updateAgent (url) {
       return remote
-        ? `require(${JSON.stringify(configPath)})().setRemoteConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(url)} })`
+        ? `applyTracingConfig({ DD_TRACE_AGENT_URL: ${JSON.stringify(url)} })`
         : `tracer.setUrl(${JSON.stringify(url)})`
     }
 
@@ -196,7 +239,7 @@ for (const remote of [false, true]) {
           tracer.llmobs.disable()
           tracer.llmobs.enable({ mlApp: 'runtime', agentlessEnabled: false })
           traceSensitive('drop-reenabled')
-          require(${JSON.stringify(configPath)})().setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '1' })
+          applyTracingConfig({ DD_TRACE_SAMPLE_RATE: '1' })
           drop = false
           traceSensitive('redacted')
           tracer.llmobs.flush()
@@ -210,7 +253,7 @@ for (const remote of [false, true]) {
           traceSensitive('drop-reregistered')
           tracer.llmobs.flush()
           tracer.llmobs.disable()
-        `)
+        `, { DD_REMOTE_CONFIGURATION_ENABLED: 'true' })
 
         const spans = requests.flat()
           .filter(({ path }) => path === '/evp_proxy/v2/api/v2/llmobs')
@@ -232,11 +275,15 @@ for (const remote of [false, true]) {
             flushInterval: 0,
             plugins: false,
           })
-          const config = require(${JSON.stringify(path.join(tracerPath, 'packages/dd-trace/src/config'))})()
+          applyTracingConfig({ DD_TRACE_SAMPLE_RATE: '1' })
           ${updateAgent(urls[1])}
-          config.setRemoteConfig(null)
+          applyTracingConfig(null)
           tracer.trace('independent-destination', () => {})
-        `, { OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${urls[1]}/v1/traces` })
+        `, {
+          DD_REMOTE_CONFIGURATION_ENABLED: 'true',
+          OTEL_TRACES_EXPORTER: 'otlp',
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${urls[1]}/v1/traces`,
+        })
 
         assert.strictEqual(requests[0].filter(({ path }) => path === '/' || path === '/v1/traces').length, 0)
         assert.strictEqual(requests[1].filter(({ path }) => path === '/v1/traces').length, 1)
@@ -253,14 +300,86 @@ for (const remote of [false, true]) {
               plugins: false,
               llmobs: { mlApp: 'runtime', agentlessEnabled: true },
             })
-            const config = require(${JSON.stringify(path.join(tracerPath, 'packages/dd-trace/src/config'))})()
+            const config = require(${JSON.stringify(configPath)})()
             const exporter = tracer._tracer._exporter
             const destination = exporter._url.href
+            applyTracingConfig({ DD_TRACE_SAMPLE_RATE: '1' })
             ${updateAgent(urls[1])}
-            config.setRemoteConfig(null)
+            applyTracingConfig(null)
             assert.strictEqual(exporter._url.href, destination)
             assert.strictEqual(config.url.href, ${JSON.stringify(`${urls[remote ? 0 : 1]}/`)})
-          `, { DD_TRACE_EXPERIMENTAL_EXPORTER: exporter, DD_API_KEY: 'test-api-key' })
+          `, {
+            DD_REMOTE_CONFIGURATION_ENABLED: 'true',
+            DD_TRACE_EXPERIMENTAL_EXPORTER: exporter,
+            DD_API_KEY: 'test-api-key',
+          })
+        })
+      })
+    }
+
+    if (remote) {
+      it('preserves sampling and code settings through Agent, LLMObs, and remote updates', async () => {
+        await withAgents(async urls => {
+          await runTracer(`
+            const assert = require('node:assert/strict')
+            const { useFakeTimers } = require(${JSON.stringify(require.resolve('sinon'))})
+            const clock = useFakeTimers({ toFake: ['Date', 'hrtime', 'performance'] })
+            try {
+              const tracer = require(${JSON.stringify(tracerPath)}).init({
+                url: ${JSON.stringify(urls[0])},
+                plugins: false,
+                profiling: false,
+                llmobs: { mlApp: 'runtime', agentlessEnabled: false },
+                sampleRate: 1,
+                rateLimit: 1,
+              })
+              const config = require(${JSON.stringify(configPath)})()
+              const tracing = { 'APM_TRACING/runtime': { sdk_config: { config: {
+                DD_TRACE_AGENT_URL: ${JSON.stringify(urls[0])},
+                DD_LLMOBS_ENABLED: 'true',
+              } } } }
+              applyRemoteConfig(tracing)
+
+              function samplingPriority () {
+                const span = tracer.startSpan('sampling-budget')
+                const headers = {}
+                tracer.inject(span, 'http_headers', headers)
+                span.finish()
+                return headers['x-datadog-sampling-priority']
+              }
+
+              assert.deepStrictEqual([samplingPriority(), samplingPriority()], ['2', '-1'])
+              tracer.setUrl(${JSON.stringify(urls[1])})
+              assert.strictEqual(samplingPriority(), '-1')
+              tracer.llmobs.disable()
+              assert.strictEqual(samplingPriority(), '-1')
+              tracer.llmobs.enable({ mlApp: 'runtime', agentlessEnabled: false })
+              assert.strictEqual(samplingPriority(), '-1')
+              tracer.llmobs.disable()
+
+              for (const wallTime of [true, false, undefined]) {
+                const files = wallTime === undefined
+                  ? tracing
+                  : { ...tracing, 'APM_PROFILING/runtime': { profilers: { wallTime } } }
+                applyRemoteConfig(files)
+                assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, String(wallTime ?? false))
+                assert.strictEqual(config.url.href, ${JSON.stringify(urls[1] + '/')})
+                assert.strictEqual(remoteConfig.url.href, config.url.href)
+                assert.strictEqual(tracer.llmobs.enabled, false)
+                assert.strictEqual(samplingPriority(), '-1')
+              }
+
+              applyRemoteConfig({
+                ...tracing,
+                'APM_TRACING/sampling': { sdk_config: { config: { DD_TRACE_SAMPLE_RATE: '0.5' } } },
+              })
+              assert.strictEqual(config.url.href, ${JSON.stringify(urls[1] + '/')})
+              assert.strictEqual(remoteConfig.url.href, config.url.href)
+              assert.strictEqual(tracer.llmobs.enabled, false)
+            } finally {
+              clock.restore()
+            }
+          `)
         })
       })
     }

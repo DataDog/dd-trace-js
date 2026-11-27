@@ -112,6 +112,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /** @type {Config | null} */
 let configInstance = null
 
+// Fires whenever remote or programmatic config applies a new value. Consumers such as profiling
+// subscribe here to pick up the effective configuration.
 const configUpdateChannel = channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
@@ -129,10 +131,9 @@ const changeTracker = {
 /**
  * @param {Config} config
  * @param {RevertibleTelemetrySource} source
- * @param {Set<ConfigPath>} [paths]
  */
-function undo (config, source, paths = changeTracker[source]) {
-  for (const name of paths) {
+function undo (config, source) {
+  for (const name of changeTracker[source]) {
     if (trackedConfigOrigins.get(name) !== source) continue
 
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
@@ -204,9 +205,6 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
-  /** @type {((config: Config) => void) | undefined} */
-  #updateHandler
-
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -288,20 +286,14 @@ class Config extends ConfigBase {
   /**
    * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
-   * @param {Set<ConfigPath>} [paths]
    */
-  #applyEnvs (envs, source, paths) {
+  #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
-      const path = entry.property ?? name
-      if (paths && !paths.has(path)) {
-        continue
-      }
-
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
-      setAndTrack(this, path, transformed, rawValue, source)
+      setAndTrack(this, entry.property ?? name, transformed, rawValue, source)
     }
   }
 
@@ -367,22 +359,21 @@ class Config extends ConfigBase {
    *
    * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
-   * @param {import('./helper').SupportedEnvKey[]} [profilingKeys] - Keys from the previous and new profiling settings
    */
-  setRemoteConfig (options, profilingKeys) {
-    const paths = profilingKeys && new Set(profilingKeys.map(name => configurationsTable[name].property ?? name))
-    // Restore omitted fields to their previous source.
+  setRemoteConfig (options) {
+    // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
-    undo(this, 'remote_config', paths)
+    undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config', paths)
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
-    this.#publishUpdate(profilingKeys === undefined)
+    this.#applyCalculated()
+    configUpdateChannel.publish(this)
   }
 
   /**
@@ -397,20 +388,7 @@ class Config extends ConfigBase {
       this.#applyOptions(values, 'llmobs', true)
       if (enabled !== undefined) setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', enabled, enabled, 'code')
     }
-    this.#publishUpdate()
-  }
-
-  /** @param {(config: Config) => void} handler */
-  setUpdateHandler (handler) {
-    this.#updateHandler = handler
-  }
-
-  /** @param {boolean} [updateTracer] */
-  #publishUpdate (updateTracer = true) {
     this.#applyCalculated()
-    if (updateTracer) {
-      this.#updateHandler?.(this)
-    }
     configUpdateChannel.publish(this)
   }
 

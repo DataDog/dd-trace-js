@@ -6961,38 +6961,6 @@ rules:
       sinon.assert.calledOnce(subscriber)
       assert.strictEqual(subscriber.firstCall.args[0], config)
     })
-
-    it('applies the owning tracer update before notifying process consumers', () => {
-      const config = getConfig({ url: 'http://initial:8126/' })
-      let destination
-      config.setUpdateHandler(updated => { destination = updated.url.href })
-      const observe = () => assert.strictEqual(destination, config.url.href)
-      configUpdateChannel.subscribe(observe)
-
-      try {
-        config.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://updated:8126/' })
-        assert.strictEqual(destination, 'http://updated:8126/')
-        config.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://remote:8126/' })
-        assert.strictEqual(destination, 'http://remote:8126/')
-      } finally {
-        configUpdateChannel.unsubscribe(observe)
-      }
-    })
-
-    it('keeps replacement tracer updates with their owning configuration', () => {
-      const first = getConfig()
-      const firstDestinations = []
-      first.setUpdateHandler(config => firstDestinations.push(config.url.href))
-      const second = getConfig()
-      const secondDestinations = []
-      second.setUpdateHandler(config => secondDestinations.push(config.url.href))
-
-      second.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://second:8126/' })
-      first.setRemoteConfig({ DD_TRACE_AGENT_URL: 'http://first:8126/' })
-
-      assert.deepStrictEqual(firstDestinations, ['http://first:8126/'])
-      assert.deepStrictEqual(secondDestinations, ['http://second:8126/'])
-    })
   })
 
   describe('remote config application', () => {

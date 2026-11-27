@@ -100,6 +100,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       configure: sinon.spy(),
+      configureAgent: sinon.spy(),
     }
 
     noop = {
@@ -205,11 +206,10 @@ describe('TracerProxy', () => {
         enabled: false,
       },
       setRemoteConfig: sinon.stub().callsFake(() => {
-        config.setUpdateHandler.lastCall?.args[0](config)
         configUpdateChannel.publish(config)
       }),
-      setProgrammaticConfig: sinon.stub(),
-      setUpdateHandler: sinon.stub(),
+      setProgrammaticConfig: sinon.stub().callsFake(({ url }) => { config.url = url }),
+      getOrigin: () => 'remote_config',
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -914,7 +914,6 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
-          config.setUpdateHandler.lastCall.args[0](config)
         })
         proxy.init()
 
@@ -933,7 +932,6 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
-          config.setUpdateHandler.lastCall.args[0](config)
         })
         proxy.init()
 
@@ -1116,7 +1114,6 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
-          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         proxy.init()
@@ -1136,7 +1133,6 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
-          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         proxy.init()
@@ -1208,7 +1204,6 @@ describe('TracerProxy', () => {
         config.iast.DD_IAST_ENABLED = true
         config.setRemoteConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
-          config.setUpdateHandler.lastCall.args[0](config)
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -1547,10 +1542,14 @@ describe('TracerProxy', () => {
       for (const url of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
         it(`normalizes ${url} before updating shared configuration`, () => {
           proxy.init()
+          tracer.configure.resetHistory()
 
           assert.strictEqual(proxy.setUrl(url), proxy)
 
           sinon.assert.calledOnceWithExactly(config.setProgrammaticConfig, { url: new URL(url) })
+          assert.strictEqual(rc.url.href, new URL(url).href)
+          sinon.assert.calledOnceWithExactly(tracer.configureAgent, config)
+          sinon.assert.notCalled(tracer.configure)
         })
       }
 
@@ -1559,6 +1558,16 @@ describe('TracerProxy', () => {
 
         sinon.assert.notCalled(Config)
         sinon.assert.notCalled(config.setProgrammaticConfig)
+      })
+
+      it('updates the Remote Config destination when tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+        proxy.init()
+
+        proxy.setUrl('http://updated:8126')
+
+        assert.strictEqual(rc.url.href, 'http://updated:8126/')
+        sinon.assert.notCalled(tracer.configureAgent)
       })
 
       it('preserves configuration when the URL is invalid', () => {
@@ -1806,9 +1815,9 @@ describe('TracerProxy', () => {
     describe('configuration updates', () => {
       it('logs a runtime consumer failure', () => {
         const error = new Error('configuration failed')
-        tracer.configure = sinon.stub().throws(error)
+        tracer.configureAgent = sinon.stub().throws(error)
 
-        config.setRemoteConfig()
+        proxy.setUrl('http://agent:8126')
 
         sinon.assert.calledOnceWithExactly(log.error, 'Error reconfiguring tracer', error)
       })

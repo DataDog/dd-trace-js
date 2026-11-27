@@ -43,6 +43,7 @@ describe('sdk', () => {
   let LLMObsSDK
   let llmobs
   let llmobsModule
+  let llmobsLifecycle
   let tracer
   let clock
 
@@ -75,6 +76,10 @@ describe('sdk', () => {
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
+  })
+
+  beforeEach(() => {
+    llmobsLifecycle = { enable: sinon.spy(), disable: sinon.spy() }
   })
 
   afterEach(() => {
@@ -121,7 +126,7 @@ describe('sdk', () => {
       [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { llmobs: { DD_LLMOBS_ENABLED: value } })
+        const enabledOrDisabledLLMObs = new LLMObsSDK(null, llmobsLifecycle, { llmobs: { DD_LLMOBS_ENABLED: value } })
 
         assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
       })
@@ -282,7 +287,7 @@ describe('sdk', () => {
       const config = getRuntimeConfig({})
 
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
 
       disabledLLMObs.enable({
         mlApp: 'mlApp',
@@ -293,6 +298,7 @@ describe('sdk', () => {
       assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
 
       assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ENABLED'), 'code')
+      sinon.assert.calledOnceWithExactly(llmobsLifecycle.enable, config)
 
       disabledLLMObs.disable() // unsubscribe
     })
@@ -303,7 +309,7 @@ describe('sdk', () => {
       config.DD_APP_KEY = 'app-key'
       config.service = 'service'
 
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
 
       assert.strictEqual(disabledLLMObs.experiments.createDataset('d').name(), 'd')
 
@@ -329,7 +335,7 @@ describe('sdk', () => {
       const config = getRuntimeConfig({})
 
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, config)
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
       process.env.DD_LLMOBS_ENABLED = 'false'
 
       disabledLLMObs.enable({})
@@ -337,6 +343,17 @@ describe('sdk', () => {
       assert.strictEqual(disabledLLMObs.enabled, false)
       delete process.env.DD_LLMOBS_ENABLED
       disabledLLMObs.disable() // unsubscribe
+    })
+
+    it('defers starting writers until tracing is enabled', () => {
+      const config = getRuntimeConfig({})
+      config.setRemoteConfig({ DD_TRACE_ENABLED: 'false' })
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
+
+      disabledLLMObs.enable({ mlApp: 'mlApp' })
+
+      assert.strictEqual(disabledLLMObs.enabled, true)
+      sinon.assert.notCalled(llmobsLifecycle.enable)
     })
   })
 
@@ -348,13 +365,14 @@ describe('sdk', () => {
         },
       })
 
-      const enabledLLMObs = new LLMObsSDK(tracer._tracer, config)
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
 
       assert.strictEqual(enabledLLMObs.enabled, true)
       enabledLLMObs.disable()
 
       assert.strictEqual(enabledLLMObs.enabled, false)
       assert.strictEqual(config.getOrigin('llmobs.DD_LLMOBS_ENABLED'), 'code')
+      sinon.assert.calledOnce(llmobsLifecycle.disable)
     })
 
     it('recreates experiments after disabling llmobs', () => {
@@ -368,7 +386,7 @@ describe('sdk', () => {
       config.DD_APP_KEY = 'app-key'
       config.service = 'service'
 
-      const enabledLLMObs = new LLMObsSDK(tracer._tracer, config)
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
 
       assert.strictEqual(typeof enabledLLMObs.experiments.createDataset('d').addRecord, 'function')
 
@@ -380,7 +398,7 @@ describe('sdk', () => {
 
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(null, { llmobs: { DD_LLMOBS_ENABLED: false } })
+      const disabledLLMObs = new LLMObsSDK(null, llmobsLifecycle, { llmobs: { DD_LLMOBS_ENABLED: false } })
       disabledLLMObs._config.setProgrammaticConfig = sinon.spy()
 
       disabledLLMObs.disable()
@@ -2744,7 +2762,7 @@ describe('sdk', () => {
         const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
         config.llmobs.DD_LLMOBS_ENABLED = true
-        otelLLMObs = new LLMObsSDK(tracer._tracer, config)
+        otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsLifecycle, config)
       })
 
       it('adds source:otel tag', () => {

@@ -1,12 +1,12 @@
 'use strict'
 
+const { configurationsTable } = require('./defaults')
 const { getEnvironmentVariables } = require('./helper')
 
 /**
  * @typedef {ReturnType<import('./index')>} Config
  * @typedef {'APM_TRACING' | 'APM_PROFILING'} Product
- * @typedef {import('./helper').SupportedEnvKey} SupportedEnvKey
- * @typedef {Partial<Record<SupportedEnvKey, string>>} Settings
+ * @typedef {Partial<Record<import('./helper').SupportedEnvKey, string>>} Settings
  */
 
 /** @type {WeakMap<Config, Record<Product, Settings | null>>} */
@@ -27,18 +27,24 @@ module.exports = function applyRemoteConfig (config, product, settings) {
     layers = { APM_TRACING: null, APM_PROFILING: null }
     layersByConfig.set(config, layers)
   }
-  const previous = layers[product]
-  layers[product] = settings
+  const previousTracing = layers.APM_TRACING
+  // Resolve aliases before comparing snapshots or combining products.
+  layers[product] = settings === null ? null : getEnvironmentVariables(settings, true)
 
   const { APM_TRACING: tracing, APM_PROFILING: profiling } = layers
-  // Resolve aliases first, so that each setting has a single key across products.
-  const merged = tracing === null || profiling === null
-    ? tracing ?? profiling
-    : { ...getEnvironmentVariables(tracing, true), ...getEnvironmentVariables(profiling, true) }
-  if (product === 'APM_PROFILING') {
-    const profilingKeys = /** @type {SupportedEnvKey[]} */ (Object.keys({ ...previous, ...settings }))
-    config.setRemoteConfig(merged, profilingKeys)
-  } else {
-    config.setRemoteConfig(merged)
+  if (tracing === null || (previousTracing === null && profiling === null)) {
+    config.setRemoteConfig(tracing ?? profiling)
+    return
   }
+
+  const merged = { ...tracing }
+  if (previousTracing !== null) {
+    // Keep code settings that arrived after an unchanged tracing value.
+    for (const name of Object.keys(tracing)) {
+      if (tracing[name] !== previousTracing[name]) continue
+      const path = configurationsTable[name].property ?? name
+      if (config.getOrigin(path) === 'code') delete merged[name]
+    }
+  }
+  config.setRemoteConfig(Object.assign(merged, profiling))
 }

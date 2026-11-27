@@ -11,6 +11,7 @@ require('../setup/core')
 describe('Tracing Remote Config', () => {
   let rc
   let config
+  let onConfigUpdated
   let batchHandlers
 
   beforeEach(() => {
@@ -28,12 +29,15 @@ describe('Tracing Remote Config', () => {
       service: 'test-service',
       env: 'test-env',
       setRemoteConfig: sinon.spy(),
+      getOrigin: () => 'remote_config',
     }
+
+    onConfigUpdated = sinon.spy()
   })
 
   describe('enable', () => {
     it('should register all APM tracing capabilities', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
@@ -61,7 +65,7 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should register a single APM_TRACING batch handler', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_TRACING')
       sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
@@ -69,7 +73,7 @@ describe('Tracing Remote Config', () => {
 
     describe('SDK_CONFIGURATION handler', () => {
       it('should configure tracer on apply action', () => {
-        enable(rc, config)
+        enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
         const sdkConfig = { DD_TRACE_SAMPLE_RATE: '0.5' }
@@ -81,10 +85,11 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
 
       it('should reset config on unapply action', () => {
-        enable(rc, config)
+        enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
 
@@ -95,6 +100,7 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         config.setRemoteConfig.resetHistory()
+        onConfigUpdated.resetHistory()
 
         // Then unapply it
         transaction = createTransaction([], [], [
@@ -104,10 +110,11 @@ describe('Tracing Remote Config', () => {
 
         // When all configs are removed, null is passed to reset
         sinon.assert.calledWithExactly(config.setRemoteConfig, null)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
 
       it('should call setRemoteConfig only once per batch', () => {
-        enable(rc, config)
+        enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
 
@@ -122,10 +129,11 @@ describe('Tracing Remote Config', () => {
 
         // Should be called exactly once, not three times
         sinon.assert.calledOnce(config.setRemoteConfig)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
 
       it('should ignore items with no sdk_config field', () => {
-        enable(rc, config)
+        enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
 
@@ -136,10 +144,11 @@ describe('Tracing Remote Config', () => {
         handler(transaction)
 
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
+        sinon.assert.calledOnce(onConfigUpdated)
       })
 
       it('should pass backend-validated settings through without a client allowlist', () => {
-        enable(rc, config)
+        enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
         const sdkConfig = { DD_PROFILING_ENABLED: 'true' }
@@ -157,7 +166,7 @@ describe('Tracing Remote Config', () => {
 
   describe('SDK_CONFIGURATION multiconfig', () => {
     it('should merge multiple configs by priority', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
       // Apply both an org-level and a service-level config in one batch
@@ -185,7 +194,7 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should handle config removal', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
       // Add two configs
@@ -223,7 +232,7 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should filter configs by service/env', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
       // Apply config for different service
@@ -242,7 +251,7 @@ describe('Tracing Remote Config', () => {
     })
 
     it('should return null when configs have no sdk_config field', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
       // Apply a config that has sdk_config set to null
@@ -259,10 +268,11 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
+      sinon.assert.calledOnce(onConfigUpdated)
     })
 
     it('should merge fields from multiple configs', () => {
-      enable(rc, config)
+      enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
       // Apply both an org-level and a service-level config in one batch

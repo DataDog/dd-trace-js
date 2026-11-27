@@ -54,17 +54,21 @@ class LLMObs extends NoopLLMObs {
 
   #getOpenFeatureProvider
 
+  #llmobsModule
+
   /**
    * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base') &
    *   Pick<ReturnType<import('../config')>, 'setProgrammaticConfig'>} config - Tracer configuration
    * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, config, getOpenFeatureProvider = () => {}) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     this._config = config
 
+    this.#llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
     this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
@@ -116,6 +120,9 @@ class LLMObs extends NoopLLMObs {
     this._config.setProgrammaticConfig({
       llmobs: { enabled: true, mlApp: options.mlApp, agentlessEnabled: options.agentlessEnabled },
     })
+    if (this._config.DD_TRACE_ENABLED !== false) {
+      this.#llmobsModule.enable(this._config)
+    }
   }
 
   disable () {
@@ -132,6 +139,7 @@ class LLMObs extends NoopLLMObs {
     logger.debug('Disabling LLMObs')
 
     this._config.setProgrammaticConfig({ llmobs: { enabled: false } })
+    this.#llmobsModule.disable()
   }
 
   trace (options = {}, fn) {

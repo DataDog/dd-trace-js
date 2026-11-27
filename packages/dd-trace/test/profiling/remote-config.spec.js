@@ -74,7 +74,7 @@ describe('Profiling Remote Config', () => {
   function currentSettings () {
     const { lastCall } = config.setRemoteConfig
     if (lastCall === null) return null
-    assert.strictEqual(lastCall.args.length, 2)
+    assert.strictEqual(lastCall.args.length, 1)
     return lastCall.args[0]
   }
 
@@ -323,9 +323,9 @@ describe('Profiling Remote Config', () => {
       sinon.assert.calledThrice(config.setRemoteConfig)
       assert.deepStrictEqual(
         config.setRemoteConfig.secondCall.args,
-        [{ DD_PROFILING_HEAP_ENABLED: 'false' }, ['DD_PROFILING_HEAP_ENABLED', 'DD_PROFILING_ENABLED']]
+        [{ DD_PROFILING_HEAP_ENABLED: 'false' }]
       )
-      assert.deepStrictEqual(config.setRemoteConfig.thirdCall.args, [null, ['DD_PROFILING_HEAP_ENABLED']])
+      assert.deepStrictEqual(config.setRemoteConfig.thirdCall.args, [null])
     })
   })
 

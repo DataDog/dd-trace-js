@@ -57,6 +57,11 @@ class DatadogTracer extends Tracer {
   configure (config) {
     const { env, sampler } = config
     this._prioritySampler.configure(env, sampler, config)
+    this.configureAgent(config)
+  }
+
+  /** @param {import('./config/config-base')} config */
+  configureAgent (config) {
     if (config.url !== undefined && this.#url !== config.url) {
       const exporter = /** @type {typeof this._exporter & ConfigurableExporter} */ (this._exporter)
       exporter.configure?.(config)
