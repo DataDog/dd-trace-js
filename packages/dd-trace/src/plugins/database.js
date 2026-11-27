@@ -147,7 +147,9 @@ class DatabasePlugin extends StoragePlugin {
  */
 function encode (value) {
   if (!value) return ''
-  return SAFE_ENCODE_RE.test(value) ? value : encodeURIComponent(toUSVString(String(value)))
+  return SAFE_ENCODE_RE.test(/** @type {string} */ (value))
+    ? value
+    : encodeURIComponent(toUSVString(String(value)))
 }
 
 module.exports = DatabasePlugin

@@ -3,8 +3,9 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 import {
-  LegacySpanTagsContext, NoInferSpanTags, SpanOptionsTags, SpanTagInputForKey, SpanTagNumericKey, SpanTagValueForKey,
-  SpecialSpanTags, ValidatedLegacySpanOptionsTags, ValidatedLegacySpanTags, ValidatedSpanTags
+  KnownSpanOptions, LegacySpanTagsContext, NoInferSpanTags, SpanOptionsTags, SpanOptionsUnion, SpanTagInputForKey,
+  SpanTagNumericKey, SpanTagValueForKey, SpecialSpanTags, ValidatedLegacySpanOptionsTags, ValidatedLegacySpanTags,
+  ValidatedSpanTags
 } from "./span-tags";
 
 declare const baseEvaluatorBrand: unique symbol
@@ -88,9 +89,15 @@ interface Tracer extends opentracing.Tracer {
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
+  startSpan<Options extends SpanOptionsBase> (
+    name: string,
+    ...options: [options?: Options] &
+      NoInferSpanTags<[options?: SpanOptionsInput<Options> & SpanOptionsUnion<Options>]>
+  ): tracer.Span;
   startSpan<Options extends SpanOptionsBase = tracer.SpanOptions> (
     name: string,
-    ...options: [options?: Options] & NoInferSpanTags<[options?: SpanOptionsInput<Options>]>
+    ...options: [options?: KnownSpanOptions<Options, SpanOptionsBase>] &
+      NoInferSpanTags<[options?: SpanOptionsInput<Options>]>
   ): tracer.Span;
 
   /**
@@ -159,9 +166,16 @@ interface Tracer extends opentracing.Tracer {
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
-  trace<T, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
+  trace<T, Options extends TraceOptionsBase> (
     name: string,
     ...args: [options: Options, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T] &
+      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options> & SpanOptionsUnion<Options>,
+        fn: (span?: tracer.Span, done?: (error?: Error) => void) => T]>
+  ): T;
+  trace<T, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
+    name: string,
+    ...args: [options: KnownSpanOptions<Options, TraceOptionsBase>,
+      fn: (span?: tracer.Span, done?: (error?: Error) => void) => T] &
       NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options>,
         fn: (span?: tracer.Span, done?: (error?: Error) => void) => T]>
   ): T;
@@ -184,8 +198,13 @@ interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
   wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
-    ...args: [options: Options, fn: T] &
+    ...args: [options: KnownSpanOptions<Options, TraceOptionsBase>, fn: T] &
       NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options>, fn: T]>
+  ): T;
+  wrap<T, Options extends TraceOptionsBase> (
+    name: string,
+    ...args: [options: Options, fn: T] &
+      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options> & SpanOptionsUnion<Options>, fn: T]>
   ): T;
   wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
@@ -490,6 +509,9 @@ declare namespace tracer {
     setTag<Key extends string> (key: SpanTagNumericKey<Key>, value: number | boolean): this;
     setTag<Key extends string> (key: Key, value: SpanTagInputForKey<Key>): this;
     setTag<Key extends string, Value> (key: Key, value: Value & SpanTagValueForKey<Key, NoInferSpanTags<Value>>): this;
+    setTag<Key extends string, Value> (
+      key: Exclude<Key, keyof SpecialSpanTags>, value: Value & SpanTagValueForKey<string, NoInferSpanTags<Value>>
+    ): this;
 
     /**
      * Adds tags to the span.

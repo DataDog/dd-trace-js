@@ -984,18 +984,59 @@ tracer.wrap('test', () => ({ tags: { 'sampling.priority': [2] } }), () => {})
 // @ts-expect-error Legacy callback collections validate array priorities.
 tracerV5.wrap('test', () => ({ tags: [{ 'sampling.priority': priorityTuple }] }), () => {})
 
+const composedOptions = { tags: { region: 'eu' }, applicationFlag: true }
+tracer.startSpan('test', composedOptions)
+tracerV5.startSpan('test', composedOptions)
+tracer.trace('test', composedOptions, () => {})
+tracerV5.trace('test', composedOptions, () => {})
+tracer.wrap('test', composedOptions, () => {})
+tracerV5.wrap('test', composedOptions, () => {})
+
+// @ts-expect-error Start options check field names alongside tag names.
+tracer.startSpan('test', { tags: { region: 'eu' }, chlidOf: null })
+// @ts-expect-error Legacy start options check field names too.
+tracerV5.startSpan('test', { tags: { region: 'eu' }, chlidOf: null })
+// @ts-expect-error Trace options check field names alongside tag names.
+tracer.trace('test', { tags: { region: 'eu' }, maesured: true }, () => {})
+// @ts-expect-error Legacy trace options check field names too.
+tracerV5.trace('test', { tags: { region: 'eu' }, maesured: true }, () => {})
+// @ts-expect-error Direct wrap options check field names alongside tag names.
+tracer.wrap('test', { tags: { region: 'eu' }, maesured: true }, () => {})
+// @ts-expect-error Legacy direct wrap options check field names too.
+tracerV5.wrap('test', { tags: { region: 'eu' }, maesured: true }, () => {})
+
+function setClientTag<Key extends `client.${string}`> (key: Key, value: { name: string }) {
+  span.setTag(key, value)
+  v5Span.setTag(key, value)
+  // @ts-expect-error Generic custom names retain ordinary tag value checks.
+  span.setTag(key, ['name'])
+  // @ts-expect-error Legacy custom names retain ordinary tag value checks.
+  v5Span.setTag(key, ['name'])
+}
+
+declare const clientOrServiceTag: `client.${string}` | 'service.name'
+setClientTag('client.name', { name: 'request' })
+// @ts-expect-error A key that can name the service must accept only strings.
+span.setTag(clientOrServiceTag, { name: 'request' })
+// @ts-expect-error The service name constraint also applies to legacy key unions.
+v5Span.setTag(clientOrServiceTag, { name: 'request' })
+
 declare const unionOptions: { tags?: { region: string } } | { tags?: { count: number } }
+declare const optionalUnionOptions: typeof unionOptions | undefined
 declare const unionTags: { region: string } | { count: number }
 declare const invalidUnionTags: { region: string } | {
   region: string
   payload: { child: { value: string } }
 }
 declare const invalidUnionOptions: { tags: { region: string } } | { tags: typeof invalidUnionTags }
+declare const invalidOptionalUnionOptions: typeof invalidUnionOptions | undefined
 
 span.addTags(unionTags)
 v5Span.addTags(unionTags)
 tracer.startSpan('union', unionOptions)
 tracerV5.startSpan('union', unionOptions)
+tracer.startSpan('union', optionalUnionOptions)
+tracerV5.startSpan('union', optionalUnionOptions)
 tracer.init(unionOptions)
 tracerV5.init(unionOptions)
 tracer.trace('union', unionOptions, () => {})
@@ -1013,6 +1054,10 @@ v5Span.addTags(invalidUnionTags)
 tracer.startSpan('union', invalidUnionOptions)
 // @ts-expect-error Legacy options must not hide an unsupported member.
 tracerV5.startSpan('union', invalidUnionOptions)
+// @ts-expect-error An optional options union still validates each tag map.
+tracer.startSpan('union', invalidOptionalUnionOptions)
+// @ts-expect-error Legacy optional options unions also validate each tag map.
+tracerV5.startSpan('union', invalidOptionalUnionOptions)
 // @ts-expect-error Initialization validates every tag-map union member.
 tracer.init(invalidUnionOptions)
 // @ts-expect-error Legacy initialization validates every tag-map union member.

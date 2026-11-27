@@ -36,7 +36,8 @@ class Sampler {
   /**
    * Determines whether a trace/span should be sampled based on the configured sampling rate.
    *
-   * @param {import('./opentracing/span') | import('./opentracing/span_context')} span
+   * @param {import('./opentracing/span') |
+   *   (import('./opentracing/span_context') & { context?: never })} span
    */
   isSampled (span) {
     if (this._rate === 1) {

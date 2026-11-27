@@ -440,14 +440,14 @@ function addMixedTag (meta, metrics, key, value, nested) {
   }
 }
 
-/** @param {unknown} obj */
+/** @param {{ readInt8?: unknown }} obj */
 function isNodeBuffer (obj) {
   return obj.constructor && obj.constructor.name === 'Buffer' &&
     typeof obj.readInt8 === 'function' &&
     typeof obj.toString === 'function'
 }
 
-/** @param {unknown} obj */
+/** @param {{ href?: unknown }} obj */
 function isUrl (obj) {
   return obj.constructor && obj.constructor.name === 'URL' &&
     typeof obj.href === 'string' &&

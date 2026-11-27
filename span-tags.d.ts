@@ -94,5 +94,11 @@ export type ValidatedLegacySpanTags<Tags> = SpanTagScalarCollection | (
 
 export type SpanOptionsTags<Options> = Options extends { tags?: infer Tags } ? Tags : object
 
+export type KnownSpanOptions<Options, Base> = Pick<Options, keyof Options & keyof Base>
+
+// Pick infers one member at a time. Allow a separate overload to infer the complete options union.
+export type SpanOptionsUnion<Options, AllOptions = Options> =
+  Options extends unknown ? [AllOptions] extends [Options] ? never : Options : never
+
 // Prevent validation from narrowing inference without requiring TypeScript's NoInfer intrinsic.
 export type NoInferSpanTags<Tags> = [Tags][Tags extends unknown ? 0 : never]

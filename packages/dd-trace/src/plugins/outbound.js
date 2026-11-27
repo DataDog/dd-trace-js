@@ -109,7 +109,7 @@ class OutboundPlugin extends TracingPlugin {
    * @param {{ currentStore?: { span: import('../opentracing/span') } }} ctx
    */
   finish (ctx) {
-    const span = ctx?.currentStore?.span || this.activeSpan
+    const span = /** @type {import('../opentracing/span')} */ (ctx?.currentStore?.span || this.activeSpan)
     this.tagPeerService(span)
 
     if (IS_SERVERLESS) {
