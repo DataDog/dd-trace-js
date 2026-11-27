@@ -198,6 +198,7 @@ function createMatcher (dcModule) {
     publishTrpcRequestInfo,
     waitForAsyncEnd,
   } = require('./transforms')
+  const { publishRestifyRoute } = require('./transforms/restify')
   const {
     postgresNativeCopy,
     postgresNativePreparation,
@@ -226,6 +227,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('postgresNativePreparation', postgresNativePreparation)
   matcher.addTransform('postgresNativeTransactionEnd', postgresNativeTransactionEnd)
   matcher.addTransform('postgresQueryAcquire', postgresQueryAcquire)
+  matcher.addTransform('publishRestifyRoute', publishRestifyRoute)
   matcher.addTransform('publishTrpcRequestInfo', publishTrpcRequestInfo)
   matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
   matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)

@@ -2,7 +2,6 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
-const handlers = ['use', 'pre']
 const methods = ['del', 'get', 'head', 'opts', 'post', 'put', 'patch']
 
 const handleChannel = channel('apm:restify:request:handle')
@@ -22,29 +21,30 @@ function wrapSetupRequest (setupRequest) {
 
 function wrapMethod (method) {
   return function (path, ...middlewares) {
-    const wrappedMiddlewares = middlewares.map(wrapFn)
+    const wrappedMiddlewares = wrapFn(middlewares, true)
 
     return method.apply(this, [path, ...wrappedMiddlewares])
   }
 }
 
-function wrapHandler (method) {
+function wrapHandler (method, afterLookup) {
   return function (...middlewares) {
-    return method.apply(this, middlewares.map(wrapFn))
+    return method.apply(this, wrapFn(middlewares, afterLookup))
   }
 }
 
-function wrapFn (fn) {
-  if (Array.isArray(fn)) return fn.map(wrapFn)
+function wrapFn (fn, afterLookup) {
+  if (Array.isArray(fn)) return fn.map(middleware => wrapFn(middleware, afterLookup))
 
   return shimmer.wrapFunction(fn, fn => function (req, res, next) {
     if (typeof next === 'function') {
       arguments[2] = wrapNext(req, next)
     }
 
-    const route = req.route && req.route.path
+    const matchedRoute = afterLookup ? req.route : undefined
+    const route = matchedRoute && matchedRoute.path
 
-    enterChannel.publish({ req, route })
+    enterChannel.publish({ req, route, routeSelected: !!matchedRoute })
 
     try {
       const result = fn.apply(this, arguments)
@@ -83,7 +83,8 @@ function wrapNext (req, next) {
 
 addHook({ name: 'restify', versions: ['>=3'], file: 'lib/server.js' }, Server => {
   shimmer.wrap(Server.prototype, '_setupRequest', wrapSetupRequest)
-  shimmer.massWrap(Server.prototype, handlers, wrapHandler)
+  shimmer.wrap(Server.prototype, 'pre', method => wrapHandler(method, false))
+  shimmer.wrap(Server.prototype, 'use', method => wrapHandler(method, true))
   shimmer.massWrap(Server.prototype, methods, wrapMethod)
 
   return Server
