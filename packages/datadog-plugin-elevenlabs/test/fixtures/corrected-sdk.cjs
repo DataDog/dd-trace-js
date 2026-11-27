@@ -7,12 +7,13 @@ const { dirname, join } = require('node:path')
 
 const sinon = require('sinon')
 
-// Simulate the proposed upstream one-character correction only in this child process. Nothing
-// modifies the installed SDK, and the production tracer never changes the provider's filter.
+// Simulate the proposed upstream correction in this child process and skip the SDK's unused HTTP client.
 const target = join(dirname(process.env.SDK_CONVERSATION_PATH), 'Conversation.js')
+const clientPath = join(dirname(target), '../../../../Client.js')
 const originalCompile = Module.prototype._compile
 let corrected = false
 Module.prototype._compile = function (source, filename) {
+  if (filename === clientPath) return
   if (filename === target) {
     const before = 'parseInt(audioEvent.event_id) <= this.lastInterruptId'
     assert.equal(source.split(before).length, 2, 'expected the published SDK interruption check exactly once')
@@ -39,6 +40,7 @@ let input
 const conversation = new Conversation({
   agentId: 'synthetic',
   requiresAuth: false,
+  client: {},
   audioInterface: {
     start (callback) { input = callback },
     stop () {},
