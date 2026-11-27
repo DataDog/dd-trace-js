@@ -3,26 +3,8 @@
 const maxVarLen64 = 9
 
 /**
- * Encodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
- * Uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
- * Maximum number possible to encode is MAX_SAFE_INTEGER/2 (using zig zag shifts the bits by 1 to the left)
- * @param {number} v
- * @returns {Uint8Array|undefined}
- */
-function encodeVarint (v) {
-  const result = new Uint8Array(maxVarLen64)
-  const written = encodeVarintInto(result, 0, v)
-  if (written === 0) {
-    return
-  }
-  return result.slice(0, written)
-}
-
-/**
- * Writes a zig-zag varint at `target[offset..]` and returns the offset just past the last
- * byte written. Returns `offset` unchanged when the value exceeds MAX_SAFE_INTEGER/2, mirroring
- * the `encodeVarint` overflow contract. Used on the DSM checkpoint hot path to avoid
- * per-call Uint8Array / Buffer allocations.
+ * Writes a zig-zag varint and returns the offset just past the last byte written.
+ * Returns the original offset when the magnitude exceeds MAX_SAFE_INTEGER/2.
  * @param {Uint8Array | Buffer} target
  * @param {number} offset
  * @param {number} value
@@ -51,58 +33,34 @@ function encodeVarintInto (target, offset, value) {
 }
 
 /**
- * Decodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
- * Uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
- * @param {Uint8Array} b
- * @returns {[number|undefined, Uint8Array]}
- */
-function decodeVarint (b) {
-  const [low, high, bytes] = decodeUvarint64(b)
-  if (low === undefined || high === undefined) {
-    return [undefined, bytes]
-  }
-  const positive = (low & 1) === 0
-  const abs = (low >>> 1) + high * 0x80_00_00_00
-  return [positive ? abs : -abs, bytes]
-}
-
-/**
+ * Reads a zig-zag varint and returns its value and the offset of the next byte.
  * @param {Uint8Array} bytes
- * @returns {[number|undefined, number|undefined, Uint8Array]}
+ * @param {number} offset
+ * @returns {[number | undefined, number]}
  */
-function decodeUvarint64 (
-  bytes
-) {
+function decodeVarint (bytes, offset) {
   let low = 0
   let high = 0
-  let s = 0
-  for (let i = 0; ; i++) {
-    if (bytes.length <= i) {
-      return [undefined, undefined, bytes.slice(bytes.length)]
+  const lastShift = (maxVarLen64 - 1) * 7
+  for (let shift = 0; offset < bytes.length; shift += 7) {
+    const byte = bytes[offset++]
+    const done = byte < 0x80 || shift === lastShift
+    const value = done ? byte : byte & 0x7F
+    if (shift < 32) {
+      low |= value << shift
     }
-    const n = bytes[i]
-    if (n < 0x80 || i === maxVarLen64 - 1) {
-      bytes = bytes.slice(i + 1)
-      if (s < 32) {
-        low |= n << s
-      }
-      if (s > 0) {
-        high |= s > 32 ? n << (s - 32) : n >> (32 - s)
-      }
-      return [low, high, bytes]
+    if (shift > 0) {
+      high |= shift > 32 ? value << (shift - 32) : value >> (32 - shift)
     }
-    if (s < 32) {
-      low |= (n & 0x7F) << s
+    if (done) {
+      const magnitude = (low >>> 1) + high * 0x80_00_00_00
+      return [(low & 1) === 0 ? magnitude : -magnitude, offset]
     }
-    if (s > 0) {
-      high |= s > 32 ? (n & 0x7F) << (s - 32) : (n & 0x7F) >> (32 - s)
-    }
-    s += 7
   }
+  return [undefined, offset]
 }
 
 module.exports = {
-  encodeVarint,
   encodeVarintInto,
   decodeVarint,
 }

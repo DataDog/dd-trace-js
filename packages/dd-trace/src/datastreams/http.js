@@ -1,11 +1,10 @@
 'use strict'
 
-const { DsmPathwayCodec } = require('./pathway')
+const { DsmPathwayCodec, prepareHttpEdgeTags } = require('./pathway')
 
-// Same tag set as dd-trace-java's DataStreamsContext.forHttpClient/forHttpServer. Kept pre-sorted because
-// computePathwayHash sorts edge tags in place.
-const CLIENT_EDGE_TAGS = ['direction:out', 'type:http']
-const SERVER_EDGE_TAGS = ['direction:in', 'type:http']
+// Same tag set as dd-trace-java's DataStreamsContext.forHttpClient/forHttpServer.
+const CLIENT_EDGE_TAGS = prepareHttpEdgeTags('direction:out')
+const SERVER_EDGE_TAGS = prepareHttpEdgeTags('direction:in')
 
 /**
  * Records an outbound HTTP checkpoint and writes its pathway context into `headers`.

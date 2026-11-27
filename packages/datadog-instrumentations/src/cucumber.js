@@ -326,7 +326,7 @@ function handleDdWorkerMessage (message) {
     const [messageCode, payload] = message
     if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
       collectTestOptimizationSummariesFromTraces(payload, { attemptToFixExecutions })
-      workerReportTraceCh.publish(payload)
+      workerReportTraceCh.publish({ traces: payload })
       return true
     }
     if (messageCode === CUCUMBER_WORKER_TELEMETRY_PAYLOAD_CODE) {

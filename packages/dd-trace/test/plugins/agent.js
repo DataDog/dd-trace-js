@@ -463,6 +463,8 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
+ * @property {() => void | PromiseLike<unknown>} [operation] - Runs after subscription.
+ *   The assertion waits for the operation and the matching payload. The timeout starts after the operation succeeds.
  * @typedef {object} SerializedSpan
  * @property {bigint} trace_id
  * @property {bigint} span_id
@@ -511,8 +513,11 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     reject = _reject
   }))
 
+  const { operation } = options
   const timeoutMs = options.timeoutMs || 1000
-  const rejectionTimeout = setTimeout(() => {
+  let rejectionTimeout
+  let traceSettled = false
+  function onTimeout () {
     // The promise settles here, so drop the handler from the set. Otherwise reset()'s leak guard
     // would flag this already-rejected expectation as still armed at teardown.
     handlers.delete(handlerPayload)
@@ -531,7 +536,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     // Hack for the information to be fully visible.
     error.message = util.inspect(error, { depth: null })
     reject(error)
-  }, timeoutMs)
+  }
 
   const handlerPayload = {
     handler,
@@ -546,19 +551,19 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
    * @type {TracesCallback | AgentlessCallback}
    */
   function handler (...args) {
+    if (traceSettled) return
+
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
 
     try {
       // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
       const result = callback(...args)
-      handlers.delete(handlerPayload)
-      clearTimeout(rejectionTimeout)
+      finishTrace()
       resolve(result)
     } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
-        handlers.delete(handlerPayload)
-        clearTimeout(rejectionTimeout)
+        finishTrace()
         reject(error)
       } else {
         errors.push(error)
@@ -566,11 +571,36 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     }
   }
 
+  function finishTrace () {
+    traceSettled = true
+    clearTimeout(rejectionTimeout)
+    if (operation === undefined) handlers.delete(handlerPayload)
+  }
+
   handlers.add(handlerPayload)
 
-  promise.cancel = handlerPayload.cancel
+  if (operation === undefined) {
+    rejectionTimeout = setTimeout(onTimeout, timeoutMs)
+    promise.cancel = handlerPayload.cancel
+    return promise
+  }
 
-  return promise
+  const traceResult = Promise.allSettled([promise])
+  const disarm = handlerPayload.cancel
+  const result = /** @type {CancelablePromise<unknown>} */ (Promise.resolve().then(operation).then(async () => {
+    if (!traceSettled && handlers.has(handlerPayload)) {
+      rejectionTimeout = setTimeout(onTimeout, timeoutMs)
+    }
+    const [trace] = await traceResult
+    if (trace.status === 'rejected') throw trace.reason
+    return trace.value
+  }).finally(disarm))
+  handlerPayload.cancel = () => {
+    disarm()
+    Promise.allSettled([result])
+  }
+  result.cancel = handlerPayload.cancel
+  return result
 }
 
 /**

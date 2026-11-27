@@ -177,6 +177,15 @@ describe('profilers/native/space', () => {
     sinon.assert.calledWith(pprof.heap.profile, undefined, mapper)
   })
 
+  it('should record the columns of frames for server-side unminification in their own field', () => {
+    const profiler = makeSpace(NativeSpaceProfiler)
+
+    profiler.start()
+    profiler.profile(true)
+
+    assert.strictEqual(pprof.heap.profile.firstCall.args[3], 'emit')
+  })
+
   it('should not monitor out of memory when OOM monitoring is disabled', () => {
     const profiler = makeSpace(NativeSpaceProfiler, { oomMonitoringEnabled: false })
 
