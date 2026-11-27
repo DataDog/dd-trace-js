@@ -703,14 +703,31 @@ function getRepositoryFile (filename) {
 /** @type {OxcParse | null | undefined} */
 let oxcParse
 
+/** @type {'oxc-binding' | 'oxc-parser' | 'meriyah' | undefined} */
+let parserInUse
+
 /** @returns {OxcParse | null} null when oxc-parser cannot be loaded */
 function getOxcParse () {
   if (oxcParse === undefined) {
-    oxcParse = loadOxcBinding() ?? loadOxcPackage() ?? null
+    const parseWithBinding = loadOxcBinding()
+    oxcParse = parseWithBinding ?? loadOxcPackage() ?? null
+    if (parseWithBinding) {
+      parserInUse = 'oxc-binding'
+    } else {
+      parserInUse = oxcParse ? 'oxc-parser' : 'meriyah'
+    }
     // What meriyah parses instead is not cached under a salt that names oxc.
     if (oxcParse === null && isOxcInCacheSalt) cacheSalt = null
   }
   return oxcParse
+}
+
+/**
+ * The parser this process instruments with, or 'none' while it has parsed nothing, as when every module it ran
+ * came from the cache. Coverage records carry it so a run can tell a fallback parser from the native binding.
+ */
+function getParserInUse () {
+  return parserInUse ?? 'none'
 }
 
 /**
@@ -1214,6 +1231,7 @@ module.exports = {
   finishTest,
   getCollector,
   getDefaultCacheDirectory,
+  getParserInUse,
   installGlobal,
   instrumentSource,
   isActive,
