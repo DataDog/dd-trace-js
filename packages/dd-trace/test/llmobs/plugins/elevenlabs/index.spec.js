@@ -82,10 +82,18 @@ describe('integrations', () => {
         clock.restore()
       })
 
+      /**
+       * @param {InstanceType<typeof Conversation>} session
+       * @param {Socket} transport
+       */
+      async function openSession (session, transport) {
+        const started = session.startSession()
+        transport.emit('open')
+        await started
+      }
+
       async function start () {
-        const promise = conversation.startSession()
-        socket.emit('open')
-        await promise
+        await openSession(conversation, socket)
         socket.deliver({
           type: 'conversation_initiation_metadata',
           conversation_initiation_metadata_event: {
@@ -1322,13 +1330,29 @@ describe('integrations', () => {
         assert.equal(callback.callCount, 3)
         assert.equal(audio.start.callCount, 1)
         assert.equal(outputSpy.callCount, 1)
-        assert.deepEqual(socket.sent[0], {
-          type: 'conversation_initiation_client_data',
-          custom_llm_extra_body: {},
-          conversation_config_override: {},
-          dynamic_variables: {},
-        })
         assert.equal(socket.sent[1].user_audio_chunk, pcm(20).toString('base64'))
+
+        const tracer = require('../../../../../..')
+        const controlSocket = new Socket()
+        tracer.use('elevenlabs', false)
+        try {
+          const control = new Conversation({
+            agentId: 'agent-test',
+            requiresAuth: false,
+            audioInterface: { start () {}, stop () {} },
+            webSocketFactory: { create: () => controlSocket },
+          })
+          try {
+            await openSession(control, controlSocket)
+          } finally {
+            control.endSession()
+          }
+        } finally {
+          tracer.use('elevenlabs', {})
+        }
+
+        assert.equal(controlSocket.sent[0]?.type, 'conversation_initiation_client_data')
+        assert.deepEqual(socket.sent[0], controlSocket.sent[0])
       })
     })
   })
