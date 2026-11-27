@@ -151,6 +151,22 @@ describe('LogPropagator', () => {
     it('should return undefined for a null carrier', () => {
       assert.strictEqual(propagator.inject(null, null), undefined)
     })
+
+    it('should fall back to 64-bit trace ID when spanContext has no _trace tags', () => {
+      config.traceId128BitLoggingEnabled = true
+      config.traceId128BitGenerationEnabled = true
+      const carrier = {}
+      const minimalContext = {
+        toTraceId: () => '123',
+        toSpanId: () => '456',
+      }
+
+      propagator.inject(minimalContext, carrier)
+
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.strictEqual(carrier.dd.trace_id, '123')
+      assert.strictEqual(carrier.dd.span_id, '456')
+    })
   })
 
   describe('extract', () => {

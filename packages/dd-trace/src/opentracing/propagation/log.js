@@ -21,7 +21,7 @@ class LogPropagator {
 
     if (spanContext) {
       dd.trace_id = this._config.traceId128BitGenerationEnabled &&
-        this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
+        this._config.traceId128BitLoggingEnabled && spanContext._trace?.tags?.['_dd.p.tid']
         ? spanContext.toTraceId(true)
         : spanContext.toTraceId()
       dd.span_id = spanContext.toSpanId()
