@@ -217,6 +217,11 @@ module.exports = {
   ],
   mysql2: [
     {
+      name: 'kysely',
+      versions: ['0.29.9'],
+      node: '>=22',
+    },
+    {
       name: 'mysql2',
       versions: ['1.3.3'],
     },
