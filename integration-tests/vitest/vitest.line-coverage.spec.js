@@ -19,6 +19,8 @@ const PATCHED_GLOBALS_TEST_FILE = 'ci-visibility/vitest-line-coverage/patched-gl
 const DEPENDENCIES_TEST_FILE = 'ci-visibility/vitest-line-coverage/dependencies.test.ts'
 const SETTINGS = 'ci-visibility/vitest-line-coverage/src/settings.json'
 const LAZY_SETTINGS = 'ci-visibility/vitest-line-coverage/src/lazy-settings.json'
+const NO_CODE = 'ci-visibility/vitest-line-coverage/src/no-code.mjs'
+const LAZY_NO_CODE = 'ci-visibility/vitest-line-coverage/src/lazy-no-code.mjs'
 const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
@@ -280,14 +282,20 @@ for (const version of getVitestVersions()) {
 
         assert.ok(getLines(filesOf('runs a line of its own file'), DEPENDENCIES_TEST_FILE).size > 0, testOutput)
 
-        // A module with no line of code, imported while the test file loads, is in Shared init. Imported inside
-        // a test, it is in no record: only the first test to import it evaluates it.
+        // A module with no line of code, imported while the test file loads, is in Shared init without lines.
+        // Imported inside a test, it is in no record: only the first test to import it evaluates it.
         const initFiles = coverages.filter(({ shared }) => shared === 'init').flatMap(({ files }) => files)
-        const settingsEntry = initFiles.find(({ filename }) => filename === SETTINGS)
-        assert.deepStrictEqual(settingsEntry, { filename: SETTINGS }, testOutput)
+        const noCodeEntry = initFiles.find(({ filename }) => filename === NO_CODE)
+        assert.deepStrictEqual(noCodeEntry, { filename: NO_CODE }, testOutput)
         const importsOne = filesOf('imports a module of no code')
         assert.ok(getLines(importsOne, DEPENDENCIES_TEST_FILE).size > 0, testOutput)
-        assert.ok(!coverages.some(({ files }) => files.some(({ filename }) => filename === LAZY_SETTINGS)), testOutput)
+        assert.ok(!coverages.some(({ files }) => files.some(({ filename }) => filename === LAZY_NO_CODE)), testOutput)
+
+        // In some Vitest versions a JSON module has lines that map to its file, in others it has none. Either way
+        // it has no code outside its initialiser, so no test record names it.
+        assert.ok(initFiles.some(({ filename }) => filename === SETTINGS), testOutput)
+        const recordFiles = coverages.filter(({ shared }) => shared === undefined).flatMap(({ files }) => files)
+        assert.ok(!recordFiles.some(({ filename }) => filename === SETTINGS || filename === LAZY_SETTINGS), testOutput)
       })
 
       it(`reports the same tests whether or not line coverage is on (${pool})`, async () => {
