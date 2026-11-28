@@ -71,26 +71,27 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
      * @returns {unknown}
      */
     const wrappedConnect = function (callback) {
-      const capture = getPoolAcquireCapture()
-      if (capture !== undefined && typeof callback !== 'function') {
-        const start = acquireStart(this)
-        const result = connect.apply(this, arguments)
-        return result.then(client => {
-          setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
-          return client
-        }, error => {
-          setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
-          throw error
-        })
-      }
-
+      const trackAcquire = poolAcquireStartCh.hasSubscribers
       // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
       if (typeof callback !== 'function') {
-        if (!poolAcquireStartCh.hasSubscribers) {
+        if (!trackAcquire) {
           return connect.apply(this, arguments)
         }
 
+        const capture = getPoolAcquireCapture()
         const start = acquireStart(this)
+
+        if (capture !== undefined) {
+          const result = connect.apply(this, arguments)
+          return result.then(client => {
+            setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
+            return client
+          }, error => {
+            setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
+            throw error
+          })
+        }
+
         const acquireCtx = { poolOptions: this.options }
         poolAcquireStartCh.publish(acquireCtx)
 
@@ -111,38 +112,39 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       }
 
       const ctx = {}
-      const poolOptions = this.options
-      const start = acquireStart(this)
-      const poolQueryAcquire = isPoolQueryAcquire()
+      const start = trackAcquire ? acquireStart(this) : undefined
       let acquireCtx
 
-      if (poolQueryAcquire) {
+      if (!trackAcquire || isPoolQueryAcquire()) {
+        const poolOptions = trackAcquire ? this.options : undefined
         arguments[0] = function (...args) {
-          const client = args[1]
-          if (client !== undefined) {
-            const waitTime = acquireWait(start)
-            return runWithPoolWait(
-              poolWaitTransfer,
-              client,
-              waitTime,
-              poolConnectFinishCh,
-              ctx,
-              callback,
-              this,
-              args
-            )
-          }
-          if (args[0] && poolAcquireStartCh.hasSubscribers) {
-            return runPoolAcquireError(
-              start,
-              args[0],
-              { poolOptions },
-              poolAcquireChannels,
-              ctx,
-              callback,
-              this,
-              args
-            )
+          if (trackAcquire && poolAcquireStartCh.hasSubscribers) {
+            const client = args[1]
+            if (client !== undefined) {
+              const waitTime = acquireWait(start)
+              return runWithPoolWait(
+                poolWaitTransfer,
+                client,
+                waitTime,
+                poolConnectFinishCh,
+                ctx,
+                callback,
+                this,
+                args
+              )
+            }
+            if (args[0]) {
+              return runPoolAcquireError(
+                start,
+                args[0],
+                { poolOptions },
+                poolAcquireChannels,
+                ctx,
+                callback,
+                this,
+                args
+              )
+            }
           }
           return poolConnectFinishCh.runStores(ctx, callback, this, ...args)
         }
@@ -174,11 +176,12 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
       wrappedConnect,
       connect,
       poolConnectStartCh,
-      deferredPoolAcquire
+      deferredPoolAcquire,
+      poolAcquireStartCh
     )
   })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(
-    wrapPoolQueryMethod(query, poolConnectStartCh, deferredPoolAcquire)
+    wrapPoolQueryMethod(query, poolAcquireStartCh, deferredPoolAcquire)
   ))
   return pg
 })
@@ -214,8 +217,9 @@ function wrapQuery (query) {
       stream,
     }
 
+    // A wait measured before reconfiguration still belongs to this query.
     const waitTime = takePoolWaitTime(this)
-    if (waitTime !== undefined) {
+    if (waitTime !== undefined && poolAcquireStartCh.hasSubscribers) {
       ctx.poolWaitTime = waitTime
     }
 
