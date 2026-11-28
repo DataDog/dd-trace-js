@@ -16,6 +16,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class MySQLPlugin extends DatabasePlugin {
   static id = 'mysql'
   static system = 'mysql'
+  static poolAcquireConfigurable = false
 
   constructor () {
     super(...arguments)
@@ -33,6 +34,8 @@ class MySQLPlugin extends DatabasePlugin {
 
     // Explicit getConnection calls get an acquire span. Pool queries report their internal acquire
     // on the query span instead, so each acquire is counted once.
+    const plugin = /** @type {typeof MySQLPlugin} */ (this.constructor)
+    const disableOption = plugin.poolAcquireConfigurable ? 'poolAcquire' : undefined
     this.addSub(`apm:${this.component}:pool:acquire:start`, ctx => {
       const operation = `${this.component}.pool.acquire`
 
@@ -44,7 +47,7 @@ class MySQLPlugin extends DatabasePlugin {
         kind: 'client',
         meta: connectionMeta(this.system, ctx.conf),
       }, ctx)
-    })
+    }, disableOption)
 
     this.addSub(`apm:${this.component}:pool:acquire:finish`, ctx => {
       const span = ctx.currentStore?.span

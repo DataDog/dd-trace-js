@@ -81,6 +81,24 @@ describe('helpers/pool-acquire', () => {
     })
   })
 
+  it('preserves the context wrapper when deferred acquisition telemetry is disabled', async () => {
+    const acquireStartCh = { hasSubscribers: true }
+    const pool = {
+      getConnection: wrapPoolAcquireCarrier(callback => callback(isPoolQueryAcquire()), noop,
+        { hasSubscribers: true }, true, acquireStartCh),
+      query: wrapPoolQueryMethod(function () {
+        return new Promise(resolve => setImmediate(() => this.getConnection(resolve)))
+      }, acquireStartCh, true),
+    }
+
+    const query = pool.query()
+    acquireStartCh.hasSubscribers = false
+    assert.strictEqual(await query, false)
+
+    acquireStartCh.hasSubscribers = true
+    assert.strictEqual(await pool.query(), true)
+  })
+
   describe('promise pool ownership', () => {
     it('forwards unsupported drivers and external connections without creating ownership', async () => {
       const startCh = channel('apm:mysql2:pool:acquire:start')
