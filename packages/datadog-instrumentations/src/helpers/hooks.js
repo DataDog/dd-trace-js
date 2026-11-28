@@ -150,6 +150,7 @@ module.exports = {
   tedious: () => require('../tedious'),
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
+  'vite-node': { esmFirst: true, fn: () => require('../vitest') },
   vitest: { esmFirst: true, fn: () => require('../vitest') },
   when: () => require('../when'),
   winston: () => require('../winston'),
