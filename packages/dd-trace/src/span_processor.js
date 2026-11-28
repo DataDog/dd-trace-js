@@ -102,7 +102,8 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans, DD_TRACE_ENABLED } = this._config
+    const { DD_TRACE_ENABLED } = this._config
+    const { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: flushMinSpans } = this._config.flush
     const { started, finished } = trace
 
     if (trace.record === false) return

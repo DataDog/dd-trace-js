@@ -20,7 +20,7 @@ class ElectronExporter {
 
     this.#traces.push(spans)
 
-    const { flushInterval } = this._config
+    const { DD_TRACE_FLUSH_INTERVAL: flushInterval } = this._config.flush
 
     if (flushInterval === 0) {
       this.flush()

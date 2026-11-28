@@ -17,7 +17,7 @@ describe('ElectronExporter', () => {
 
   beforeEach(() => {
     span = { name: 'test', service: 'my-service', meta: {}, metrics: {} }
-    config = { flushInterval: 1000 }
+    config = { flush: { DD_TRACE_FLUSH_INTERVAL: 1000 } }
 
     traceChannel = {
       hasSubscribers: true,
@@ -47,7 +47,7 @@ describe('ElectronExporter', () => {
     })
 
     it('should flush immediately when flushInterval is 0', () => {
-      exporter = new Exporter({ flushInterval: 0 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
       exporter.export([span])
 
       sinon.assert.calledOnce(traceChannel.publish)

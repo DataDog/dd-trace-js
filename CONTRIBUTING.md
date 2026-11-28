@@ -619,6 +619,7 @@ Load order in `config/index.js`:
 ```json
 "DD_RUNTIME_METRICS_ENABLED": [{
   "type": "boolean",
+  "namespace": "runtimeMetrics",
   "configurationNames": ["runtimeMetrics.enabled", "runtimeMetrics"],
   "default": "false"
 }]
@@ -641,7 +642,7 @@ tracer.init({
 Result:
 
 ```js
-config.runtimeMetrics.enabled === true
+config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED === true
 ```
 
 ### Decimal with transform

@@ -103,7 +103,7 @@ describe('OTLP consistent probability sampling', () => {
   })
 
   it('exports the same sampling fields as propagation across partial flushes', () => {
-    config.flushMinSpans = 1
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
     const tracer = new Tracer(config)
     const root = tracer.startSpan('root', { childOf: undecidedParent(tracer) })
     const child = tracer.startSpan('child', { childOf: root })
@@ -174,7 +174,7 @@ describe('OTLP consistent probability sampling', () => {
     })
 
     it(`updates sampling state after a partial flush (${inherited ? 'inherited' : 'local'})`, () => {
-      config.flushMinSpans = 1
+      config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
       config.sampling = { DD_TRACE_SAMPLE_RATE: 1 }
       const tracer = new Tracer(config)
       const original = 'ot=rv:ef284ace7a91e1;th:8,congo=value'

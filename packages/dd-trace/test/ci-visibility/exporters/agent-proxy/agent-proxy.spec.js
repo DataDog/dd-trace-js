@@ -11,6 +11,7 @@ const sinon = require('sinon')
 const nock = require('nock')
 const proxyquire = require('proxyquire')
 
+const { defaults } = require('../../../../src/config/defaults')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
 const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agent-proxy')
@@ -25,9 +26,11 @@ const { defaults: { hostname, port } } = require('../../../../src/config/default
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
+const defaultFlushInterval = defaults['flush.DD_TRACE_FLUSH_INTERVAL']
+
 class AgentProxyCiVisibilityExporter extends AgentProxyCiVisibilityExporterBase {
   constructor (config) {
-    super({ testOptimization: {}, ...config })
+    super({ testOptimization: {}, flush: { DD_TRACE_FLUSH_INTERVAL: defaultFlushInterval }, ...config })
   }
 }
 
@@ -70,7 +73,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
     class ControlledExporter extends ControlledExporterBase {
       constructor (config) {
-        super({ testOptimization: {}, ...config })
+        super({ testOptimization: {}, flush: { DD_TRACE_FLUSH_INTERVAL: defaultFlushInterval }, ...config })
       }
     }
 
@@ -479,7 +482,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/'],
         }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, flushInterval, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+        url,
+        flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval },
+        tags,
+      })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
       agentProxyCiVisibilityExporter._writer = mockWriter
@@ -504,7 +511,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2/'],
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ url, flushInterval, tags })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+        url,
+        flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval },
+        tags,
+      })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
 
       agentProxyCiVisibilityExporter._writer = mockWriter

@@ -16,6 +16,7 @@ const { VARIANT } = process.env
 
 const OPERATIONS = Number(process.env.OPERATIONS)
 const dsmEnabled = true
+const flushInterval = 2_147_483_647
 
 const processor = new DataStreamsProcessor({
   // Benchmark CI runs this fixture against the baseline implementation too.
@@ -23,7 +24,8 @@ const processor = new DataStreamsProcessor({
   dataStreams: { DD_DATA_STREAMS_ENABLED: dsmEnabled },
   service: 'bench-svc',
   env: 'bench-env',
-  flushInterval: 2_147_483_647,
+  flushInterval,
+  flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval },
 })
 processor.writer.flush = () => {}
 clearInterval(processor.timer)

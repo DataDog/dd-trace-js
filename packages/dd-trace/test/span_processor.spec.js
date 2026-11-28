@@ -64,7 +64,7 @@ describe('SpanProcessor', () => {
       sample: sinon.stub(),
     }
     config = {
-      flushMinSpans: 3,
+      flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 3 },
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
@@ -274,6 +274,7 @@ describe('SpanProcessor', () => {
 
   it('should configure span sampler correctly', () => {
     const config = {
+      flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 3 },
       stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
       appsec: {},
       tracing: {},
@@ -299,6 +300,7 @@ describe('SpanProcessor', () => {
   it('should erase the trace and stop execution when tracing=false', () => {
     const config = {
       DD_TRACE_ENABLED: false,
+      flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 3 },
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
@@ -321,7 +323,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should call spanFormat every time a partial flush is triggered', () => {
-    config.flushMinSpans = 1
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
@@ -336,7 +338,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should add span tags to first span in a chunk', () => {
-    config.flushMinSpans = 2
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2
     config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
@@ -367,7 +369,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should add the native export marker to the first span of each chunk', () => {
-    config.flushMinSpans = 2
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan]
@@ -385,7 +387,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should not let a span tag override the native export marker', () => {
-    config.flushMinSpans = 1
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     const formattedSpan = { meta: { [SDK_OTLP_EXPORT_KEY]: 'true' } }
     spanFormat.returns(formattedSpan)
@@ -397,7 +399,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should not add the native export marker when traces are exported over OTLP', () => {
-    config.flushMinSpans = 1
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [finishedSpan]
@@ -409,7 +411,7 @@ describe('SpanProcessor', () => {
   })
 
   it('should add the native export marker when a native transport overrides OTLP', () => {
-    config.flushMinSpans = 1
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
     config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -475,7 +477,7 @@ describe('SpanProcessor', () => {
 
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
-    config.flushMinSpans = 2
+    config.flush.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     const firstFormatted = { meta: {}, metrics: {} }
     const secondFormatted = { meta: {}, metrics: {} }
@@ -551,7 +553,7 @@ describe('SpanProcessor', () => {
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {
-        flushMinSpans: 3,
+        flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 3 },
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
         tracing: {},
@@ -576,7 +578,7 @@ describe('SpanProcessor', () => {
       formattedSpan.meta['_dd.otel.instrumentation_http_resource'] = 'PROPFIND /u'
       spanFormat.returns(formattedSpan)
       const otelConfig = {
-        flushMinSpans: 3,
+        flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 3 },
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
         tracing: {},

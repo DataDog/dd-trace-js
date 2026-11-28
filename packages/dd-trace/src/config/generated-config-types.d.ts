@@ -451,8 +451,10 @@ export interface GeneratedConfig {
     DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: boolean;
     DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   };
-  flushInterval: number;
-  flushMinSpans: number;
+  flush: {
+    DD_TRACE_FLUSH_INTERVAL: number;
+    DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: number;
+  };
   headerTags: string[];
   hostname: string;
   iast: {
@@ -562,12 +564,12 @@ export interface GeneratedConfig {
     DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
   };
   runtimeMetrics: {
-    enabled: boolean;
-    eventLoop: boolean;
-    gc: boolean;
-    native: boolean;
+    DD_RUNTIME_METRICS_ENABLED: boolean;
+    DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: boolean;
+    DD_RUNTIME_METRICS_GC_ENABLED: boolean;
+    DD_RUNTIME_METRICS_NATIVE: boolean;
+    DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: boolean;
   };
-  runtimeMetricsRuntimeId: boolean;
   sampling: {
     DD_SPAN_SAMPLING_RULES: import('../../../../index').SpanSamplingRule[] | undefined;
     DD_TRACE_RATE_LIMIT: number;
@@ -627,8 +629,10 @@ export interface GeneratedConfig {
     DD_TEST_MANAGEMENT_ENABLED: boolean;
     DD_TEST_MANAGEMENT_REPORT_ENABLED: boolean | undefined;
   };
-  traceId128BitGenerationEnabled: boolean;
-  traceId128BitLoggingEnabled: boolean;
+  traceId: {
+    DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: boolean;
+    DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: boolean;
+  };
   traceWebsocketMessagesEnabled: boolean;
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;

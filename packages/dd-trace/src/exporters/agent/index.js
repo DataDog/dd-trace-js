@@ -12,7 +12,8 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._config = config
-    const { lookup, protocolVersion, stats = {}, apmTracingEnabled, flushInterval } = config
+    const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const { DD_TRACE_FLUSH_INTERVAL: flushInterval } = config.flush
     this._url = config.url
 
     const headers = {}
@@ -46,7 +47,7 @@ class AgentExporter {
   export (spans) {
     const appended = this._writer.append(spans)
 
-    const { flushInterval } = this._config
+    const { DD_TRACE_FLUSH_INTERVAL: flushInterval } = this._config.flush
 
     if (flushInterval === 0) {
       this._writer.flush()

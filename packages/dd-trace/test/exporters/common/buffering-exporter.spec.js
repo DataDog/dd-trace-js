@@ -21,7 +21,7 @@ describe('BufferingExporter', () => {
 
   it('should store traces as is when export is called before initialization', () => {
     const trace = [{ span_id: '1234' }]
-    const exporter = new BufferingExporter({ port })
+    const exporter = new BufferingExporter({ port, flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval } })
 
     exporter.export(trace)
 
@@ -30,7 +30,7 @@ describe('BufferingExporter', () => {
 
   it('should export if a writer is initialized', (done) => {
     const trace = [{ span_id: '1234' }]
-    const exporter = new BufferingExporter({ port, flushInterval })
+    const exporter = new BufferingExporter({ port, flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval } })
 
     exporter._writer = writer
     exporter._isInitialized = true
@@ -50,7 +50,7 @@ describe('BufferingExporter', () => {
   it('should export buffered traces via exportUncodedTraces', () => {
     const trace1 = [{ span_id: '1234' }]
     const trace2 = [{ span_id: '5678' }]
-    const exporter = new BufferingExporter({ port })
+    const exporter = new BufferingExporter({ port, flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval } })
 
     exporter.export(trace1)
     exporter.export(trace2)
@@ -68,7 +68,7 @@ describe('BufferingExporter', () => {
 
   it('should reset uncoded traces', () => {
     const trace = [{ span_id: '1234' }]
-    const exporter = new BufferingExporter({ port })
+    const exporter = new BufferingExporter({ port, flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval } })
 
     exporter.export(trace)
     assert.deepStrictEqual(exporter.getUncodedTraces(), [trace])
@@ -89,7 +89,7 @@ describe('BufferingExporter', () => {
       append: sinon.stub().onFirstCall().returns(false).onSecondCall().returns(true),
       flush: sinon.spy(),
     }
-    const exporter = new TestBufferingExporter({ isCiVisibility: true, flushInterval: 0 })
+    const exporter = new TestBufferingExporter({ isCiVisibility: true, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
     exporter._writer = writer
     exporter._isInitialized = true
 

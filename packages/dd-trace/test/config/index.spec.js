@@ -223,7 +223,7 @@ describe('Config', () => {
         process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
         assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
         const config = getConfig()
-        assert.strictEqual(config.runtimeMetricsRuntimeId, true)
+        assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, true)
         assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
         delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
@@ -479,7 +479,7 @@ describe('Config', () => {
       logLevel: 'error',
       sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       runtimeMetrics: {
-        enabled: true,
+        DD_RUNTIME_METRICS_ENABLED: true,
       },
       tags: {
         foo: 'bar',
@@ -656,7 +656,7 @@ describe('Config', () => {
       logLevel: 'debug',
       sampling: { DD_TRACE_SAMPLE_RATE: 0.1 },
       runtimeMetrics: {
-        enabled: false,
+        DD_RUNTIME_METRICS_ENABLED: false,
       },
       tags: {
         foo: 'bar1',
@@ -2285,8 +2285,10 @@ describe('Config', () => {
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
-      flushInterval: 2000,
-      flushMinSpans: 1000,
+      flush: {
+        DD_TRACE_FLUSH_INTERVAL: 2000,
+        DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 1000,
+      },
       DD_HEAP_SNAPSHOT_COUNT: 0,
       DD_HEAP_SNAPSHOT_DESTINATION: '',
       DD_HEAP_SNAPSHOT_INTERVAL: 3600,
@@ -2329,19 +2331,21 @@ describe('Config', () => {
       },
       reportHostname: false,
       runtimeMetrics: {
-        enabled: false,
-        eventLoop: true,
-        gc: true,
+        DD_RUNTIME_METRICS_ENABLED: false,
+        DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+        DD_RUNTIME_METRICS_GC_ENABLED: true,
+        DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: false,
       },
-      runtimeMetricsRuntimeId: false,
       sampling: { DD_TRACE_SAMPLE_RATE: undefined },
       DD_TRACE_SCOPE: undefined,
       service: 'node',
       spanAttributeSchema: 'v0',
       spanComputePeerService: false,
       spanRemoveIntegrationFromService: false,
-      traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true,
+      traceId: {
+        DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
+        DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
+      },
       DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
     })
     assert.deepStrictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS, [])
@@ -2820,12 +2824,12 @@ describe('Config', () => {
       },
       reportHostname: true,
       runtimeMetrics: {
-        enabled: true,
-        eventLoop: false,
-        gc: false,
-        native: false,
+        DD_RUNTIME_METRICS_ENABLED: true,
+        DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: false,
+        DD_RUNTIME_METRICS_GC_ENABLED: false,
+        DD_RUNTIME_METRICS_NATIVE: false,
+        DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: true,
       },
-      runtimeMetricsRuntimeId: true,
       sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
       spanAttributeSchema: 'v1',
@@ -2838,8 +2842,10 @@ describe('Config', () => {
         version: '1.0.0',
         env: 'test',
       },
-      traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true,
+      traceId: {
+        DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
+        DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
+      },
       DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart',
       DD_TRACE_ENABLED: true,
       version: '1.0.0',
@@ -3059,9 +3065,32 @@ describe('Config', () => {
       apmTracingEnabled: false,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST: true,
       runtimeMetrics: {
-        enabled: false,
+        DD_RUNTIME_METRICS_ENABLED: false,
       },
     })
+  })
+
+  it('should use canonical Runtime Metrics names internally', () => {
+    const config = getConfig({
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: false,
+        gc: false,
+        native: false,
+      },
+      runtimeMetricsRuntimeId: true,
+    })
+
+    assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED, true)
+    assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED, false)
+    assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_GC_ENABLED, false)
+    assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE, false)
+    assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, true)
+    assert.strictEqual(Object.hasOwn(config.runtimeMetrics, 'enabled'), false)
+    assert.strictEqual(Object.hasOwn(config.runtimeMetrics, 'eventLoop'), false)
+    assert.strictEqual(Object.hasOwn(config.runtimeMetrics, 'gc'), false)
+    assert.strictEqual(Object.hasOwn(config.runtimeMetrics, 'native'), false)
+    assert.strictEqual(Object.hasOwn(config, 'runtimeMetricsRuntimeId'), false)
   })
 
   it('should accept numeric and automatic OOM heap limit extension sizes', () => {
@@ -3158,7 +3187,7 @@ describe('Config', () => {
     })
 
     assert.strictEqual(config.startupLogs, false)
-    assert.strictEqual(config.flushInterval, 1234)
+    assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, 1234)
     assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     assert.strictEqual(config.service, '1234')
@@ -3173,7 +3202,7 @@ describe('Config', () => {
       },
     })
 
-    assert.strictEqual(config.flushInterval, Infinity)
+    assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, Infinity)
     assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
   })
 
@@ -3247,7 +3276,7 @@ describe('Config', () => {
     })
 
     assert.strictEqual(config.startupLogs, defaults.startupLogs)
-    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, defaults['flush.DD_TRACE_FLUSH_INTERVAL'])
     assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
     assert.strictEqual(config.service, 'node')
     assert.deepStrictEqual(
@@ -3283,7 +3312,7 @@ describe('Config', () => {
     })
 
     assert.strictEqual(config.startupLogs, defaults.startupLogs)
-    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, defaults['flush.DD_TRACE_FLUSH_INTERVAL'])
     assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
     assert.strictEqual(config.service, 'node')
   })
@@ -3524,8 +3553,10 @@ describe('Config', () => {
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
-      flushInterval: 5000,
-      flushMinSpans: 500,
+      flush: {
+        DD_TRACE_FLUSH_INTERVAL: 5000,
+        DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
+      },
       hostname: 'agent',
       iast: {
         DD_IAST_DB_ROWS_TO_TAINT: 2,
@@ -3556,11 +3587,11 @@ describe('Config', () => {
       },
       reportHostname: true,
       runtimeMetrics: {
-        enabled: true,
-        eventLoop: false,
-        gc: false,
+        DD_RUNTIME_METRICS_ENABLED: true,
+        DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: false,
+        DD_RUNTIME_METRICS_GC_ENABLED: false,
+        DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: true,
       },
-      runtimeMetricsRuntimeId: true,
       sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
       site: 'datadoghq.eu',
@@ -3572,8 +3603,10 @@ describe('Config', () => {
         service: 'service',
         version: '0.1.0',
       },
-      traceId128BitGenerationEnabled: true,
-      traceId128BitLoggingEnabled: true,
+      traceId: {
+        DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
+        DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
+      },
       version: '0.1.0',
     })
     assert.deepStrictEqual(
@@ -3762,8 +3795,10 @@ describe('Config', () => {
     assert.strictEqual(config.logger, logger)
     assert.strictEqual(config.tags.foo, 'bar')
     assertObjectContains(config, {
-      flushInterval: 5000,
-      flushMinSpans: 500,
+      flush: {
+        DD_TRACE_FLUSH_INTERVAL: 5000,
+        DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
+      },
       plugins: false,
     })
   })
@@ -4260,8 +4295,10 @@ describe('Config', () => {
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent' },
-      flushMinSpans: 500,
-      flushInterval: 500,
+      flush: {
+        DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
+        DD_TRACE_FLUSH_INTERVAL: 500,
+      },
       iast: {
         DD_IAST_DB_ROWS_TO_TAINT: 3,
         DD_IAST_DEDUPLICATION_ENABLED: true,
@@ -4288,16 +4325,18 @@ describe('Config', () => {
       },
       reportHostname: false,
       runtimeMetrics: {
-        enabled: false,
+        DD_RUNTIME_METRICS_ENABLED: false,
+        DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: false,
       },
-      runtimeMetricsRuntimeId: false,
       service: 'test',
       site: 'datadoghq.com',
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
       spanRemoveIntegrationFromService: true,
-      traceId128BitGenerationEnabled: false,
-      traceId128BitLoggingEnabled: false,
+      traceId: {
+        DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false,
+        DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: false,
+      },
       version: '1.0.0',
       serviceMapping: { b: 'bb' },
       tags: {
@@ -4717,7 +4756,7 @@ describe('Config', () => {
       })
 
       assert.strictEqual(config.dogstatsd, undefined)
-      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED, false)
     })
   }
 
@@ -4880,7 +4919,7 @@ describe('Config', () => {
 
       const config = getConfig()
 
-      assert.strictEqual(config.flushInterval, 0)
+      assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, 0)
     })
 
     it('should not set flushInterval to 0 in Lambda environment with mini agent', () => {
@@ -4889,7 +4928,7 @@ describe('Config', () => {
 
       const config = getConfig()
 
-      assert.strictEqual(config.flushInterval, 2000)
+      assert.strictEqual(config.flush.DD_TRACE_FLUSH_INTERVAL, 2000)
     })
   })
 
@@ -6027,7 +6066,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
       const config = getConfig()
-      assert.strictEqual(config.runtimeMetrics.enabled, true)
+      assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED, true)
     })
 
     it('should normalize stable site and OTLP protocol configuration', () => {
@@ -6119,7 +6158,7 @@ apm_configuration_default:
       assert.strictEqual(stableConfig.warnings.length, 0)
 
       const config = getConfig()
-      assert.strictEqual(config.runtimeMetrics.enabled, true)
+      assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED, true)
     })
 
     it('should log a warning if the YAML files are malformed', () => {
@@ -6191,7 +6230,7 @@ apm_configuration_default:
       const config = getConfig()
 
       // Tracing
-      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+      assert.strictEqual(config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED, true)
       assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['tracecontext'])
       assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['tracecontext'])
 
@@ -7164,7 +7203,7 @@ rules:
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
-      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED, false)
       assert.strictEqual(config.dataStreams.DD_DATA_STREAMS_ENABLED, false)
       assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
@@ -7359,7 +7398,7 @@ rules:
     it('should disable 128-bit trace ID generation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.traceId128BitGenerationEnabled, false)
+      assert.strictEqual(config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED, false)
     })
 
     it('should allow env var to override agentless 128-bit disable', () => {
@@ -7367,7 +7406,7 @@ rules:
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
       const config = getConfig()
       // Env var has higher priority than calculated; encoder truncation is the safety net
-      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+      assert.strictEqual(config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED, true)
     })
 
     it('should not affect other config when agentless is disabled', () => {
@@ -7441,7 +7480,7 @@ rules:
             const origin = value === undefined ? 'default' : 'env_var'
 
             for (const [name, configPath] of [
-              ['DD_RUNTIME_METRICS_NATIVE', 'runtimeMetrics.native'],
+              ['DD_RUNTIME_METRICS_NATIVE', 'runtimeMetrics.DD_RUNTIME_METRICS_NATIVE'],
               ['DD_PROFILING_HEAP_ENABLED', 'DD_PROFILING_HEAP_ENABLED'],
               ['DD_IAST_ENABLED', 'iast.DD_IAST_ENABLED'],
             ]) {
@@ -7451,7 +7490,7 @@ rules:
                 origin,
               })
             }
-            assert.strictEqual(config.runtimeMetrics.native, value === undefined || value === 'true')
+            assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE, value === undefined || value === 'true')
             assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, value === undefined ? undefined : value === 'true')
             assert.strictEqual(config.iast.DD_IAST_ENABLED, value === 'true')
             sinon.assert.notCalled(logWriter.warn)
@@ -7581,7 +7620,7 @@ rules:
 
         const config = getConfig()
 
-        assert.strictEqual(config.runtimeMetrics.native, false)
+        assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE, false)
         assertObjectContains(getLatestConfigUpdate('DD_RUNTIME_METRICS_NATIVE'), {
           value: false,
           origin: value === 'false' ? 'env_var' : 'calculated',
@@ -7592,8 +7631,8 @@ rules:
     it('should disable native runtime metrics enabled programmatically and explain why', () => {
       const config = getConfig({ runtimeMetrics: { native: true } })
 
-      assert.strictEqual(config.runtimeMetrics.native, false)
-      assert.strictEqual(config.getOrigin('runtimeMetrics.native'), 'calculated')
+      assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE, false)
+      assert.strictEqual(config.getOrigin('runtimeMetrics.DD_RUNTIME_METRICS_NATIVE'), 'calculated')
       sinon.assert.calledOnceWithExactly(logWriter.warn,
         'DATADOG TRACER DIAGNOSTIC - Native runtime metrics are disabled, because they do not work on Bun.')
     })
@@ -7651,7 +7690,7 @@ rules:
       for (const remoteConfig of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
         config.setRemoteConfig(remoteConfig)
 
-        assert.strictEqual(config.runtimeMetrics.native, false)
+        assert.strictEqual(config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE, false)
         assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, false)
         for (const name of ['DD_RUNTIME_METRICS_NATIVE', 'DD_PROFILING_HEAP_ENABLED']) {
           assertObjectContains(getLatestConfigUpdate(name), { value: false, origin: 'calculated' })

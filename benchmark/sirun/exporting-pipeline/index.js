@@ -39,8 +39,11 @@ let exported = 0
 let lastFormatted
 const exporter = { export (formatted) { exported += formatted.length; lastFormatted = formatted } }
 const prioritySampler = new PrioritySampler()
+const flushMinSpans = 100
 const config = {
-  flushMinSpans: 100,
+  // Benchmark CI runs this fixture against the baseline processor too.
+  flushMinSpans,
+  flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: flushMinSpans },
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: WITH_STATS,
   },

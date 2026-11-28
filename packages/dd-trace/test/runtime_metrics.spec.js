@@ -76,7 +76,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       beforeEach(() => {
         config = {
           runtimeMetrics: {
-            enabled: false,
+            DD_RUNTIME_METRICS_ENABLED: false,
           },
         }
 
@@ -121,7 +121,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       })
 
       it('should proxy when enabled', () => {
-        config.runtimeMetrics.enabled = true
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = true
 
         proxy.start(config)
         proxy.track()
@@ -145,10 +145,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       })
 
       it('should be noop when disabled after being enabled', () => {
-        config.runtimeMetrics.enabled = true
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = true
         proxy.start(config)
         proxy.stop()
-        config.runtimeMetrics.enabled = false
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = false
         proxy.start(config)
         proxy.track()
         proxy.boolean()
@@ -178,7 +178,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         sinon.assert.notCalled(runtimeMetrics.flush)
         sinon.assert.calledOnce(done)
 
-        config.runtimeMetrics.enabled = true
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = true
         proxy.start(config)
         proxy.flush(done)
         sinon.assert.calledOnceWithExactly(runtimeMetrics.flush, done)
@@ -250,9 +250,9 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             DD_DOGSTATSD_PORT: 8125,
           },
           runtimeMetrics: {
-            enabled: true,
-            eventLoop: true,
-            gc: true,
+            DD_RUNTIME_METRICS_ENABLED: true,
+            DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+            DD_RUNTIME_METRICS_GC_ENABLED: true,
           },
           tags: {
             str: 'bar',
@@ -347,7 +347,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
         it('should refresh the DogStatsD client tags when the identity-refresh channel fires', () => {
           config.tags['runtime-id'] = 'initial-id'
-          config.runtimeMetricsRuntimeId = true
+          config.runtimeMetrics.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = true
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
           client.updateTags.resetHistory()
@@ -513,7 +513,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
         it('should handle configuration changes correctly', async () => {
           // Test with GC disabled
-          const configWithoutGC = { ...config, runtimeMetrics: { ...config.runtimeMetrics, gc: false } }
+          const configWithoutGC = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, DD_RUNTIME_METRICS_GC_ENABLED: false },
+          }
           runtimeMetrics.stop()
           runtimeMetrics.start(configWithoutGC)
 
@@ -538,7 +541,10 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.gc.pause.95percentile')
 
           // Test with event loop disabled
-          const configWithoutEL = { ...config, runtimeMetrics: { ...config.runtimeMetrics, eventLoop: false } }
+          const configWithoutEL = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: false },
+          }
           // Calling start again should stop any former metric collection
           runtimeMetrics.start(configWithoutEL)
           client.gauge.resetHistory()
@@ -599,7 +605,12 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
           const configNativeDisabled = {
             ...config,
-            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: false },
+            runtimeMetrics: {
+              ...config.runtimeMetrics,
+              DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+              DD_RUNTIME_METRICS_GC_ENABLED: true,
+              DD_RUNTIME_METRICS_NATIVE: false,
+            },
           }
 
           localRuntimeMetrics.start(configNativeDisabled)
@@ -648,7 +659,12 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
 
           const configNativeEnabled = {
             ...config,
-            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: true },
+            runtimeMetrics: {
+              ...config.runtimeMetrics,
+              DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+              DD_RUNTIME_METRICS_GC_ENABLED: true,
+              DD_RUNTIME_METRICS_NATIVE: true,
+            },
           }
 
           localRuntimeMetrics.start(configNativeEnabled)
@@ -1053,7 +1069,12 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
       url: new URL('http://localhost:8126'),
       dogstatsd: { DD_DOGSTATSD_HOST: 'localhost', DD_DOGSTATSD_PORT: 8125 },
       // native is explicitly true to prove the real version gate wins over it.
-      runtimeMetrics: { enabled: true, eventLoop: true, gc: true, native: true },
+      runtimeMetrics: {
+        DD_RUNTIME_METRICS_ENABLED: true,
+        DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+        DD_RUNTIME_METRICS_GC_ENABLED: true,
+        DD_RUNTIME_METRICS_NATIVE: true,
+      },
       tags: {},
       DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
       getOrigin: () => 'default',
@@ -1319,7 +1340,7 @@ describe('otlp_runtime_metrics', () => {
   ])
 
   it('registers all OTel-native metrics with spec-correct types and units', () => {
-    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } })
 
     assert.deepStrictEqual(Object.keys(createdInstruments).sort(), Object.keys(SPEC).sort())
     assert.strictEqual(batchCallbacks.length, 2, 'heap and event-loop delay stats each register one batch callback')
@@ -1339,7 +1360,7 @@ describe('otlp_runtime_metrics', () => {
   })
 
   it('observes positive values and emits required attributes', () => {
-    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } })
 
     const observed = fireBatchCallbacks()
 
@@ -1380,7 +1401,7 @@ describe('otlp_runtime_metrics', () => {
     const ctx = loadOtlpRuntimeMetricsTestModule({
       monitorEventLoopDelay: () => fakeH,
     })
-    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    ctx.otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } })
     const observed = ctx.fireBatchCallbacks()
     assert.ok(!observed.has(ctx.createdInstruments['nodejs.eventloop.delay.min']),
       'delay gauges should not emit when count < 5')
@@ -1402,7 +1423,7 @@ describe('otlp_runtime_metrics', () => {
     const ctx = loadOtlpRuntimeMetricsTestModule({
       monitorEventLoopDelay: () => fakeH,
     })
-    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    ctx.otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } })
     const observed = ctx.fireBatchCallbacks()
 
     assert.deepStrictEqual(
@@ -1440,7 +1461,7 @@ describe('otlp_runtime_metrics', () => {
 
   it('records v8js.gc.duration in seconds with mapped v8js.gc.type attribute', () => {
     const { constants: perfConstants } = require('node:perf_hooks')
-    otlpMetrics.start({ runtimeMetrics: { gc: true } })
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_GC_ENABLED: true } })
 
     assert.strictEqual(FakePerformanceObserverForOtlp.instances.length, 1, 'GC observer should be installed')
     const observer = FakePerformanceObserverForOtlp.instances[0]
@@ -1467,8 +1488,8 @@ describe('otlp_runtime_metrics', () => {
     ])
   })
 
-  it('skips gc.duration when runtimeMetrics.gc is false', () => {
-    otlpMetrics.start({ runtimeMetrics: { gc: false } })
+  it('skips gc.duration when runtimeMetrics.DD_RUNTIME_METRICS_GC_ENABLED is false', () => {
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_GC_ENABLED: false } })
     assert.ok(!createdInstruments['v8js.gc.duration'], 'gc.duration should not be created when disabled')
     assert.strictEqual(FakePerformanceObserverForOtlp.instances.length, 0, 'no GC observer should be installed')
   })
@@ -1511,7 +1532,7 @@ describe('otlp_runtime_metrics', () => {
       '../log': { error: errorLog },
     })
 
-    dispatcher.start({ runtimeMetrics: { enabled: true }, DD_METRICS_OTEL_ENABLED: true })
+    dispatcher.start({ runtimeMetrics: { DD_RUNTIME_METRICS_ENABLED: true }, DD_METRICS_OTEL_ENABLED: true })
 
     assert.ok(createdBeforeFailure > 0, 'sanity: some instruments were registered before the throw')
     assert.ok(errorLog.calledOnce, 'failure should be logged via log.error')
@@ -1546,7 +1567,7 @@ describe('otlp_runtime_metrics', () => {
   })
 
   it('skips event loop metrics when disabled and is restartable', () => {
-    otlpMetrics.start({ runtimeMetrics: { eventLoop: false } })
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: false } })
     for (const name of Object.keys(SPEC)) {
       if (name.startsWith('nodejs.eventloop.')) {
         assert.ok(!createdInstruments[name], `${name} should not be created`)
@@ -1555,14 +1576,14 @@ describe('otlp_runtime_metrics', () => {
 
     otlpMetrics.stop()
     for (const k of Object.keys(createdInstruments)) delete createdInstruments[k]
-    otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+    otlpMetrics.start({ runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } })
     assert.strictEqual(Object.keys(createdInstruments).length, Object.keys(SPEC).length,
       'should register every metric again after stop')
   })
 
   it('subscribes the DogStatsD client to identity refresh on start and unsubscribes on stop', () => {
     const ctx = loadOtlpRuntimeMetricsTestModule()
-    const config = { runtimeMetrics: { eventLoop: true } }
+    const config = { runtimeMetrics: { DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true } }
 
     ctx.otlpMetrics.start(config)
 
@@ -1644,7 +1665,11 @@ describe('OTLP runtime metrics — pipeline flow', () => {
   // the GC observer wiring + kind→type mapping is covered in the mock describe above.
   it('flushes every observable metric with correct wire shape (sum vs gauge) and scope name', () => {
     otlpRuntimeMetrics.start({
-      runtimeMetrics: { enabled: true, eventLoop: true, gc: false },
+      runtimeMetrics: {
+        DD_RUNTIME_METRICS_ENABLED: true,
+        DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED: true,
+        DD_RUNTIME_METRICS_GC_ENABLED: false,
+      },
       dogstatsd: { DD_DOGSTATSD_HOST: '127.0.0.1', DD_DOGSTATSD_PORT: 8125 },
     })
     reader.forceFlush()

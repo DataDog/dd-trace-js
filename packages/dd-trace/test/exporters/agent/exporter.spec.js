@@ -13,6 +13,7 @@ const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-deli
 describe('Exporter', () => {
   let url
   let flushInterval
+  let flush
   let Exporter
   let exporter
   let Writer
@@ -25,6 +26,7 @@ describe('Exporter', () => {
   beforeEach(() => {
     url = 'http://www.example.com:8126'
     flushInterval = 1000
+    flush = { DD_TRACE_FLUSH_INTERVAL: flushInterval }
     span = {}
     writer = {
       append: sinon.spy(),
@@ -46,7 +48,7 @@ describe('Exporter', () => {
 
   it('should pass computed stats header through to writer', () => {
     const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
-    exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
+    exporter = new Exporter({ url, flush, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, {
       headers: {
         'Datadog-Client-Computed-Stats': 'yes',
@@ -57,7 +59,7 @@ describe('Exporter', () => {
   it('should pass computed stats header through to writer if APM Tracing is disabled', () => {
     const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: false }
     const apmTracingEnabled = false
-    exporter = new Exporter({ url, flushInterval, stats, apmTracingEnabled }, prioritySampler)
+    exporter = new Exporter({ url, flush, stats, apmTracingEnabled }, prioritySampler)
 
     sinon.assert.calledWithMatch(Writer, {
       headers: {
@@ -69,13 +71,13 @@ describe('Exporter', () => {
   it('should forward an IPv6 agent URL to the writer', () => {
     const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
     const url = new URL('http://[::1]:8126/')
-    exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
+    exporter = new Exporter({ url, flush, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, { url })
   })
 
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+      exporter = new Exporter({ url, flush }, prioritySampler)
     })
 
     it('should pass the interval to the writer', () => {
@@ -83,7 +85,7 @@ describe('Exporter', () => {
     })
 
     it('should not flush if export has not been called', (done) => {
-      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+      exporter = new Exporter({ url, flush }, prioritySampler)
       setTimeout(() => {
         sinon.assert.notCalled(writer.flush)
         done()
@@ -91,7 +93,7 @@ describe('Exporter', () => {
     })
 
     it('should flush after the configured interval if a payload has been exported', (done) => {
-      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+      exporter = new Exporter({ url, flush }, prioritySampler)
       exporter.export([{}])
       setTimeout(() => {
         sinon.assert.called(writer.flush)
@@ -115,7 +117,7 @@ describe('Exporter', () => {
 
   describe('when interval is set to 0', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url, flushInterval: 0 })
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
     })
 
     it('should pass the interval to the writer', () => {
@@ -138,7 +140,7 @@ describe('Exporter', () => {
       writer.flush = sinon.spy(done => {
         writerOptions.deliveryTracker.track(callback => callbacks.push(callback), done)
       })
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } }, prioritySampler)
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -155,7 +157,7 @@ describe('Exporter', () => {
       const flushDirect = sinon.spy(done => callbacks.push(done))
       writer.flushDirect = flushDirect
       writer.flush = sinon.spy(done => writerOptions.deliveryTracker.track(flushDirect, done))
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } }, prioritySampler)
       const flushed = sinon.spy()
 
       // This is the path the encoder uses when it crosses its soft limit.
@@ -172,7 +174,7 @@ describe('Exporter', () => {
       writer.flush = sinon.stub()
       writer.flush.onFirstCall().throws(new Error('encode failed'))
       writer.flush.onSecondCall().callsFake(done => done())
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } }, prioritySampler)
       const flushed = sinon.spy()
 
       assert.throws(() => exporter.export([span]), /encode failed/)
@@ -188,7 +190,7 @@ describe('Exporter', () => {
         writerOptions.deliveryTracker.track(callback => { inFlightDone = callback }, done)
       })
       writer.flush.onSecondCall().throws(new Error('encode failed'))
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } }, prioritySampler)
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -203,7 +205,7 @@ describe('Exporter', () => {
       createServerlessDeliveryTracker.resetBehavior()
       let complete
       writer.flush = sinon.stub().callsFake(done => { complete = done })
-      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter = new Exporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } }, prioritySampler)
       const flushed = sinon.spy()
 
       exporter.flush(flushed)
@@ -216,7 +218,7 @@ describe('Exporter', () => {
 
   describe('setUrl', () => {
     beforeEach(() => {
-      exporter = new Exporter({ url })
+      exporter = new Exporter({ url, flush })
     })
 
     it('should set the URL on self and writer', () => {

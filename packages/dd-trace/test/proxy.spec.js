@@ -197,7 +197,7 @@ describe('TracerProxy', () => {
         DD_REMOTE_CONFIGURATION_ENABLED: true,
       },
       runtimeMetrics: {
-        enabled: false,
+        DD_RUNTIME_METRICS_ENABLED: false,
       },
       setRemoteConfig: sinon.stub(),
       llmobs: {},
@@ -1192,7 +1192,7 @@ describe('TracerProxy', () => {
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
-        config.runtimeMetrics.enabled = true
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = true
 
         proxy.init()
 
@@ -1200,7 +1200,7 @@ describe('TracerProxy', () => {
       })
 
       it('registers the runtime metrics flush with the serverless lifecycle', () => {
-        config.runtimeMetrics.enabled = true
+        config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED = true
         const done = sinon.spy()
 
         proxy.init()
@@ -1247,8 +1247,8 @@ describe('TracerProxy', () => {
       it('should expose noop metrics methods in agentless mode', () => {
         config.DD_AGENTLESS_ENABLED = true
         config.dogstatsd = {
-          hostname: 'localhost',
-          port: 9876,
+          DD_DOGSTATSD_HOST: 'localhost',
+          DD_DOGSTATSD_PORT: 9876,
         }
 
         proxy.init()
@@ -1260,8 +1260,8 @@ describe('TracerProxy', () => {
 
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
-          hostname: 'localhost',
-          port: 9876,
+          DD_DOGSTATSD_HOST: 'localhost',
+          DD_DOGSTATSD_PORT: 9876,
         }
         config.tags = {
           service: 'photos',
@@ -1274,7 +1274,7 @@ describe('TracerProxy', () => {
 
         const incs = dogStatsD._increments()
 
-        assert.strictEqual(dogStatsD._config().dogstatsd.hostname, 'localhost')
+        assert.strictEqual(dogStatsD._config().dogstatsd.DD_DOGSTATSD_HOST, 'localhost')
         assert.strictEqual(incs.length, 1)
         assert.strictEqual(incs[0][0], 'foo')
         assert.strictEqual(incs[0][1], 10)
@@ -2124,7 +2124,7 @@ describe('TracerProxy', () => {
       const CapturingConfig = (...args) => {
         capturedConfig = RealConfig(...args)
         capturedConfig.lookup = dns.lookup
-        capturedConfig.runtimeMetricsRuntimeId = true
+        capturedConfig.runtimeMetrics.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = true
         // Force the UDP send path so this test can observe the outgoing packet directly,
         // instead of going through the HTTP-proxy-to-agent path config.url otherwise selects.
         capturedConfig.url = undefined

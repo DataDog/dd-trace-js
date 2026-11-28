@@ -20,8 +20,8 @@ class LogPropagator {
     let hasField = false
 
     if (spanContext) {
-      dd.trace_id = this._config.traceId128BitGenerationEnabled &&
-        this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
+      dd.trace_id = this._config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED &&
+        this._config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED && spanContext._trace.tags['_dd.p.tid']
         ? spanContext.toTraceId(true)
         : spanContext.toTraceId()
       dd.span_id = spanContext.toSpanId()

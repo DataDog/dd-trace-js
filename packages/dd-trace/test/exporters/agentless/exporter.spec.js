@@ -197,7 +197,7 @@ describe('AgentlessExporter', () => {
 
   describe('export', () => {
     it('should append spans to writer and schedule flush', () => {
-      exporter = new Exporter({ flushInterval: 1000 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 1000 } })
       const spans = [{ name: 'test' }]
 
       exporter.export(spans)
@@ -211,7 +211,7 @@ describe('AgentlessExporter', () => {
     })
 
     it('should batch multiple exports into one flush', () => {
-      exporter = new Exporter({ flushInterval: 1000 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 1000 } })
       const spans = [{ name: 'test' }]
 
       exporter.export(spans)
@@ -227,7 +227,7 @@ describe('AgentlessExporter', () => {
     })
 
     it('should re-arm timer after flush for subsequent exports', () => {
-      exporter = new Exporter({ flushInterval: 1000 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 1000 } })
       const spans = [{ name: 'test' }]
 
       // First cycle
@@ -244,7 +244,7 @@ describe('AgentlessExporter', () => {
     })
 
     it('should flush immediately when flushInterval is 0', () => {
-      exporter = new Exporter({ flushInterval: 0 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
       const spans = [{ name: 'test' }]
 
       exporter.export(spans)
@@ -256,7 +256,7 @@ describe('AgentlessExporter', () => {
 
   describe('flush', () => {
     beforeEach(() => {
-      exporter = new Exporter({ flushInterval: 1000 })
+      exporter = new Exporter({ flush: { DD_TRACE_FLUSH_INTERVAL: 1000 } })
     })
 
     it('should flush writer immediately', () => {

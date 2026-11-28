@@ -18,6 +18,7 @@ describe('LogPropagator', () => {
 
   beforeEach(() => {
     config = {
+      traceId: {},
       service: 'test',
       env: 'dev',
       version: '1.0.0',
@@ -62,8 +63,8 @@ describe('LogPropagator', () => {
     })
 
     it('should inject 128-bit trace IDs when enabled', () => {
-      config.traceId128BitLoggingEnabled = true
-      config.traceId128BitGenerationEnabled = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
 
       const carrier = {}
       const traceId = id('1234567812345678')
@@ -83,8 +84,8 @@ describe('LogPropagator', () => {
     })
 
     it('should correctly inject 128 bit trace ids when _dd.p.tid is present', () => {
-      config.traceId128BitLoggingEnabled = true
-      config.traceId128BitGenerationEnabled = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
       const carrier = {}
       const traceId = id('4e2a9c1573d240b1a3b7e3c1d4c2f9a7', 16)
       const traceIdTag = '8765432187654321'
@@ -103,8 +104,8 @@ describe('LogPropagator', () => {
     })
 
     it('should not inject 128-bit trace IDs when disabled', () => {
-      config.traceId128BitLoggingEnabled = false
-      config.traceId128BitGenerationEnabled = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = false
+      config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
       const carrier = {}
       const traceId = id('123', 10)
       const traceIdTag = '8765432187654321'
@@ -123,8 +124,8 @@ describe('LogPropagator', () => {
     })
 
     it('should not inject 128-bit trace IDs when 128 bit generation is disabled', () => {
-      config.traceId128BitLoggingEnabled = true
-      config.traceId128BitGenerationEnabled = false
+      config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = false
       const carrier = {}
       const traceId = id('123', 10)
       const traceIdTag = '8765432187654321'
@@ -185,7 +186,7 @@ describe('LogPropagator', () => {
     })
 
     it('should extract 128-bit IDs', () => {
-      config.traceId128BitLoggingEnabled = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = true
       log.dd.trace_id = '87654321876543211234567812345678'
 
       const carrier = log

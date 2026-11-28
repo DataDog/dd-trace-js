@@ -93,9 +93,10 @@ describe('Tracer', () => {
     }
 
     config = {
+      traceId: {},
       service: 'service',
       url: 'http://test:7777',
-      flushInterval: 2000,
+      flush: { DD_TRACE_FLUSH_INTERVAL: 2000 },
       sampleRate: 0.5,
       logger: 'logger',
       tags: {},
@@ -448,7 +449,7 @@ describe('Tracer', () => {
     })
 
     it('should start a span with the trace ID generation configuration', () => {
-      config.traceId128BitGenerationEnabled = true
+      config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 

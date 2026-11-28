@@ -13,12 +13,18 @@ const legacyStorage = storage('legacy')
 const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Typical production config: 128-bit trace ids on, service/version/env set.
+const traceId = {
+  DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
+  DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
+}
 const config = {
   service: 'web-api',
   version: '1.2.3',
   env: 'production',
-  traceId128BitGenerationEnabled: true,
-  traceId128BitLoggingEnabled: true,
+  // Benchmark CI runs this fixture against the baseline propagator too.
+  traceId,
+  traceId128BitGenerationEnabled: traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
+  traceId128BitLoggingEnabled: traceId.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
 }
 const propagator = new LogPropagator(config)
 
@@ -72,7 +78,7 @@ legacyStorage.run({ span: activeSpan }, () => {
   // silently measuring a no-op (service/env alone would still produce a dd field).
   const probe = { line: baseLine }
   plugin.handleJsonLine(probe)
-  assert.ok(probe.line.includes('"trace_id":'), 'pino plugin did not inject the trace id into the line')
+  assert.strictEqual(JSON.parse(probe.line).dd.trace_id, spanContext.toTraceId(true))
 
   guard.loopStart()
   for (let i = 0; i < OPERATIONS; i++) {

@@ -20,7 +20,7 @@ class AgentlessExporter {
   /**
    * @param {object} config - Configuration object
    * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
-   * @param {number} [config.flushInterval] - Batch flush interval in ms
+   * @param {{ DD_TRACE_FLUSH_INTERVAL: number }} config.flush - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
    * @param {object} config.tags - Tags including runtime-id
    */
@@ -88,7 +88,7 @@ class AgentlessExporter {
   export (spans) {
     const appended = this._writer.append(spans)
 
-    const { flushInterval } = this.#config
+    const { DD_TRACE_FLUSH_INTERVAL: flushInterval } = this.#config.flush
 
     if (flushInterval === 0) {
       try {
