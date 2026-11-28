@@ -5,7 +5,6 @@ const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 
 class MySQL2Plugin extends MySQLPlugin {
   static id = 'mysql2'
-  static poolAcquireConfigurable = true
 
   constructor () {
     super(...arguments)

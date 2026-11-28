@@ -3319,13 +3319,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
      */
-    interface mariadb extends mysql {
-      /**
-       * Record pool acquisition spans and wait time on queries that own an acquisition.
-       * @default true
-       */
-      poolAcquire?: boolean;
-    }
+    interface mariadb extends mysql {}
 
     /**
      * This plugin automatically instruments the
@@ -3418,20 +3412,19 @@ declare namespace tracer {
      */
     interface mysql extends Instrumentation {
       service?: string | ((params: any) => string);
+      /**
+       * Record pool acquisition spans and wait time on queries that own an acquisition.
+       *
+       * @default true
+       */
+      poolAcquire?: boolean;
     }
 
     /**
      * This plugin automatically instruments the
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
-    interface mysql2 extends mysql {
-      /**
-       * Whether to report pool acquisition spans and pool wait time on queries.
-       *
-       * @default true
-       */
-      poolAcquire?: boolean;
-    }
+    interface mysql2 extends mysql {}
 
     /**
      * This plugin automatically instruments the

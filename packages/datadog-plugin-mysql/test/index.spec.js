@@ -2,8 +2,10 @@
 
 const assert = require('node:assert/strict')
 const dc = require('node:diagnostics_channel')
+// eslint-disable-next-line n/no-deprecated-api -- mysql binds queued callbacks to the active domain.
+const { create: createDomain } = require('node:domain')
 const net = require('node:net')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -341,6 +343,140 @@ describe('Plugin', () => {
           { desc: 'for explicit pool acquire', resource: 'mysql.pool.acquire' }
         )
 
+        it('skips wait timing for an explicit checkout and a queued query when poolAcquire is false', async () => {
+          tracer.use('mysql', { poolAcquire: false })
+          const borrow = promisify(pool.getConnection).bind(pool)
+          const parent = tracer.startSpan('caller')
+          const scope = tracer.scope()
+          const finishChannel = dc.channel('dd-trace:span:finish')
+          let acquireSpans = 0
+          let queryTags
+          const onSpanFinish = span => {
+            const context = span.context()
+            if (context._name === 'mysql.pool.acquire') acquireSpans++
+            const tags = context.getTags()
+            if (tags['resource.name'] === 'SELECT 42 AS disabled_pool_wait') queryTags = tags
+          }
+          finishChannel.subscribe(onSpanFinish)
+
+          try {
+            const holder = await borrow()
+            let query
+            let clockReads
+            const clock = sinon.spy(performance, 'now')
+            try {
+              query = scope.activate(parent, () => new Promise((resolve, reject) => {
+                pool.query('SELECT 42 AS disabled_pool_wait', (error, rows) => {
+                  if (error) reject(error)
+                  else resolve({ rows, activeSpan: scope.active() })
+                })
+              }))
+              clockReads = clock.callCount
+            } finally {
+              clock.restore()
+              holder.release()
+            }
+
+            const { rows, activeSpan } = await query
+            assert.strictEqual(acquireSpans, 0)
+            assert.strictEqual(clockReads, 0)
+            assert.ok(queryTags)
+            assert.strictEqual(queryTags['mysql.pool.wait_time'], undefined)
+            assert.strictEqual(activeSpan, parent)
+            assert.strictEqual(rows[0].disabled_pool_wait, 42)
+          } finally {
+            parent.finish()
+            finishChannel.unsubscribe(onSpanFinish)
+            tracer.use('mysql', {})
+          }
+        })
+
+        it('keeps a domain-bound checkout admitted with poolAcquire false out of tracing', async function () {
+          if (typeof pool._enqueueCallback !== 'function') return this.skip()
+
+          const borrow = promisify(pool.getConnection).bind(pool)
+          const scope = tracer.scope()
+          const parent = tracer.startSpan('caller')
+          const domain = createDomain()
+          const finishChannel = dc.channel('dd-trace:span:finish')
+          const acquireSpans = []
+          let callbackCalls = 0
+          const onSpanFinish = span => {
+            if (span.context()._name === 'mysql.pool.acquire') acquireSpans.push(span)
+          }
+
+          finishChannel.subscribe(onSpanFinish)
+          try {
+            for (let checkout = 0; checkout < 2; checkout++) {
+              tracer.use('mysql', { poolAcquire: false })
+              const holder = await borrow()
+              pool.once('enqueue', () => {
+                tracer.use('mysql', { poolAcquire: true })
+                holder.destroy()
+              })
+              const { connection, activeSpan, activeDomain } = await scope.activate(parent, () => domain.run(() => {
+                return new Promise((resolve, reject) => {
+                  pool.getConnection((error, connection) => {
+                    callbackCalls++
+                    if (error) reject(error)
+                    else resolve({ connection, activeSpan: scope.active(), activeDomain: process.domain })
+                  })
+                })
+              }))
+              connection.release()
+              assert.strictEqual(activeSpan, parent)
+              assert.strictEqual(activeDomain, domain)
+            }
+            assert.strictEqual(acquireSpans.length, 0)
+            assert.strictEqual(callbackCalls, 2)
+          } finally {
+            parent.finish()
+            finishChannel.unsubscribe(onSpanFinish)
+            tracer.use('mysql', {})
+          }
+        })
+
+        it('traces a fresh checkout when it reuses a callback queued while mysql was disabled', async function () {
+          if (typeof pool._enqueueCallback !== 'function') return this.skip()
+
+          const borrow = promisify(pool.getConnection).bind(pool)
+          const first = await borrow()
+          const domainCheckout = createDomain().run(borrow)
+          first.release()
+          const observed = await domainCheckout
+          observed.release()
+
+          let complete
+          const reused = (...args) => complete(...args)
+          const checkout = () => new Promise((resolve, reject) => {
+            complete = (error, connection) => error ? reject(error) : resolve(connection)
+            pool.getConnection(reused)
+          })
+          const spanFinish = dc.channel('dd-trace:span:finish')
+          let acquireCount = 0
+          const countAcquire = span => {
+            if (span.context()._name === 'mysql.pool.acquire') acquireCount++
+          }
+
+          try {
+            const holder = await borrow()
+            tracer.use('mysql', false)
+            const queued = checkout()
+            tracer.use('mysql', {})
+            holder.release()
+            const acquired = await queued
+            acquired.release()
+
+            spanFinish.subscribe(countAcquire)
+            const fresh = await checkout()
+            fresh.release()
+            assert.strictEqual(acquireCount, 1)
+          } finally {
+            spanFinish.unsubscribe(countAcquire)
+            tracer.use('mysql', {})
+          }
+        })
+
         it('keeps tracing when an acquire finishes without a matching start', async () => {
           dc.channel('apm:mysql:pool:acquire:finish').publish({ poolWaitTime: 1 })
 
@@ -486,16 +622,18 @@ describe('Plugin', () => {
           return port
         }
 
-        for (const deferredRetry of [false, true]) {
+        for (const [deferredRetry, poolAcquire] of [[false, true], [true, true], [false, false]]) {
           const scheduling = deferredRetry ? 'tick-delayed' : 'synchronous'
+          const admission = poolAcquire ? '' : ' admitted with poolAcquire false'
+          const title = `retains pooled-query classification across a ${scheduling} canRetry failover`
 
-          it(`retains pooled-query classification across a ${scheduling} canRetry failover`, async function () {
+          it(`${title}${admission}`, async function () {
             const unsupportedCluster = mysql.createPoolCluster()
             const supported = typeof unsupportedCluster.of('*').query === 'function'
             unsupportedCluster.end(() => {})
             if (!supported) return this.skip()
 
-            const cluster = mysql.createPoolCluster()
+            const cluster = mysql.createPoolCluster(poolAcquire ? {} : { removeNodeErrorCount: 1 })
             cluster.add('dead', {
               host: '127.0.0.1',
               user: 'root',
@@ -505,6 +643,19 @@ describe('Plugin', () => {
             cluster.add('live', { host: '127.0.0.1', user: 'root', database: 'db', connectionLimit: 1 })
             cluster.on('warn', () => {})
             const namespace = cluster.of('*')
+            const finishChannel = dc.channel('dd-trace:span:finish')
+            let acquireSpans = 0
+            const onSpanFinish = span => {
+              if (span.context()._name === 'mysql.pool.acquire') acquireSpans++
+            }
+            if (!poolAcquire) {
+              tracer.use('mysql', { poolAcquire: false })
+              finishChannel.subscribe(onSpanFinish)
+              cluster.once('remove', node => {
+                assert.strictEqual(node, 'dead')
+                tracer.use('mysql', { poolAcquire: true })
+              })
+            }
             if (deferredRetry) {
               const query = namespace.query
               let queryCalls = 0
@@ -523,14 +674,23 @@ describe('Plugin', () => {
                 agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                  if (poolAcquire) {
+                    assert.strictEqual(typeof span.metrics['mysql.pool.wait_time'], 'number')
+                  } else {
+                    assert.strictEqual(span.metrics['mysql.pool.wait_time'], undefined)
+                  }
                   assert.strictEqual(traces[0].find(span => span.name === 'mysql.pool.acquire'), undefined)
                 }, { spanResourceMatch: new RegExp(`^${resource}$`) }),
                 new Promise((resolve, reject) => {
                   namespace.query(resource, error => error ? reject(error) : resolve())
                 }),
               ])
+              if (!poolAcquire) assert.strictEqual(acquireSpans, 0)
             } finally {
+              if (!poolAcquire) {
+                finishChannel.unsubscribe(onSpanFinish)
+                tracer.use('mysql', {})
+              }
               await new Promise(resolve => cluster.end(resolve))
             }
           })
