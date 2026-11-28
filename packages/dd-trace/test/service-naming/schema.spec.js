@@ -6,6 +6,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
+const { getConfigFresh } = require('../helpers/config')
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
 const { httpPluginClientService } = require('../../src/service-naming/schemas/util')
 const v0 = require('../../src/service-naming/schemas/v0')
@@ -27,9 +28,22 @@ describe('Service naming', () => {
       assert.strictEqual(singleton.version, 'v0')
     })
 
-    it('Should grab the version given by `spanAttributeSchema`', () => {
-      singleton.configure({ spanAttributeSchema: 'MyShinyNewVersion' })
+    it('Should grab the version given by DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', () => {
+      singleton.configure({ tracing: { DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'MyShinyNewVersion' } })
       assert.strictEqual(singleton.version, 'MyShinyNewVersion')
+    })
+
+    it('uses the configured operation naming when integration service names are disabled', () => {
+      const options = { awsService: 's3', operation: 'getObject', pluginConfig: {}, params: {} }
+      for (const [spanAttributeSchema, operation] of [['v0', 'aws.request'], ['v1', 'aws.s3.request']]) {
+        singleton.configure(getConfigFresh({
+          service: 'test-service',
+          spanAttributeSchema,
+          spanRemoveIntegrationFromService: true,
+        }))
+        assert.strictEqual(singleton.opName('web', 'client', 'aws', options), operation)
+        assert.strictEqual(singleton.serviceName('web', 'client', 'aws', options).name, 'test-service')
+      }
     })
 
     describe('Name resolution proxy', () => {
@@ -40,7 +54,7 @@ describe('Service naming', () => {
       beforeEach(() => {
         versions = { v0: { getOpName: sinon.spy(), getServiceName: sinon.spy() } }
         singleton = require('../../src/service-naming')
-        singleton.configure({ spanAttributeSchema: 'v0', service: 'test-service' })
+        singleton.configure({ tracing: { DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v0' }, service: 'test-service' })
         singleton.schemas = versions
       })
 

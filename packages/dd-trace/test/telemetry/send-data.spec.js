@@ -143,6 +143,18 @@ describe('sendData', () => {
     assert.deepStrictEqual(data.payload, trimmedPayload)
   })
 
+  it('sends the configured span naming schema in the telemetry envelope', () => {
+    const config = {
+      tags: { 'runtime-id': '123' },
+      tracing: { ...tracing, DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v1' },
+    }
+
+    sendDataModule.sendData(config, application, host, 'req-type')
+
+    sinon.assert.calledOnce(request)
+    assert.strictEqual(JSON.parse(request.firstCall.args[0]).naming_schema_version, 'v1')
+  })
+
   it('preserves batch payload items when sending message batches', () => {
     const retryObjData = { payload: { foo: 'bar' }, request_type: 'req-type-1' }
     const payload = [{

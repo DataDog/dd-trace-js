@@ -26,7 +26,10 @@ class BenchedMemcachedPlugin extends MemcachedPlugin {
 }
 
 const tracer = { _service: 'web-app', _env: 'prod', _version: '1.0.0' }
-const plugin = new BenchedMemcachedPlugin(tracer, { spanComputePeerService: false })
+const plugin = new BenchedMemcachedPlugin(tracer, {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+})
 plugin.configure({ enabled: true, service: 'memcached-prod', DD_TRACE_MEMCACHED_COMMAND_ENABLED: true })
 
 // HashRing stand-in: a real memcached client picks a server for a key by

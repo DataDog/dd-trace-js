@@ -5,8 +5,10 @@ class SchemaManager {
    * @type {object}
    */
   config = {
-    spanAttributeSchema: 'v0',
-    spanRemoveIntegrationFromService: false,
+    tracing: {
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v0',
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
+    },
   }
 
   schemas = {
@@ -18,11 +20,11 @@ class SchemaManager {
   }
 
   get version () {
-    return this.config.spanAttributeSchema
+    return this.config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
   }
 
   get shouldUseConsistentServiceNaming () {
-    return this.config.spanRemoveIntegrationFromService && this.version === 'v0'
+    return this.config.tracing.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED && this.version === 'v0'
   }
 
   /**
@@ -52,12 +54,16 @@ class SchemaManager {
 
   /**
    * @param {object} config
-   * @param {string} config.spanAttributeSchema
-   * @param {boolean} config.spanRemoveIntegrationFromService
+   * @param {object} config.tracing
+   * @param {string} config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+   * @param {boolean} config.tracing.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
    * @param {string} [config.service]
    */
   configure (config) {
-    const { spanAttributeSchema, spanRemoveIntegrationFromService } = config
+    const {
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: spanAttributeSchema,
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: spanRemoveIntegrationFromService,
+    } = config.tracing
 
     if (!this.schemas.v0 && spanAttributeSchema === 'v0') {
       this.schemas.v0 = require('./schemas/v0')

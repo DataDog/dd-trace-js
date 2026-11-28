@@ -28,7 +28,10 @@ class BenchedCassandraPlugin extends CassandraDriverPlugin {
 }
 
 const tracer = { _service: 'web-app', _env: 'prod', _version: '1.0.0' }
-const plugin = new BenchedCassandraPlugin(tracer, { spanComputePeerService: false })
+const plugin = new BenchedCassandraPlugin(tracer, {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+})
 plugin.configure({ enabled: true, service: 'cassandra-prod' })
 
 const CONTACT_POINTS = ['10.0.0.1', '10.0.0.2', '10.0.0.3']

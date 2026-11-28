@@ -143,7 +143,13 @@ describe('telemetry', () => {
         DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
+      tracing: {
+        DD_TRACE_EXPERIMENTAL_EXPORTER: '',
+        DD_TRACE_PEER_SERVICE_MAPPING: {
+          service_1: 'remapped_service_1',
+          service_2: 'remapped_service_2',
+        },
+      },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -156,10 +162,6 @@ describe('telemetry', () => {
       appsec: { DD_APPSEC_ENABLED: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: 'true' },
       dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: true },
-      peerServiceMapping: {
-        service_1: 'remapped_service_1',
-        service_2: 'remapped_service_2',
-      },
       DD_INSTRUMENTATION_INSTALL_ID: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
       DD_INSTRUMENTATION_INSTALL_TYPE: 'k8s_single_step',
       DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',

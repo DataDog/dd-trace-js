@@ -75,10 +75,11 @@ class AwsLambdaPlugin extends TracingPlugin {
     if (context.config?.createInferredSpan ?? this.config.createInferredSpan) {
       const inferrer = new SpanInferrer(this.tracer, {
         service: getEnvironmentVariable('DD_SERVICE'),
-        serviceMapping: this._tracerConfig.serviceMapping,
+        serviceMapping: this._tracerConfig.tracing.DD_SERVICE_MAPPING,
         serviceRepresentationEnabled: context.config?.serviceRepresentationEnabled ??
           this.config.serviceRepresentationEnabled,
-        removeIntegrationServiceNamesEnabled: this._tracerConfig.spanRemoveIntegrationFromService,
+        removeIntegrationServiceNamesEnabled:
+          this._tracerConfig.tracing.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       })
       try {
         // The source listener gates inferred authorizer decoding with encodeAuthorizerContext.

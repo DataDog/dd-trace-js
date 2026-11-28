@@ -35,7 +35,12 @@ function makeSpan (tags = {}) {
  */
 function buildPlugin ({ spanComputePeerService = false, peerServiceMapping } = {}, Plugin = DatabasePlugin) {
   const tracer = { _service: 'orders-api', _env: 'prod', _version: '1.0.0' }
-  const plugin = new Plugin(tracer, { spanComputePeerService, peerServiceMapping })
+  const plugin = new Plugin(tracer, {
+    tracing: {
+      DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: spanComputePeerService,
+      DD_TRACE_PEER_SERVICE_MAPPING: peerServiceMapping,
+    },
+  })
   plugin.configure({ dbmPropagationMode: 'service', enabled: true })
   return plugin
 }

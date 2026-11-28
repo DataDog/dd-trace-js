@@ -2054,6 +2054,7 @@
       {
         "implementation": "C",
         "type": "map",
+        "namespace": "tracing",
         "configurationNames": [
           "serviceMapping"
         ],
@@ -3878,6 +3879,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "configurationNames": [
           "spanComputePeerService"
         ],
@@ -3888,6 +3890,7 @@
       {
         "implementation": "A",
         "type": "map",
+        "namespace": "tracing",
         "configurationNames": [
           "peerServiceMapping"
         ],
@@ -4117,6 +4120,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "default": "false",
         "configurationNames": [
           "spanRemoveIntegrationFromService"
@@ -4238,6 +4242,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "tracing",
         "allowed": "v0|v1",
         "transform": "toLowerCase",
         "configurationNames": [

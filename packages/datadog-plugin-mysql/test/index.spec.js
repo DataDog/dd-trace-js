@@ -664,8 +664,8 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           const plugin = tracer._pluginManager._pluginsByName.mysql
-          computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
-          remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
+          computeStub = sinon.stub(plugin._tracerConfig.tracing, 'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+          remapStub = sinon.stub(plugin._tracerConfig.tracing, 'DD_TRACE_PEER_SERVICE_MAPPING')
         })
 
         afterEach(() => {

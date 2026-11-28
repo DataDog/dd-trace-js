@@ -67,8 +67,10 @@ function withNamingSchema (
         beforeEach(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
-            spanAttributeSchema: versionName,
-            spanRemoveIntegrationFromService: false,
+            tracing: {
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: versionName,
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
+            },
             service: fullConfig.service, // Hack: only way to retrieve the test agent configuration
           })
         })
@@ -129,9 +131,11 @@ function withNamingSchema (
       beforeEach(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
-          spanAttributeSchema: 'v0',
+          tracing: {
+            DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v0',
+            DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
+          },
           service: fullConfig.service,
-          spanRemoveIntegrationFromService: true,
         })
       })
 
@@ -199,7 +203,8 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       // Read the plugin off the live `TracerProxy`; a closure-captured
       // `tracer()` may point at a torn-down proxy after a gate-fired rebuild.
       const plugin = global._ddtrace._pluginManager._pluginsByName[pluginName]
-      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
+      computePeerServiceSpy = sinon.stub(plugin._tracerConfig.tracing, 'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+        .value(true)
     })
 
     afterEach(() => {

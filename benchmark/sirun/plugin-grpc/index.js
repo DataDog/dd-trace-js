@@ -27,7 +27,10 @@ class BenchedGrpcPlugin extends GrpcClientPlugin {
 }
 
 const tracer = { _service: 'web-app', _env: 'prod', _version: '1.0.0', inject () {} }
-const plugin = new BenchedGrpcPlugin(tracer, { spanComputePeerService: false })
+const plugin = new BenchedGrpcPlugin(tracer, {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+})
 plugin.configure({ enabled: true, service: 'grpc-prod' })
 
 // A service definition exposes a small, finite set of method paths; the parser

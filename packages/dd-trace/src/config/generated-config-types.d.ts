@@ -541,7 +541,6 @@ export interface GeneratedConfig {
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
   OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
-  peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
     DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
@@ -574,11 +573,7 @@ export interface GeneratedConfig {
     DD_TRACE_SAMPLING_RULES: import('../../../../index').SamplingRule[];
   };
   service: string;
-  serviceMapping: Record<string, string>;
   site: string;
-  spanAttributeSchema: "v0" | "v1";
-  spanComputePeerService: boolean;
-  spanRemoveIntegrationFromService: boolean;
   startupLogs: boolean;
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
@@ -632,9 +627,14 @@ export interface GeneratedConfig {
   };
   tracing: {
     DD_LOGS_INJECTION: boolean;
+    DD_SERVICE_MAPPING: Record<string, string>;
     DD_TRACE_EXPERIMENTAL_EXPORTER: string;
     DD_TRACE_HEADER_TAGS: string[];
     DD_TRACE_MIDDLEWARE_TRACING_ENABLED: boolean;
+    DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: boolean;
+    DD_TRACE_PEER_SERVICE_MAPPING: Record<string, string>;
+    DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: boolean;
+    DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: "v0" | "v1";
     DD_TRACE_WEBSOCKET_MESSAGES_ENABLED: boolean;
     DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING: boolean;
     DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES: boolean;
