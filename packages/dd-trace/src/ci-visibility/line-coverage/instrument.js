@@ -17,14 +17,23 @@
 // expression that may throw, through an identity call. Positions with no such place, like a method
 // header, take a computed key or a synthetic declaration.
 //
-// The first probe of an activation, and the first one after each resumption, also checks the
-// module's touched flag. The first check after a test boundary queues the module's reader with the
-// collector, so a boundary only reads the modules that ran since the previous one.
+// The first probe of an activation checks the module's touched flag, and calls the collector when it
+// is clear: the collector works out who owns the running context and queues the module's reader.
+// Code that may start a new job, so run in another context, calls the collector unconditionally:
+// the first probe after each resumption, and the first probe of a function passed inline to
+// `then`, `catch`, `finally` or `queueMicrotask`.
 //
 // Inserted text never contains a newline, so line numbers stay intact.
 
 const UNMAPPED = -2
 const TOUCHED = -1
+
+// What the first probe of an activation segment does with the module's touched flag.
+const TOUCH_IF_CLEAR = 1
+const TOUCH_ALWAYS = 2
+
+// Calls whose function arguments run as a job of their own.
+const JOB_METHODS = new Set(['then', 'catch', 'finally'])
 
 const LIST = 0
 const SLOT = 1
@@ -104,6 +113,10 @@ class Instrumenter {
     this.undo = []
     this.segments = 0
     this.segment = 0
+    // The segment an activation starts in; a probe point in any other segment follows a resumption.
+    this.entrySegment = 0
+    /** @type {WeakSet<object>} functions that run as a job of their own */
+    this.jobFunctions = new WeakSet()
     // The open credit point: probes attached to it run at an instant that is control-equivalent to
     // the current one. `latent` realizes the instant right after the last expression that may throw.
     this.point = null
@@ -219,12 +232,12 @@ class Instrumenter {
   }
 
   open (opener) {
-    const point = { opener, slots: [], touch: false }
+    const point = { opener, slots: [], touch: 0 }
     this.points.push(point)
     this.point = point
     this.latent = null
     if (!this.isDone(TOUCHED)) {
-      point.touch = true
+      point.touch = this.segment === this.entrySegment ? TOUCH_IF_CLEAR : TOUCH_ALWAYS
       this.markDone(TOUCHED)
     }
     const pending = this.pending
@@ -295,10 +308,15 @@ class Instrumenter {
     this.segment = ++this.segments
   }
 
-  activation (walk) {
+  /**
+   * @param {() => void} walk
+   * @param {boolean} [isJob] whether the activation starts a job of its own
+   */
+  activation (walk, isJob = false) {
     const saved = {
       init: this.init,
       segment: this.segment,
+      entrySegment: this.entrySegment,
       point: this.point,
       latent: this.latent,
       pending: this.pending,
@@ -307,6 +325,7 @@ class Instrumenter {
       inChain: this.inChain,
     }
     this.segment = ++this.segments
+    this.entrySegment = isJob ? -1 : this.segment
     this.point = null
     this.latent = null
     this.pending = []
@@ -317,6 +336,7 @@ class Instrumenter {
     this.rollback(saved.undo)
     this.init = saved.init
     this.segment = saved.segment
+    this.entrySegment = saved.entrySegment
     this.point = saved.point
     this.latent = saved.latent
     this.pending = saved.pending
@@ -593,7 +613,7 @@ class Instrumenter {
       } else {
         this.expression(body, true, null)
       }
-    })
+    }, this.jobFunctions.has(node))
   }
 
   // An anonymous function or class whose name comes from where it is defined: wrapping it would
@@ -929,6 +949,13 @@ class Instrumenter {
     }
     this.inChain = false
     if (node.optional) this.optionalLink()
+    if (startsJobs(callee)) {
+      for (const argument of node.arguments) {
+        if (argument.type === 'FunctionExpression' || argument.type === 'ArrowFunctionExpression') {
+          this.jobFunctions.add(argument)
+        }
+      }
+    }
     this.arguments(node.arguments)
     this.inChain = inChain
     this.unsafe()
@@ -1073,7 +1100,9 @@ class Instrumenter {
 
   probeText (point) {
     const p = this.prefix
-    let text = point.touch ? `${p}t||${p}r()` : ''
+    let text = ''
+    if (point.touch === TOUCH_IF_CLEAR) text = `${p}t||${p}r()`
+    else if (point.touch === TOUCH_ALWAYS) text = `${p}r()`
     const masks = new Map()
     for (const slot of point.slots) {
       const word = Math.floor(slot / SLOTS_PER_WORD)
@@ -1202,12 +1231,24 @@ class Instrumenter {
       names += `,${p}${word}=0`
     }
     reader += `${p}t=0;return n}`
-    const touch = `function ${p}r(){${p}t=1;var c=${p}c||(${p}c=` +
-      `globalThis[Symbol.for('dd-trace.line-coverage')]);if(c)c.q.push(${p}x)}`
+    const touch = `function ${p}r(){var c=${p}c||(${p}c=globalThis[Symbol.for('dd-trace.line-coverage')]);` +
+      `${p}t=c?c.touch(${this.moduleId},${p}x):1}`
     // Passes a value on, so probes can run right after the expression that computes it.
     const identity = `function ${p}a(v){return v}`
     return `;var ${names};${touch}${reader}${identity}`
   }
+}
+
+/**
+ * Whether functions passed to a call of `callee` run as a job of their own.
+ *
+ * @param {object} callee
+ */
+function startsJobs (callee) {
+  if (callee.type === 'MemberExpression') {
+    return !callee.computed && callee.property.type === 'Identifier' && JOB_METHODS.has(callee.property.name)
+  }
+  return callee.type === 'Identifier' && callee.name === 'queueMicrotask'
 }
 
 function compareEdits (a, b) {

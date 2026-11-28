@@ -34,6 +34,7 @@ const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFnCh = channel('ci:mocha:test:fn')
+const suiteSetupFnCh = channel('ci:mocha:suite-setup:fn')
 const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
@@ -649,6 +650,15 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
         wrappedFunctions.add(this.fn)
       }
+    } else if (suiteSetupFnCh.hasSubscribers && !this.parent.root && this.parent._beforeAll.includes(this)) {
+      // A describe block's before-all hook runs in a context of its own, so its work can be told apart.
+      const suite = this.parent
+      const newFn = shimmer.wrapFunction(this.fn, originalFn => function (...args) {
+        return suiteSetupFnCh.runStores({ suite }, () => originalFn.apply(this, args))
+      })
+      originalFns.set(newFn, this.fn)
+      this.fn = newFn
+      wrappedFunctions.add(this.fn)
     }
 
     const failedTestReplayPromise = (isTestHook || this.type === 'test') &&
