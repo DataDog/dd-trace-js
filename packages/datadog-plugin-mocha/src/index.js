@@ -6,7 +6,6 @@ const { clearTimeout, setTimeout } = require('node:timers')
 const { channel } = require('dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const lineCoverage = require('../../dd-trace/src/ci-visibility/line-coverage')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
@@ -117,6 +116,7 @@ const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineF
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
+const isLineCoverageRequested = ['1', 'true'].includes(getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED'))
 const shouldRecordWebdriverioVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/
@@ -293,6 +293,12 @@ class MochaPlugin extends CiPlugin {
   static id = 'mocha'
 
   #pendingWebdriverioVideos = new Set()
+  /**
+   * The line-coverage module, loaded when per-test line coverage starts.
+   *
+   * @type {typeof import('../../dd-trace/src/ci-visibility/line-coverage') | undefined}
+   */
+  #lineCoverage
   /** @type {WeakMap<object, { coverage: object, suite: object }>} line coverage of running tests, by span */
   #lineCoverageTests = new WeakMap()
   #webdriverioJasmineAnnotations = new Map()
@@ -725,16 +731,16 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:suite-setup:start', ({ suite }) => {
-      if (lineCoverage.isActive()) lineCoverage.startSuiteSetup(suite)
+      if (this.#lineCoverage?.isActive()) this.#lineCoverage.startSuiteSetup(suite)
     })
 
     this.addSub('ci:mocha:suite-setup:finish', () => {
-      if (lineCoverage.isActive()) lineCoverage.finishSuiteSetup()
+      if (this.#lineCoverage?.isActive()) this.#lineCoverage.finishSuiteSetup()
     })
 
     this.addBind('ci:mocha:suite-setup:fn', () => {
       const store = storage('legacy').getStore()
-      return lineCoverage.isActive() ? lineCoverage.suiteSetupStore(store) : store
+      return this.#lineCoverage?.isActive() ? this.#lineCoverage.suiteSetupStore(store) : store
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
@@ -783,8 +789,8 @@ class MochaPlugin extends CiPlugin {
     this.addBind('ci:mocha:test:start', (ctx) => {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
-      if (lineCoverage.isActive()) {
-        this.#lineCoverageTests.set(span, { coverage: lineCoverage.startTest(span), suite: ctx.suite })
+      if (this.#lineCoverage?.isActive()) {
+        this.#lineCoverageTests.set(span, { coverage: this.#lineCoverage.startTest(span), suite: ctx.suite })
       }
       const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
       if (!isDisabled || isAttemptToFix) this.#startWebdriverioVideo(span)
@@ -850,7 +856,7 @@ class MochaPlugin extends CiPlugin {
     }) => {
       if (span) {
         const finishTime = span._getTime()
-        if (lineCoverage.isActive()) this.#exportLineCoverage(span)
+        if (this.#lineCoverage?.isActive()) this.#exportLineCoverage(span)
         span.setTag(TEST_STATUS, status)
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
@@ -1070,7 +1076,7 @@ class MochaPlugin extends CiPlugin {
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
-      if (this.testSessionSpan && lineCoverage.isActive()) this.#exportSharedLineCoverage()
+      if (this.testSessionSpan && this.#lineCoverage?.isActive()) this.#exportSharedLineCoverage()
       if (this.testSessionSpan) {
         const {
           isSuitesSkippingEnabled,
@@ -1160,8 +1166,9 @@ class MochaPlugin extends CiPlugin {
   configure (config, shouldGetEnvironmentData) {
     super.configure(config, shouldGetEnvironmentData)
     // Coverage files are relative to the repository root, which is known only once configured.
-    if (this._enabled && lineCoverage.isEnabled()) {
-      lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
+    if (this._enabled && isLineCoverageRequested) {
+      this.#lineCoverage ??= require('../../dd-trace/src/ci-visibility/line-coverage')
+      this.#lineCoverage.enable({ root: this.repositoryRoot || this.sourceRoot })
     }
   }
 
@@ -1691,7 +1698,7 @@ class MochaPlugin extends CiPlugin {
     const test = this.#lineCoverageTests.get(span)
     if (test === undefined) return
     this.#lineCoverageTests.delete(span)
-    const files = lineCoverage.finishTest(test.coverage, enclosingSuites(test.suite))
+    const files = this.#lineCoverage.finishTest(test.coverage, enclosingSuites(test.suite))
     if (files.length === 0) return
     const context = span.context()
     this.tracer._exporter.exportCoverage({
@@ -1704,7 +1711,7 @@ class MochaPlugin extends CiPlugin {
 
   #exportSharedLineCoverage () {
     const sessionId = this.testSessionSpan.context()._traceId
-    for (const { shared, files } of lineCoverage.takeShared()) {
+    for (const { shared, files } of this.#lineCoverage.takeShared()) {
       if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
     }
   }
