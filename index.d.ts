@@ -3247,7 +3247,14 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
-    interface mysql2 extends mysql {}
+    interface mysql2 extends mysql {
+      /**
+       * Whether to report pool acquisition spans and pool wait time on queries.
+       *
+       * @default true
+       */
+      poolAcquire?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
