@@ -408,7 +408,7 @@ describe('Config', () => {
     const config = getConfig({ logger, logInjection: true })
 
     assert.strictEqual(config.logger, logger)
-    assert.strictEqual(config.logInjection, true)
+    assert.strictEqual(config.tracing.DD_LOGS_INJECTION, true)
   })
 
   it('should hold a custom lookup function by reference', () => {
@@ -633,7 +633,7 @@ describe('Config', () => {
       process.env.DD_LOGS_INJECTION = 'false'
       const config = getConfig()
 
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
       assert.ok(!Object.hasOwn(config.lambda, 'injectLogContext'))
     })
   })
@@ -863,7 +863,7 @@ describe('Config', () => {
         assert.strictEqual(config.getOrigin('DD_METRICS_OTEL_ENABLED'), 'calculated')
         assert.strictEqual(config.getOrigin('DD_LOGS_OTEL_ENABLED'), 'calculated')
         // Disabled OTel logs no longer displace Datadog log injection.
-        assert.strictEqual(config.logInjection, true)
+        assert.strictEqual(config.tracing.DD_LOGS_INJECTION, true)
         sinon.assert.calledTwice(logWriter.warn)
         sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_METRICS_OTEL_ENABLED'))
         sinon.assert.calledWithExactly(logWriter.warn, sdkDisabledDiagnostic('DD_LOGS_OTEL_ENABLED'))
@@ -2284,7 +2284,10 @@ describe('Config', () => {
         DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
+      tracing: {
+        DD_TRACE_EXPERIMENTAL_EXPORTER: '',
+        DD_TRACE_MIDDLEWARE_TRACING_ENABLED: true,
+      },
       flush: {
         DD_TRACE_FLUSH_INTERVAL: 2000,
         DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 1000,
@@ -2318,7 +2321,6 @@ describe('Config', () => {
         DD_LLMOBS_SAMPLE_RATE: 1,
       },
       logLevel: 'debug',
-      middlewareTracingEnabled: true,
       plugins: true,
       protocolVersion: '0.4',
       DD_TRACE_ENABLED: true,
@@ -2791,7 +2793,10 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 2000,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
+      tracing: {
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
+        DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
+      },
       hostname: 'agent',
       DD_HEAP_SNAPSHOT_COUNT: 1,
       DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
@@ -2815,7 +2820,6 @@ describe('Config', () => {
         DD_LLMOBS_AGENTLESS_ENABLED: true,
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
-      middlewareTracingEnabled: false,
       protocolVersion: '0.4',
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
       remoteConfig: {
@@ -3283,7 +3287,7 @@ describe('Config', () => {
       config.baggage.DD_TRACE_BAGGAGE_TAG_KEYS,
       defaults['baggage.DD_TRACE_BAGGAGE_TAG_KEYS']
     )
-    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
+    assert.deepStrictEqual(config.tracing.DD_TRACE_HEADER_TAGS, defaults['tracing.DD_TRACE_HEADER_TAGS'])
     assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
     assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, defaults['sampling.DD_TRACE_SAMPLING_RULES'])
     sinon.assert.calledWithExactly(
@@ -3552,7 +3556,10 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 2000,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
+      tracing: {
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
+        DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
+      },
       flush: {
         DD_TRACE_FLUSH_INTERVAL: 5000,
         DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
@@ -3577,7 +3584,6 @@ describe('Config', () => {
       },
       logLevel,
       logger,
-      middlewareTracingEnabled: false,
       peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
@@ -4294,7 +4300,10 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 2000,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent' },
+      tracing: {
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent',
+        DD_TRACE_MIDDLEWARE_TRACING_ENABLED: true,
+      },
       flush: {
         DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
         DD_TRACE_FLUSH_INTERVAL: 500,
@@ -4317,7 +4326,6 @@ describe('Config', () => {
         DD_LLMOBS_AGENTLESS_ENABLED: false,
         DD_LLMOBS_ML_APP: 'myOtherMlApp',
       },
-      middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
       protocolVersion: '0.4',
       remoteConfig: {
@@ -6890,15 +6898,15 @@ rules:
 
     it('should resolve logs injection enablement', () => {
       const config = getConfig()
-      assert.strictEqual(config.logInjection, true)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, true)
       config.setRemoteConfig({ DD_LOGS_INJECTION: 'false' })
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
     })
 
     it('should resolve a comma-separated array env-var-keyed config, stripping colon whitespace', () => {
       const config = getConfig({ headerTags: ['foo:bar'] })
       config.setRemoteConfig({ DD_TRACE_HEADER_TAGS: 'x-custom-header : custom.tag,x-other-header' })
-      assert.deepStrictEqual(config.headerTags, [
+      assert.deepStrictEqual(config.tracing.DD_TRACE_HEADER_TAGS, [
         // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
         // 'foo:bar',
         'x-custom-header:custom.tag',
@@ -6929,7 +6937,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
-        logInjection: true,
+        tracing: { DD_LOGS_INJECTION: true },
         sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
 
@@ -6937,7 +6945,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: false,
-        logInjection: true,
+        tracing: { DD_LOGS_INJECTION: true },
         sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
 
@@ -6945,7 +6953,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
-        logInjection: true,
+        tracing: { DD_LOGS_INJECTION: true },
         sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
     })
@@ -6985,7 +6993,7 @@ rules:
       })
 
       assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'remote_config')
-      assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
+      assert.strictEqual(config.getOrigin('tracing.DD_LOGS_INJECTION'), 'remote_config')
 
       config.setRemoteConfig({
         DD_LOGS_INJECTION: 'false',
@@ -6993,7 +7001,7 @@ rules:
 
       assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
       assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'code')
-      assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
+      assert.strictEqual(config.getOrigin('tracing.DD_LOGS_INJECTION'), 'remote_config')
     })
 
     it('should update telemetry when an individual RC option falls back to a previous source', () => {
@@ -7074,7 +7082,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
-        logInjection: true,
+        tracing: { DD_LOGS_INJECTION: true },
       })
 
       assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
@@ -7087,7 +7095,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
-        logInjection: false,
+        tracing: { DD_LOGS_INJECTION: false },
         sampling: { DD_TRACE_SAMPLE_RATE: 0.8 },
       })
 
@@ -7097,7 +7105,7 @@ rules:
 
       assertObjectContains(config, {
         DD_TRACE_ENABLED: false,
-        logInjection: true,
+        tracing: { DD_LOGS_INJECTION: true },
       })
       assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
     })
@@ -7211,7 +7219,7 @@ rules:
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
       assert.deepStrictEqual(config.DD_PROFILING_EXPORTERS, [])
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
@@ -7304,7 +7312,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
     })
 
     it('should disable Dynamic Instrumentation without an API key', () => {

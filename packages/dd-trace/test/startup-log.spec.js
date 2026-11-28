@@ -22,7 +22,7 @@ const configWithStartupLogs = {
     DD_TRACE_SAMPLE_RATE: 1,
   },
   tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: 42n },
-  logInjection: true,
+  tracing: { DD_LOGS_INJECTION: true },
   runtimeMetrics: true,
   startupLogs: true,
   appsec: { DD_APPSEC_ENABLED: true },

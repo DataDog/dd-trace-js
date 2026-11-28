@@ -464,7 +464,7 @@ describe('Plugin Manager', () => {
             DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: false,
             DD_TRACE_MANAGED_SERVICES: false,
           },
-          logInjection: false,
+          tracing: { DD_LOGS_INJECTION: false },
           site: 'datadoghq.eu',
         }))
 
@@ -830,10 +830,17 @@ describe('Plugin Manager', () => {
     })
 
     it('observes configuration options', () => {
-      const tracing = { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' }
+      const tracing = {
+        DD_LOGS_INJECTION: true,
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
+        DD_TRACE_HEADER_TAGS: ['x-foo:bar'],
+        DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
+        DD_TRACE_WEBSOCKET_MESSAGES_ENABLED: true,
+        DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING: false,
+        DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES: true,
+      }
       pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
-        logInjection: true,
         DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
         tracing,
@@ -843,9 +850,14 @@ describe('Plugin Manager', () => {
       sinon.assert.calledWithMatch(Two.prototype.configure, {
         enabled: true,
         service: 'deux',
+        headers: ['x-foo:bar'],
         logInjection: true,
+        middleware: false,
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
+        traceWebsocketMessagesEnabled: true,
+        traceWebsocketMessagesInheritSampling: false,
+        traceWebsocketMessagesSeparateTraces: true,
         tracing,
       })
       sinon.assert.calledWithMatch(Four.prototype.configure, {

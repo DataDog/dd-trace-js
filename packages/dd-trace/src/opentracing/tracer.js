@@ -34,7 +34,6 @@ class DatadogTracer {
     this.serviceLower = typeof config.service === 'string' ? config.service.toLowerCase() : ''
     this._version = config.version
     this._env = config.env
-    this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampling)
 
