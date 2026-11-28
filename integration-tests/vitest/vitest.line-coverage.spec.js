@@ -116,8 +116,11 @@ for (const version of getVitestVersions()) {
       it(`reports the lines each test ran and what ran outside tests (${pool})`, async () => {
         const { tests, coverages } = await runFixtureSuite(true, pool)
 
-        assert.strictEqual(tests.length, 5, testOutput)
-        for (const test of tests) assert.strictEqual(test.meta[TEST_STATUS], 'pass', testOutput)
+        assert.strictEqual(tests.length, 7, testOutput)
+        for (const test of tests) {
+          const isSkipped = test.meta[TEST_NAME].includes('skipped tests')
+          assert.strictEqual(test.meta[TEST_STATUS], isSkipped ? 'skip' : 'pass', testOutput)
+        }
 
         const coverageOf = name => {
           const test = tests.find(test => test.meta[TEST_NAME].endsWith(name))
@@ -168,6 +171,12 @@ for (const version of getVitestVersions()) {
         const multipliesConcurrently = coverageOf('multiplies concurrently')
         assert.ok(getLines(multipliesConcurrently, ARITHMETIC).has(MULTIPLY_LINE), testOutput)
         assert.ok(!getLines(multipliesConcurrently, ARITHMETIC).has(DIVIDE_LINE), testOutput)
+
+        // A test that skips itself gets what ran before it did; one skipped before it starts ran nothing.
+        assert.ok(getLines(coverageOf('skips itself after it starts'), ARITHMETIC).has(SUBTRACT_LINE), testOutput)
+        const skippedBeforeStart = tests.find(test => test.meta[TEST_NAME].endsWith('is skipped before it starts'))
+        assert.ok(skippedBeforeStart, testOutput)
+        assert.ok(!coverages.some(coverage => coverage.span_id === Number(skippedBeforeStart.span_id)), testOutput)
       })
 
       it(`reports the lines of tests that replace fs, path and timers (${pool})`, async () => {
@@ -209,7 +218,7 @@ for (const version of getVitestVersions()) {
     it('collects no coverage when the settings do not ask for coverage', async () => {
       const { tests, coverages } = await runFixtureSuite(true, 'forks', false)
 
-      assert.strictEqual(tests.length, 5, testOutput)
+      assert.strictEqual(tests.length, 7, testOutput)
       assert.deepStrictEqual(coverages, [], testOutput)
     })
   })

@@ -48,3 +48,14 @@ describe('concurrent tests', () => {
     expect(divide(6, 3)).toBe(2)
   })
 })
+
+describe('skipped tests', () => {
+  it('skips itself after it starts', (context) => {
+    expect(subtract(5, 3)).toBe(2)
+    context.skip()
+  })
+
+  it.skip('is skipped before it starts', () => {
+    expect(add(1, 1)).toBe(2)
+  })
+})
