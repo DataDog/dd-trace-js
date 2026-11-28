@@ -33,7 +33,6 @@ const poolAcquireChannels = {
   acquireStartCh,
   acquireFinishCh,
   queuedCallbacks: queuedPoolCallbacks,
-  requireAcquireSubscriber: true,
 }
 
 /**

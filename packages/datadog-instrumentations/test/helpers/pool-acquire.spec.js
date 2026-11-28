@@ -250,7 +250,7 @@ describe('helpers/pool-acquire', () => {
           connectionFinishCh: { runStores },
           acquireStartCh: startCh,
           acquireFinishCh: finishCh,
-          reentersQueuedCallbacks: true,
+          queuedCallbacks: new WeakSet(),
         })
         const acquire = wrapPromisePoolAcquire(
           () => new Promise((resolve, reject) => {
@@ -594,6 +594,7 @@ describe('helpers/pool-acquire', () => {
     const firstConnection = {}
     const secondConnection = {}
     const channels = activeChannels()
+    channels.acquireStartCh = { hasSubscribers: true, publish: noop }
     const pool = { config: { connectionConfig: {} } }
     const physicalCallbacks = []
     const poolGetConnection = wrapPoolGetConnection(function (callback) {
@@ -674,6 +675,7 @@ describe('helpers/pool-acquire', () => {
   it('skips idle clock reads and transfers waits only when consumed', () => {
     const now = sinon.stub(performance, 'now')
     const channels = activeChannels()
+    channels.acquireStartCh = { hasSubscribers: true, publish: noop }
     const connection = {}
     const pool = { config: { connectionConfig: {} }, _freeConnections: [connection] }
     let consumeWait = false
