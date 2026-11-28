@@ -197,6 +197,7 @@ describe('dogstatsd', () => {
         DD_DOGSTATSD_PORT: 8125,
       },
       lookup: dns.lookup,
+      tags: { 'runtime-id': 'ignored-runtime-id' },
       runtimeMetrics: {
         DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: false,
       },
