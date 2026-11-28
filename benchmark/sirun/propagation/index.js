@@ -31,17 +31,19 @@ const WITH_TRACE_TAG_REPLACEMENTS = VARIANT === 'inject-replacements'
 // Duck-typed config keeps the bench out of the full `Config` singleton (telemetry
 // registration, env reads). The propagator only reads the fields below.
 const propagator = new TextMapPropagator({
-  tracePropagationStyle: {
-    extract: ['datadog', 'tracecontext', 'baggage'],
-    inject: ['datadog', 'tracecontext', 'baggage'],
+  propagation: {
+    DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['datadog', 'tracecontext', 'baggage'],
+    DD_TRACE_PROPAGATION_STYLE_INJECT: ['datadog', 'tracecontext', 'baggage'],
   },
-  legacyBaggageEnabled: true,
-  baggageMaxItems: 64,
-  baggageMaxBytes: 8192,
+  baggage: {
+    DD_TRACE_BAGGAGE_MAX_BYTES: 8192,
+    DD_TRACE_BAGGAGE_MAX_ITEMS: 64,
+    DD_TRACE_BAGGAGE_TAG_KEYS: ['user.id', 'session.id', 'account.id'],
+    DD_TRACE_LEGACY_BAGGAGE_ENABLED: true,
+  },
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
   DD_TRACE_PROPAGATION_EXTRACT_FIRST: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
-  baggageTagKeys: ['user.id', 'session.id', 'account.id'],
 })
 
 // Realistic incoming carrier: traceparent + 4-vendor tracestate + 4-key baggage. Most

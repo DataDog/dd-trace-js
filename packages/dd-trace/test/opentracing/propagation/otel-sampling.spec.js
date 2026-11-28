@@ -21,9 +21,9 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
 
   beforeEach(() => {
     config = getConfig()
-    config.tracePropagationStyle = {
-      extract: ['tracecontext'],
-      inject: ['tracecontext'],
+    config.propagation = {
+      DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['tracecontext'],
+      DD_TRACE_PROPAGATION_STYLE_INJECT: ['tracecontext'],
     }
     config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'continue'
     propagator = new TextMapPropagator(config)

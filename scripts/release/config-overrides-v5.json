@@ -126,6 +126,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "propagation",
         "configurationNames": [
           "experimental.b3"
         ],

@@ -25,7 +25,6 @@ export interface ConfigProperties extends GeneratedConfig {
     localEntries: Record<string, string>
     warnings: string[] | undefined
   }
-  tracePropagationStyle: GeneratedConfig['tracePropagationStyle']
 }
 
 type Primitive = bigint | boolean | null | number | string | symbol | undefined

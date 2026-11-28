@@ -238,7 +238,7 @@ describe('trace-checkpoint', () => {
     }
 
     const config = getConfigFresh()
-    config.legacyBaggageEnabled = true
+    config.baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED = true
 
     const spanContext = new SpanContext({
       traceId: id('123', 10),

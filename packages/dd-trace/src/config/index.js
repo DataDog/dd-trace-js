@@ -487,21 +487,23 @@ class Config extends ConfigBase {
     }
 
     // TODO: Remove the experimental env vars as a major or deprecate the option?
-    if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3')) {
-        this.tracePropagationStyle.inject.push('b3')
+    if (this.propagation.DD_TRACE_EXPERIMENTAL_B3_ENABLED) {
+      const extract = this.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+      const inject = this.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT
+      if (!inject.includes('b3')) {
+        inject.push('b3')
       }
-      if (!this.tracePropagationStyle.extract.includes('b3')) {
-        this.tracePropagationStyle.extract.push('b3')
+      if (!extract.includes('b3')) {
+        extract.push('b3')
       }
-      if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
-        this.tracePropagationStyle.inject.push('b3 single header')
+      if (!inject.includes('b3 single header')) {
+        inject.push('b3 single header')
       }
-      if (!this.tracePropagationStyle.extract.includes('b3 single header')) {
-        this.tracePropagationStyle.extract.push('b3 single header')
+      if (!extract.includes('b3 single header')) {
+        extract.push('b3 single header')
       }
-      setAndTrack(this, 'tracePropagationStyle.inject', this.tracePropagationStyle.inject)
-      setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
+      setAndTrack(this, 'propagation.DD_TRACE_PROPAGATION_STYLE_INJECT', inject)
+      setAndTrack(this, 'propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT', extract)
     }
 
     if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {

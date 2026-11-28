@@ -274,8 +274,7 @@ describe('module', () => {
       }
       LLMObsTagger.tagMap.set(store.span, { [SESSION_ID]: sessionId })
 
-      const config = getConfigFresh()
-      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      const config = getConfigFresh({ tracePropagationStyle: { inject: ['datadog', 'tracecontext'] } })
       const carrier = {}
       inject(carrier, undefined, config)
 
