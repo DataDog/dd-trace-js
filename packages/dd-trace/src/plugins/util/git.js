@@ -1018,7 +1018,7 @@ function getMergeBaseAsync (baseBranch, sourceBranch, cwd) {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } },
-    true, { cwd }
+    true, { uncached: true, cwd }
   )
 }
 
@@ -1057,7 +1057,7 @@ async function getCountsAsync (sourceBranch, candidateBranch, cwd) {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } },
-    true, { cwd }
+    true, { uncached: true, cwd }
   )
   return parseCountsOutput(counts)
 }

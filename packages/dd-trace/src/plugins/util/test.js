@@ -2474,7 +2474,7 @@ async function getModifiedFilesForCheckout ({
       let waitedForGitUpload = false
 
       const ensureShallowHistoryReady = async () => {
-        if (waitedForGitUpload || typeof waitForGitUpload !== 'function') return
+        if (waitedForGitUpload || typeof waitForGitUpload !== 'function') return false
         waitedForGitUpload = true
         if (typeof isShallowRepositoryAsync === 'function' && await isShallowRepositoryAsync(true, gitRoot)) {
           try {
@@ -2482,7 +2482,9 @@ async function getModifiedFilesForCheckout ({
           } catch {
             // Proceed with local discovery even if git upload failed.
           }
+          return true
         }
+        return false
       }
 
       // Fast path 1: CI PR merge commit (e.g. GitHub Actions refs/pull/N/merge) where HEAD's first parent
@@ -2540,16 +2542,19 @@ async function getModifiedFilesForCheckout ({
       }
 
       if (!baseBranchSha) {
-        await ensureShallowHistoryReady()
         if (!remoteName) {
           remoteName = await getGitRemoteNameAsync(gitRoot)
         }
-        baseBranchSha = await getPullRequestBaseBranchAsync(pullRequestBaseBranch, gitRoot, {
+        const discoverBaseBranch = () => getPullRequestBaseBranchAsync(pullRequestBaseBranch, gitRoot, {
           remoteName,
           sourceBranch,
           currentBranch: isCustomCheckout ? undefined : branch,
           defaultRemoteBranch,
         })
+        baseBranchSha = await discoverBaseBranch()
+        if (!baseBranchSha && await ensureShallowHistoryReady()) {
+          baseBranchSha = await discoverBaseBranch()
+        }
       }
 
       if (!baseBranchSha) {
@@ -2641,8 +2646,10 @@ async function getModifiedFilesForCheckout ({
       return getModifiedFilesFromDiff(diff) || {}
     }
 
+    const hasPinnedBaseSha = validateGitCommitSha(pullRequestBaseBranchSha)
+    const hasValidTargetCommit = !targetCommit || validateGitCommitSha(targetCommit)
     let currentHeadSha = ''
-    let canUseFsCache = Boolean(isCacheEnabled() && commitSha)
+    let canUseFsCache = Boolean(isCacheEnabled() && commitSha && hasPinnedBaseSha && hasValidTargetCommit)
     if (canUseFsCache && !targetCommit) {
       const [hasWorkingTreeChanges, headSha] = await Promise.all([
         hasWorkingTreeChangesAsync(gitRoot),

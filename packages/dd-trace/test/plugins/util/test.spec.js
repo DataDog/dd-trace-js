@@ -2458,24 +2458,62 @@ describe('getModifiedFilesForCheckout', () => {
       sinon.assert.callCount(getGitDiffAsyncStub, 4)
     })
 
-  it('waits for pending git upload on shallow checkouts before resolving ancestry', async () => {
-    const events = []
-    let resolveGitUpload
-    const gitUploadPromise = new Promise(resolve => {
-      resolveGitUpload = () => {
-        events.push('git-upload-done')
-        resolve()
-      }
+  it('bypasses fs-cache when base SHA is unpinned so moved base refs are never served stale', async () => {
+    const cacheStore = new Map()
+    const headSha = '5'.repeat(40)
+    const oldBaseSha = '6'.repeat(40)
+    const getMergeBaseAsyncStub = sinon.stub()
+    getMergeBaseAsyncStub.onCall(0).resolves(oldBaseSha)
+    getMergeBaseAsyncStub.onCall(1).resolves(headSha)
+    const getGitDiffAsyncStub = sinon.stub()
+    getGitDiffAsyncStub.onCall(0).resolves('test/impacted.spec.js\n')
+    getGitDiffAsyncStub.onCall(1).resolves('')
+
+    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+        getSourceBranchAsync: sinon.stub().resolves('feature'),
+        hasLocalGitObjectAsync: sinon.stub().resolves(true),
+        getMergeBaseAsync: getMergeBaseAsyncStub,
+        hasWorkingTreeChangesAsync: sinon.stub().resolves(false),
+        getRevParseAsync: sinon.stub().resolves(headSha),
+        getGitDiffAsync: getGitDiffAsyncStub,
+      },
+      '../../ci-visibility/requests/fs-cache': {
+        isCacheEnabled: () => true,
+        buildCacheKey: (prefix, parts) => `${prefix}:${JSON.stringify(parts)}`,
+        writeToCache: (key, data) => cacheStore.set(key, data),
+        withCache: (key, fetchFn, done) => {
+          if (cacheStore.has(key)) {
+            return done(null, cacheStore.get(key))
+          }
+          fetchFn(key, done)
+        },
+      },
     })
 
-    const getGitDiffAsyncStub = sinon.stub().callsFake(async () => {
-      events.push('diff')
-      return 'test/shallow.spec.js\n'
-    })
-    const getMergeBaseAsyncStub = sinon.stub().callsFake(async () => {
-      events.push('merge-base')
-      return '7'.repeat(40)
-    })
+    const unpinnedOptions = {
+      testEnvironmentMetadata: {
+        'git.commit.sha': headSha,
+        'git.pull_request.base_branch': 'main',
+      },
+      gitRoot: '/repo',
+      testFramework: 'vitest',
+      getUserProvidedGitMetadata: () => ({}),
+    }
+
+    assert.deepStrictEqual(await getModifiedFilesForCheckout(unpinnedOptions), { 'test/impacted.spec.js': [1] })
+    assert.strictEqual(cacheStore.size, 0)
+    // After the base ref advances to HEAD, the second call must recompute {} instead of reusing stale results.
+    assert.deepStrictEqual(await getModifiedFilesForCheckout(unpinnedOptions), {})
+    sinon.assert.calledTwice(getMergeBaseAsyncStub)
+    sinon.assert.calledTwice(getGitDiffAsyncStub)
+  })
+
+  it('skips waiting for pending git upload on shallow checkouts when local ancestry already resolves', async () => {
+    const waitForGitUploadStub = sinon.stub().returns(new Promise(() => {}))
+    const getMergeBaseAsyncStub = sinon.stub().resolves('7'.repeat(40))
+    const getGitDiffAsyncStub = sinon.stub().resolves('test/local-shallow.spec.js\n')
 
     const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
       './git': {
@@ -2496,47 +2534,6 @@ describe('getModifiedFilesForCheckout', () => {
       },
     })
 
-    const pending = getModifiedFilesForCheckout({
-      testEnvironmentMetadata: {
-        'git.commit.sha': '8'.repeat(40),
-        'git.branch': 'feature',
-      },
-      gitRoot: '/repo',
-      testFramework: 'vitest',
-      waitForGitUpload: () => gitUploadPromise,
-      getUserProvidedGitMetadata: () => ({}),
-    })
-
-    await new Promise(resolve => setImmediate(resolve))
-    sinon.assert.notCalled(getMergeBaseAsyncStub)
-
-    resolveGitUpload()
-    const modifiedFiles = await pending
-    assert.deepStrictEqual(modifiedFiles, { 'test/shallow.spec.js': [1] })
-    assert.deepStrictEqual(events, ['git-upload-done', 'merge-base', 'diff'])
-  })
-
-  it('does not wait for pending git upload on non-shallow checkouts', async () => {
-    const waitForGitUploadStub = sinon.stub().returns(new Promise(() => {}))
-    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
-      './git': {
-        isShallowRepositoryAsync: sinon.stub().resolves(false),
-        getGitRemoteNameAsync: sinon.stub().resolves('origin'),
-        getSourceBranchAsync: sinon.stub().resolves('feature'),
-        getDefaultRemoteBranchAsync: sinon.stub().resolves('main'),
-        getLocalBranchesAsync: sinon.stub().resolves(['origin/main']),
-        checkAndFetchBranchesAsync: sinon.stub().resolves(),
-        getMergeBaseAsync: sinon.stub().resolves('7'.repeat(40)),
-        getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
-        getRevParseAsync: sinon.stub().resolves('8'.repeat(40)),
-        hasLocalGitObjectAsync: sinon.stub().resolves(true),
-        getGitDiffAsync: sinon.stub().resolves('test/non-shallow.spec.js\n'),
-      },
-      '../../ci-visibility/requests/fs-cache': {
-        isCacheEnabled: () => false,
-      },
-    })
-
     const modifiedFiles = await getModifiedFilesForCheckout({
       testEnvironmentMetadata: {
         'git.commit.sha': '8'.repeat(40),
@@ -2548,7 +2545,114 @@ describe('getModifiedFilesForCheckout', () => {
       getUserProvidedGitMetadata: () => ({}),
     })
 
-    assert.deepStrictEqual(modifiedFiles, { 'test/non-shallow.spec.js': [1] })
+    assert.deepStrictEqual(modifiedFiles, { 'test/local-shallow.spec.js': [1] })
+    sinon.assert.calledOnce(getMergeBaseAsyncStub)
+    sinon.assert.notCalled(waitForGitUploadStub)
+  })
+
+  it('waits for pending git upload and retries ancestry discovery on shallow checkouts when local ancestry is missing',
+    async () => {
+      const events = []
+      let resolveGitUpload
+      const gitUploadPromise = new Promise(resolve => {
+        resolveGitUpload = () => {
+          events.push('git-upload-done')
+          resolve()
+        }
+      })
+
+      const getGitDiffAsyncStub = sinon.stub().callsFake(async () => {
+        events.push('diff')
+        return 'test/shallow.spec.js\n'
+      })
+      const getMergeBaseAsyncStub = sinon.stub()
+      getMergeBaseAsyncStub.onCall(0).callsFake(async () => {
+        events.push('merge-base-miss')
+        return ''
+      })
+      getMergeBaseAsyncStub.onCall(1).callsFake(async () => {
+        events.push('merge-base-hit')
+        return '7'.repeat(40)
+      })
+
+      const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          isShallowRepositoryAsync: sinon.stub().resolves(true),
+          getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+          getSourceBranchAsync: sinon.stub().resolves('feature'),
+          getDefaultRemoteBranchAsync: sinon.stub().resolves('main'),
+          getLocalBranchesAsync: sinon.stub().resolves(['origin/main']),
+          checkAndFetchBranchesAsync: sinon.stub().resolves(),
+          getMergeBaseAsync: getMergeBaseAsyncStub,
+          getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
+          getRevParseAsync: sinon.stub().resolves('8'.repeat(40)),
+          hasLocalGitObjectAsync: sinon.stub().resolves(true),
+          getGitDiffAsync: getGitDiffAsyncStub,
+        },
+        '../../ci-visibility/requests/fs-cache': {
+          isCacheEnabled: () => false,
+        },
+      })
+
+      const pending = getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': '8'.repeat(40),
+          'git.branch': 'feature',
+        },
+        gitRoot: '/repo',
+        testFramework: 'vitest',
+        waitForGitUpload: () => gitUploadPromise,
+        getUserProvidedGitMetadata: () => ({}),
+      })
+
+      await new Promise(resolve => setImmediate(resolve))
+      sinon.assert.calledOnce(getMergeBaseAsyncStub)
+      assert.deepStrictEqual(events, ['merge-base-miss'])
+
+      resolveGitUpload()
+      const modifiedFiles = await pending
+      assert.deepStrictEqual(modifiedFiles, { 'test/shallow.spec.js': [1] })
+      sinon.assert.calledTwice(getMergeBaseAsyncStub)
+      assert.deepStrictEqual(events, ['merge-base-miss', 'git-upload-done', 'merge-base-hit', 'diff'])
+    })
+
+  it('does not wait for pending git upload on non-shallow checkouts', async () => {
+    const waitForGitUploadStub = sinon.stub().returns(new Promise(() => {}))
+    const getMergeBaseAsyncStub = sinon.stub().resolves('')
+    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        isShallowRepositoryAsync: sinon.stub().resolves(false),
+        getGitRemoteNameAsync: sinon.stub().resolves('origin'),
+        getSourceBranchAsync: sinon.stub().resolves('feature'),
+        getDefaultRemoteBranchAsync: sinon.stub().resolves('main'),
+        getLocalBranchesAsync: sinon.stub().resolves(['origin/main']),
+        checkAndFetchBranchesAsync: sinon.stub().resolves(),
+        getMergeBaseAsync: getMergeBaseAsyncStub,
+        getCountsAsync: sinon.stub().resolves({ ahead: 1, behind: 0 }),
+        getRevParseAsync: sinon.stub().resolves('8'.repeat(40)),
+        hasLocalGitObjectAsync: sinon.stub().resolves(true),
+        getGitDiffAsync: sinon.stub().resolves('test/non-shallow.spec.js\n'),
+      },
+      '../../ci-visibility/requests/fs-cache': {
+        isCacheEnabled: () => false,
+      },
+    })
+
+    await assert.rejects(
+      getModifiedFilesForCheckout({
+        testEnvironmentMetadata: {
+          'git.commit.sha': '8'.repeat(40),
+          'git.branch': 'feature',
+        },
+        gitRoot: '/repo',
+        testFramework: 'vitest',
+        waitForGitUpload: waitForGitUploadStub,
+        getUserProvidedGitMetadata: () => ({}),
+      }),
+      /No modified tests could have been retrieved/
+    )
+
+    sinon.assert.calledOnce(getMergeBaseAsyncStub)
     sinon.assert.notCalled(waitForGitUploadStub)
   })
 })
