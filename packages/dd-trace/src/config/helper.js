@@ -24,13 +24,9 @@
  */
 
 const { deprecate } = require('util')
-const { DD_MAJOR } = require('../../../../version')
-const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
-
-applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 /**
  * Types for environment variable handling.

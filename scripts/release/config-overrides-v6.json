@@ -1,0 +1,8 @@
+{
+  "defaults": {
+    "DD_TRACE_ELECTRON_ENABLED": {
+      "base": "false",
+      "legacy": "true"
+    }
+  }
+}

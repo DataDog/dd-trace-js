@@ -1,0 +1,139 @@
+{
+  "configurationNames": {
+    "DD_API_SECURITY_ENABLED": ["experimental.appsec.apiSecurity.enabled"],
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED": ["experimental.appsec.apiSecurity.endpointCollectionEnabled"],
+    "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": ["experimental.appsec.apiSecurity.endpointCollectionMessageLimit"],
+    "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": ["experimental.appsec.eventTracking.mode"],
+    "DD_APPSEC_COLLECT_ALL_HEADERS": ["experimental.appsec.extendedHeadersCollection.enabled"],
+    "DD_APPSEC_ENABLED": [
+      "experimental.appsec.enabled",
+      "experimental.appsec"
+    ],
+    "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": ["experimental.appsec.blockedTemplateGraphql"],
+    "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": ["experimental.appsec.extendedHeadersCollection.redaction"],
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": ["experimental.appsec.blockedTemplateHtml"],
+    "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": ["experimental.appsec.blockedTemplateJson"],
+    "DD_APPSEC_MAX_COLLECTED_HEADERS": ["experimental.appsec.extendedHeadersCollection.maxHeaders"],
+    "DD_APPSEC_MAX_STACK_TRACES": ["experimental.appsec.stackTrace.maxStackTraces"],
+    "DD_APPSEC_MAX_STACK_TRACE_DEPTH": ["experimental.appsec.stackTrace.maxDepth"],
+    "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": ["experimental.appsec.obfuscatorKeyRegex"],
+    "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": ["experimental.appsec.obfuscatorValueRegex"],
+    "DD_APPSEC_RASP_COLLECT_REQUEST_BODY": ["experimental.appsec.rasp.bodyCollection"],
+    "DD_APPSEC_RASP_ENABLED": ["experimental.appsec.rasp.enabled"],
+    "DD_APPSEC_RULES": ["experimental.appsec.rules"],
+    "DD_APPSEC_STACK_TRACE_ENABLED": ["experimental.appsec.stackTrace.enabled"],
+    "DD_APPSEC_TRACE_RATE_LIMIT": ["experimental.appsec.rateLimit"],
+    "DD_APPSEC_WAF_TIMEOUT": ["experimental.appsec.wafTimeout"],
+    "DD_IAST_DB_ROWS_TO_TAINT": ["experimental.iast.dbRowsToTaint"],
+    "DD_IAST_DEDUPLICATION_ENABLED": ["experimental.iast.deduplicationEnabled"],
+    "DD_IAST_ENABLED": [
+      "experimental.iast.enabled",
+      "experimental.iast"
+    ],
+    "DD_IAST_MAX_CONCURRENT_REQUESTS": ["experimental.iast.maxConcurrentRequests"],
+    "DD_IAST_MAX_CONTEXT_OPERATIONS": ["experimental.iast.maxContextOperations"],
+    "DD_IAST_REDACTION_ENABLED": ["experimental.iast.redactionEnabled"],
+    "DD_IAST_REDACTION_NAME_PATTERN": ["experimental.iast.redactionNamePattern"],
+    "DD_IAST_REDACTION_VALUE_PATTERN": ["experimental.iast.redactionValuePattern"],
+    "DD_IAST_REQUEST_SAMPLING": ["experimental.iast.requestSampling"],
+    "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
+      "iast.securityControlsConfiguration",
+      "experimental.iast.securityControlsConfiguration"
+    ],
+    "DD_IAST_STACK_TRACE_ENABLED": ["experimental.iast.stackTrace.enabled"],
+    "DD_IAST_TELEMETRY_VERBOSITY": ["experimental.iast.telemetryVerbosity"],
+    "DD_TRACE_RATE_LIMIT": ["ingestion.rateLimit"],
+    "DD_TRACE_SAMPLE_RATE": ["ingestion.sampleRate"]
+  },
+  "aliases": {
+    "DD_PROFILING_CODEHOTSPOTS_ENABLED": ["DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"],
+    "DD_PROFILING_CPU_ENABLED": ["DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"],
+    "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": ["DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"],
+    "DD_PROFILING_TIMELINE_ENABLED": ["DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"],
+    "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": ["DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"]
+  },
+  "defaults": {
+    "DD_TRACE_STARTUP_LOGS": {
+      "base": "true",
+      "legacy": "false"
+    }
+  },
+  "entries": {
+    "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "namespace": "appsec",
+        "default": "false",
+        "configurationNames": [
+          "experimental.appsec.standalone.enabled"
+        ]
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "aliases": [
+          "DD_PROFILING_CODEHOTSPOTS_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "aliases": [
+          "DD_PROFILING_CPU_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "aliases": [
+          "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "aliases": [
+          "DD_PROFILING_TIMELINE_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
+    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "default": "false",
+        "aliases": [
+          "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
+    "DD_TRACE_EXPERIMENTAL_B3_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.b3"
+        ],
+        "default": "false"
+      }
+    ]
+  }
+}
