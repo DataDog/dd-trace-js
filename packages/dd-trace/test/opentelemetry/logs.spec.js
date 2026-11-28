@@ -941,7 +941,7 @@ describe('OpenTelemetry Logs', () => {
       const { config, loggerProvider } = setupLogs()
 
       assert(loggerProvider)
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
     })
 
     it('disables log injection even when DD_LOGS_INJECTION is explicitly set to true', () => {
@@ -950,7 +950,7 @@ describe('OpenTelemetry Logs', () => {
       const { config, loggerProvider } = setupLogs()
 
       assert(loggerProvider)
-      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.tracing.DD_LOGS_INJECTION, false)
     })
   })
 

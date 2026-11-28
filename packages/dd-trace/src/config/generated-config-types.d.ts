@@ -455,7 +455,6 @@ export interface GeneratedConfig {
     DD_TRACE_FLUSH_INTERVAL: number;
     DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: number;
   };
-  headerTags: string[];
   hostname: string;
   iast: {
     DD_IAST_DB_ROWS_TO_TAINT: number;
@@ -501,12 +500,10 @@ export interface GeneratedConfig {
     DD_LLMOBS_PROJECT_NAME: string | undefined;
     DD_LLMOBS_SAMPLE_RATE: number;
   };
-  logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   mcp: {
     DD_MCP_CAPTURE_INTENT: boolean;
   };
-  middlewareTracingEnabled: boolean;
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
     DD_OPENAI_REALTIME_ENABLED: boolean;
@@ -633,11 +630,14 @@ export interface GeneratedConfig {
     DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: boolean;
     DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: boolean;
   };
-  traceWebsocketMessagesEnabled: boolean;
-  traceWebsocketMessagesInheritSampling: boolean;
-  traceWebsocketMessagesSeparateTraces: boolean;
   tracing: {
+    DD_LOGS_INJECTION: boolean;
     DD_TRACE_EXPERIMENTAL_EXPORTER: string;
+    DD_TRACE_HEADER_TAGS: string[];
+    DD_TRACE_MIDDLEWARE_TRACING_ENABLED: boolean;
+    DD_TRACE_WEBSOCKET_MESSAGES_ENABLED: boolean;
+    DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING: boolean;
+    DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES: boolean;
   };
   url: string | URL;
   version: string | undefined;

@@ -170,6 +170,7 @@ describe('TracerProxy', () => {
       DD_APP_KEY: 'app-key',
       DD_TRACE_ENABLED: true,
       testOptimization: {},
+      tracing: {},
       dataStreams: { DD_DATA_STREAMS_ENABLED: false },
       dbm: { DD_DBM_PROPAGATION_MODE: 'disabled' },
       featureFlags: {

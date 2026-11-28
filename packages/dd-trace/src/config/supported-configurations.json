@@ -1662,6 +1662,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "tracing",
         "configurationNames": [
           "logInjection"
         ],
@@ -3270,6 +3271,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "tracing",
         "default": "",
         "configurationNames": [
           "headerTags"
@@ -3614,6 +3616,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "default": "true",
         "configurationNames": [
           "middlewareTracingEnabled"
@@ -4362,6 +4365,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "default": "true",
         "configurationNames": [
           "traceWebsocketMessagesEnabled"
@@ -4372,6 +4376,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "default": "true",
         "configurationNames": [
           "traceWebsocketMessagesInheritSampling"
@@ -4382,6 +4387,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "tracing",
         "default": "true",
         "configurationNames": [
           "traceWebsocketMessagesSeparateTraces"

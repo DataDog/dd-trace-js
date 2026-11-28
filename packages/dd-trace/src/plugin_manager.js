@@ -180,13 +180,11 @@ module.exports = class PluginManager {
   // TODO: figure out a better way to handle this
   #getSharedConfig (name) {
     const {
-      logInjection,
       lambda,
       serviceMapping,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
-      headerTags,
       codeOriginForSpans,
       dbm,
       dataStreams,
@@ -205,16 +203,20 @@ module.exports = class PluginManager {
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       testOptimization,
       isServiceUserProvided,
-      middlewareTracingEnabled,
-      traceWebsocketMessagesEnabled,
-      traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces,
       tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
       DD_APM_FLUSH_DEADLINE_MILLISECONDS,
       DD_API_KEY,
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
+    const {
+      DD_LOGS_INJECTION: logInjection,
+      DD_TRACE_HEADER_TAGS: headerTags,
+      DD_TRACE_MIDDLEWARE_TRACING_ENABLED: middlewareTracingEnabled,
+      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED: traceWebsocketMessagesEnabled,
+      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING: traceWebsocketMessagesInheritSampling,
+      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES: traceWebsocketMessagesSeparateTraces,
+    } = tracing
 
     const sharedConfig = {
       codeOriginForSpans,
@@ -256,9 +258,6 @@ module.exports = class PluginManager {
       sharedConfig.clientIpEnabled = clientIpEnabled
     }
 
-    // For the global setting, we use the name `middlewareTracingEnabled`, but
-    // for the plugin-specific setting, we use `middleware`. They mean the same
-    // to an individual plugin, so we normalize them here.
     if (middlewareTracingEnabled !== undefined) {
       sharedConfig.middleware = middlewareTracingEnabled
     }

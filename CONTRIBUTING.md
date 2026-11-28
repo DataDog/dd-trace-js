@@ -664,6 +664,7 @@ The `sampleRate` transform validates and clamps the value to the supported `0..1
 ```json
 "DD_TRACE_HEADER_TAGS": [{
   "type": "array",
+  "namespace": "tracing",
   "configurationNames": ["headerTags"],
   "default": "",
   "transform": "stripColonWhitespace"
@@ -685,7 +686,7 @@ tracer.init({
 Both become:
 
 ```js
-config.headerTags
+config.tracing.DD_TRACE_HEADER_TAGS
 // ['x-user-id:user.id', 'x-team:team']
 ```
 

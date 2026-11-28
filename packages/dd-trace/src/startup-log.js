@@ -105,7 +105,7 @@ function configInfo () {
     sample_rate_limit: config.sampling.DD_TRACE_RATE_LIMIT,
     sampling_rules: samplingRules,
     tags: config.tags,
-    log_injection_enabled: !!config.logInjection,
+    log_injection_enabled: !!config.tracing.DD_LOGS_INJECTION,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.DD_APPSEC_ENABLED,

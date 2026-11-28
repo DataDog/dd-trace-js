@@ -731,7 +731,7 @@ class Config extends ConfigBase {
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
+      setAndTrack(this, 'tracing.DD_LOGS_INJECTION', false)
     }
 
     // OTEL_PROPAGATORS is not an alias, as its values differ: an empty value is unset and `none` disables
