@@ -50,8 +50,7 @@ class DatadogTracer extends Tracer {
   }
 
   configure (config) {
-    const { env, sampler } = config
-    this._prioritySampler.configure(env, sampler, config)
+    this._prioritySampler.configure(config.env, config.sampling)
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.

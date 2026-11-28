@@ -225,7 +225,7 @@ describe('DataStreamsProcessor', () => {
   let payloadSize
 
   const config = {
-    dsmEnabled: true,
+    dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
@@ -255,7 +255,7 @@ describe('DataStreamsProcessor', () => {
     })
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.dsmEnabled)
+    assert.strictEqual(processor.enabled, config.dataStreams.DD_DATA_STREAMS_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.deepStrictEqual(processor.tags, config.tags)
   })
@@ -651,7 +651,11 @@ describe('DataStreamsProcessor with forged parent contexts', () => {
   let dropped
 
   beforeEach(() => {
-    processor = new DataStreamsProcessor({ dsmEnabled: true, env: 'test', service: 'service1' })
+    processor = new DataStreamsProcessor({
+      dataStreams: { DD_DATA_STREAMS_ENABLED: true },
+      env: 'test',
+      service: 'service1',
+    })
     clearTimeout(processor.timer)
     clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
     dropped = sinon.spy(
@@ -680,7 +684,7 @@ describe('DataStreamsProcessor with forged parent contexts', () => {
 
 describe('DataStreamsProcessor#setCheckpoint payload size', () => {
   const config = {
-    dsmEnabled: true,
+    dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
@@ -785,7 +789,7 @@ describe('CheckpointRegistry', () => {
 
 describe('DataStreamsProcessor.trackTransaction', () => {
   const config = {
-    dsmEnabled: true,
+    dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
@@ -814,7 +818,10 @@ describe('DataStreamsProcessor.trackTransaction', () => {
       './writer': { DataStreamsWriter },
       '../log': { warn: warnStub },
     })
-    const disabledProcessor = new PatchedProcessor({ ...config, dsmEnabled: false })
+    const disabledProcessor = new PatchedProcessor({
+      ...config,
+      dataStreams: { DD_DATA_STREAMS_ENABLED: false },
+    })
     clearTimeout(disabledProcessor.timer)
     disabledProcessor.trackTransaction('tx-001', 'ingested')
     assert.strictEqual(disabledProcessor.buckets.size, 0)
@@ -891,7 +898,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
 
 describe('_serializeBuckets with transactions', () => {
   const config = {
-    dsmEnabled: true,
+    dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),

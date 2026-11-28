@@ -66,7 +66,7 @@ describe('Remote config product composition', () => {
 
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
       assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'code')
-      assert.strictEqual(config.sampleRate, 0.25)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.25)
     })
 
     it(`replaces and removes ${product} as the only product`, () => {
@@ -113,13 +113,13 @@ describe('Remote config product composition', () => {
         const remaining = removed === 'APM_TRACING' ? 'APM_PROFILING' : 'APM_TRACING'
         assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, remaining === 'APM_PROFILING' ? 'true' : 'false')
         assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'remote_config')
-        assert.strictEqual(config.sampleRate, remaining === 'APM_TRACING' ? 0.5 : 0.25)
+        assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, remaining === 'APM_TRACING' ? 0.5 : 0.25)
 
         update(remaining, null)
 
         assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
         assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'code')
-        assert.strictEqual(config.sampleRate, 0.25)
+        assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.25)
       })
     }
   }
@@ -135,7 +135,7 @@ describe('Remote config product composition', () => {
     assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, undefined)
     assert.strictEqual(config.DD_PROFILING_WALLTIME_ENABLED, true)
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
-    assert.strictEqual(config.sampleRate, 0.75)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.75)
   })
 
   it('resolves aliases before merging products and restores the surviving alias', () => {
@@ -169,7 +169,7 @@ describe('Remote config product composition', () => {
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
       update('APM_TRACING', tracing('0.75'))
       assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
-      assert.strictEqual(config.sampleRate, 0.75)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.75)
     })
   }
 

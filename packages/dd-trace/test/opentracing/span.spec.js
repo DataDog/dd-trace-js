@@ -720,7 +720,7 @@ describe('Span', () => {
       [{ [MANUAL_KEEP]: true, [MANUAL_DROP]: true }, { [MANUAL_KEEP]: false }, USER_REJECT],
     ]) {
       it(`preserves priority ${expected} when adding ${JSON.stringify(second)} after ${JSON.stringify(first)}`, () => {
-        const sampler = new PrioritySampler('test', { sampleRate: 1 })
+        const sampler = new PrioritySampler('test', { DD_TRACE_SAMPLE_RATE: 1 })
         const batched = new DatadogSpan(tracer, processor, sampler, { operationName: 'batched' })
         const combined = new DatadogSpan(tracer, processor, sampler, { operationName: 'combined' })
 

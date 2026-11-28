@@ -18,8 +18,8 @@ const configWithStartupLogs = {
   service: 'test',
   url: new URL('http://example.com:4321/'),
   debug: true,
-  sampler: {
-    sampleRate: 1,
+  sampling: {
+    DD_TRACE_SAMPLE_RATE: 1,
   },
   tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: 42n },
   logInjection: true,
@@ -27,7 +27,7 @@ const configWithStartupLogs = {
   startupLogs: true,
   appsec: { DD_APPSEC_ENABLED: true },
   profiling: { DD_PROFILING_ENABLED: false },
-  dsmEnabled: true,
+  dataStreams: { DD_DATA_STREAMS_ENABLED: true },
 }
 
 const testSamplingRules = [

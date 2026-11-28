@@ -65,7 +65,7 @@ function startupConfig (config, rules, pipelines = {}) {
     }
     const firstRule = rules[0]
     if (config.apmTracingEnabled !== false && firstRule) {
-      const globalRuleCount = config.sampler.sampleRate === undefined ? 0 : 1
+      const globalRuleCount = config.sampling.DD_TRACE_SAMPLE_RATE === undefined ? 0 : 1
       if (rules.length > globalRuleCount) {
         out.OTEL_TRACES_SAMPLER = 'datadog_custom_rules'
       } else {

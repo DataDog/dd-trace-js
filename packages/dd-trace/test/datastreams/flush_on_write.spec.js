@@ -19,7 +19,7 @@ const { DataStreamsProcessor } = proxyquire('../../src/datastreams/processor', {
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 
 const baseConfig = {
-  dsmEnabled: true,
+  dataStreams: { DD_DATA_STREAMS_ENABLED: true },
   hostname: '127.0.0.1',
   port: 8126,
   url: new URL('http://127.0.0.1:8126'),

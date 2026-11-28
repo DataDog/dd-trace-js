@@ -16,7 +16,7 @@ class DataStreamsCheckpointer {
    * @param {object} carrier - The carrier object to inject context into.
    */
   setProduceCheckpoint (type, target, carrier) {
-    if (!this.config.dsmEnabled) return
+    if (!this.config.dataStreams.DD_DATA_STREAMS_ENABLED) return
 
     const ctx = this.dsmProcessor.setCheckpoint(
       ['direction:out', 'type:' + type, 'topic:' + target, 'manual_checkpoint:true'],
@@ -39,7 +39,7 @@ class DataStreamsCheckpointer {
    *                                           instrumented.
    */
   setConsumeCheckpoint (type, source, carrier, manualCheckpoint = true) {
-    if (!this.config.dsmEnabled) return
+    if (!this.config.dataStreams.DD_DATA_STREAMS_ENABLED) return
 
     const parentCtx = this.tracer.extract('text_map_dsm', carrier)
     DataStreamsContext.setDataStreamsContext(parentCtx)
@@ -63,7 +63,7 @@ class DataStreamsCheckpointer {
    * @param {object|null} [span] - Span to tag. Defaults to the currently active span.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
-    if (!this.config.dsmEnabled) return
+    if (!this.config.dataStreams.DD_DATA_STREAMS_ENABLED) return
     const activeSpan = span ?? this.tracer.scope().active()
     this.dsmProcessor.trackTransaction(transactionId, checkpointName, activeSpan)
   }

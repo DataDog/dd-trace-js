@@ -542,8 +542,8 @@ class DogStatsDClient {
     }
 
     const clientConfig = {
-      host: config.dogstatsd.hostname,
-      port: config.dogstatsd.port,
+      host: config.dogstatsd.DD_DOGSTATSD_HOST,
+      port: config.dogstatsd.DD_DOGSTATSD_PORT,
       tags,
       lookup: config.lookup,
     }

@@ -60,7 +60,7 @@ describe('span sampler', () => {
 
   it('adds _spanSampling when sampled successfully', () => {
     const sampler = new SpanSampler({
-      spanSamplingRules: [
+      DD_SPAN_SAMPLING_RULES: [
         {
           service: 'test',
           name: 'operation',
@@ -103,7 +103,7 @@ describe('span sampler', () => {
 
   it('should stop at first rule match', () => {
     const sampler = new SpanSampler({
-      spanSamplingRules: [
+      DD_SPAN_SAMPLING_RULES: [
         {
           service: 'does-not-match',
           name: 'operation',
@@ -158,7 +158,7 @@ describe('span sampler', () => {
 
   it('should sample multiple spans with one rule', () => {
     const sampler = new SpanSampler({
-      spanSamplingRules: [
+      DD_SPAN_SAMPLING_RULES: [
         {
           service: 'test',
           name: '*operation',
@@ -221,7 +221,7 @@ describe('span sampler', () => {
 
   it('should sample mutiple spans with multiple rules', () => {
     const sampler = new SpanSampler({
-      spanSamplingRules: [
+      DD_SPAN_SAMPLING_RULES: [
         {
           service: 'test',
           name: 'operation',

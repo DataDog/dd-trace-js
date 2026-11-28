@@ -1802,7 +1802,7 @@ describe('AIGuard SDK', () => {
 
     it('keeps trace even when auto-sampling would drop it', async () => {
       // Configure sampler to drop all traces (0% sample rate)
-      tracer._tracer._prioritySampler.configure('test', { sampleRate: 0 })
+      tracer._tracer._prioritySampler.configure('test', { DD_TRACE_SAMPLE_RATE: 0 })
 
       try {
         mockRequest({

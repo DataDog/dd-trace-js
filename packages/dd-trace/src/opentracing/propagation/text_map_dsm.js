@@ -16,7 +16,7 @@ class DSMTextMapPropagator {
    * @returns {Record<string, string> | undefined}
    */
   inject (ctx, carrier) {
-    if (!this.config.dsmEnabled) return
+    if (!this.config.dataStreams.DD_DATA_STREAMS_ENABLED) return
 
     const injectedCarrier = DsmPathwayCodec.encode(ctx, carrier)
     if (injectedCarrier === undefined) return
@@ -28,7 +28,7 @@ class DSMTextMapPropagator {
   }
 
   extract (carrier) {
-    if (!this.config.dsmEnabled) return
+    if (!this.config.dataStreams.DD_DATA_STREAMS_ENABLED) return
 
     const dsmContext = DsmPathwayCodec.decode(carrier)
 

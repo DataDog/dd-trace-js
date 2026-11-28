@@ -277,9 +277,9 @@ describe('SpanProcessor', () => {
       stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
       appsec: {},
       tracing: {},
-      sampler: {
-        sampleRate: 0,
-        spanSamplingRules: [
+      sampling: {
+        DD_TRACE_SAMPLE_RATE: 0,
+        DD_SPAN_SAMPLING_RULES: [
           {
             service: 'foo',
             name: 'bar',
@@ -293,7 +293,7 @@ describe('SpanProcessor', () => {
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(SpanSampler, config.sampler)
+    sinon.assert.calledWith(SpanSampler, config.sampling)
   })
 
   it('should erase the trace and stop execution when tracing=false', () => {

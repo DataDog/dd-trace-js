@@ -101,15 +101,15 @@ function configInfo () {
     service: config.service,
     agent_url: url,
     debug: !!config.debug,
-    sample_rate: config.sampler.sampleRate,
-    sample_rate_limit: config.sampler.rateLimit,
+    sample_rate: config.sampling.DD_TRACE_SAMPLE_RATE,
+    sample_rate_limit: config.sampling.DD_TRACE_RATE_LIMIT,
     sampling_rules: samplingRules,
     tags: config.tags,
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.DD_APPSEC_ENABLED,
-    data_streams_enabled: !!config.dsmEnabled,
+    data_streams_enabled: !!config.dataStreams.DD_DATA_STREAMS_ENABLED,
     ...otelConfig,
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version

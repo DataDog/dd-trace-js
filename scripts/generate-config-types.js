@@ -35,10 +35,9 @@ const BASE_TYPES = {
 
 const SIMPLE_ALLOWED_VALUE = /^[A-Za-z0-9 _./:-]+$/
 const PROPERTY_TYPE_OVERRIDES = {
-  'dogstatsd.port': 'string | number',
   port: 'string | number',
-  samplingRules: "import('../../../../index').SamplingRule[]",
-  spanSamplingRules: "import('../../../../index').SpanSamplingRule[]",
+  'sampling.DD_SPAN_SAMPLING_RULES': "import('../../../../index').SpanSamplingRule[]",
+  'sampling.DD_TRACE_SAMPLING_RULES': "import('../../../../index').SamplingRule[]",
   url: 'string | URL',
 }
 const TRANSFORM_TYPE_OVERRIDES = {

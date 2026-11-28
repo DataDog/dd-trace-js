@@ -17,7 +17,7 @@ const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
 
 const processor = new DataStreamsProcessor({
-  dsmEnabled: true,
+  dataStreams: { DD_DATA_STREAMS_ENABLED: true },
   service: 'bench-svc',
   env: 'bench-env',
   flushInterval: 2_147_483_647,

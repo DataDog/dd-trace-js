@@ -129,7 +129,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should not record a rule decision while evaluating', () => {
-      prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
+      prioritySampler = new PrioritySampler('test', { DD_TRACE_SAMPLE_RATE: 0.5 })
 
       assert.strictEqual(prioritySampler.isSampled(span), true)
       assert.strictEqual(context._trace['_dd.rule_psr'], undefined)
@@ -208,7 +208,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should support a global sample rate', () => {
-      prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
+      prioritySampler = new PrioritySampler('test', { DD_TRACE_SAMPLE_RATE: 0.5 })
       prioritySampler.sample(context)
 
       assert.strictEqual(context._sampling.priority, USER_KEEP)
@@ -223,7 +223,7 @@ describe('PrioritySampler', () => {
 
     it('should support a rule-based sampling', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 0, service: 'foo', resource: /res.*/ },
           { sampleRate: 1, service: 'test', resource: /res.*/ },
         ],
@@ -236,7 +236,7 @@ describe('PrioritySampler', () => {
 
     it('should mark the context for discard when a discard=true rule rejects the trace', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 0, service: 'test', resource: /res.*/, discard: true },
         ],
       })
@@ -248,7 +248,7 @@ describe('PrioritySampler', () => {
 
     it('should mark the context for discard when a discard=true rule keeps the trace (but not actually drop)', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 1, service: 'test', resource: /res.*/, discard: true },
         ],
       })
@@ -260,7 +260,7 @@ describe('PrioritySampler', () => {
 
     it('should not mark the context for discard when the rejecting rule has discard=false', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 0, service: 'foo', resource: /res.*/ },
           { sampleRate: 0, service: 'test', resource: /res.*/ },
         ],
@@ -273,7 +273,7 @@ describe('PrioritySampler', () => {
 
     it('should support a customer-defined remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 1, service: 'test', resource: /res.*/, provenance: 'customer' },
         ],
       })
@@ -285,7 +285,7 @@ describe('PrioritySampler', () => {
 
     it('should support a dynamic remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 0, service: 'test', resource: /res.*/, provenance: 'dynamic' },
         ],
       })
@@ -300,7 +300,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        rules: {
+        DD_TRACE_SAMPLING_RULES: {
           name: 'test',
           sampleRate: 0,
         },
@@ -313,7 +313,7 @@ describe('PrioritySampler', () => {
 
     it('should validate and ignore non-JSON sampling rules', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: 5,
+        DD_TRACE_SAMPLING_RULES: 5,
       })
 
       // Should not throw
@@ -322,7 +322,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should default to no rules if rules are set to null', () => {
-      prioritySampler = new PrioritySampler('test', { rules: null })
+      prioritySampler = new PrioritySampler('test', { DD_TRACE_SAMPLING_RULES: null })
 
       prioritySampler.sample(context)
       assert.strictEqual(context._sampling.priority, AUTO_KEEP)
@@ -332,8 +332,8 @@ describe('PrioritySampler', () => {
       context._name = 'foo'
 
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rules: [
+        DD_TRACE_SAMPLE_RATE: 1,
+        DD_TRACE_SAMPLING_RULES: [
           { sampleRate: 0, name: 'bar' },
         ],
       })
@@ -345,8 +345,8 @@ describe('PrioritySampler', () => {
 
     it('should support a rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rateLimit: 1,
+        DD_TRACE_SAMPLE_RATE: 1,
+        DD_TRACE_RATE_LIMIT: 1,
       })
       prioritySampler.sample(context)
 
@@ -363,9 +363,9 @@ describe('PrioritySampler', () => {
 
     it('should support a global rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rateLimit: 1,
-        rules: [{
+        DD_TRACE_SAMPLE_RATE: 1,
+        DD_TRACE_RATE_LIMIT: 1,
+        DD_TRACE_SAMPLING_RULES: [{
           service: 'test',
           sampleRate: 1,
           rateLimit: 1000,
@@ -386,8 +386,8 @@ describe('PrioritySampler', () => {
 
     it('should support disabling the rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1,
-        rateLimit: -1,
+        DD_TRACE_SAMPLE_RATE: 1,
+        DD_TRACE_RATE_LIMIT: -1,
       })
       prioritySampler.sample(context)
 
@@ -404,8 +404,8 @@ describe('PrioritySampler', () => {
 
     it('should preserve probability metadata when the rate limiter allows a trace', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: [{ service: 'test', sampleRate: 1 }],
-        rateLimit: 1,
+        DD_TRACE_SAMPLING_RULES: [{ service: 'test', sampleRate: 1 }],
+        DD_TRACE_RATE_LIMIT: 1,
       })
       sinon.stub(prioritySampler._limiter, 'isAllowed').returns(true)
       sinon.stub(prioritySampler._limiter, 'effectiveRate').returns(0.5)
@@ -426,7 +426,7 @@ describe('PrioritySampler', () => {
 
     it('should add metrics for rule sample rate', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0,
+        DD_TRACE_SAMPLE_RATE: 0,
       })
       prioritySampler.sample(span)
 
@@ -436,8 +436,8 @@ describe('PrioritySampler', () => {
 
     it('should add metrics for rate limiter sample rate', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.5,
-        rateLimit: 1,
+        DD_TRACE_SAMPLE_RATE: 0.5,
+        DD_TRACE_RATE_LIMIT: 1,
       })
       prioritySampler.sample(span)
 
@@ -462,7 +462,7 @@ describe('PrioritySampler', () => {
 
     it('should set _dd.p.ksr tag for rule-based sampling', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.5,
+        DD_TRACE_SAMPLE_RATE: 0.5,
       })
       prioritySampler.sample(span)
 
@@ -471,7 +471,7 @@ describe('PrioritySampler', () => {
 
     it('should set _dd.p.ksr tag for rule-based sampling with rate 0', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0,
+        DD_TRACE_SAMPLE_RATE: 0,
       })
       prioritySampler.sample(span)
 
@@ -480,7 +480,7 @@ describe('PrioritySampler', () => {
 
     it('should set _dd.p.ksr tag for rate 1.0 as "1"', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 1.0,
+        DD_TRACE_SAMPLE_RATE: 1.0,
       })
       prioritySampler.sample(span)
 
@@ -502,7 +502,7 @@ describe('PrioritySampler', () => {
         rate: sinon.stub().returns(0.000001),
       })
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.000001,
+        DD_TRACE_SAMPLE_RATE: 0.000001,
       })
       prioritySampler.sample(span)
 
@@ -515,7 +515,7 @@ describe('PrioritySampler', () => {
         rate: sinon.stub().returns(0.0000001),
       })
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.0000001,
+        DD_TRACE_SAMPLE_RATE: 0.0000001,
       })
       prioritySampler.sample(span)
 
@@ -528,7 +528,7 @@ describe('PrioritySampler', () => {
         rate: sinon.stub().returns(0.00000051),
       })
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.00000051,
+        DD_TRACE_SAMPLE_RATE: 0.00000051,
       })
       prioritySampler.sample(span)
 
@@ -650,7 +650,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should not let manual tags override an AI Guard force-keep', () => {
-      prioritySampler = new PrioritySampler('test', { sampleRate: 1 })
+      prioritySampler = new PrioritySampler('test', { DD_TRACE_SAMPLE_RATE: 1 })
       prioritySampler.setPriority(span, USER_KEEP, AI_GUARD)
       prioritySampler.isSampled(span)
 

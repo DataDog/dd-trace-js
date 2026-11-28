@@ -40,9 +40,9 @@ describe('Plugin', () => {
       proxiedServices.init(config)
 
       sinon.assert.calledOnceWithExactly(DogStatsDClient, {
-        host: config.dogstatsd.hostname,
+        host: config.dogstatsd.DD_DOGSTATSD_HOST,
         lookup: config.lookup,
-        port: config.dogstatsd.port,
+        port: config.dogstatsd.DD_DOGSTATSD_PORT,
         tags: [
           'service:bar',
           'env:prod',

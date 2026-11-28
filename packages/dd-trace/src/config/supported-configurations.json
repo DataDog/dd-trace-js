@@ -883,6 +883,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dataStreams",
         "default": "false",
         "configurationNames": [
           "dsmEnabled"
@@ -900,6 +901,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dbm",
         "configurationNames": [
           "dbm.injectSqlBaseHash"
         ],
@@ -910,6 +912,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "dbm",
         "configurationNames": [
           "dbmPropagationMode"
         ],
@@ -922,6 +925,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "dogstatsd",
         "configurationNames": [
           "dogstatsd.hostname"
         ],
@@ -935,6 +939,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dogstatsd",
         "configurationNames": [
           "dogstatsd.port"
         ],
@@ -2064,6 +2069,7 @@
       {
         "implementation": "D",
         "type": "json",
+        "namespace": "sampling",
         "configurationNames": [
           "spanSamplingRules"
         ],
@@ -4047,6 +4053,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "sampling",
         "configurationNames": [
           "rateLimit"
         ],
@@ -4147,6 +4154,7 @@
       {
         "implementation": "B",
         "type": "decimal",
+        "namespace": "sampling",
         "configurationNames": [
           "sampleRate"
         ],
@@ -4158,6 +4166,7 @@
       {
         "implementation": "E",
         "type": "json",
+        "namespace": "sampling",
         "configurationNames": [
           "samplingRules"
         ],

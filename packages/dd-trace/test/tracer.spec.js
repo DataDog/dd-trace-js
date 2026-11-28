@@ -37,10 +37,10 @@ describe('Tracer', () => {
   describe('configure', () => {
     it('should pass the sampling options to the priority sampler', () => {
       const env = 'test'
-      const sampler = { sampleRate: 0.5 }
-      const options = { env, sampler }
+      const sampling = { DD_TRACE_SAMPLE_RATE: 0.5 }
+      const options = { env, sampling }
       tracer.configure(options)
-      sinon.assert.calledWith(tracer._prioritySampler.configure, env, sampler)
+      sinon.assert.calledOnceWithExactly(tracer._prioritySampler.configure, env, sampling)
     })
   })
 

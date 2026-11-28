@@ -691,6 +691,7 @@ config.headerTags
 ```json
 "DD_TRACE_SAMPLING_RULES": [{
   "type": "json",
+  "namespace": "sampling",
   "configurationNames": ["samplingRules"],
   "default": "[]",
   "transform": "toCamelCase"
@@ -704,7 +705,7 @@ DD_TRACE_SAMPLING_RULES='[{"sample_rate":0.5,"service":"api"}]'
 Result:
 
 ```js
-config.samplingRules
+config.sampling.DD_TRACE_SAMPLING_RULES
 // [{ sampleRate: 0.5, service: 'api' }]
 ```
 

@@ -20,12 +20,6 @@ export interface ConfigProperties extends GeneratedConfig {
   lookup: NonNullable<import('../../../../index').TracerOptions['lookup']>
   readonly parsedDdTags: Record<string, string>
   plugins: boolean
-  sampler: {
-    rateLimit: number
-    rules: import('../../../../index').SamplingRule[]
-    sampleRate: number | undefined
-    spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined
-  }
   stableConfig: {
     fleetEntries: Record<string, string>
     localEntries: Record<string, string>
