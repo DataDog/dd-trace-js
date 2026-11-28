@@ -73,6 +73,12 @@ const MARKED_TRACE = Symbol('dd-trace.line-coverage.marked-trace')
 const CHILD_TARGET = '_DD_LINE_COVERAGE_CHILD'
 const CHILD_ROOT = '_DD_LINE_COVERAGE_ROOT'
 
+// Dependency and build-output directories: the files under them are not the repository's own code.
+const EXCLUDED_DIRECTORIES = new Set([
+  'node_modules', '.git', '.yarn', '.pnpm-store', '.next', '.nuxt', '.output', '.svelte-kit', '.vite', '.turbo',
+  '.nx', '.cache', '.parcel-cache', '.angular', '.docusaurus', '.vercel',
+])
+
 let enabled = false
 let rootPrefix = ''
 const stats = { files: 0, instrumentNs: 0n, failures: 0, bytesIn: 0, bytesOut: 0, cacheHits: 0, cacheWrites: 0 }
@@ -667,16 +673,16 @@ function writeDump () {
 }
 
 /**
- * Whether `filename` is a file of the repository: under the root, outside `node_modules` and
- * outside directories whose name starts with a dot.
+ * Whether `filename` is a file of the repository: under the root, and outside dependency and
+ * build-output directories.
  *
  * @param {string} filename an absolute path
  */
 function shouldInstrument (filename) {
   if (!filename.startsWith(rootPrefix)) return false
   const parts = filename.slice(rootPrefix.length).split(sep)
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i] === 'node_modules' || (i < parts.length - 1 && parts[i].startsWith('.'))) return false
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (EXCLUDED_DIRECTORIES.has(parts[i])) return false
   }
   return true
 }

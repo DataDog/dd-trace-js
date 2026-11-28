@@ -46,6 +46,22 @@ describe('line coverage enable', () => {
     assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, 'node_modules/x/index.js')), false)
   })
 
+  it('instruments files under dot-directories, except dependency and build-output directories', () => {
+    const lineCoverage = loadFresh()
+    lineCoverage.enable({ root, patchModuleLoader: false })
+
+    assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, 'docs/.vitepress/theme/index.js')), true)
+    assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, 'test/cases/.hidden-dir/deep.js')), true)
+    assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, '.eslintrc.js')), true)
+    assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, 'app/.vite/deps/chunk.js')), false)
+    for (const directory of [
+      '.git', '.yarn', '.pnpm-store', '.next', '.nuxt', '.output', '.svelte-kit', '.turbo', '.nx', '.cache',
+      '.parcel-cache', '.angular', '.docusaurus', '.vercel',
+    ]) {
+      assert.strictEqual(lineCoverage.shouldInstrument(path.join(root, 'app', directory, 'chunk.js')), false, directory)
+    }
+  })
+
   it('does not instrument anything before it is enabled', () => {
     const lineCoverage = loadFresh()
 
