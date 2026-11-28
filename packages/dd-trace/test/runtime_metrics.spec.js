@@ -246,8 +246,8 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
         config = {
           url: new URL('http://localhost:8126'),
           dogstatsd: {
-            hostname: 'localhost',
-            port: 8125,
+            DD_DOGSTATSD_HOST: 'localhost',
+            DD_DOGSTATSD_PORT: 8125,
           },
           runtimeMetrics: {
             enabled: true,
@@ -1051,7 +1051,7 @@ describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIterati
 
     config = {
       url: new URL('http://localhost:8126'),
-      dogstatsd: { hostname: 'localhost', port: 8125 },
+      dogstatsd: { DD_DOGSTATSD_HOST: 'localhost', DD_DOGSTATSD_PORT: 8125 },
       // native is explicitly true to prove the real version gate wins over it.
       runtimeMetrics: { enabled: true, eventLoop: true, gc: true, native: true },
       tags: {},
@@ -1645,7 +1645,7 @@ describe('OTLP runtime metrics — pipeline flow', () => {
   it('flushes every observable metric with correct wire shape (sum vs gauge) and scope name', () => {
     otlpRuntimeMetrics.start({
       runtimeMetrics: { enabled: true, eventLoop: true, gc: false },
-      dogstatsd: { hostname: '127.0.0.1', port: 8125 },
+      dogstatsd: { DD_DOGSTATSD_HOST: '127.0.0.1', DD_DOGSTATSD_PORT: 8125 },
     })
     reader.forceFlush()
 

@@ -2,7 +2,7 @@
 
 const dgram = require('dgram')
 const { defaults } = require('../../packages/dd-trace/src/config/defaults')
-const port = process.env.SIRUN_STATSD_PORT || defaults['dogstatsd.DD_DOGSTATSD_PORT']
+const port = process.env.SIRUN_STATSD_PORT || defaults['dogstatsd.DD_DOGSTATSD_PORT'] || defaults['dogstatsd.port']
 
 class StatsD {
   constructor (options) {

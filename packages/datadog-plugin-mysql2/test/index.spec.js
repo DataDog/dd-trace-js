@@ -809,7 +809,7 @@ describe('Plugin', () => {
             agent.close().then(done)
           })
 
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 1 } })
         })
 
         beforeEach(async () => {
@@ -841,7 +841,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
@@ -911,7 +911,7 @@ describe('Plugin', () => {
             agent.close().then(done)
           })
 
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 1 } })
         })
 
         beforeEach(async () => {
@@ -943,7 +943,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {

@@ -42,7 +42,12 @@ const CONFIGS = {
 const config = CONFIGS[VARIANT]
 assert.ok(config, `unknown VARIANT: ${VARIANT}`)
 
-const sampler = new PrioritySampler('production', config)
+// Benchmark CI also runs this workload against the older sampler.
+const sampler = new PrioritySampler('production', {
+  ...config,
+  rateLimit: config.DD_TRACE_RATE_LIMIT,
+  rules: config.DD_TRACE_SAMPLING_RULES,
+})
 // The agent variant needs non-default per-service rates so the non-unit Knuth
 // path runs instead of the rate===1 short circuit.
 if (VARIANT === 'agent') {

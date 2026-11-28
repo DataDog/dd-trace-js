@@ -15,9 +15,12 @@ const { getMessageSize } = require('../../../packages/dd-trace/src/datastreams/s
 const { VARIANT } = process.env
 
 const OPERATIONS = Number(process.env.OPERATIONS)
+const dsmEnabled = true
 
 const processor = new DataStreamsProcessor({
-  dataStreams: { DD_DATA_STREAMS_ENABLED: true },
+  // Benchmark CI runs this fixture against the baseline implementation too.
+  dsmEnabled,
+  dataStreams: { DD_DATA_STREAMS_ENABLED: dsmEnabled },
   service: 'bench-svc',
   env: 'bench-env',
   flushInterval: 2_147_483_647,

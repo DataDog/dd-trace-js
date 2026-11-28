@@ -1328,7 +1328,7 @@ describe('Plugin', () => {
         describe('with full mode using tracer configurations', () => {
           beforeEach(async () => {
             await connect({ dbmPropagationMode: 'full', service: 'post' })
-            global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+            global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 1 } })
           })
 
           it('should send the trace context to the server in the query text', async () => {

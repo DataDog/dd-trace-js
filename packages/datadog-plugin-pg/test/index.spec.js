@@ -1442,7 +1442,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           client.end(done)
 
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 1 } })
         })
 
         it('query config objects should be handled', async () => {
@@ -1467,7 +1467,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', async () => {
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 0 } })
           const query = {
             text: 'SELECT $1::text as message',
           }
