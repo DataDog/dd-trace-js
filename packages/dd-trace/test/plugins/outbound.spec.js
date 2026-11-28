@@ -33,7 +33,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should attempt to remap when we found peer service', () => {
-      computePeerServiceStub.value({ spanComputePeerService: true })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true } })
       getPeerServiceStub.returns({ foo: 'bar' })
       instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
 
@@ -42,7 +42,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should not attempt to remap if we found no peer service', () => {
-      computePeerServiceStub.value({ spanComputePeerService: true })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true } })
       getPeerServiceStub.returns(undefined)
       instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
 
@@ -51,7 +51,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should not recompute peer service after its source was set', () => {
-      computePeerServiceStub.value({ spanComputePeerService: true })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true } })
       const tags = {
         'peer.service': 'mypeerservice',
         '_dd.peer.service.source': 'out.host',
@@ -63,7 +63,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should not recompute peer service when only its source was set', () => {
-      computePeerServiceStub.value({ spanComputePeerService: true })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true } })
       const tags = {
         '_dd.peer.service.source': 'out.host',
       }
@@ -74,7 +74,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should compute peer service when only its value was set', () => {
-      computePeerServiceStub.value({ spanComputePeerService: true })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true } })
       getPeerServiceStub.returns({
         'peer.service': 'mypeerservice',
         '_dd.peer.service.source': 'peer.service',
@@ -89,7 +89,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should do nothing when disabled', () => {
-      computePeerServiceStub.value({ spanComputePeerService: false })
+      computePeerServiceStub.value({ tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false } })
       instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })
       sinon.assert.notCalled(getPeerServiceStub)
       sinon.assert.notCalled(getRemapStub)
@@ -165,22 +165,21 @@ describe('OuboundPlugin', () => {
     })
 
     it('should return peer data unchanged if there is no peer service', () => {
-      mappingStub = sinon.stub(instance, '_tracerConfig').value({})
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({ tracing: {} })
       const mappingData = instance.getPeerServiceRemap({ foo: 'bar' })
       assert.deepStrictEqual(mappingData, { foo: 'bar' })
     })
 
     it('should return peer data unchanged if no mapping is available', () => {
-      mappingStub = sinon.stub(instance, '_tracerConfig').value({ peerServiceMapping: {} })
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({ tracing: { DD_TRACE_PEER_SERVICE_MAPPING: {} } })
       const mappingData = instance.getPeerServiceRemap(peerData)
       assert.deepStrictEqual(mappingData, peerData)
     })
 
     it('should return peer data unchanged if no mapping item matches', () => {
       mappingStub = sinon.stub(instance, '_tracerConfig').value({
-        peerServiceMapping: {
-          barsvc: 'bar',
-          bazsvc: 'baz',
+        tracing: {
+          DD_TRACE_PEER_SERVICE_MAPPING: { barsvc: 'bar', bazsvc: 'baz' },
         },
       })
       const mappingData = instance.getPeerServiceRemap(peerData)
@@ -189,9 +188,8 @@ describe('OuboundPlugin', () => {
 
     it('should remap if a mapping item matches', () => {
       mappingStub = sinon.stub(instance, '_tracerConfig').value({
-        peerServiceMapping: {
-          foosvc: 'foo',
-          bazsvc: 'baz',
+        tracing: {
+          DD_TRACE_PEER_SERVICE_MAPPING: { foosvc: 'foo', bazsvc: 'baz' },
         },
       })
       const mappingData = instance.getPeerServiceRemap(peerData)

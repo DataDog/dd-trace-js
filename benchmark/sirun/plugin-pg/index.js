@@ -27,7 +27,10 @@ const tracer = {
   _service: 'web-app',
   _version: '1.2.3',
 }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+}
 const plugin = new BenchedPGPlugin(tracer, tracerConfig)
 plugin.configure({
   enabled: true,

@@ -782,18 +782,19 @@ class Config extends ConfigBase {
     }
 
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-      if (this.spanAttributeSchema !== 'v0') {
+      if (this.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA !== 'v0') {
         log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting')
       }
-      if (this.spanComputePeerService) {
+      if (this.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED) {
         log.warn(
           'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
         )
       }
-      setAndTrack(this, 'spanAttributeSchema', 'v0')
-      setAndTrack(this, 'spanComputePeerService', false)
-    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
-      setAndTrack(this, 'spanComputePeerService', true)
+      setAndTrack(this, 'tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', 'v0')
+      setAndTrack(this, 'tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED', false)
+    } else if (!trackedConfigOrigins.has('tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED') &&
+      this.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA !== 'v0') {
+      setAndTrack(this, 'tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED', true)
     }
 
     // An explicit OTel sampler also applies to native trace exporters.

@@ -27,7 +27,10 @@ const tracer = {
   _service: 'web-app',
   _nomenclature: { config: {}, opName: () => 'redis.command' },
 }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+}
 const plugin = new BenchedRedisPlugin(tracer, tracerConfig)
 plugin.configure({ enabled: true, service: 'redis-prod' })
 

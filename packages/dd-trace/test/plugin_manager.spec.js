@@ -42,12 +42,9 @@ describe('Plugin Manager', () => {
   function makeTracerConfig (overrides = {}) {
     return {
       plugins: true,
-      spanAttributeSchema: 'v0',
-      spanRemoveIntegrationFromService: false,
       // The real tracer Config always carries the testOptimization namespace;
       // #getSharedConfig reads it, so the stand-in must provide it too.
       testOptimization: {},
-      tracing: {},
       dbm: {
         DD_DBM_INJECT_SQL_BASEHASH: false,
         DD_DBM_PROPAGATION_MODE: 'disabled',
@@ -56,6 +53,11 @@ describe('Plugin Manager', () => {
         DD_DATA_STREAMS_ENABLED: false,
       },
       ...overrides,
+      tracing: {
+        DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v0',
+        DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
+        ...overrides.tracing,
+      },
     }
   }
 
@@ -432,8 +434,8 @@ describe('Plugin Manager', () => {
       })
 
       it('configures the plugin once per configuration with the latest settings', () => {
-        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'first' } }))
-        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'second' } }))
+        pm.configure(makeTracerConfig({ tracing: { DD_SERVICE_MAPPING: { 'aws-lambda': 'first' } } }))
+        pm.configure(makeTracerConfig({ tracing: { DD_SERVICE_MAPPING: { 'aws-lambda': 'second' } } }))
 
         assert.deepStrictEqual(instantiated, ['aws-lambda'])
         sinon.assert.calledTwice(AwsLambda.prototype.configure)
@@ -624,7 +626,7 @@ describe('Plugin Manager', () => {
 
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'late-lambda'
       try {
-        pm.configure(makeTracerConfig({ serviceMapping: { 'aws-lambda': 'late-service' } }))
+        pm.configure(makeTracerConfig({ tracing: { DD_SERVICE_MAPPING: { 'aws-lambda': 'late-service' } } }))
         assert.deepStrictEqual(instantiated, ['aws-lambda'])
         sinon.assert.calledOnceWithMatch(AwsLambda.prototype.configure, { enabled: true, service: 'late-service' })
       } finally {
@@ -832,6 +834,7 @@ describe('Plugin Manager', () => {
     it('observes configuration options', () => {
       const tracing = {
         DD_LOGS_INJECTION: true,
+        DD_SERVICE_MAPPING: { two: 'deux' },
         DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
         DD_TRACE_HEADER_TAGS: ['x-foo:bar'],
         DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
@@ -840,7 +843,6 @@ describe('Plugin Manager', () => {
         DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES: true,
       }
       pm.configure(makeTracerConfig({
-        serviceMapping: { two: 'deux' },
         DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
         tracing,

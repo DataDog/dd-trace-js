@@ -1996,8 +1996,8 @@ describe('Config', () => {
     assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'jest_worker')
     assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-    assert.strictEqual(config.spanAttributeSchema, 'v1')
-    assert.strictEqual(config.spanComputePeerService, true)
+    assert.strictEqual(config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'v1')
+    assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
     sinon.assert.calledOnceWithExactly(
       log.warn,
       'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
@@ -2020,8 +2020,8 @@ describe('Config', () => {
     assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'electron')
     assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-    assert.strictEqual(config.spanAttributeSchema, 'v1')
-    assert.strictEqual(config.spanComputePeerService, true)
+    assert.strictEqual(config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'v1')
+    assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
     sinon.assert.calledOnceWithExactly(
       log.warn,
       'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
@@ -2287,6 +2287,9 @@ describe('Config', () => {
       tracing: {
         DD_TRACE_EXPERIMENTAL_EXPORTER: '',
         DD_TRACE_MIDDLEWARE_TRACING_ENABLED: true,
+        DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v0',
+        DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false,
+        DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
       },
       flush: {
         DD_TRACE_FLUSH_INTERVAL: 2000,
@@ -2341,9 +2344,6 @@ describe('Config', () => {
       sampling: { DD_TRACE_SAMPLE_RATE: undefined },
       DD_TRACE_SCOPE: undefined,
       service: 'node',
-      spanAttributeSchema: 'v0',
-      spanComputePeerService: false,
-      spanRemoveIntegrationFromService: false,
       traceId: {
         DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
         DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
@@ -2358,7 +2358,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
-    assert.deepStrictEqual(config.serviceMapping, {})
+    assert.deepStrictEqual(config.tracing.DD_SERVICE_MAPPING, {})
     assert.deepStrictEqual(
       config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT,
       ['datadog', 'tracecontext', 'baggage']
@@ -2558,7 +2558,7 @@ describe('Config', () => {
       logger: {},
     })
     sinon.assert.notCalled(log.warn)
-    assert.strictEqual(config.spanAttributeSchema, 'v0')
+    assert.strictEqual(config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'v0')
   })
 
   it('should initialize from the default service', () => {
@@ -2796,6 +2796,9 @@ describe('Config', () => {
       tracing: {
         DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
         DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
+        DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v1',
+        DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true,
+        DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
       },
       hostname: 'agent',
       DD_HEAP_SNAPSHOT_COUNT: 1,
@@ -2836,9 +2839,6 @@ describe('Config', () => {
       },
       sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
-      spanAttributeSchema: 'v1',
-      spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true,
       tags: {
         foo: 'bar',
         baz: 'qux',
@@ -2859,7 +2859,7 @@ describe('Config', () => {
     assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_ID, '68e75c48-57ca-4a12-adfc-575c4b05fcbe')
     assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TYPE, 'k8s_single_step')
     assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TIME, '1703188212')
-    assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
+    assert.deepStrictEqual(config.tracing.DD_TRACE_PEER_SERVICE_MAPPING, { c: 'cc', d: 'dd' })
     assert.strictEqual(Object.hasOwn(config, 'sampler'), false)
     assert.deepStrictEqual(config.sampling, {
       DD_TRACE_SAMPLE_RATE: 0.5,
@@ -2877,7 +2877,7 @@ describe('Config', () => {
         { sampleRate: 0.1 },
       ],
     })
-    assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
+    assert.deepStrictEqual(config.tracing.DD_SERVICE_MAPPING, { a: 'aa', b: 'bb' })
     assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['b3', 'tracecontext'])
     assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3', 'tracecontext'])
 
@@ -3288,7 +3288,7 @@ describe('Config', () => {
       defaults['baggage.DD_TRACE_BAGGAGE_TAG_KEYS']
     )
     assert.deepStrictEqual(config.tracing.DD_TRACE_HEADER_TAGS, defaults['tracing.DD_TRACE_HEADER_TAGS'])
-    assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
+    assert.deepStrictEqual(config.tracing.DD_SERVICE_MAPPING, defaults['tracing.DD_SERVICE_MAPPING'])
     assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, defaults['sampling.DD_TRACE_SAMPLING_RULES'])
     sinon.assert.calledWithExactly(
       log.warn,
@@ -3559,6 +3559,9 @@ describe('Config', () => {
       tracing: {
         DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
         DD_TRACE_MIDDLEWARE_TRACING_ENABLED: false,
+        DD_TRACE_PEER_SERVICE_MAPPING: { d: 'dd' },
+        DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true,
+        DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
       },
       flush: {
         DD_TRACE_FLUSH_INTERVAL: 5000,
@@ -3584,7 +3587,6 @@ describe('Config', () => {
       },
       logLevel,
       logger,
-      peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
       protocolVersion: '0.4',
@@ -3601,8 +3603,6 @@ describe('Config', () => {
       sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
       site: 'datadoghq.eu',
-      spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true,
       tags: {
         env: 'test',
         foo: 'bar',
@@ -3652,7 +3652,7 @@ describe('Config', () => {
         { sampleRate: 0.1 },
       ],
     })
-    assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
+    assert.deepStrictEqual(config.tracing.DD_SERVICE_MAPPING, { a: 'aa', b: 'bb' })
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     if (DD_MAJOR < 6) {
@@ -3858,7 +3858,7 @@ describe('Config', () => {
       log.warn,
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
-    assert.strictEqual(config.spanAttributeSchema, 'v0')
+    assert.strictEqual(config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'v0')
   })
 
   it('should reject an empty API key', () => {
@@ -3979,38 +3979,38 @@ describe('Config', () => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
       let config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, true)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, false)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, false)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, false)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, false)
 
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, false)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, false)
     })
 
     it('should activate peer service in v1 unless explicitly false', () => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
       let config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, false)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, false)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, true)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
 
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, true)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
 
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = getConfig()
-      assert.strictEqual(config.spanComputePeerService, true)
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, true)
     })
 
     it('should disable peer service when OTel HTTP semantics are enabled', () => {
@@ -4020,8 +4020,8 @@ describe('Config', () => {
 
       const config = getConfig()
 
-      assert.strictEqual(config.spanAttributeSchema, 'v0')
-      assert.strictEqual(config.spanComputePeerService, false)
+      assert.strictEqual(config.tracing.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'v0')
+      assert.strictEqual(config.tracing.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED, false)
       assert(log.warn.calledWith(
         'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting'
       ))
@@ -4303,6 +4303,11 @@ describe('Config', () => {
       tracing: {
         DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent',
         DD_TRACE_MIDDLEWARE_TRACING_ENABLED: true,
+        DD_TRACE_PEER_SERVICE_MAPPING: { d: 'dd' },
+        DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v1',
+        DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: true,
+        DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
+        DD_SERVICE_MAPPING: { b: 'bb' },
       },
       flush: {
         DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 500,
@@ -4326,7 +4331,6 @@ describe('Config', () => {
         DD_LLMOBS_AGENTLESS_ENABLED: false,
         DD_LLMOBS_ML_APP: 'myOtherMlApp',
       },
-      peerServiceMapping: { d: 'dd' },
       protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
@@ -4338,15 +4342,11 @@ describe('Config', () => {
       },
       service: 'test',
       site: 'datadoghq.com',
-      spanAttributeSchema: 'v1',
-      spanComputePeerService: true,
-      spanRemoveIntegrationFromService: true,
       traceId: {
         DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false,
         DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: false,
       },
       version: '1.0.0',
-      serviceMapping: { b: 'bb' },
       tags: {
         foo: 'foo',
         service: 'test',

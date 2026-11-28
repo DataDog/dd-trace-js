@@ -26,7 +26,10 @@ class BenchedElasticsearchPlugin extends ElasticsearchPlugin {
 }
 
 const tracer = { _service: 'web-app', _env: 'prod', _version: '1.0.0' }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+}
 const plugin = new BenchedElasticsearchPlugin(tracer, tracerConfig)
 plugin.configure({ enabled: true, service: 'elasticsearch-prod' })
 

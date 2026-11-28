@@ -22,8 +22,10 @@ const tracerConfig = {
       },
     },
   },
-  peerServiceMapping: {},
-  spanComputePeerService: false,
+  tracing: {
+    DD_TRACE_PEER_SERVICE_MAPPING: {},
+    DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false,
+  },
 }
 const TRACE_CONTEXT = {
   'x-datadog-trace-id': '123',

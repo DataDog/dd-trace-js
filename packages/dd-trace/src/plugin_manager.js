@@ -181,7 +181,6 @@ module.exports = class PluginManager {
   #getSharedConfig (name) {
     const {
       lambda,
-      serviceMapping,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
@@ -211,6 +210,7 @@ module.exports = class PluginManager {
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
     const {
       DD_LOGS_INJECTION: logInjection,
+      DD_SERVICE_MAPPING: serviceMapping,
       DD_TRACE_HEADER_TAGS: headerTags,
       DD_TRACE_MIDDLEWARE_TRACING_ENABLED: middlewareTracingEnabled,
       DD_TRACE_WEBSOCKET_MESSAGES_ENABLED: traceWebsocketMessagesEnabled,

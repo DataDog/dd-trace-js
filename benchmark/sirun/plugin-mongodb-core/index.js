@@ -40,7 +40,10 @@ const tracer = {
   _version: '1.2.3',
   _nomenclature: { opName: () => 'mongodb.query' },
 }
-const tracerConfig = { spanComputePeerService: false }
+const tracerConfig = {
+  spanComputePeerService: false,
+  tracing: { DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: false },
+}
 const plugin = new BenchedMongoPlugin(tracer, tracerConfig)
 plugin.config = {
   heartbeatEnabled: true,

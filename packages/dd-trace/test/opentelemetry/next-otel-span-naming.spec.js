@@ -178,7 +178,10 @@ describe('Next.js OTel bridge span naming', () => {
 
     beforeEach(() => {
       previousConfig = tracer._nomenclature.config
-      tracer._nomenclature.configure({ ...previousConfig, spanAttributeSchema: 'v1' })
+      tracer._nomenclature.configure({
+        ...previousConfig,
+        tracing: { ...previousConfig.tracing, DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v1' },
+      })
     })
 
     afterEach(() => {
