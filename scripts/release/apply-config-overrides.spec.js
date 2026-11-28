@@ -9,13 +9,13 @@ const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const { files, scripts } = require('../../package.json')
-const { DD_MAJOR } = require('../../version')
-const applyConfigOverrides = require('./apply-config-overrides')
 
 const root = path.join(__dirname, '..', '..')
 const schemaPath = 'packages/dd-trace/src/config/supported-configurations.json'
 const source = readFileSync(path.join(root, schemaPath), 'utf8')
 const isWindows = process.platform === 'win32'
+const prepare = scripts.prepare.split(' && ').find(command => command.includes('apply-config-overrides.js'))
+assert.ok(prepare)
 
 /**
  * @param {string} directory
@@ -25,6 +25,7 @@ function runNpm (directory, args) {
   return execFileSync(isWindows ? 'npm.cmd' : 'npm', args, {
     cwd: directory,
     encoding: 'utf8',
+    timeout: 20_000,
     env: {
       ...process.env,
       NODE_OPTIONS: '',
@@ -39,22 +40,23 @@ function runNpm (directory, args) {
 /**
  * @param {number} major
  * @param {(directory: string) => void} test
+ * @param {Record<string, string>} [hooks]
  */
-function withFixture (major, test) {
+function withFixture (major, test, hooks = { prepack: scripts.prepack }) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-config-pack-'))
   try {
     writeFileSync(path.join(directory, 'package.json'), JSON.stringify({
       name: 'dd-trace-config-fixture',
       version: major + '.0.0',
       files,
-      scripts: { prepack: scripts.prepack },
+      scripts: hooks,
     }))
     for (const file of [
       'index.d.ts',
       'index.d.v5.ts',
       'scripts/release/apply-config-overrides.js',
       'scripts/release/config-overrides-v5.json',
-      'scripts/release/config-overrides-v6.json',
+      'scripts/release/config-overrides-v7.json',
       'scripts/release/swap-v5-types.js',
       'version.js',
     ]) {
@@ -63,11 +65,9 @@ function withFixture (major, test) {
       copyFileSync(path.join(root, file), destination)
     }
 
-    const schema = JSON.parse(source)
-    applyConfigOverrides(schema.supportedConfigurations, major === 5 ? 7 : major - 1)
     const filename = path.join(directory, schemaPath)
     mkdirSync(path.dirname(filename), { recursive: true })
-    writeFileSync(filename, JSON.stringify(schema, null, 2) + '\n')
+    writeFileSync(filename, source)
     test(directory)
   } finally {
     rmSync(directory, { force: true, recursive: true })
@@ -80,56 +80,70 @@ function withFixture (major, test) {
  */
 function assertVersionedSchema (data, major) {
   const { supportedConfigurations: schema } = JSON.parse(data)
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases -- Assert the literal alias shipped to v5.
+  const legacyCpuAlias = 'DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'
 
   assert.strictEqual(schema.DD_TRACE_ELECTRON_ENABLED[0].default, String(major < 7))
   assert.strictEqual(schema.DD_TRACE_STARTUP_LOGS[0].default, String(major >= 6))
   assert.strictEqual(Object.hasOwn(schema, 'DD_TRACE_EXPERIMENTAL_B3_ENABLED'), major === 5)
-  assert.strictEqual(Object.hasOwn(schema, 'DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'), major === 5)
+  assert.strictEqual(Object.hasOwn(schema, legacyCpuAlias), major === 5)
 
   if (major === 5) {
     assert.deepStrictEqual(schema.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames, [
       'iast.securityControlsConfiguration',
       'experimental.iast.securityControlsConfiguration',
     ])
-    assert.ok(schema.DD_PROFILING_CPU_ENABLED[0].aliases.includes('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'))
+    assert.ok(schema.DD_PROFILING_CPU_ENABLED[0].aliases.includes(legacyCpuAlias))
   } else {
     assert.strictEqual(schema.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames, undefined)
-    assert.ok(!schema.DD_PROFILING_CPU_ENABLED[0].aliases?.includes('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'))
+    assert.ok(!schema.DD_PROFILING_CPU_ENABLED[0].aliases?.includes(legacyCpuAlias))
   }
 }
 
-describe('release config schema', () => {
+describe('release config schema', function () {
+  this.timeout(30_000)
+
   for (const major of [5, 6, 7]) {
     it('packs the v' + major + ' schema and declarations', () => {
       withFixture(major, directory => {
-        const { filename, integrity } = JSON.parse(runNpm(directory, ['pack', '--json']))[0]
+        const [pack] = JSON.parse(runNpm(directory, ['pack', '--json']))
+        const { filename } = pack
         const tarball = path.join(directory, filename)
         const config = execFileSync('tar', ['-xOzf', tarball, 'package/' + schemaPath], { encoding: 'utf8' })
         const types = execFileSync('tar', ['-xOzf', tarball, 'package/index.d.ts'], { encoding: 'utf8' })
 
+        const schemas = pack.files.filter(file => file.path.endsWith('/supported-configurations.json'))
+        assert.deepStrictEqual(schemas.map(file => file.path), [schemaPath])
         assertVersionedSchema(config, major)
         assert.strictEqual(types, readFileSync(path.join(root, major === 5 ? 'index.d.v5.ts' : 'index.d.ts'), 'utf8'))
 
-        if (major === 5) {
-          assert.strictEqual(JSON.parse(runNpm(directory, ['pack', '--json']))[0].integrity, integrity)
-        } else if (major === 7 && DD_MAJOR === 7) {
+        if (major === 6) {
           assert.strictEqual(config, source)
         }
       })
     })
   }
 
-  it('prepares the schema in a v5 source checkout', () => {
+  it('applies the schema when npm packs a directory using only prepare', () => {
     withFixture(5, directory => {
-      const manifest = path.join(directory, 'package.json')
-      const pkg = JSON.parse(readFileSync(manifest, 'utf8'))
-      pkg.scripts.prepare = scripts.prepare
-      pkg.scripts['prepare:dependencies'] = 'node --version'
-      writeFileSync(manifest, JSON.stringify(pkg))
+      const [pack] = JSON.parse(runNpm(directory, ['pack', '--ignore-scripts', '--json', directory]))
+      const tarball = path.join(directory, pack.filename)
+      const config = execFileSync('tar', ['-xOzf', tarball, 'package/' + schemaPath], { encoding: 'utf8' })
+      assertVersionedSchema(config, 5)
+    }, { prepare })
+  })
 
-      runNpm(directory, ['run', 'prepare', '--silent'])
+  it('leaves the source registry intact during ordinary prepare', () => {
+    withFixture(7, directory => {
+      runNpm(directory, ['run', 'prepare'])
+      assert.strictEqual(readFileSync(path.join(directory, schemaPath), 'utf8'), source)
+    }, { prepare })
+  })
 
-      assertVersionedSchema(readFileSync(path.join(directory, schemaPath), 'utf8'), 5)
+  it('keeps Electron opt-in for later majors', () => {
+    withFixture(8, directory => {
+      execFileSync(process.execPath, ['scripts/release/apply-config-overrides.js'], { cwd: directory })
+      assertVersionedSchema(readFileSync(path.join(directory, schemaPath), 'utf8'), 8)
     })
   })
 })

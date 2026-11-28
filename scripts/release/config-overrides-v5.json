@@ -53,10 +53,7 @@
     "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": ["DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"]
   },
   "defaults": {
-    "DD_TRACE_STARTUP_LOGS": {
-      "base": "true",
-      "legacy": "false"
-    }
+    "DD_TRACE_STARTUP_LOGS": "false"
   },
   "entries": {
     "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [

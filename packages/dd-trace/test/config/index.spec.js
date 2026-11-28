@@ -87,11 +87,12 @@ describe('Config', () => {
     const parsers = loadParsers('../../src/config/parsers', {})
     const loadSupportedConfigurations = proxyquire.noPreserveCache()
     const supportedConfigurations = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
-    if (ddMajor !== DD_MAJOR) {
+    if (ddMajor === 5) {
       applyConfigOverrides(supportedConfigurations.supportedConfigurations, ddMajor)
     }
     const loadDefaults = proxyquire.noPreserveCache()
     const configDefaults = loadDefaults('../../src/config/defaults', {
+      '../../../../version': { DD_MAJOR: ddMajor },
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
@@ -145,6 +146,17 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    for (const ddMajor of [5, 6, 7]) {
+      it(`uses the v${ddMajor} Electron default`, () => {
+        const config = getConfig({}, { ddMajor })
+
+        assert.strictEqual(config.DD_TRACE_ELECTRON_ENABLED, ddMajor < 7)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_TRACE_ELECTRON_ENABLED', value: ddMajor < 7, origin: 'default' },
+        ])
+      })
+    }
+
     it('enables tRPC tracing by default', () => {
       assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
     })

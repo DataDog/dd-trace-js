@@ -598,11 +598,8 @@ async function execHelperAsync (command, options) {
  * @returns {Promise<void>}
  */
 async function packTarball (tarballPath, env) {
-  const { DD_MAJOR } = require('../../version')
-  if (DD_MAJOR === 5 || DD_MAJOR === 6) {
-    await execHelperAsync('npm run prepack --silent', { env })
-  }
-
+  const { prepack } = require('../../package.json').scripts
+  await execHelperAsync(prepack, { env })
   // Native V8 coverage reads execution straight from the installed (uninstrumented) sources, so
   // there is no pre-instrumentation step: the tarball is always a plain pack.
   await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })

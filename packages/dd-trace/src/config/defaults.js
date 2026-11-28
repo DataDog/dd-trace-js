@@ -3,6 +3,8 @@
 const assert = require('node:assert')
 const util = require('util')
 
+const { DD_MAJOR } = require('../../../../version')
+
 const {
   parsers,
   programmaticTypeCoercions,
@@ -13,6 +15,11 @@ const {
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+// Source checkouts of v7+ still start from the v6 registry.
+if (DD_MAJOR >= 7 && supportedConfigurations.DD_TRACE_ELECTRON_ENABLED[0].default === 'true') {
+  supportedConfigurations.DD_TRACE_ELECTRON_ENABLED[0].default = 'false'
+}
 
 let log
 let seqId = 0
