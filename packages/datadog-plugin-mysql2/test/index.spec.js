@@ -2,7 +2,9 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const { existsSync } = require('node:fs')
 const net = require('node:net')
+const { dirname, join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { inspect, promisify } = require('node:util')
 
@@ -683,30 +685,39 @@ describe('Plugin', () => {
           }
 
           it('keeps the queued checkout setting with native pool diagnostics', async function () {
+            const fixture = require(`../../../versions/mysql2@${version}`)
+            const tracingPath = join(dirname(fixture.pkgJsonPath()), 'lib/tracing.js')
+            if (!existsSync(tracingPath) || !require(tracingPath).poolConnectChannel) {
+              this.skip()
+            }
+
             const nativeConnect = channel('tracing:mysql2:pool:connect:start')
             let starts = 0
+            let queuedStarts
             const onStart = () => { starts++ }
             nativeConnect.subscribe(onStart)
             const acquire = promisify(pool.getConnection).bind(pool)
+            let holder
 
             try {
-              const holder = await acquire()
-              if (starts === 0) {
-                holder.release()
-                return this.skip()
-              }
+              holder = await acquire()
+              assert.strictEqual(starts, 1)
 
               const enqueued = once(pool, 'enqueue')
               async function replaceAfterEnqueue () {
                 await enqueued
+                queuedStarts = starts
                 tracer.use('mysql2', { poolAcquire: true })
                 holder.destroy()
+                holder = undefined
               }
 
               const [connection] = await Promise.all([acquire(), replaceAfterEnqueue()])
               connection.release()
+              assert.strictEqual(queuedStarts, 2)
               assert.strictEqual(acquireCount, 0)
             } finally {
+              holder?.release()
               nativeConnect.unsubscribe(onStart)
             }
           })
