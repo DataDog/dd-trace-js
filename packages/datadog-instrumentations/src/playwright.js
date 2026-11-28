@@ -1569,15 +1569,19 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
     const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
     const shouldGetTestManagementTests = isTestManagementTestsEnabled && isTestOptimizationSupported
+    const shouldGetImpactedTests = isImpactedTestsEnabled && isTestOptimizationSupported
 
     const {
       knownTestsResponse,
       testManagementTestsResponse,
+      modifiedFilesResponse,
     } = await getTestOptimizationRequestResults({
       isKnownTestsEnabled: shouldGetKnownTests,
       isTestManagementTestsEnabled: shouldGetTestManagementTests,
+      isImpactedTestsEnabled: shouldGetImpactedTests,
       getKnownTests: () => getChannelPromise(knownTestsCh),
       getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+      getModifiedFiles: () => getChannelPromise(modifiedFilesCh),
     })
 
     if (shouldGetKnownTests) {
@@ -1617,9 +1621,10 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    if (isImpactedTestsEnabled && isTestOptimizationSupported) {
+    if (shouldGetImpactedTests) {
       try {
-        const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
+        const { err, modifiedFiles: receivedModifiedFiles } =
+          modifiedFilesResponse || await getChannelPromise(modifiedFilesCh)
         if (err) {
           isImpactedTestsEnabled = false
         } else {

@@ -49,8 +49,20 @@ describe('Cypress selected checkout context', () => {
     it(`keeps modified-file Git reads in the selected root (hasBaseSha=${hasBaseSha})`, async () => {
       const root = path.join(process.cwd(), 'tools')
       const stop = new Error('stop after modified-file discovery')
-      const getPullRequestBaseBranch = sinon.stub().returns('base-sha')
-      const getPullRequestDiff = sinon.stub().returns('selected-diff')
+      const getGitRemoteNameAsync = sinon.stub().resolves('origin')
+      const getSourceBranchAsync = sinon.stub().resolves('feature')
+      const hasLocalGitObjectAsync = sinon.stub().resolves(true)
+      const getMergeBaseAsync = sinon.stub().resolves('base-sha')
+      const getGitDiffAsync = sinon.stub().resolves('cypress/e2e/test.cy.js\n')
+      const { getModifiedFilesForCheckout } = proxyquire('../../packages/dd-trace/src/plugins/util/test', {
+        './git': {
+          getGitRemoteNameAsync,
+          getSourceBranchAsync,
+          hasLocalGitObjectAsync,
+          getMergeBaseAsync,
+          getGitDiffAsync,
+        },
+      })
       const plugin = proxyquire('../../packages/datadog-plugin-cypress/src/cypress-plugin', {
         '../../dd-trace/src/plugins/util/test': {
           getTestEnvironmentMetadata: () => ({
@@ -61,9 +73,7 @@ describe('Cypress selected checkout context', () => {
             'git.commit.head.sha': 'head-sha',
           }),
           getCodeOwnersFileEntries: () => [],
-          getPullRequestBaseBranch,
-          getPullRequestDiff,
-          getModifiedFilesFromDiff: () => ['cypress/e2e/test.cy.js'],
+          getModifiedFilesForCheckout,
           getTestParentSpan: () => { throw stop },
         },
       })
@@ -72,10 +82,18 @@ describe('Cypress selected checkout context', () => {
 
       await assert.rejects(plugin.beforeRun({}), error => error === stop)
 
-      assert.deepStrictEqual(plugin.modifiedFiles, ['cypress/e2e/test.cy.js'])
-      sinon.assert.calledOnceWithExactly(getPullRequestDiff, 'base-sha', 'head-sha', root)
-      if (hasBaseSha) sinon.assert.notCalled(getPullRequestBaseBranch)
-      else sinon.assert.calledOnceWithExactly(getPullRequestBaseBranch, 'main', root)
+      assert.deepStrictEqual(plugin.modifiedFiles, { 'cypress/e2e/test.cy.js': [1] })
+      sinon.assert.calledOnceWithMatch(getGitDiffAsync, 'base-sha', 'head-sha', root, { nameOnly: true })
+      if (hasBaseSha) {
+        sinon.assert.notCalled(getGitRemoteNameAsync)
+        sinon.assert.notCalled(getSourceBranchAsync)
+        sinon.assert.notCalled(getMergeBaseAsync)
+      } else {
+        sinon.assert.calledOnceWithExactly(getGitRemoteNameAsync, root)
+        sinon.assert.calledOnceWithExactly(getSourceBranchAsync, root)
+        sinon.assert.calledOnceWithExactly(hasLocalGitObjectAsync, 'main', root)
+        sinon.assert.calledOnceWithExactly(getMergeBaseAsync, 'main', 'feature', root)
+      }
     })
   }
 

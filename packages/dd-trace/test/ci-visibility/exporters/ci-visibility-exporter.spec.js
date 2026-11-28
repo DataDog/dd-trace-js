@@ -2433,4 +2433,32 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledOnceWithExactly(callback, error)
     })
   })
+
+  describe('waitForGitUpload', () => {
+    it('resolves immediately when no git upload has been started', async () => {
+      const exporter = new CiVisibilityExporter({ url, env: 'test' })
+      await exporter.waitForGitUpload()
+    })
+
+    it('waits until an in-flight git upload settles', async () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        env: 'test',
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
+      exporter.sendGitMetadata('https://github.com/example/repo.git', 'a'.repeat(40))
+
+      let settled = false
+      const pending = exporter.waitForGitUpload().then(() => {
+        settled = true
+      })
+
+      await new Promise(resolve => setImmediate(resolve))
+      assert.strictEqual(settled, false)
+
+      exporter._resolveGit(new Error('upload failed'))
+      await pending
+      assert.strictEqual(settled, true)
+    })
+  })
 })

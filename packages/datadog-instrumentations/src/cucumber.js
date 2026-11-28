@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
@@ -699,6 +700,43 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
+/**
+ * Collects repo-relative feature and step definition files when loaded in-process
+ * so line-level diffs can skip unrelated changed files.
+ *
+ * @param {object} runtime
+ * @param {boolean} isParallel
+ * @param {boolean} isCoordinator
+ * @param {string | undefined} rootDir
+ * @returns {string[] | undefined}
+ */
+function getImpactedTestCandidateFiles (runtime, isParallel, isCoordinator, rootDir) {
+  const stepDefinitions = runtime?.supportCodeLibrary?.stepDefinitions
+  if (isParallel || !rootDir || !Array.isArray(stepDefinitions)) {
+    return
+  }
+
+  const candidateFiles = new Set()
+  const pickles = isCoordinator ? getPickleByFileNew(runtime) : getPickleByFile(runtime)
+  for (const uri of Object.keys(pickles)) {
+    if (!uri) continue
+    candidateFiles.add(getTestSuitePath(path.resolve(process.cwd(), uri), rootDir).replaceAll('\\', '/'))
+  }
+
+  for (const stepDefinition of stepDefinitions) {
+    if (!stepDefinition?.uri) {
+      // Fall back to a full diff if any step definition has no usable file URI.
+      return
+    }
+    candidateFiles.add(stepDefinition.uri.replaceAll('\\', '/'))
+    candidateFiles.add(
+      getTestSuitePath(path.resolve(process.cwd(), stepDefinition.uri), rootDir).replaceAll('\\', '/')
+    )
+  }
+
+  return candidateFiles.size ? [...candidateFiles] : undefined
+}
+
 function getFinalStatus ({
   status,
   hasFailedAllRetries,
@@ -1206,17 +1244,28 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
+    const candidateFiles = isImpactedTestsEnabled
+      ? getImpactedTestCandidateFiles(this, isParallel, isCoordinator, repositoryRoot)
+      : undefined
+    const getModifiedFiles = () => getChannelPromise(
+      modifiedFilesCh,
+      candidateFiles ? { candidateFiles } : undefined
+    )
+
     const {
       knownTestsResponse,
       testManagementTestsResponse,
       skippableSuitesResponse,
+      modifiedFilesResponse,
     } = await getTestOptimizationRequestResults({
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       isSuitesSkippingEnabled,
+      isImpactedTestsEnabled,
       getKnownTests: () => getChannelPromise(knownTestsCh),
       getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
       getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+      getModifiedFiles,
     })
 
     if (isKnownTestsEnabled) {
@@ -1290,7 +1339,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isImpactedTestsEnabled) {
-      const impactedTestsResponse = await getChannelPromise(modifiedFilesCh)
+      const impactedTestsResponse = modifiedFilesResponse || await getModifiedFiles()
       if (impactedTestsResponse && !impactedTestsResponse.err) {
         modifiedFiles = impactedTestsResponse.modifiedFiles
       }

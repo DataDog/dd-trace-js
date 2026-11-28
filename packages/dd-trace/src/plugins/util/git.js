@@ -3,8 +3,9 @@
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
-const { execFileSync } = require('node:child_process')
+const { execFile, execFileSync } = require('node:child_process')
 
+const getConfig = require('../../config')
 const log = require('../../log')
 const { getEnvironmentVariables } = require('../../config/helper')
 const {
@@ -15,7 +16,6 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS,
 } = require('../../ci-visibility/telemetry')
 const { storage } = require('../../../../datadog-core')
-const { getSegment } = require('../../util')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -40,7 +40,7 @@ const {
   GIT_COMMIT_HEAD_MESSAGE,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { cachedExec } = require('./git-cache')
+const { cachedExec, cachedExecAsync } = require('./git-cache')
 const { validateGitCommitSha } = require('./user-provided-git')
 
 /** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
@@ -48,6 +48,29 @@ const { validateGitCommitSha } = require('./user-provided-git')
 const legacyStorage = storage('legacy')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
+const GIT_DIFF_MAX_BUFFER = 50 * 1024 * 1024 // 50MB
+const GIT_LS_REMOTE_TIMEOUT_MS = 2000
+const GIT_FETCH_BRANCH_TIMEOUT_MS = 5000
+
+/**
+ * @param {string} cmd
+ * @param {string[]} flags
+ * @param {import('node:child_process').ExecFileOptions} [options]
+ * @returns {Promise<string | Buffer>}
+ */
+function execFileAsync (cmd, flags, options) {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, flags, options, (err, stdout) => {
+      if (err) {
+        if (typeof err.code === 'number' && err.status === undefined) {
+          err.status = err.code
+        }
+        return reject(err)
+      }
+      resolve(stdout)
+    })
+  })
+}
 
 function getGitEnvironment () {
   const env = { ...getEnvironmentVariables() }
@@ -59,6 +82,64 @@ function getGitEnvironment () {
     }
   }
   return env
+}
+
+/**
+ * @typedef {{
+ *   cwd?: string,
+ *   timeout?: number,
+ *   maxBuffer?: number,
+ *   localOnly?: boolean,
+ *   uncached?: boolean,
+ *   expectedFailure?: boolean,
+ *   throwOnError?: boolean,
+ * }} GitExecutionOptions
+ */
+
+/**
+ * @param {GitExecutionOptions | undefined} executionOptions
+ * @param {boolean} isSync
+ * @returns {import('node:child_process').ExecFileSyncOptions & import('node:child_process').ExecFileOptions}
+ */
+function buildGitExecOptions (executionOptions, isSync) {
+  /** @type {import('node:child_process').ExecFileSyncOptions & import('node:child_process').ExecFileOptions} */
+  const options = isSync
+    ? { stdio: 'pipe', env: getGitEnvironment() }
+    : { env: getGitEnvironment() }
+  if (executionOptions?.cwd) options.cwd = executionOptions.cwd
+  if (executionOptions?.timeout) options.timeout = executionOptions.timeout
+  if (executionOptions?.maxBuffer) options.maxBuffer = executionOptions.maxBuffer
+  if (executionOptions?.localOnly) {
+    options.env.GIT_NO_LAZY_FETCH = '1'
+    options.env.GIT_ALLOW_PROTOCOL = ''
+  }
+  return options
+}
+
+/**
+ * @param {{ name: string, tags: Record<string, unknown> } | null | undefined} errorMetric
+ * @param {Error & { code?: string | number, status?: number, errno?: number, killed?: boolean, signal?: string }} err
+ * @param {GitExecutionOptions | undefined} executionOptions
+ */
+function recordGitExecError (errorMetric, err, executionOptions) {
+  if (errorMetric) {
+    const errorType = typeof err.code === 'string'
+      ? err.code
+      : (err.killed && err.signal ? 'ETIMEDOUT' : undefined)
+    const exitCode = typeof err.code === 'number'
+      ? err.code
+      : (err.status || err.errno)
+    incrementCountMetric(errorMetric.name, {
+      ...errorMetric.tags,
+      errorType,
+      exitCode,
+    })
+  }
+  if (executionOptions?.expectedFailure) {
+    log.debug('Git plugin error executing command', err)
+  } else {
+    log.error('Git plugin error executing command', err)
+  }
 }
 
 function sanitizedExec (
@@ -79,14 +160,7 @@ function sanitizedExec (
     }
     try {
       const exec = executionOptions?.uncached ? execFileSync : cachedExec
-      /** @type {import('node:child_process').ExecFileSyncOptions} */
-      const options = { stdio: 'pipe', env: getGitEnvironment() }
-      if (executionOptions?.cwd) options.cwd = executionOptions.cwd
-      if (executionOptions?.timeout) options.timeout = executionOptions.timeout
-      if (executionOptions?.localOnly) {
-        options.env.GIT_NO_LAZY_FETCH = '1'
-        options.env.GIT_ALLOW_PROTOCOL = ''
-      }
+      const options = buildGitExecOptions(executionOptions, true)
       let result = exec('git', flags, options).toString()
 
       if (shouldTrim) {
@@ -98,18 +172,54 @@ function sanitizedExec (
       }
       return result
     } catch (err) {
-      if (errorMetric) {
-        incrementCountMetric(errorMetric.name, {
-          ...errorMetric.tags,
-          errorType: err.code,
-          exitCode: err.status || err.errno,
-        })
+      recordGitExecError(errorMetric, err, executionOptions)
+      if (executionOptions?.throwOnError) throw err
+      return ''
+    }
+  })
+}
+
+/**
+ * @param {string[]} flags
+ * @param {{ name: string, tags: Record<string, unknown> } | null} operationMetric
+ * @param {{ name: string, tags: Record<string, unknown> } | null} durationMetric
+ * @param {{ name: string, tags: Record<string, unknown> } | null} errorMetric
+ * @param {boolean} [shouldTrim]
+ * @param {Record<string, unknown>} [executionOptions]
+ * @returns {Promise<string>}
+ */
+function sanitizedExecAsync (
+  flags,
+  operationMetric,
+  durationMetric,
+  errorMetric,
+  shouldTrim = true,
+  executionOptions
+) {
+  return legacyStorage.run({ noop: true }, async () => {
+    let startTime
+    if (operationMetric) {
+      incrementCountMetric(operationMetric.name, operationMetric.tags)
+    }
+    if (durationMetric) {
+      startTime = Date.now()
+    }
+    try {
+      const exec = executionOptions?.uncached ? execFileAsync : cachedExecAsync
+      const options = buildGitExecOptions(executionOptions, false)
+      const output = await exec('git', flags, options)
+      let result = output.toString()
+
+      if (shouldTrim) {
+        result = result.replaceAll(/(\r\n|\n|\r)/g, '')
       }
-      if (executionOptions?.expectedFailure) {
-        log.debug('Git plugin error executing command', err)
-      } else {
-        log.error('Git plugin error executing command', err)
+
+      if (durationMetric) {
+        distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
       }
+      return result
+    } catch (err) {
+      recordGitExecError(errorMetric, err, executionOptions)
       if (executionOptions?.throwOnError) throw err
       return ''
     }
@@ -144,6 +254,22 @@ function isShallowRepository (uncached = false, cwd) {
     true,
     { uncached, cwd }
   ) === 'true'
+}
+
+/**
+ * @param {boolean} [uncached]
+ * @param {string} [cwd]
+ * @returns {Promise<boolean>}
+ */
+async function isShallowRepositoryAsync (uncached = false, cwd) {
+  return (await sanitizedExecAsync(
+    ['rev-parse', '--is-shallow-repository'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } },
+    true,
+    { uncached, cwd }
+  )) === 'true'
 }
 
 function getGitVersion (cwd) {
@@ -251,9 +377,9 @@ function unshallowRepository (parentOnly = false, commitSha, cwd) {
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
 }
 
-function getRepositoryUrl (cwd) {
+function getRepositoryUrl (cwd, remoteName) {
   return sanitizedExec(
-    ['remote', 'get-url', getGitRemoteName(cwd)],
+    ['remote', 'get-url', remoteName || getGitRemoteName(cwd)],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } },
@@ -300,38 +426,154 @@ function getLatestCommits (commitSha, cwd) {
   }
 }
 
-function getGitDiff (baseCommit, targetCommit, cwd) {
-  // Fetch the required snapshots explicitly; a depth-1 metadata fetch does not provide their ancestry.
-  for (const commit of targetCommit ? [baseCommit, targetCommit] : [baseCommit]) {
-    if (!hasLocalGitObject(commit, cwd)) {
-      // Use the current checkout state so a stale cache cannot shorten a complete clone.
-      fetchHeadCommitSha(commit, isShallowRepository(true, cwd), cwd)
-    }
-  }
-  const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
+/**
+ * @param {string} baseCommit
+ * @param {string | undefined} targetCommit
+ * @param {{ nameOnly?: boolean, paths?: string[] }} [options]
+ * @returns {string[]}
+ */
+function buildDiffFlags (baseCommit, targetCommit, options) {
+  const flags = options?.nameOnly
+    ? ['-c', 'core.quotepath=false', 'diff', '--name-only', '--no-renames', baseCommit]
+    : ['-c', 'core.quotepath=false', 'diff', '-U0', '--no-renames', baseCommit]
   if (targetCommit) {
     flags.push(targetCommit)
   }
+  if (!options?.nameOnly && options?.paths?.length) {
+    flags.push('--', ...options.paths)
+  }
+  return flags
+}
+
+/**
+ * @param {string} baseCommit
+ * @param {string | undefined} targetCommit
+ * @param {string | undefined} cwd
+ * @param {{ remoteName?: string }} [options]
+ */
+function ensureDiffCommitsLocal (baseCommit, targetCommit, cwd, options) {
+  const commits = targetCommit ? [baseCommit, targetCommit] : [baseCommit]
+  let shallow
+  let remoteName = options?.remoteName
+  // Fetch the required snapshots explicitly; a depth-1 metadata fetch does not provide their ancestry.
+  for (const commit of commits) {
+    if (!hasLocalGitObject(commit, cwd)) {
+      if (shallow === undefined) {
+        // Use the current checkout state so a stale cache cannot shorten a complete clone.
+        shallow = isShallowRepository(true, cwd)
+      }
+      if (!remoteName) {
+        remoteName = getGitRemoteName(cwd)
+      }
+      fetchHeadCommitSha(commit, shallow, cwd, { remoteName, isLocal: false })
+    }
+  }
+}
+
+/**
+ * @param {string} baseCommit
+ * @param {string | undefined} targetCommit
+ * @param {string | undefined} cwd
+ * @param {{ remoteName?: string }} [options]
+ */
+async function ensureDiffCommitsLocalAsync (baseCommit, targetCommit, cwd, options) {
+  const commits = targetCommit ? [baseCommit, targetCommit] : [baseCommit]
+  const locality = await Promise.all(commits.map(commit => hasLocalGitObjectAsync(commit, cwd)))
+  const missingCommits = commits.filter((_, index) => !locality[index])
+  if (!missingCommits.length) return
+
+  // Use the current checkout state so a stale cache cannot shorten a complete clone.
+  const [shallow, remoteName] = await Promise.all([
+    isShallowRepositoryAsync(true, cwd),
+    options?.remoteName ? Promise.resolve(options.remoteName) : getGitRemoteNameAsync(cwd),
+  ])
+  for (const commit of missingCommits) {
+    // eslint-disable-next-line no-await-in-loop -- Sequential fetches avoid Git shallow.lock contention.
+    await fetchHeadCommitShaAsync(commit, shallow, cwd, { remoteName, isLocal: false })
+  }
+}
+
+function getGitDiff (baseCommit, targetCommit, cwd, options) {
+  if (!options?.skipFetchCheck) {
+    ensureDiffCommitsLocal(baseCommit, targetCommit, cwd, options)
+  }
+  const flags = buildDiffFlags(baseCommit, targetCommit, options)
   return sanitizedExec(
     flags,
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
     false, // important not to trim or we'll lose the line breaks which we need to detect impacted tests
-    { uncached: true, cwd }
+    { uncached: true, cwd, maxBuffer: GIT_DIFF_MAX_BUFFER, throwOnError: options?.throwOnError }
   )
 }
 
-function getGitRemoteName (cwd) {
-  const branchRef = sanitizedExec(
-    ['symbolic-ref', '--quiet', 'HEAD'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    true,
-    { expectedFailure: true, uncached: true, cwd } // Detached HEADs use the checkout-local fallback.
+/**
+ * @param {string} baseCommit
+ * @param {string | undefined} targetCommit
+ * @param {string | undefined} cwd
+ * @param {{
+ *   nameOnly?: boolean,
+ *   paths?: string[],
+ *   remoteName?: string,
+ *   skipFetchCheck?: boolean,
+ *   throwOnError?: boolean,
+ * }} [options]
+ * @returns {Promise<string>}
+ */
+async function getGitDiffAsync (baseCommit, targetCommit, cwd, options) {
+  if (!options?.skipFetchCheck) {
+    await ensureDiffCommitsLocalAsync(baseCommit, targetCommit, cwd, options)
+  }
+  const flags = buildDiffFlags(baseCommit, targetCommit, options)
+  return sanitizedExecAsync(
+    flags,
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
+    false,
+    { uncached: true, cwd, maxBuffer: GIT_DIFF_MAX_BUFFER, throwOnError: options?.throwOnError }
   )
+}
 
+/**
+ * @param {string} configOutput
+ * @param {string[]} remoteNames
+ * @returns {{ configuredRemote: string | undefined, trackingRemotes: Set<string> }}
+ */
+function parseRemoteConfig (configOutput, remoteNames) {
+  let configuredRemote
+  const trackingRemotes = new Set()
+
+  for (const line of configOutput.split(/\r?\n/)) {
+    if (!line) continue
+    const separatorIndex = line.indexOf(' ')
+    if (separatorIndex === -1) continue
+    const key = line.slice(0, separatorIndex)
+    const value = line.slice(separatorIndex + 1)
+    if (key.toLowerCase() === 'clone.defaultremotename') {
+      configuredRemote = value
+    } else if (key.startsWith('branch.') && key.endsWith('.remote') && value && remoteNames.includes(value)) {
+      trackingRemotes.add(value)
+    }
+  }
+  return { configuredRemote, trackingRemotes }
+}
+
+/**
+ * @param {string[]} remoteNames
+ * @param {string | undefined} configuredRemote
+ * @param {Set<string>} trackingRemotes
+ */
+function selectRemoteName (remoteNames, configuredRemote, trackingRemotes) {
+  if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
+  if (trackingRemotes.size === 1) return trackingRemotes.values().next().value
+  return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
+}
+
+const REMOTE_CONFIG_REGEXP = String.raw`^(clone\.defaultremotename|branch\..*\.remote)$`
+
+function getGitRemoteName (cwd) {
   const remotes = sanitizedExec(
     ['remote'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
@@ -343,10 +585,23 @@ function getGitRemoteName (cwd) {
 
   if (!remotes) return 'origin'
 
-  const remoteNames = remotes.trim().split(/\r?\n/)
+  const remoteNames = remotes.trim().split(/\r?\n/).filter(Boolean)
+  if (!remoteNames.length) return 'origin'
+  // Avoid extra symbolic-ref and git-config spawns for the common single-remote checkout.
+  if (remoteNames.length === 1) return remoteNames[0]
+
+  const branchRef = sanitizedExec(
+    ['symbolic-ref', '--quiet', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true, uncached: true, cwd } // Detached HEADs use the checkout-local fallback.
+  )
   const branch = branchRef.replace(/^refs\/heads\//, '')
+
   if (branch) {
-    // Read the configured remote: custom fetch refspecs can use any ref namespace.
+    // Read effective config so worktree and GIT_CONFIG_* overrides take precedence over local config.
     const branchRemote = sanitizedExec(
       ['config', '--get', `branch.${branch}.remote`],
       { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
@@ -355,31 +610,74 @@ function getGitRemoteName (cwd) {
       true,
       { expectedFailure: true, uncached: true, cwd }
     )
-    if (branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
+    if (branchRemote && branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
   }
-  const configuredRemote = sanitizedExec(
-    ['config', '--local', '--get', 'clone.defaultRemoteName'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    true,
-    { expectedFailure: true, uncached: true, cwd }
-  )
 
-  if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
-  // Clone -o overrides remain in local branch tracking after HEAD is detached.
-  const trackingConfiguration = sanitizedExec(
-    ['config', '--local', '--get-regexp', String.raw`^branch\..*\.remote$`],
+  const localConfig = sanitizedExec(
+    ['config', '--local', '--get-regexp', REMOTE_CONFIG_REGEXP],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
     false,
     { expectedFailure: true, uncached: true, cwd }
   )
-  const trackingRemotes = new Set(trackingConfiguration.split(/\r?\n/)
-    .map(line => getSegment(line, ' ', 1)).filter(remote => remote && remoteNames.includes(remote)))
-  if (trackingRemotes.size === 1) return trackingRemotes.values().next().value
-  return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
+  const parsed = parseRemoteConfig(localConfig, remoteNames)
+  return selectRemoteName(remoteNames, parsed.configuredRemote, parsed.trackingRemotes)
+}
+
+/**
+ * @param {string} [cwd]
+ * @returns {Promise<string>}
+ */
+async function getGitRemoteNameAsync (cwd) {
+  const remotes = await sanitizedExecAsync(
+    ['remote'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false,
+    { uncached: true, cwd }
+  )
+
+  if (!remotes) return 'origin'
+
+  const remoteNames = remotes.trim().split(/\r?\n/).filter(Boolean)
+  if (!remoteNames.length) return 'origin'
+  if (remoteNames.length === 1) return remoteNames[0]
+
+  const branchRef = await sanitizedExecAsync(
+    ['symbolic-ref', '--quiet', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true, uncached: true, cwd }
+  )
+  const branch = branchRef.replace(/^refs\/heads\//, '')
+
+  if (branch) {
+    // Read effective config so worktree and GIT_CONFIG_* overrides take precedence over local config.
+    const branchRemote = await sanitizedExecAsync(
+      ['config', '--get', `branch.${branch}.remote`],
+      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+      true,
+      { expectedFailure: true, uncached: true, cwd }
+    )
+    if (branchRemote && branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
+  }
+
+  const localConfig = await sanitizedExecAsync(
+    ['config', '--local', '--get-regexp', REMOTE_CONFIG_REGEXP],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false,
+    { expectedFailure: true, uncached: true, cwd }
+  )
+  const parsed = parseRemoteConfig(localConfig, remoteNames)
+  return selectRemoteName(remoteNames, parsed.configuredRemote, parsed.trackingRemotes)
 }
 
 function getSourceBranch (cwd) {
@@ -392,58 +690,310 @@ function getSourceBranch (cwd) {
   )
 }
 
-function checkAndFetchBranch (branch, remoteName, cwd) {
-  const options = { stdio: 'pipe', env: getGitEnvironment() }
-  if (cwd) options.cwd = cwd
-  try {
-    // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
-    // Otherwise it will exit 1
-    cachedExec(
-      'git',
-      ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
-      options
-    )
-    // branch exists locally, so we finish
-  } catch {
-    // branch does not exist locally, so we will check the remote
-    try {
-      // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
-      // `git ls-remote --heads origin my-branch` will exit 0 even if the branch doesn't exist.
-      // The piece of information we need is whether the command outputs anything.
-      // `git ls-remote --heads origin my-branch` could exit an error code if the remote does not exist.
-      const remoteHeads = cachedExec(
-        'git',
-        ['ls-remote', '--heads', remoteName, branch],
-        { ...options, timeout: 2000 }
-      )
-      if (remoteHeads) {
-        // branch exists, so we'll fetch it
-        cachedExec(
-          'git',
-          ['fetch', '--depth', '1', remoteName, branch],
-          { ...options, timeout: 5000 }
-        )
-      }
-    } catch (err) {
-      // branch does not exist or couldn't be fetched, so we can't do anything
-      log.debug('Git plugin error checking and fetching branch', err)
+/**
+ * @param {string} [cwd]
+ * @returns {Promise<string>}
+ */
+function getSourceBranchAsync (cwd) {
+  return sanitizedExecAsync(
+    ['rev-parse', '--abbrev-ref', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_source_branch' } },
+    true, { cwd }
+  )
+}
+
+/**
+ * @param {string} remoteName
+ * @param {string} [cwd]
+ * @returns {Promise<string>}
+ */
+async function getDefaultRemoteBranchAsync (remoteName, cwd) {
+  const ref = await sanitizedExecAsync(
+    ['symbolic-ref', '--quiet', '--short', `refs/remotes/${remoteName}/HEAD`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_default_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_default_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_default_branch' } },
+    true,
+    { expectedFailure: true, localOnly: true, cwd }
+  )
+  const prefix = `${remoteName}/`
+  return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref
+}
+
+/**
+ * @param {string} commitSha
+ * @param {string} [cwd]
+ * @returns {Promise<string[]>}
+ */
+async function getCommitParentsAsync (commitSha, cwd) {
+  const commitObject = await sanitizedExecAsync(
+    ['cat-file', 'commit', commitSha],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_parents' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_parents' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_parents' } },
+    false,
+    { expectedFailure: true, localOnly: true, cwd }
+  )
+  const parents = []
+  if (!commitObject) return parents
+  for (const line of commitObject.split(/\r?\n/)) {
+    if (!line) break
+    if (line.startsWith('parent ')) {
+      const parentSha = line.slice('parent '.length).trim()
+      if (parentSha) parents.push(parentSha)
     }
   }
+  return parents
+}
+
+/**
+ * @param {string} ref
+ * @param {string} [cwd]
+ */
+function getRevParse (ref, cwd) {
+  return sanitizedExec(
+    ['rev-parse', '--verify', ref + '^{commit}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'rev_parse' } },
+    true,
+    { expectedFailure: true, localOnly: true, uncached: true, cwd }
+  )
+}
+
+/**
+ * @param {string} ref
+ * @param {string} [cwd]
+ * @returns {Promise<string>}
+ */
+function getRevParseAsync (ref, cwd) {
+  return sanitizedExecAsync(
+    ['rev-parse', '--verify', ref + '^{commit}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'rev_parse' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'rev_parse' } },
+    true,
+    { expectedFailure: true, localOnly: true, uncached: true, cwd }
+  )
+}
+
+/**
+ * Checks whether tracked files have staged or unstaged changes relative to HEAD.
+ * Fails closed (`true`) if Git status cannot be inspected so callers do not reuse stale caches.
+ *
+ * @param {string} [cwd]
+ * @returns {Promise<boolean>}
+ */
+async function hasWorkingTreeChangesAsync (cwd) {
+  try {
+    const status = await sanitizedExecAsync(
+      ['status', '--porcelain', '--untracked-files=no'],
+      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'status' } },
+      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'status' } },
+      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'status' } },
+      true,
+      { uncached: true, throwOnError: true, cwd }
+    )
+    return status.length > 0
+  } catch {
+    return true
+  }
+}
+
+/**
+ * @param {string} remoteHeads
+ * @param {string[]} requestedBranches
+ * @returns {string[]}
+ */
+function parseLsRemoteHeads (remoteHeads, requestedBranches) {
+  if (!remoteHeads) return []
+  const foundBranches = new Set()
+  for (const line of remoteHeads.split(/\r?\n/)) {
+    if (!line) continue
+    const tabIndex = line.indexOf('\t')
+    if (tabIndex === -1) continue
+    const ref = line.slice(tabIndex + 1).trim()
+    if (ref.startsWith('refs/heads/')) {
+      foundBranches.add(ref.slice('refs/heads/'.length))
+    }
+  }
+  return requestedBranches.filter(branch => foundBranches.has(branch))
+}
+
+/**
+ * @param {string[]} branches
+ * @param {string} remoteName
+ * @param {boolean} shallow
+ * @returns {string[]}
+ */
+function buildBranchFetchFlags (branches, remoteName, shallow) {
+  const refspecs = branches.map(branch => `refs/heads/${branch}:refs/remotes/${remoteName}/${branch}`)
+  return [
+    'fetch',
+    ...(shallow ? ['--depth=1', '--update-shallow'] : []),
+    '--filter=blob:none',
+    '--no-tags',
+    '--recurse-submodules=no',
+    '--no-write-fetch-head',
+    remoteName,
+    ...refspecs,
+  ]
+}
+
+/**
+ * @param {string[]} branches
+ * @param {string} remoteName
+ * @param {string} [cwd]
+ * @param {{ existingRemoteBranches?: Set<string>, isShallow?: boolean }} [options]
+ */
+function checkAndFetchBranches (branches, remoteName, cwd, options) {
+  const uniqueBranches = [...new Set(branches.filter(Boolean))]
+  if (!uniqueBranches.length) return
+
+  let missingBranches
+  if (options?.existingRemoteBranches) {
+    missingBranches = uniqueBranches.filter(branch => !options.existingRemoteBranches.has(branch))
+  } else {
+    missingBranches = []
+    for (const branch of uniqueBranches) {
+      try {
+        sanitizedExec(
+          ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+          { name: TELEMETRY_GIT_COMMAND, tags: { command: 'show_ref' } },
+          { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'show_ref' } },
+          { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'show_ref' } },
+          true,
+          { expectedFailure: true, throwOnError: true, uncached: true, cwd }
+        )
+      } catch {
+        missingBranches.push(branch)
+      }
+    }
+  }
+
+  if (!missingBranches.length) return
+
+  // Batch all missing branch probes into a single ls-remote round-trip.
+  const remoteHeads = sanitizedExec(
+    ['ls-remote', '--heads', remoteName, ...missingBranches.map(branch => `refs/heads/${branch}`)],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'ls_remote' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'ls_remote' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'ls_remote' } },
+    false,
+    { timeout: GIT_LS_REMOTE_TIMEOUT_MS, expectedFailure: true, cwd }
+  )
+  const existingOnRemote = parseLsRemoteHeads(remoteHeads, missingBranches)
+  if (!existingOnRemote.length) return
+
+  const shallow = options?.isShallow ?? isShallowRepository(true, cwd)
+  sanitizedExec(
+    buildBranchFetchFlags(existingOnRemote, remoteName, shallow),
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_branch' } },
+    true,
+    { timeout: GIT_FETCH_BRANCH_TIMEOUT_MS, expectedFailure: true, uncached: true, cwd }
+  )
+}
+
+/**
+ * @param {string[]} branches
+ * @param {string} remoteName
+ * @param {string} [cwd]
+ * @param {{ existingRemoteBranches?: Set<string>, isShallow?: boolean }} [options]
+ */
+async function checkAndFetchBranchesAsync (branches, remoteName, cwd, options) {
+  const uniqueBranches = [...new Set(branches.filter(Boolean))]
+  if (!uniqueBranches.length) return
+
+  let missingBranches
+  if (options?.existingRemoteBranches) {
+    missingBranches = uniqueBranches.filter(branch => !options.existingRemoteBranches.has(branch))
+  } else {
+    const checks = await Promise.all(uniqueBranches.map(async branch => {
+      try {
+        await sanitizedExecAsync(
+          ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+          { name: TELEMETRY_GIT_COMMAND, tags: { command: 'show_ref' } },
+          { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'show_ref' } },
+          { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'show_ref' } },
+          true,
+          { expectedFailure: true, throwOnError: true, uncached: true, cwd }
+        )
+        return true
+      } catch {
+        return false
+      }
+    }))
+    missingBranches = uniqueBranches.filter((_, index) => !checks[index])
+  }
+
+  if (!missingBranches.length) return
+
+  const remoteHeads = await sanitizedExecAsync(
+    ['ls-remote', '--heads', remoteName, ...missingBranches.map(branch => `refs/heads/${branch}`)],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'ls_remote' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'ls_remote' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'ls_remote' } },
+    false,
+    { timeout: GIT_LS_REMOTE_TIMEOUT_MS, expectedFailure: true, cwd }
+  )
+  const existingOnRemote = parseLsRemoteHeads(remoteHeads, missingBranches)
+  if (!existingOnRemote.length) return
+
+  const shallow = options?.isShallow ?? await isShallowRepositoryAsync(true, cwd)
+  await sanitizedExecAsync(
+    buildBranchFetchFlags(existingOnRemote, remoteName, shallow),
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_branch' } },
+    true,
+    { timeout: GIT_FETCH_BRANCH_TIMEOUT_MS, expectedFailure: true, uncached: true, cwd }
+  )
+}
+
+function checkAndFetchBranch (branch, remoteName, cwd) {
+  checkAndFetchBranches([branch], remoteName, cwd)
+}
+
+/**
+ * @param {string} localBranches
+ * @param {string} remoteName
+ * @returns {string[]}
+ */
+function parseLocalBranches (localBranches, remoteName) {
+  if (!localBranches) return []
+  const remoteHead = `${remoteName}/HEAD`
+  return localBranches.split(/\r?\n/).filter(branch => branch && branch !== remoteHead)
 }
 
 function getLocalBranches (remoteName, cwd) {
   const localBranches = sanitizedExec(
-    ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
+    ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
-    false, { cwd }
+    false, { uncached: true, cwd }
   )
-  try {
-    return localBranches.split('\n').filter(Boolean)
-  } catch {
-    return []
-  }
+  return parseLocalBranches(localBranches, remoteName)
+}
+
+/**
+ * @param {string} remoteName
+ * @param {string} [cwd]
+ * @returns {Promise<string[]>}
+ */
+async function getLocalBranchesAsync (remoteName, cwd) {
+  const localBranches = await sanitizedExecAsync(
+    ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
+    false, { uncached: true, cwd }
+  )
+  return parseLocalBranches(localBranches, remoteName)
 }
 
 function getMergeBase (baseBranch, sourceBranch, cwd) {
@@ -456,6 +1006,34 @@ function getMergeBase (baseBranch, sourceBranch, cwd) {
   )
 }
 
+/**
+ * @param {string} baseBranch
+ * @param {string} sourceBranch
+ * @param {string} [cwd]
+ * @returns {Promise<string>}
+ */
+function getMergeBaseAsync (baseBranch, sourceBranch, cwd) {
+  return sanitizedExecAsync(
+    ['merge-base', baseBranch, sourceBranch],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } },
+    true, { uncached: true, cwd }
+  )
+}
+
+/**
+ * @param {string} counts
+ * @returns {{ behind: number | null, ahead: number | null }}
+ */
+function parseCountsOutput (counts) {
+  if (!counts) {
+    return { behind: null, ahead: null }
+  }
+  const [behind, ahead] = counts.split(/\s+/).map(Number)
+  return { behind, ahead }
+}
+
 function getCounts (sourceBranch, candidateBranch, cwd) {
   const counts = sanitizedExec(
     ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
@@ -464,15 +1042,24 @@ function getCounts (sourceBranch, candidateBranch, cwd) {
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } },
     true, { cwd }
   )
-  try {
-    if (!counts) {
-      return { behind: null, ahead: null }
-    }
-    const [behind, ahead] = counts.split(/\s+/).map(Number)
-    return { behind, ahead }
-  } catch {
-    return { behind: null, ahead: null }
-  }
+  return parseCountsOutput(counts)
+}
+
+/**
+ * @param {string} sourceBranch
+ * @param {string} candidateBranch
+ * @param {string} [cwd]
+ * @returns {Promise<{ behind: number | null, ahead: number | null }>}
+ */
+async function getCountsAsync (sourceBranch, candidateBranch, cwd) {
+  const counts = await sanitizedExecAsync(
+    ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } },
+    true, { uncached: true, cwd }
+  )
+  return parseCountsOutput(counts)
 }
 
 /**
@@ -684,9 +1271,18 @@ function getGitMetadata (ciMetadata) {
     if (tagsAtHead.length === 1) localTag = tagsAtHead[0]
   }
 
+  let cachedRemoteName
+  const resolveRemoteName = () => {
+    if (!cachedRemoteName) {
+      cachedRemoteName = getGitRemoteName(gitRoot)
+    }
+    return cachedRemoteName
+  }
+
   if (headCommitSha) {
     const shallow = isShallowRepository(true, gitRoot)
-    const fetchedAtDepthOne = shallow && fetchHeadCommitSha(headCommitSha, true, gitRoot)
+    const fetchedAtDepthOne = shallow &&
+      fetchHeadCommitSha(headCommitSha, true, gitRoot, { remoteName: resolveRemoteName() })
     const headFlags = [
       'show',
       '-s',
@@ -698,13 +1294,23 @@ function getGitMetadata (ciMetadata) {
     const headOptions = { uncached: true, localOnly: true, cwd: gitRoot }
     let headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
     if (!headInfo && (fetchedAtDepthOne || !shallow)) {
-      fetchHeadCommitSha(headCommitSha, false, gitRoot)
+      fetchHeadCommitSha(headCommitSha, false, gitRoot, { remoteName: resolveRemoteName() })
       headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
     }
 
-    // Prepare a known diff base while the remote is available, including when Git upload is disabled.
-    if (shallow && pullRequestBaseBranchSha && !hasLocalGitObject(pullRequestBaseBranchSha, gitRoot)) {
-      fetchHeadCommitSha(pullRequestBaseBranchSha, true, gitRoot)
+    // Prepare a known diff base while the remote is available, unless impacted tests detection is disabled.
+    const isImpactedTestsAllowed =
+      getConfig().testOptimization?.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED !== false
+    if (
+      shallow &&
+      isImpactedTestsAllowed &&
+      pullRequestBaseBranchSha &&
+      !hasLocalGitObject(pullRequestBaseBranchSha, gitRoot)
+    ) {
+      fetchHeadCommitSha(pullRequestBaseBranchSha, true, gitRoot, {
+        remoteName: resolveRemoteName(),
+        isLocal: false,
+      })
     }
 
     const [
@@ -731,7 +1337,7 @@ function getGitMetadata (ciMetadata) {
 
   const entries = [
     GIT_REPOSITORY_URL,
-    filterSensitiveInfoFromRepository(repositoryUrl || getRepositoryUrl(gitRoot)),
+    filterSensitiveInfoFromRepository(repositoryUrl || getRepositoryUrl(gitRoot, cachedRemoteName)),
     GIT_COMMIT_AUTHOR_DATE, authorDate,
     GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
     GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
@@ -788,10 +1394,32 @@ function hasLocalGitObject (sha, cwd) {
   })
 }
 
-function fetchHeadCommitSha (headSha, useDepth = true, cwd) {
-  const remoteName = getGitRemoteName(cwd)
+/**
+ * @param {string} sha
+ * @param {string} [cwd]
+ * @returns {Promise<boolean>}
+ */
+function hasLocalGitObjectAsync (sha, cwd) {
+  return legacyStorage.run({ noop: true }, async () => {
+    try {
+      /** @type {import('node:child_process').ExecFileOptions} */
+      const options = {
+        env: { ...getGitEnvironment(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+      }
+      if (cwd) options.cwd = cwd
+      await execFileAsync('git', ['cat-file', '-e', sha], options)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
+function fetchHeadCommitSha (headSha, useDepth = true, cwd, options) {
+  const remoteName = options?.remoteName || getGitRemoteName(cwd)
   // Existing heads retain the original repair/history behavior; a failed bounded fetch also retries that path.
-  const depths = useDepth && !hasLocalGitObject(headSha, cwd) ? [true, false] : [false]
+  const isLocal = options?.isLocal ?? hasLocalGitObject(headSha, cwd)
+  const depths = useDepth && !isLocal ? [true, false] : [false]
   for (const shallow of depths) {
     try {
       sanitizedExec(
@@ -819,6 +1447,45 @@ function fetchHeadCommitSha (headSha, useDepth = true, cwd) {
   return false
 }
 
+/**
+ * @param {string} headSha
+ * @param {boolean} [useDepth]
+ * @param {string} [cwd]
+ * @param {{ remoteName?: string, isLocal?: boolean }} [options]
+ * @returns {Promise<boolean>}
+ */
+async function fetchHeadCommitShaAsync (headSha, useDepth = true, cwd, options) {
+  const remoteName = options?.remoteName || await getGitRemoteNameAsync(cwd)
+  const isLocal = options?.isLocal ?? await hasLocalGitObjectAsync(headSha, cwd)
+  const depths = useDepth && !isLocal ? [true, false] : [false]
+  for (const shallow of depths) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- Fallback fetch runs only when the bounded fetch fails.
+      await sanitizedExecAsync(
+        [
+          'fetch',
+          ...(shallow ? ['--depth=1'] : []),
+          '--update-shallow',
+          '--filter=blob:none',
+          '--recurse-submodules=no',
+          '--no-write-fetch-head',
+          remoteName,
+          headSha,
+        ],
+        { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
+        { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
+        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } },
+        true,
+        { uncached: true, throwOnError: true, timeout: 5000, cwd }
+      )
+      return shallow
+    } catch {
+      // sanitizedExecAsync records the failure; retry without a depth limit if the bounded fetch failed.
+    }
+  }
+  return false
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -826,18 +1493,35 @@ module.exports = {
   generatePackFilesForCommits,
   getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
+  GIT_DIFF_MAX_BUFFER,
   isShallowRepository,
+  isShallowRepositoryAsync,
   unshallowRepository,
   isGitAvailable,
   getGitInformationDiscrepancy,
   getGitDiff,
+  getGitDiffAsync,
   getGitRemoteName,
+  getGitRemoteNameAsync,
+  getDefaultRemoteBranchAsync,
+  getCommitParentsAsync,
+  getRevParse,
+  getRevParseAsync,
+  hasWorkingTreeChangesAsync,
   getSourceBranch,
+  getSourceBranchAsync,
   checkAndFetchBranch,
+  checkAndFetchBranches,
+  checkAndFetchBranchesAsync,
   getLocalBranches,
+  getLocalBranchesAsync,
   getMergeBase,
+  getMergeBaseAsync,
   getCounts,
+  getCountsAsync,
   hasLocalGitObject,
+  hasLocalGitObjectAsync,
   fetchHeadCommitSha,
+  fetchHeadCommitShaAsync,
   getRepositoryRoot,
 }

@@ -803,13 +803,16 @@ async function runMainProcessSetup (
     knownTestsResponse,
     skippableSuitesResponse,
     testManagementTestsResponse,
+    modifiedFilesResponse,
   } = await getTestOptimizationRequestResults({
     isKnownTestsEnabled,
     isSuitesSkippingEnabled,
     isTestManagementTestsEnabled,
+    isImpactedTestsEnabled,
     getKnownTests: () => getChannelPromise(knownTestsCh),
     getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+    getModifiedFiles: () => getChannelPromise(modifiedFilesCh),
   })
   mergeRequestErrorTags(knownTestsResponse)
   mergeRequestErrorTags(skippableSuitesResponse)
@@ -907,11 +910,11 @@ async function runMainProcessSetup (
   }
 
   if (isImpactedTestsEnabled) {
-    const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
-    if (!modifiedFilesResponse || modifiedFilesResponse.err) {
+    const currentModifiedFilesResponse = modifiedFilesResponse || await getChannelPromise(modifiedFilesCh)
+    if (!currentModifiedFilesResponse || currentModifiedFilesResponse.err) {
       log.error('Could not get modified tests.')
     } else {
-      modifiedFiles = modifiedFilesResponse.modifiedFiles
+      modifiedFiles = currentModifiedFilesResponse.modifiedFiles
       impactedTestSuites = getImpactedTestSuites(modifiedFiles)
       shouldSendTestProperties = true
       if (!shouldInstallNoWorkerInit) {

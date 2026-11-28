@@ -580,6 +580,19 @@ class CiVisibilityExporter extends BufferingExporter {
     }
   }
 
+  /**
+   * Resolves once an in-flight git metadata upload (and any shallow-history recovery) has settled.
+   * Resolves immediately when no upload was started.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForGitUpload () {
+    if (this.#gitUploadTimeoutId === undefined) {
+      return Promise.resolve()
+    }
+    return this._gitUploadPromise.then(() => {})
+  }
+
   sendGitMetadata (repositoryUrl, sha, gitRoot = process.cwd()) {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
       this._resolveGit()

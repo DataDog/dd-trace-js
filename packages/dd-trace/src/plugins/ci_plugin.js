@@ -40,7 +40,6 @@ const {
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_COMMIT_HEAD_MESSAGE,
 } = require('./util/tags')
 const REPOSITORY_METADATA_KEYS = [
@@ -93,9 +92,7 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
-  getPullRequestDiff,
-  getModifiedFilesFromDiff,
-  getPullRequestBaseBranch,
+  getModifiedFilesForCheckout,
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
@@ -475,32 +472,20 @@ module.exports = class CiPlugin extends Plugin {
       return ctx.currentStore
     })
 
-    this.addSub(`ci:${this.constructor.id}:modified-files`, ({ onDone }) => {
-      const isCustomCheckout = this.testEnvironmentMetadata[GIT_CHECKOUT_IS_CUSTOM] === 'true'
-      const diffMetadata = isCustomCheckout ? getUserProviderGitMetadata() : this.testEnvironmentMetadata
-      const {
-        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
-        [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-      } = diffMetadata
-      const commitSha = this.testEnvironmentMetadata[GIT_COMMIT_SHA]
-      const targetCommit = commitHeadSha ||
-        (isCustomCheckout && validateGitCommitSha(commitSha) ? commitSha : undefined)
-
-      const baseBranchSha = pullRequestBaseBranchSha ||
-        getPullRequestBaseBranch(pullRequestBaseBranch, this.repositoryRoot)
-
-      if (baseBranchSha) {
-        const diff = getPullRequestDiff(baseBranchSha, targetCommit, this.repositoryRoot)
-        const modifiedFiles = getModifiedFilesFromDiff(diff)
-
-        if (modifiedFiles) {
-          return onDone({ err: null, modifiedFiles })
-        }
-      }
-
-      // TODO: Add telemetry for this type of error
-      return onDone({ err: new Error('No modified tests could have been retrieved') })
+    this.addSub(`ci:${this.constructor.id}:modified-files`, ({ onDone, candidateFiles }) => {
+      getModifiedFilesForCheckout({
+        testEnvironmentMetadata: this.testEnvironmentMetadata,
+        gitRoot: this.repositoryRoot,
+        testFramework: this.constructor.id,
+        candidateFiles,
+        waitForGitUpload: this.tracer?._exporter?.waitForGitUpload
+          ? () => this.tracer._exporter.waitForGitUpload()
+          : undefined,
+        getUserProvidedGitMetadata: getUserProviderGitMetadata,
+      }).then(
+        modifiedFiles => onDone({ err: null, modifiedFiles }),
+        err => onDone({ err })
+      )
     })
 
     this.addSub(`ci:${this.constructor.id}:worker-report:trace`, payload => {
