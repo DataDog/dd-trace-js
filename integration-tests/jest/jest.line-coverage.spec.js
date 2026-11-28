@@ -260,6 +260,73 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
     assert.ok(later.lines.has(11) && later.lines.has(5) && later.lines.has(7), testOutput)
   })
 
+  it('names the test file and the modules it mocks in every test record, without lines where it ran none', async () => {
+    const coverageRecords = []
+    const testsByName = new Map()
+    const coveragePromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcov',
+      (payloads) => {
+        coverageRecords.length = 0
+        coverageRecords.push(...payloads
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content: { coverages } }) => coverages))
+        assert.strictEqual(coverageRecords.filter(({ span_id: spanId }) => spanId !== undefined).length, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        testsByName.clear()
+        for (const { payload } of payloads) {
+          for (const { type, content } of payload.events) {
+            if (type === 'test') testsByName.set(content.meta[TEST_NAME], content)
+          }
+        }
+        assert.strictEqual(testsByName.size, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    childProcess = exec('node ./node_modules/jest/bin/jest --config config-jest.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_TEST_LINE_COVERAGE_ENABLED: '1',
+        CONFIG_TEST_MATCH: '**/ci-visibility/jest-line-coverage-dependencies/*-test.js',
+      },
+    })
+    let testOutput = ''
+    childProcess.stdout.on('data', chunk => { testOutput += chunk })
+    childProcess.stderr.on('data', chunk => { testOutput += chunk })
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+
+    const directory = 'ci-visibility/jest-line-coverage-dependencies'
+    const testFile = `${directory}/dependencies-test.js`
+    // Named as the per-suite coverage of Test Impact Analysis names a mocked module: the path given to jest.mock.
+    const mockedModule = `${directory}/mocked`
+    const filesOf = (name) => {
+      const test = testsByName.get(`dependencies ${name}`)
+      assert.ok(test, `no test named ${name}`)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
+      assert.ok(record, `no record for ${name}`)
+      const filenames = record.files.map(({ filename }) => filename)
+      assert.strictEqual(new Set(filenames).size, filenames.length, `a file named twice: ${filenames}`)
+      return record.files
+    }
+
+    const elsewhere = filesOf('runs a body defined in another file')
+    assert.deepStrictEqual(elsewhere.find(({ filename }) => filename === testFile), { filename: testFile })
+    assert.deepStrictEqual(elsewhere.find(({ filename }) => filename === mockedModule), { filename: mockedModule })
+    assert.ok(getLines(elsewhere, `${directory}/shared-body.js`).size > 0)
+
+    const own = filesOf('runs a line of its own file')
+    assert.ok(getLines(own, testFile).size > 0)
+    assert.deepStrictEqual(own.find(({ filename }) => filename === mockedModule), { filename: mockedModule })
+  })
+
   esModuleIt('reports the lines each test ran in ECMAScript modules', async () => {
     const coverageRecords = []
     const testsByName = new Map()

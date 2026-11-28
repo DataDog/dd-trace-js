@@ -19,8 +19,9 @@
 // A framework integration calls, in each process that runs tests:
 //   enable({ root })                    once; instruments CommonJS modules under root as they load
 //   instrumentSource(code, filename, options)  for modules the framework compiles itself
+//   recordLinelessModule(filename)      as it evaluates one of those with no mapped line
 //   installGlobal(globalObject)         for every other realm instrumented code runs in
-//   startTest(span) / finishTest(test, suites)
+//   startTest(span) / finishTest(test, suites, dependencies)
 //   startSuiteSetup(suite) / finishSuiteSetup(), and runs each suite setup hook in suiteSetupStore()
 //   takeShared()                        after the last test, or after each test file
 
@@ -52,7 +53,8 @@ const { createPositionMapper, getSourceMappingUrl, readSourceMapUrl } = require(
 const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
 
 /**
- * @typedef {{ filename: string, bitmap: Buffer }} FileCoverage
+ * @typedef {{ filename: string, bitmap?: Buffer }} FileCoverage an entry without a bitmap names a
+ *   file the test depends on but ran no line of
  * @typedef {import('./collector').Owner} Owner
  * @typedef {import('./worker-threads').PathLines} PathLines
  */
@@ -85,6 +87,8 @@ const stats = { files: 0, instrumentNs: 0n, failures: 0, bytesIn: 0, bytesOut: 0
 
 let unownedLines = new LineSet()
 let suiteSetup = new LineSet()
+/** @type {Set<string>} real paths of modules with no mapped line, evaluated outside every window */
+let linelessInit = new Set()
 
 /** @type {WeakMap<object, LineSet>} lines of each suite's setup hooks */
 const fixtures = new WeakMap()
@@ -125,6 +129,9 @@ let cachedOwner
 
 /** @type {string[]} filenames relative to the root, by file index */
 const relativeFilenames = []
+
+/** @type {Map<string, string>} filenames relative to the root, by the dependency path given */
+const dependencyFilenames = new Map()
 
 /** @type {Map<string, { code: string, instrumented: string }>} */
 const instrumentedByFilename = new Map()
@@ -271,9 +278,11 @@ function startTest (span) {
  *
  * @param {Owner} test
  * @param {Iterable<object>} [suites] the suites enclosing the test, as passed to startSuiteSetup
+ * @param {Iterable<string>} [dependencies] absolute paths of files the test depends on whatever it
+ *   runs, such as its own file: each one with no covered line comes back without a bitmap
  * @returns {FileCoverage[]}
  */
-function finishTest (test, suites) {
+function finishTest (test, suites, dependencies) {
   if (!openTests.has(test)) return []
   const collector = getCollector()
   collector.boundary()
@@ -293,7 +302,9 @@ function finishTest (test, suites) {
     }
   }
   if (dumpPath) testUnion.addAll(coverage)
-  return toFiles(coverage)
+  const files = toFiles(coverage)
+  if (dependencies !== undefined) addDependencies(files, dependencies)
+  return files
 }
 
 /**
@@ -342,15 +353,32 @@ function takeShared () {
   collector.takeLines(collector.unowned, unownedLines)
   takeLateChildLines(unownedLines)
   takeWorkerLines(collector.unowned, unownedLines)
+  const init = toFiles(collector.sharedInit)
+  if (linelessInit.size > 0) addDependencies(init, linelessInit)
   const shared = [
-    { shared: 'init', files: toFiles(collector.sharedInit) },
+    { shared: 'init', files: init },
     { shared: 'suiteSetup', files: toFiles(suiteSetup) },
     { shared: 'unowned', files: toFiles(unownedLines) },
   ]
   collector.sharedInit = new LineSet()
   suiteSetup = new LineSet()
   unownedLines = new LineSet()
+  linelessInit = new Set()
   return shared
+}
+
+/**
+ * Notes that a module with no line that maps to a line of its file is evaluated now. Evaluated
+ * outside every window, while test files load, it joins the init part of Shared without lines.
+ * Evaluated in a window, it is not kept: only the first test or setup to import it evaluates it,
+ * which says nothing about what that test depends on.
+ *
+ * @param {string} filename an absolute path
+ */
+function recordLinelessModule (filename) {
+  if (openTests.size > 0 || openSetup !== undefined) return
+  const real = getRepositoryFile(filename)
+  if (real !== undefined) linelessInit.add(real)
 }
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
@@ -639,14 +667,45 @@ function toFiles (lines) {
     if (end === 0) continue
     let filename = relativeFilenames[file]
     if (filename === undefined) {
-      filename = collector.filename(file)
-      filename = filename.startsWith(rootPrefix) ? filename.slice(rootPrefix.length) : relative(rootPrefix, filename)
-      if (sep !== '/') filename = filename.split(sep).join('/')
+      filename = toRelativeFilename(collector.filename(file))
       relativeFilenames[file] = filename
     }
     files.push({ filename, bitmap: Buffer.from(bitmap.buffer, bitmap.byteOffset, end) })
   }
   return files
+}
+
+/**
+ * Adds an entry without a bitmap for each dependency that `files` does not name yet.
+ *
+ * @param {FileCoverage[]} files
+ * @param {Iterable<string>} dependencies absolute paths
+ */
+function addDependencies (files, dependencies) {
+  const named = new Set()
+  for (const { filename } of files) named.add(filename)
+  for (const dependency of dependencies) {
+    let filename = dependencyFilenames.get(dependency)
+    if (filename === undefined) {
+      filename = toRelativeFilename(getRealPath(dependency))
+      dependencyFilenames.set(dependency, filename)
+    }
+    if (named.has(filename)) continue
+    named.add(filename)
+    files.push({ filename })
+  }
+}
+
+/**
+ * The path relative to the root, with forward slashes.
+ *
+ * @param {string} filename an absolute real path
+ */
+function toRelativeFilename (filename) {
+  const relativeFilename = filename.startsWith(rootPrefix)
+    ? filename.slice(rootPrefix.length)
+    : relative(rootPrefix, filename)
+  return sep === '/' ? relativeFilename : relativeFilename.split(sep).join('/')
 }
 
 // Debugging aid: _DD_LINE_COVERAGE_DUMP=<file> writes every line the process covered at exit.
@@ -692,13 +751,19 @@ function shouldInstrument (filename) {
  * @returns {string | undefined} the real path, when it is a file of the repository
  */
 function getRepositoryFile (filename) {
-  let real
-  try {
-    real = realpathSync(filename)
-  } catch {
-    real = resolve(filename)
-  }
+  const real = getRealPath(filename)
   return shouldInstrument(real) ? real : undefined
+}
+
+/**
+ * @param {string} filename an absolute path, which may go through symbolic links or not exist
+ */
+function getRealPath (filename) {
+  try {
+    return realpathSync(filename)
+  } catch {
+    return resolve(filename)
+  }
 }
 
 /**
@@ -1241,6 +1306,7 @@ module.exports = {
   installGlobal,
   instrumentSource,
   isActive,
+  recordLinelessModule,
   shouldInstrument,
   startSuiteSetup,
   startTest,

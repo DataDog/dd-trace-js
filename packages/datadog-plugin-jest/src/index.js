@@ -114,7 +114,11 @@ class JestPlugin extends CiPlugin {
     if (test === undefined) return
     this.#lineCoverageTests.delete(span)
     this.#openLineCoverageTests.delete(test)
-    const files = this.#lineCoverage.finishTest(test.coverage, enclosingDescribeBlocks(test.describeBlock))
+    const files = this.#lineCoverage.finishTest(
+      test.coverage,
+      enclosingDescribeBlocks(test.describeBlock),
+      test.dependencies
+    )
     if (files.length === 0) return
     const context = span.context()
     this.tracer._exporter.exportCoverage({
@@ -496,6 +500,7 @@ class JestPlugin extends CiPlugin {
       const test = this.#lineCoverage?.isActive()
         ? {
             coverage: this.#lineCoverage.startTest(span),
+            dependencies: ctx.lineCoverageDependencies,
             describeBlock: ctx.describeBlock,
             suiteId: this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)?.context()._spanId,
           }

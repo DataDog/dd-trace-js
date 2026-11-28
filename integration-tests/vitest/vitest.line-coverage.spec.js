@@ -16,6 +16,9 @@ const { getVitestVersions } = require('./versions')
 
 const TEST_FILE = 'ci-visibility/vitest-line-coverage/line-coverage.test.ts'
 const PATCHED_GLOBALS_TEST_FILE = 'ci-visibility/vitest-line-coverage/patched-globals.test.ts'
+const DEPENDENCIES_TEST_FILE = 'ci-visibility/vitest-line-coverage/dependencies.test.ts'
+const SETTINGS = 'ci-visibility/vitest-line-coverage/src/settings.json'
+const LAZY_SETTINGS = 'ci-visibility/vitest-line-coverage/src/lazy-settings.json'
 const LAZY = 'ci-visibility/vitest-line-coverage/src/lazy.mjs'
 const ARITHMETIC = 'ci-visibility/vitest-line-coverage/src/arithmetic.ts'
 const FIXTURE = 'ci-visibility/vitest-line-coverage/src/fixture.mjs'
@@ -253,6 +256,38 @@ for (const version of getVitestVersions()) {
         // The body of `double`, loaded while fs and path functions were replaced.
         assert.ok(getLines(filesOf('fs and path functions are replaced'), LAZY).has(2), testOutput)
         assert.ok(getLines(filesOf('with every timer faked'), ARITHMETIC).has(ADD_LINE), testOutput)
+      })
+
+      it(`names the files a test depends on without lines where it ran none (${pool})`, async () => {
+        const { tests, coverages } = await runFixtureSuite(true, pool, true, DEPENDENCIES_TEST_FILE)
+
+        assert.strictEqual(tests.length, 3, testOutput)
+        const filesOf = name => {
+          const test = tests.find(test => test.meta[TEST_NAME].endsWith(name))
+          assert.ok(test, `no test named ${name}`)
+          assert.strictEqual(test.meta[TEST_STATUS], 'pass', testOutput)
+          const matching = coverages.filter(coverage => coverage.span_id === Number(test.span_id))
+          assert.strictEqual(matching.length, 1, `${name}: ${matching.length} records\n${testOutput}`)
+          const filenames = matching[0].files.map(({ filename }) => filename)
+          assert.strictEqual(new Set(filenames).size, filenames.length, `a file named twice: ${filenames}`)
+          return matching[0].files
+        }
+
+        const elsewhere = filesOf('runs a body defined in another file')
+        const testFileEntry = elsewhere.find(({ filename }) => filename === DEPENDENCIES_TEST_FILE)
+        assert.deepStrictEqual(testFileEntry, { filename: DEPENDENCIES_TEST_FILE }, testOutput)
+        assert.ok(getLines(elsewhere, ARITHMETIC).has(ADD_LINE), testOutput)
+
+        assert.ok(getLines(filesOf('runs a line of its own file'), DEPENDENCIES_TEST_FILE).size > 0, testOutput)
+
+        // A module with no line of code, imported while the test file loads, is in Shared init. Imported inside
+        // a test, it is in no record: only the first test to import it evaluates it.
+        const initFiles = coverages.filter(({ shared }) => shared === 'init').flatMap(({ files }) => files)
+        const settingsEntry = initFiles.find(({ filename }) => filename === SETTINGS)
+        assert.deepStrictEqual(settingsEntry, { filename: SETTINGS }, testOutput)
+        const importsOne = filesOf('imports a module of no code')
+        assert.ok(getLines(importsOne, DEPENDENCIES_TEST_FILE).size > 0, testOutput)
+        assert.ok(!coverages.some(({ files }) => files.some(({ filename }) => filename === LAZY_SETTINGS)), testOutput)
       })
 
       it(`reports the same tests whether or not line coverage is on (${pool})`, async () => {

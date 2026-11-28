@@ -127,4 +127,64 @@ describe(`mocha@${MOCHA_VERSION} per-test line coverage`, () => {
     assert.ok(getLines(multiplies, ARITHMETIC).has(6))
     assert.ok(!getLines(multiplies, ARITHMETIC).has(2))
   })
+
+  it('names the test file in every test record, without lines where it ran none', async () => {
+    const coverageRecords = []
+    const testsByName = new Map()
+    const coveragePromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcov',
+      (payloads) => {
+        coverageRecords.length = 0
+        coverageRecords.push(...payloads
+          .flatMap(({ payload }) => payload)
+          .flatMap(({ content: { coverages } }) => coverages))
+        assert.strictEqual(coverageRecords.filter(({ span_id: spanId }) => spanId !== undefined).length, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+    const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        testsByName.clear()
+        for (const { payload } of payloads) {
+          for (const { type, content } of payload.events) {
+            if (type === 'test') testsByName.set(content.meta[TEST_NAME], content)
+          }
+        }
+        assert.strictEqual(testsByName.size, 2)
+      },
+      SUMMARY_TIMEOUT_MS
+    )
+
+    const testFile = 'ci-visibility/mocha-line-coverage-dependencies/dependencies-test.js'
+    childProcess = exec(`node node_modules/mocha/bin/mocha ${testFile}`, {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_TEST_LINE_COVERAGE_ENABLED: '1',
+      },
+    })
+    let testOutput = ''
+    childProcess.stdout.on('data', chunk => { testOutput += chunk })
+    childProcess.stderr.on('data', chunk => { testOutput += chunk })
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
+    assert.strictEqual(exitCode, 0, testOutput)
+
+    const filesOf = (name) => {
+      const test = testsByName.get(`dependencies ${name}`)
+      assert.ok(test, `no test named ${name}`)
+      assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      const record = coverageRecords.find(({ span_id: spanId }) => String(spanId) === String(Number(test.span_id)))
+      assert.ok(record, `no record for ${name}`)
+      const filenames = record.files.map(({ filename }) => filename)
+      assert.strictEqual(new Set(filenames).size, filenames.length, `a file named twice: ${filenames}`)
+      return record.files
+    }
+
+    const elsewhere = filesOf('runs a body defined in another file')
+    assert.deepStrictEqual(elsewhere.find(({ filename }) => filename === testFile), { filename: testFile })
+    assert.ok(getLines(elsewhere, 'ci-visibility/mocha-line-coverage-dependencies/shared-body.js').size > 0)
+
+    assert.ok(getLines(filesOf('runs a line of its own file'), testFile).size > 0)
+  })
 })

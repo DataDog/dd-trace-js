@@ -809,6 +809,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #snapshotTestNames
     /** Whether per-test line coverage runs for this test file. */
     #isLineCoverageEnabled = false
+    /** @type {string[]|undefined} */
+    #lineCoverageDependencies
 
     constructor (config, context) {
       super(config, context)
@@ -2373,6 +2375,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.hasDynamicName = hasDynamicName
         ctx.testSuiteAbsolutePath = this.testSuiteAbsolutePath
         ctx.describeBlock = event.test.parent
+        if (this.#isLineCoverageEnabled) {
+          // Every test of the file depends on the file and on the modules it mocks, named as the
+          // per-suite coverage of Test Impact Analysis names them. They are read before the first
+          // test, so that no test's list depends on the tests that ran before it.
+          this.#lineCoverageDependencies ??= [this.testSuiteAbsolutePath, ...getMockedFiles(this.testSuiteAbsolutePath)]
+          ctx.lineCoverageDependencies = this.#lineCoverageDependencies
+        }
         if (concurrentTestState) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx

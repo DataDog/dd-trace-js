@@ -796,7 +796,11 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
       if (this.#lineCoverage?.isActive()) {
-        this.#lineCoverageTests.set(span, { coverage: this.#lineCoverage.startTest(span), suite: ctx.suite })
+        this.#lineCoverageTests.set(span, {
+          coverage: this.#lineCoverage.startTest(span),
+          suite: ctx.suite,
+          file: ctx.testSuiteAbsolutePath,
+        })
       }
       const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
       if (!isDisabled || isAttemptToFix) this.#startWebdriverioVideo(span)
@@ -1707,7 +1711,8 @@ class MochaPlugin extends CiPlugin {
     const test = this.#lineCoverageTests.get(span)
     if (test === undefined) return
     this.#lineCoverageTests.delete(span)
-    const files = this.#lineCoverage.finishTest(test.coverage, enclosingSuites(test.suite))
+    // Every test depends on its own file, whether or not it ran a line of it.
+    const files = this.#lineCoverage.finishTest(test.coverage, enclosingSuites(test.suite), test.file && [test.file])
     if (files.length === 0) return
     const context = span.context()
     this.tracer._exporter.exportCoverage({

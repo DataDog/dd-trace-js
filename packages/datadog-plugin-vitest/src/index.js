@@ -701,13 +701,17 @@ class VitestPlugin extends CiPlugin {
       if (!lineCoverage.shouldInstrument(ctx.filename)) return
       // Without the map, lines of the transformed module cannot be mapped to lines of the file.
       const sourceMap = ctx.sourceMap ?? getInlineSourceMap(ctx.code)
-      if (sourceMap === undefined) return
-      ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, {
-        isModule: true,
-        reuse: true,
-        sourceMap,
-        cacheDirectory: lineCoverage.getDefaultCacheDirectory(),
-      })
+      const { code } = ctx
+      if (sourceMap !== undefined) {
+        ctx.code = lineCoverage.instrumentSource(code, ctx.filename, {
+          isModule: true,
+          reuse: true,
+          sourceMap,
+          cacheDirectory: lineCoverage.getDefaultCacheDirectory(),
+        })
+      }
+      // Code that comes back as it was has no probe: an asset, JSON, or code with no mapped line.
+      if (ctx.code === code) lineCoverage.recordLinelessModule(ctx.filename)
     })
 
     this.addBind('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
@@ -738,7 +742,9 @@ class VitestPlugin extends CiPlugin {
     const test = this.#lineCoverageTests.get(startedSpan)
     if (test === undefined) return
     this.#lineCoverageTests.delete(startedSpan)
-    const files = this.#lineCoverage.finishTest(test, enclosingSuites(task))
+    // Every test depends on its own file, whether or not it ran a line of it.
+    const testFile = task.file?.filepath
+    const files = this.#lineCoverage.finishTest(test, enclosingSuites(task), testFile && [testFile])
     if (files.length === 0) return
     const context = reportedSpan.context()
     this.tracer._exporter.exportCoverage({
