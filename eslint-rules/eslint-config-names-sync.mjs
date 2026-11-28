@@ -1,12 +1,7 @@
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import ts from 'typescript'
-
-const require = createRequire(import.meta.url)
-const { DD_MAJOR } = require('../version.js')
-const applyMajorOverrides = require('../packages/dd-trace/src/config/major-overrides.js')
 
 const IGNORED_CONFIGURATION_NAMES = new Set([
   // v6 drops `experimental.b3` from `index.d.ts`; v5 still consumes the env var.
@@ -14,9 +9,7 @@ const IGNORED_CONFIGURATION_NAMES = new Set([
   'tracePropagationStyle',
   'tracing',
 ])
-// Configuration name prefixes that are intentionally only present in
-// `supported-configurations.json` for v5 backports and stripped at runtime in
-// v6. Keep these out of the `index.d.ts` ↔ JSON parity check.
+// Legacy option names can appear in v5 release schemas.
 const IGNORED_CONFIGURATION_NAME_PREFIXES = [
   'experimental.appsec.',
   'experimental.iast.',
@@ -108,7 +101,6 @@ function isIgnoredConfigurationName (name) {
 function getSupportedConfigurationInfo (filePath) {
   const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   const supportedConfigurations = parsed?.supportedConfigurations
-  applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
   const names = new Set()
   const primaryEnvTargets = new Map()

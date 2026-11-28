@@ -21,6 +21,7 @@ const exporters = require('../../../../ext/exporters')
 const { defaults } = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const applyConfigOverrides = require('../../../../scripts/release/apply-config-overrides')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
 const telemetryMetrics = require('../../src/telemetry/metrics')
@@ -86,17 +87,19 @@ describe('Config', () => {
     const parsers = loadParsers('../../src/config/parsers', {})
     const loadSupportedConfigurations = proxyquire.noPreserveCache()
     const supportedConfigurations = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+    if (ddMajor === 5) {
+      applyConfigOverrides(supportedConfigurations.supportedConfigurations, ddMajor)
+    }
     const loadDefaults = proxyquire.noPreserveCache()
     const configDefaults = loadDefaults('../../src/config/defaults', {
+      '../../../../version': { DD_MAJOR: ddMajor },
       './supported-configurations.json': supportedConfigurations,
       '../log': log,
       './parsers': parsers,
-      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const loadHelper = proxyquire.noPreserveCache()
     const configHelper = loadHelper('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
-      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const loadServerless = proxyquire.noPreserveCache()
     const serverless = loadServerless('../../src/serverless', {})
@@ -143,6 +146,17 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    for (const ddMajor of [5, 6, 7]) {
+      it(`uses the v${ddMajor} Electron default`, () => {
+        const config = getConfig({}, { ddMajor })
+
+        assert.strictEqual(config.DD_TRACE_ELECTRON_ENABLED, ddMajor < 7)
+        assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+          { name: 'DD_TRACE_ELECTRON_ENABLED', value: ddMajor < 7, origin: 'default' },
+        ])
+      })
+    }
+
     it('enables tRPC tracing by default', () => {
       assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
     })
@@ -221,8 +235,6 @@ describe('Config', () => {
         )
       })
 
-    // Load `helper.js` in isolation so a missing alias filter in helper.js cannot be masked by
-    // the same overrides applied from `defaults.js` against a shared module cache.
     const loadFreshHelper = () => {
       const loadSupportedConfigurations = proxyquire.noPreserveCache()
       const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
@@ -262,50 +274,6 @@ describe('Config', () => {
         () => helper.getEnvironmentVariable('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'),
         /Missing DD_PROFILING_EXPERIMENTAL_CPU_ENABLED env\/configuration in "supported-configurations.json" file./
       )
-    })
-
-    itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
-      const loadSupportedConfigurations = proxyquire.noPreserveCache()
-      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
-      const loadMajorOverrides = proxyquire.noPreserveCache()
-      const applyMajorOverrides = loadMajorOverrides('../../src/config/major-overrides', {})
-      const supported = fresh.supportedConfigurations
-      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
-      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
-      applyMajorOverrides(supported, 6)
-      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
-      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
-      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
-      const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
-      assert.ok(
-        !cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')),
-        `Got: ${inspect(cpuEntry.aliases)}`
-      )
-      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
-      const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
-      assert.strictEqual(runtimeIdEntry.aliases, undefined)
-
-      const beforeKeyCount = Object.keys(supported).length
-      applyMajorOverrides(supported, 6)
-      assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
-    })
-
-    it('applyMajorOverrides is idempotent for v5 security controls', () => {
-      const loadSupportedConfigurations = proxyquire.noPreserveCache()
-      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
-      const loadMajorOverrides = proxyquire.noPreserveCache()
-      const applyMajorOverrides = loadMajorOverrides('../../src/config/major-overrides', {})
-      const supported = fresh.supportedConfigurations
-      const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
-
-      applyMajorOverrides(supported, 5)
-      applyMajorOverrides(supported, 5)
-
-      assert.deepStrictEqual(iastEntry.configurationNames, [
-        'iast.securityControlsConfiguration',
-        'experimental.iast.securityControlsConfiguration',
-      ])
-      assert.strictEqual(iastEntry.internalPropertyName, undefined)
     })
 
     it('does not retain any internalPropertyName entries in supported-configurations.json', () => {
@@ -8086,7 +8054,6 @@ rules:
         './supported-configurations.json': supportedConfigurations,
         '../log': log,
         './parsers': parsers,
-        '../../../../version': { DD_MAJOR },
       })
       const loadHelper = proxyquire.noPreserveCache()
       const configHelper = loadHelper('../../src/config/helper', {

@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import applyConfigOverrides from '../scripts/release/apply-config-overrides.js'
+
 const __filename = fileURLToPath(import.meta.url)
 
 const supportedConfigsPath = path.resolve(
@@ -9,6 +11,7 @@ const supportedConfigsPath = path.resolve(
   '../packages/dd-trace/src/config/supported-configurations.json'
 )
 const { supportedConfigurations } = JSON.parse(fs.readFileSync(supportedConfigsPath, 'utf8'))
+applyConfigOverrides(supportedConfigurations, 5)
 
 const aliasToCanonical = {}
 const fallbackAliases = new Set()

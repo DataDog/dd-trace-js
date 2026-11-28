@@ -1,0 +1,5 @@
+{
+  "defaults": {
+    "DD_TRACE_ELECTRON_ENABLED": "false"
+  }
+}

@@ -3,6 +3,8 @@
 const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
+const applyConfigOverrides = require('./release/apply-config-overrides')
+
 const CHECK_FLAG = '--check'
 const OUTPUT_PATH_IN_REPOSITORY = 'packages/dd-trace/src/config/generated-config-types.d.ts'
 const SUPPORTED_CONFIGURATIONS_PATH = path.join(
@@ -274,6 +276,8 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
 
 function generateConfigTypes () {
   const { supportedConfigurations } = JSON.parse(readFileSync(SUPPORTED_CONFIGURATIONS_PATH, 'utf8'))
+  // Backport code still references v5-only configuration fields.
+  applyConfigOverrides(supportedConfigurations, 5)
   const root = createTreeNode()
 
   for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {

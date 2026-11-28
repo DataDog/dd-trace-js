@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
+
 const {
   parsers,
   programmaticTypeCoercions,
@@ -11,12 +12,14 @@ const {
   telemetryTransformers,
   setWarnInvalidValue,
 } = require('./parsers')
-const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
-applyMajorOverrides(supportedConfigurations, DD_MAJOR)
+// Source checkouts of v7+ still start from the v6 registry.
+if (DD_MAJOR >= 7 && supportedConfigurations.DD_TRACE_ELECTRON_ENABLED[0].default === 'true') {
+  supportedConfigurations.DD_TRACE_ELECTRON_ENABLED[0].default = 'false'
+}
 
 let log
 let seqId = 0
@@ -210,7 +213,8 @@ const configurationsTable = {}
 // One way aliases. Must be applied in apply calculated entries.
 const fallbackConfigurations = new Map()
 
-const regExps = {}
+/** @type {Record<string, RegExp>} */
+const regExps = Object.create(null)
 
 // Canonical names of configurations whose value is excluded from configuration
 // telemetry. Driven by the `sensitive: true` attribute in
@@ -233,8 +237,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     // and the alias is resolved by helper.js. helper.js drops these from the shared
     // supported-configurations object (after registering the deprecation), but that
     // mutation is order-dependent on which module loads first. Skip here too so
-    // `defaults` is identical regardless of load order (it differed in v5, where
-    // major-overrides keeps these entries instead of deleting them outright).
+    // `defaults` is identical regardless of load order.
     if (entry.deprecated && entry.aliases) continue
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
@@ -245,23 +248,8 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     const type = entry.type.toUpperCase()
     assert.ok(programmaticTypeCoercions[type])
 
-    let transformer = transformers[entry.transform]
-    if (entry.allowed) {
-      regExps[entry.allowed] ??= new RegExp(`^(${entry.allowed})$`, 'i')
-      const allowed = regExps[entry.allowed]
-      const originalTransform = transformer
-      transformer = (value, optionName, source, reportInvalid = true) => {
-        if (!allowed.test(value)) {
-          if (reportInvalid) warnInvalidValue(value, optionName, source, 'Invalid value')
-          return
-        }
-        if (originalTransform) {
-          value = originalTransform(value, optionName, source, reportInvalid)
-        }
-        return value
-      }
-    }
-
+    const transformer = transformers[entry.transform]
+    const { allowed } = entry
     const option = { parser, type }
 
     if (fullPropertyName !== canonicalName) {
@@ -269,7 +257,18 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       option.canonicalName = canonicalName
       configurationsTable[fullPropertyName] = option
     }
-    if (transformer) {
+    if (allowed) {
+      option.transformer = (value, optionName, source, reportInvalid = true) => {
+        const regExp = regExps[allowed] ??= new RegExp(`^(${allowed})$`, 'i')
+        if (!regExp.test(value)) {
+          if (reportInvalid) {
+            warnInvalidValue(value, optionName, source, 'Invalid value')
+          }
+          return
+        }
+        return transformer ? transformer(value, optionName, source, reportInvalid) : value
+      }
+    } else if (transformer) {
       option.transformer = transformer
     }
     if (entry.configurationNames) {

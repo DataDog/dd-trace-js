@@ -1,6 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
+
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -237,6 +239,54 @@ describe('config-helper env resolution', () => {
 
     assert.strictEqual(getValueFromEnvSources('OTEL_LOG_LEVEL'), 'debug')
     assert.strictEqual(getValueFromEnvSources('DD_TRACE_LOG_LEVEL'), 'debug')
+  })
+
+  it('compiles a configured validator on first use', () => {
+    const helperPath = require.resolve('../../src/config/helper')
+    const schemaPath = require.resolve('../../src/config/supported-configurations.json')
+    const source = `
+      process.env = { AWS_LAMBDA_FUNCTION_NAME: 'config-test' }
+      const name = 'DD_DBM_PROPAGATION_MODE'
+      const { supportedConfigurations } = require(${JSON.stringify(schemaPath)})
+      const pattern = '^(' + supportedConfigurations[name][0].allowed + ')$'
+      let constructions = 0
+      globalThis.RegExp = new Proxy(RegExp, {
+        construct (target, args, newTarget) {
+          if (args[0] === pattern) constructions++
+          return Reflect.construct(target, args, newTarget)
+        },
+      })
+      const { getValueFromEnvSources } = require(${JSON.stringify(helperPath)})
+      const read = () => [getValueFromEnvSources(name), constructions]
+      const initial = read()
+      process.env[name] = 'SERVICE'
+      console.log(JSON.stringify([initial, read(), read()]))
+    `
+    const output = execFileSync(process.execPath, ['-e', source], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '' },
+    })
+
+    assert.deepStrictEqual(JSON.parse(output), [['disabled', 0], ['service', 1], ['service', 1]])
+  })
+
+  it('accepts registered defaults for options with an allowed pattern', () => {
+    const { supportedConfigurations } = /** @type {import('../../src/config/helper').SupportedConfigurationsJson} */ (
+      require('../../src/config/supported-configurations.json')
+    )
+    process.env = {}
+
+    for (const [name, [entry]] of Object.entries(supportedConfigurations)) {
+      if (!entry.allowed || entry.default === null) continue
+
+      const defaultValue = getValueFromEnvSources(name)
+      process.env[name] = String(entry.default)
+      const configured = getValueFromEnvSources(name, true)
+
+      assert.notStrictEqual(configured, undefined, name)
+      assert.deepStrictEqual(configured, defaultValue, name)
+      delete process.env[name]
+    }
   })
 
   describe('with stable config and env vars', () => {
