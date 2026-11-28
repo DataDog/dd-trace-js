@@ -24,6 +24,7 @@
 //   startSuiteSetup(suite) / finishSuiteSetup(), and runs each suite setup hook in suiteSetupStore()
 //   takeShared()                        after the last test, or after each test file
 
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const Module = require('node:module')
 const os = require('node:os')
@@ -38,7 +39,7 @@ const { getEnvironmentVariable } = require('../../config/helper')
 const log = require('../../log')
 const { getCollector, LineSet } = require('./collector')
 const { instrument } = require('./instrument')
-const { createPositionMapper, readSourceMap } = require('./source-map')
+const { createPositionMapper, getSourceMappingUrl, readSourceMapUrl } = require('./source-map')
 const { followWorkers, getParentSettings, reportToParent } = require('./worker-threads')
 
 /**
@@ -62,7 +63,7 @@ const CHILD_ROOT = '_DD_LINE_COVERAGE_ROOT'
 
 let enabled = false
 let rootPrefix = ''
-const stats = { files: 0, instrumentNs: 0n, failures: 0, bytesIn: 0, bytesOut: 0 }
+const stats = { files: 0, instrumentNs: 0n, failures: 0, bytesIn: 0, bytesOut: 0, cacheHits: 0, cacheWrites: 0 }
 
 let unownedLines = new LineSet()
 let suiteSetup = new LineSet()
@@ -109,6 +110,15 @@ const relativeFilenames = []
 
 /** @type {Map<string, { code: string, instrumented: string }>} */
 const instrumentedByFilename = new Map()
+
+/** Keys of code instrumented for this thread only. */
+let nextModuleKey = 0
+
+/** @type {string | null | undefined} what cached code depends on besides its input; null without a cache */
+let cacheSalt
+
+/** @type {Set<string>} cache directories known to exist */
+const cacheDirectories = new Set()
 
 function isEnabled () {
   const value = getEnvironmentVariable('DD_TEST_LINE_COVERAGE_ENABLED')
@@ -637,14 +647,10 @@ function getRepositoryFile (filename) {
   return shouldInstrument(real) ? real : undefined
 }
 
+/** @type {typeof import('oxc-parser') | null | undefined} */
 let oxc
 
-/**
- * @param {string} code
- * @param {boolean} isModule
- * @returns {object} an ESTree Program
- */
-function parse (code, isModule) {
+function getOxc () {
   if (oxc === undefined) {
     try {
       oxc = require('oxc-parser')
@@ -652,7 +658,16 @@ function parse (code, isModule) {
       oxc = null
     }
   }
-  if (oxc) {
+  return oxc
+}
+
+/**
+ * @param {string} code
+ * @param {boolean} isModule
+ * @returns {object} an ESTree Program
+ */
+function parse (code, isModule) {
+  if (getOxc()) {
     const { program, errors } = oxc.parseSync('index.js', code, {
       // CommonJS allows a top-level `return`.
       sourceType: isModule ? 'module' : 'commonjs',
@@ -684,56 +699,165 @@ function toSourceMap (sourceMap) {
 }
 
 /**
+ * What instrumented code depends on besides its input: the code that instruments it and the code it
+ * calls, and the parser.
+ *
+ * @returns {string | null} null when it cannot be known, and nothing is cached
+ */
+function getCacheSalt () {
+  if (cacheSalt !== undefined) return cacheSalt
+  try {
+    const hash = crypto.createHash('sha1')
+    for (const file of ['./index', './collector', './instrument', './source-map']) {
+      hash.update(fs.readFileSync(require.resolve(file)))
+    }
+    hash.update(getOxc() ? `oxc-parser ${require('oxc-parser/package.json').version}` : 'meriyah')
+    cacheSalt = hash.digest('hex')
+  } catch {
+    cacheSalt = null
+  }
+  return cacheSalt
+}
+
+/**
+ * @param {string} directory
+ * @param {string} key
+ */
+function getCachePath (directory, key) {
+  return path.join(directory, 'dd-trace-line-coverage', key.slice(0, 2), key)
+}
+
+/**
+ * @param {string} directory
+ * @param {string} key
+ * @returns {string | undefined} the instrumented code, empty for code that is not instrumented, or
+ *   undefined when the cache does not have it
+ */
+function readCachedCode (directory, key) {
+  let text
+  try {
+    text = fs.readFileSync(getCachePath(directory, key), 'utf8')
+  } catch {
+    return
+  }
+  // A cache file starts with `<key>:<length of the code>\n`.
+  const newline = text.indexOf('\n')
+  if (newline === -1 || !text.startsWith(`${key}:`)) return
+  const code = text.slice(newline + 1)
+  if (Number(text.slice(key.length + 1, newline)) === code.length) return code
+}
+
+/**
+ * @param {string} directory
+ * @param {string} key
+ * @param {string} code the instrumented code, empty for code that is not instrumented
+ */
+function writeCachedCode (directory, key, code) {
+  const file = getCachePath(directory, key)
+  const temporary = `${file}.${process.pid}-${threadId}`
+  try {
+    const parent = path.dirname(file)
+    if (!cacheDirectories.has(parent)) {
+      fs.mkdirSync(parent, { recursive: true })
+      cacheDirectories.add(parent)
+    }
+    // Readers in other processes see the whole file or none.
+    fs.writeFileSync(temporary, `${key}:${code.length}\n${code}`)
+    fs.renameSync(temporary, file)
+    stats.cacheWrites++
+  } catch (error) {
+    log.debug('Line coverage could not cache %s: %s', file, error.message)
+    try {
+      fs.rmSync(temporary, { force: true })
+    } catch {}
+  }
+}
+
+/**
+ * The key of instrumented code in a cache shared with other processes: a hash of everything the
+ * code depends on.
+ *
+ * @param {string} salt
+ * @param {string} code
+ * @param {string} filename
+ * @param {boolean} isModule
+ * @param {object | string | undefined} sourceMap
+ */
+function getCacheKey (salt, code, filename, isModule, sourceMap) {
+  return crypto.createHash('sha1')
+    .update(`${salt}\0${rootPrefix}\0${filename}\0${isModule}\0`)
+    .update(typeof sourceMap === 'string' ? sourceMap : JSON.stringify(sourceMap ?? null))
+    .update('\0')
+    .update(code)
+    .digest('hex')
+}
+
+/**
  * Returns the instrumented code, or `code` when it cannot be instrumented.
  *
  * @param {string} code
  * @param {string} filename
- * @param {{ isModule?: boolean, reuse?: boolean, sourceMap?: object | string }} [options]
- *   `reuse` keeps the result for the next call with the same filename and code, for frameworks that
- *   compile a module once per test file. `sourceMap` maps `code` back to the files it was compiled
- *   from; without it, a source map the code names in a `sourceMappingURL` comment does. Lines are
- *   then reported in the original files, and code mapped to no line of a repository file is not
- *   probed.
+ * @param {object} [options]
+ * @param {boolean} [options.isModule]
+ * @param {boolean} [options.reuse] keeps the result for the next call with the same filename and
+ *   code, for frameworks that compile a module once per test file
+ * @param {object | string | (() => object | string | undefined)} [options.sourceMap] maps `code` back
+ *   to the files it was compiled from, or returns what does, and is then called only when the code
+ *   is not reused. Without it, a source map the code names in a `sourceMappingURL` comment does.
+ *   Lines are then reported in the original files, and code mapped to no line of a repository file
+ *   is not probed.
+ * @param {string} [options.cacheDirectory] a directory to keep instrumented code in, for other
+ *   processes that instrument the same code
  */
-function instrumentSource (code, filename, { isModule = false, reuse = false, sourceMap } = {}) {
+function instrumentSource (code, filename, { isModule = false, reuse = false, sourceMap, cacheDirectory } = {}) {
   if (reuse) {
     const cached = instrumentedByFilename.get(filename)
     if (cached !== undefined && cached.code === code) return cached.instrumented
-    const instrumented = instrumentSource(code, filename, { isModule, sourceMap })
+    const instrumented = instrumentSource(code, filename, { isModule, sourceMap, cacheDirectory })
     instrumentedByFilename.set(filename, { code, instrumented })
     return instrumented
   }
   const start = process.hrtime.bigint()
   try {
-    const collector = getCollector()
-    const map = toSourceMap(sourceMap) ?? readSourceMap(code, filename)
-    let mapPosition
-    /** @type {number[]} the collector's file index of each source, -1 outside the repository */
-    let sourceFiles
-    if (map === undefined) {
-      sourceFiles = [collector.fileIndex(filename)]
+    if (typeof sourceMap === 'function') sourceMap = sourceMap()
+    let url
+    if (sourceMap === undefined) {
+      url = getSourceMappingUrl(code)
+      // An inline map is part of the code, and is decoded only when the code is instrumented.
+      if (url !== undefined && !url.startsWith('data:')) sourceMap = readSourceMapUrl(url, filename)
+    }
+    const salt = cacheDirectory === undefined ? null : getCacheSalt()
+    let key
+    if (salt === null) {
+      key = String(nextModuleKey++)
     } else {
-      const mapper = createPositionMapper(map, filename)
-      sourceFiles = mapper.sources.map(source => {
-        const file = getRepositoryFile(source)
-        return file === undefined ? -1 : collector.fileIndex(file)
-      })
-      mapPosition = (line, column) => {
-        const original = mapper.mapPosition(line, column)
-        return original === undefined || sourceFiles[original.source] === -1 ? undefined : original
+      key = getCacheKey(salt, code, filename, isModule, sourceMap)
+      const cached = readCachedCode(cacheDirectory, key)
+      if (cached !== undefined) {
+        stats.cacheHits++
+        return cached === '' ? code : cached
       }
     }
-    const moduleId = collector.reserveModule()
-    const result = instrument(code, { parse: source => parse(source, isModule), moduleId, mapPosition })
-    if (!result) return code
-    const { slots } = result
-    const files = new Int32Array(slots.length)
-    const lines = new Int32Array(slots.length)
-    for (let i = 0; i < slots.length; i++) {
-      files[i] = sourceFiles[slots[i].source]
-      lines[i] = slots[i].init ? -slots[i].line : slots[i].line
+    if (sourceMap === undefined && url !== undefined) sourceMap = readSourceMapUrl(url, filename)
+    const map = toSourceMap(sourceMap)
+    let sources = [filename]
+    let mapPosition
+    if (map !== undefined) {
+      const mapper = createPositionMapper(map, filename)
+      sources = mapper.sources.map(source => getRepositoryFile(source) ?? null)
+      mapPosition = (line, column) => {
+        const original = mapper.mapPosition(line, column)
+        return original === undefined || sources[original.source] === null ? undefined : original
+      }
     }
-    collector.defineModule(moduleId, files, lines)
+    const result = instrument(code, {
+      parse: source => parse(source, isModule),
+      moduleKey: key,
+      sources,
+      mapPosition,
+    })
+    if (salt !== null) writeCachedCode(cacheDirectory, key, result ? result.code : '')
+    if (!result) return code
     stats.files++
     stats.bytesIn += code.length
     stats.bytesOut += result.code.length
@@ -817,6 +941,8 @@ function startCollecting (root, patchModuleLoader) {
         files: stats.files,
         failures: stats.failures,
         instrumentMs: Number(stats.instrumentNs / 1000n) / 1000,
+        cacheHits: stats.cacheHits,
+        cacheWrites: stats.cacheWrites,
         bytesIn: stats.bytesIn,
         bytesOut: stats.bytesOut,
         resets: c.resets,
