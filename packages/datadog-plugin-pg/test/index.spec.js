@@ -814,6 +814,158 @@ describe('Plugin', () => {
           })
         })
 
+        describe('with acquisition telemetry disabled', () => {
+          const spanFinish = dc.channel('dd-trace:span:finish')
+          let acquireCount
+
+          beforeEach(() => {
+            acquireCount = 0
+            tracer.use('pg', { poolAcquire: false })
+            spanFinish.subscribe(countAcquireSpan)
+          })
+
+          afterEach(() => {
+            spanFinish.unsubscribe(countAcquireSpan)
+            tracer.use('pg', { poolAcquire: true })
+          })
+
+          function countAcquireSpan (span) {
+            if (span.context()._name === 'pg.pool.acquire') acquireCount++
+          }
+
+          it('keeps queued connect and pool query callbacks in the caller trace', async () => {
+            const blocker = await pool.connect()
+            const parent = tracer.startSpan('checkout-caller')
+
+            const trace = agent.assertSomeTraces(traces => {
+              const queries = traces[0].filter(span => span.name === 'pg.query')
+              assert.strictEqual(queries.length, 2)
+              for (const span of queries) {
+                assert.strictEqual(span.metrics['db.pool.wait_time_ms'], undefined)
+                assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+              }
+            }, { spanResourceMatch: /^SELECT 21 AS pool_query$/ })
+
+            const operation = tracer.scope().activate(parent, async () => {
+              const callbackQuery = acquireWithCallback(pool, async (client, release) => {
+                const result = await client.query('SELECT 20 AS direct_query')
+                release()
+                return result
+              })
+              const poolQuery = pool.query('SELECT 21 AS pool_query')
+              const promiseCheckout = (async () => {
+                const client = await pool.connect()
+                client.release()
+              })()
+
+              try {
+                const [checkout, query] = await Promise.all([callbackQuery, poolQuery, promiseCheckout])
+                assert.strictEqual(acquireCount, 0)
+                assert.strictEqual(checkout.rows[0].direct_query, 20)
+                assert.strictEqual(query.rows[0].pool_query, 21)
+              } finally {
+                parent.finish()
+              }
+            })
+
+            blocker.release()
+            await Promise.all([operation, trace])
+          })
+
+          it('leaves checkout failures to the caller', async () => {
+            const closedPool = new pg.Pool(poolOptions())
+            await closedPool.end()
+            const error = { message: 'Cannot use a pool after calling end on the pool' }
+
+            await Promise.all([
+              assert.rejects(closedPool.connect(), error),
+              assert.rejects(acquireWithCallback(closedPool, () => assert.fail('expected connect to fail')), error),
+              assert.rejects(closedPool.query('SELECT 1'), error),
+            ])
+
+            const returned = closedPool.connect(failure => {
+              assert.strictEqual(failure.message, error.message)
+              return 'callback return'
+            })
+            const thrown = new Error('callback failure')
+            assert.throws(() => closedPool.connect(() => { throw thrown }), failure => failure === thrown)
+
+            assert.strictEqual(acquireCount, 0)
+            assert.strictEqual(returned, 'callback return')
+          })
+
+          it('finishes a queued checkout that started before disabling acquisitions', async () => {
+            const blocker = await pool.connect()
+            tracer.use('pg', { poolAcquire: true })
+            const checkout = acquireWithCallback(pool, (client, release) => release())
+
+            tracer.use('pg', { poolAcquire: false })
+            blocker.release()
+            await checkout
+
+            assert.strictEqual(acquireCount, 1)
+          })
+
+          it('skips the wait metric when disabled while a query is queued', async () => {
+            const blocker = await pool.connect()
+            tracer.use('pg', { poolAcquire: true })
+
+            const trace = agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].metrics['db.pool.wait_time_ms'], undefined)
+            }, { spanResourceMatch: /^SELECT 22 AS reconfigured_query$/ })
+            const query = pool.query('SELECT 22 AS reconfigured_query')
+
+            tracer.use('pg', { poolAcquire: false })
+            blocker.release()
+            const [result] = await Promise.all([query, trace])
+
+            assert.strictEqual(acquireCount, 0)
+            assert.strictEqual(result.rows[0].reconfigured_query, 22)
+          })
+
+          it('consumes a skipped wait before the pooled client is reused', async () => {
+            const firstSql = 'SELECT 23 AS skipped_wait'
+            const secondSql = 'SELECT 24 AS reused_client'
+            class ReconfiguringClient extends pg.Client {
+              /** @param {string} sql */
+              query (sql) {
+                if (sql === firstSql) {
+                  tracer.use('pg', { poolAcquire: false })
+                }
+                return super.query(...arguments)
+              }
+            }
+
+            const reusedPool = new pg.Pool({ ...poolOptions(), Client: ReconfiguringClient })
+            const trace = agent.assertSomeTraces(traces => {
+              const queries = traces[0].filter(span => span.name === 'pg.query')
+              assert.strictEqual(queries.length, 2)
+              for (const query of queries) {
+                assert.strictEqual(query.metrics['db.pool.wait_time_ms'], undefined)
+              }
+            }, { spanResourceMatch: /^SELECT 24 AS reused_client$/ })
+
+            await Promise.all([
+              trace,
+              withPool(reusedPool, () => tracer.trace('pg-pool-reuse', async () => {
+                const blocker = await reusedPool.connect()
+                tracer.use('pg', { poolAcquire: true })
+                const first = reusedPool.query(firstSql)
+                blocker.release()
+                assert.strictEqual((await first).rows[0].skipped_wait, 23)
+
+                const client = await reusedPool.connect()
+                try {
+                  tracer.use('pg', { poolAcquire: true })
+                  assert.strictEqual((await client.query(secondSql)).rows[0].reused_client, 24)
+                } finally {
+                  client.release()
+                }
+              })),
+            ])
+          })
+        })
+
         it('creates a dedicated acquire span for an explicit promise pool.connect()', async () => {
           const parent = tracer.startSpan('acquire-promise-parent')
 

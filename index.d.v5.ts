@@ -3511,6 +3511,11 @@ declare namespace tracer {
      */
     interface pg extends DatabaseInstrumentation {
       /**
+       * Record pool acquisition spans and wait time on queries that own an acquisition.
+       * @default true
+       */
+      poolAcquire?: boolean;
+      /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
       service?: string | ((params: any) => string);

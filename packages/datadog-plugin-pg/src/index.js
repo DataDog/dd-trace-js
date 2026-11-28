@@ -37,7 +37,7 @@ class PGPlugin extends DatabasePlugin {
           ...connectionMeta(params),
         },
       }, ctx)
-    })
+    }, 'poolAcquire')
     this.addSub('apm:pg:pool:acquire:finish', ctx => {
       const span = ctx.currentStore?.span
       if (span === undefined) return
