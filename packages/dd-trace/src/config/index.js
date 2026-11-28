@@ -50,6 +50,7 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
+const { decodeValue, resolveStartup } = require('./startup')
 
 const rfdc = createRfdc({
   proto: false,
@@ -196,6 +197,46 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
+const portableOptionTypes = new Set(['BOOLEAN', 'DECIMAL', 'INT', 'STRING'])
+
+/**
+ * @param {Array<[string, unknown]>} entries
+ * @param {string} root
+ */
+function resolvePortableOptions (entries, root) {
+  /** @type {import('./startup').StartEntry[] | undefined} */
+  let inputs
+  for (const [name, value] of entries) {
+    const fullName = root ? `${root}.${name}` : name
+    const entry = optionsTable[fullName]
+    if (!entry?.canonicalName || entry.nestedProperties || entry.transformer || !portableOptionTypes.has(entry.type)) {
+      continue
+    }
+
+    /** @type {import('./startup').WireValue | undefined} */
+    let encoded
+    if (typeof value === 'string') {
+      encoded = { kind: 'string', value }
+    } else if (typeof value === 'boolean') {
+      encoded = { kind: 'boolean', value }
+    } else if (typeof value === 'number' && Number.isFinite(value) && !Object.is(value, -0)) {
+      encoded = { kind: 'number', value }
+    }
+    if (encoded) {
+      inputs ??= []
+      inputs.push({ name: fullName, value: encoded })
+    }
+  }
+  if (inputs === undefined) {
+    return
+  }
+
+  const snapshot = resolveStartup([{ origin: 'code', entries: inputs }], DD_MAJOR, undefined, log, true)
+  return snapshot?.sources.length === inputs.length
+    ? new Map(inputs.map(({ name }, index) => [name, snapshot.sources[index].value]))
+    : undefined
+}
+
 module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
@@ -251,10 +292,7 @@ class Config extends ConfigBase {
     }
 
     this.#applyDefaults()
-    // TODO: Update origin documentation to list all valid sources. Add local_stable_config and fleet_stable_config.
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config')
-    this.#applyEnvs(getEnvironmentVariables(undefined, true), 'env_var')
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config')
+    this.#applyStartupEnvs()
 
     // Experimental options are applied first, so they can be overridden by non-experimental options.
     // TODO: When using programmatic options, check if there is a higher
@@ -278,6 +316,62 @@ class Config extends ConfigBase {
     }
   }
 
+  #applyStartupEnvs () {
+    /** @type {Array<[import('./helper').TracerEnv, Exclude<import('./startup').StartOrigin, 'code'>]>} */
+    const sources = [
+      [getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config'],
+      [getEnvironmentVariables(undefined, true), 'env_var'],
+      [getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config'],
+    ]
+    const layers = sources.map(([envs, origin]) => {
+      const entries = /** @type {Array<[string, string]>} */ (Object.entries(envs))
+      return { origin, entries: entries.map(([name, value]) => ({ name, value })) }
+    })
+    const snapshot = resolveStartup(layers, DD_MAJOR, (name, value, origin) => {
+      return configurationsTable[name].transformer(value, name, origin)
+    }, log)
+    if (snapshot === undefined) {
+      for (const [envs, origin] of sources) {
+        this.#applyEnvs(envs, origin)
+      }
+      return
+    }
+
+    const { settings, diagnostics, sources: events, hostValues } = snapshot
+    for (const { name, origin, problem } of diagnostics) {
+      if (problem.kind === 'transform_rejected') {
+        continue
+      }
+
+      const event = events.find(entry => entry.name === name && entry.origin === origin)
+      if (problem.kind === 'invalid_value') {
+        warnInvalidValue(event?.input, name, origin, `Invalid ${configurationsTable[name].type} input`)
+      } else {
+        const value = decodeValue(event?.parsed, hostValues)
+        const message = problem.kind === 'disallowed_value'
+          ? 'Invalid value'
+          : 'Sample rate out of range between 0 and 1'
+        warnInvalidValue(value, name, origin, message)
+      }
+    }
+
+    const tracked = new Set()
+    for (const { name, origin, value: encoded, parsed, input } of events) {
+      const value = decodeValue(encoded, hostValues)
+      const rawValue = value !== null && typeof value === 'object'
+        ? input
+        : decodeValue(parsed, hostValues) ?? value
+      setAndTrack(this, configurationsTable[name].property ?? name, value, rawValue, origin)
+      tracked.add(name)
+    }
+    for (const { name, property, resolved } of settings) {
+      if (resolved && !tracked.has(name)) {
+        const path = /** @type {ConfigPath} */ (property)
+        setAndTrack(this, path, decodeValue(resolved.value, hostValues), undefined, resolved.origin)
+      }
+    }
+  }
+
   /**
    * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
@@ -297,7 +391,9 @@ class Config extends ConfigBase {
    * @param {string} [root]
    */
   #applyOptions (options, root = '') {
-    for (const [name, value] of Object.entries(options)) {
+    const entries = Object.entries(options)
+    const portable = resolvePortableOptions(entries, root)
+    for (const [name, value] of entries) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
       if (!entry) {
@@ -336,7 +432,8 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const coerced = programmaticTypeCoercions[entry.type](value)
+      const parsed = portable?.get(fullName)
+      const coerced = parsed === undefined ? programmaticTypeCoercions[entry.type](value) : decodeValue(parsed)
       if (coerced === undefined && value !== undefined) {
         warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }

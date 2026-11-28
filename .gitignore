@@ -155,3 +155,5 @@ __queuestorage__/AzuriteConfig
 /package.electron.json
 
 /supported_versions.json
+/packages/dd-trace/src/config/supported-configurations.prepared.json
+/packages/dd-trace/src/config/core-config-transforms.json
