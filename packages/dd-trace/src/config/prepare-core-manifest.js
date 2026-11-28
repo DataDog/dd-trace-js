@@ -3,6 +3,7 @@
 const applyMajorOverrides = require('./major-overrides')
 
 const nativeTransforms = new Set(['sampleRate', 'toLowerCase', 'toUpperCase'])
+const portableCodeTypes = new Set(['boolean', 'decimal', 'int', 'string'])
 
 /**
  * @typedef {import('./helper').SupportedConfigurationsJson} SupportedConfigurationsJson
@@ -21,10 +22,8 @@ const nativeTransforms = new Set(['sampleRate', 'toLowerCase', 'toUpperCase'])
  *   input: string,
  *   output: 'host',
  *   slot: number,
- *   transform: string | undefined,
- *   allowed?: string,
- *   validateDefault?: boolean,
  * }} HostTransform
+ * @typedef {{ definitions: PreparedDefinition[], asciiOnly: boolean }} CodeRule
  */
 
 /**
@@ -52,6 +51,8 @@ function prepareManifest (source, major) {
 
   /** @type {Map<string, HostTransform>} */
   const hostTransforms = new Map()
+  /** @type {Record<string, CodeRule>} */
+  const codeRules = Object.create(null)
   const prepared = {}
   for (const [name, entries] of Object.entries(supportedConfigurations)) {
     prepared[name] = entries.map(entry => {
@@ -60,19 +61,16 @@ function prepareManifest (source, major) {
       const pattern = allowed && portablePattern(allowed)
       const hostAllowed = allowed && pattern === undefined
       const validateDefault = originalTransform !== undefined
-      if (hostAllowed || transform && !nativeTransforms.has(transform)) {
+      const useHost = hostAllowed || transform && !nativeTransforms.has(transform)
+      if (useHost) {
         const hostName = hostAllowed
           ? `node.allowed.${name}`
           : `node.${transform}`
         const bindingName = `${hostName}:${entry.type}`
         if (!hostTransforms.has(bindingName)) {
-          /** @type {HostTransform} */
-          const binding = { name: hostName, input: entry.type, output: 'host', slot: hostTransforms.size, transform }
-          if (hostAllowed) {
-            binding.allowed = allowed
-            binding.validateDefault = validateDefault
-          }
-          hostTransforms.set(bindingName, binding)
+          hostTransforms.set(bindingName, {
+            name: hostName, input: entry.type, output: 'host', slot: hostTransforms.size,
+          })
         }
         transform = hostName
       }
@@ -95,11 +93,22 @@ function prepareManifest (source, major) {
       } else if (name === 'DD_TAGS') {
         rule.parse = { mapSyntax: 'colon_or_space_separated' }
       }
+      if (!useHost && !rule.aliasOnly && !entry.sensitive && entry.configurationNames &&
+        portableCodeTypes.has(rule.type)) {
+        codeRules[name] = {
+          definitions: [rule],
+          asciiOnly: transform === 'toLowerCase' || transform === 'toUpperCase',
+        }
+      }
       return rule
     })
   }
 
-  return { manifest: { ...source, supportedConfigurations: prepared }, hostTransforms: [...hostTransforms.values()] }
+  return {
+    manifest: { ...source, supportedConfigurations: prepared },
+    hostTransforms: [...hostTransforms.values()],
+    codeRules,
+  }
 }
 
 module.exports = prepareManifest

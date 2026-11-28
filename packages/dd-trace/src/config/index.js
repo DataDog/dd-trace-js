@@ -50,7 +50,7 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
-const { decodeValue, resolveStartup } = require('./startup')
+const { decodeValue, getCoreArtifacts, resolveStartup } = require('./startup')
 
 const rfdc = createRfdc({
   proto: false,
@@ -197,19 +197,53 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
-const portableOptionTypes = new Set(['BOOLEAN', 'DECIMAL', 'INT', 'STRING'])
+/**
+ * @param {import('./startup').DiagnosticProblem} problem
+ * @param {string} name
+ * @param {import('./startup').CoreOrigin} origin
+ * @param {string} type
+ * @param {unknown} input
+ * @param {unknown} parsed
+ */
+function warnStartupDiagnostic (problem, name, origin, type, input, parsed) {
+  switch (problem.kind) {
+    case 'invalid_value':
+      warnInvalidValue(input, name, origin, `Invalid ${type} input`)
+      break
+    case 'disallowed_value':
+      warnInvalidValue(parsed, name, origin, 'Invalid value')
+      break
+    case 'transform_warning':
+      warnInvalidValue(parsed, name, origin, problem.message)
+      break
+  }
+}
+
+/** @typedef {import('./startup').SourceEvent & {problem?: import('./startup').DiagnosticProblem}} ResolvedOption */
 
 /**
  * @param {Array<[string, unknown]>} entries
  * @param {string} root
  */
 function resolvePortableOptions (entries, root) {
+  if (entries.length === 0) return
+
+  const codeRules = getCoreArtifacts(DD_MAJOR).config?.codeRules
+  if (codeRules === undefined) return
+
+  /** @type {Record<string, import('./prepare-core-manifest').PreparedDefinition[]>} */
+  const selected = Object.create(null)
   /** @type {import('./startup').StartEntry[] | undefined} */
   let inputs
   for (const [name, value] of entries) {
     const fullName = root ? `${root}.${name}` : name
     const entry = optionsTable[fullName]
-    if (!entry?.canonicalName || entry.nestedProperties || entry.transformer || !portableOptionTypes.has(entry.type)) {
+    if (!entry?.canonicalName || entry.nestedProperties) {
+      continue
+    }
+    const rule = codeRules[entry.canonicalName]
+    // Node and Rust can have different Unicode case tables.
+    if (rule === undefined || (rule.asciiOnly && typeof value === 'string' && /[\u0080-\uFFFF]/.test(value))) {
       continue
     }
 
@@ -225,16 +259,26 @@ function resolvePortableOptions (entries, root) {
     if (encoded) {
       inputs ??= []
       inputs.push({ name: fullName, value: encoded })
+      selected[entry.canonicalName] = rule.definitions
     }
   }
   if (inputs === undefined) {
     return
   }
 
-  const snapshot = resolveStartup([{ origin: 'code', entries: inputs }], DD_MAJOR, undefined, log, true)
-  return snapshot?.sources.length === inputs.length
-    ? new Map(inputs.map(({ name }, index) => [name, snapshot.sources[index].value]))
-    : undefined
+  const snapshot = resolveStartup([{ origin: 'code', entries: inputs }], DD_MAJOR, undefined, log, selected)
+  if (snapshot === undefined) return
+
+  /** @type {Map<string, ResolvedOption>} */
+  const results = new Map()
+  for (const event of snapshot.sources) {
+    results.set(event.input_name ?? event.name, event)
+  }
+  for (const { name, input_name: inputName, problem } of snapshot.diagnostics) {
+    const result = results.get(inputName ?? name)
+    if (result) result.problem = problem
+  }
+  return results
 }
 
 module.exports = getConfig
@@ -344,15 +388,8 @@ class Config extends ConfigBase {
       }
 
       const event = events.find(entry => entry.name === name && entry.origin === origin)
-      if (problem.kind === 'invalid_value') {
-        warnInvalidValue(event?.input, name, origin, `Invalid ${configurationsTable[name].type} input`)
-      } else {
-        const value = decodeValue(event?.parsed, hostValues)
-        const message = problem.kind === 'disallowed_value'
-          ? 'Invalid value'
-          : 'Sample rate out of range between 0 and 1'
-        warnInvalidValue(value, name, origin, message)
-      }
+      warnStartupDiagnostic(problem, name, origin, configurationsTable[name].type, event?.input,
+        decodeValue(event?.parsed, hostValues))
     }
 
     const tracked = new Set()
@@ -432,14 +469,22 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const parsed = portable?.get(fullName)
-      const coerced = parsed === undefined ? programmaticTypeCoercions[entry.type](value) : decodeValue(parsed)
-      if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+      const resolved = portable?.get(fullName)
+      let transformed
+      if (resolved) {
+        if (resolved.problem) {
+          warnStartupDiagnostic(resolved.problem, fullName, 'code', entry.type, value, decodeValue(resolved.parsed))
+        }
+        transformed = decodeValue(resolved.value)
+      } else {
+        const coerced = programmaticTypeCoercions[entry.type](value)
+        if (coerced === undefined && value !== undefined) {
+          warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+        }
+        transformed = coerced !== undefined && entry.transformer
+          ? entry.transformer(coerced, fullName, 'code')
+          : coerced
       }
-      const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, 'code')
-        : coerced
       setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }

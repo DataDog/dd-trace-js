@@ -9,13 +9,14 @@ const { DD_MAJOR } = require('../../version')
 
 const directory = resolve(__dirname, '../../packages/dd-trace/src/config')
 const source = JSON.parse(readFileSync(resolve(directory, 'supported-configurations.json'), 'utf8'))
-const { manifest, hostTransforms } = prepareManifest(source, DD_MAJOR)
+const { manifest, hostTransforms, codeRules } = prepareManifest(source, DD_MAJOR)
 
 const manifestPath = resolve(directory, 'supported-configurations.prepared.json')
 writeFileSync(manifestPath, JSON.stringify(manifest))
 writeFileSync(resolve(directory, 'core-config-transforms.json'), JSON.stringify({
   major: DD_MAJOR,
   bindings: hostTransforms,
+  codeRules,
   defaults: compileDefaults(manifestPath, hostTransforms),
 }))
 

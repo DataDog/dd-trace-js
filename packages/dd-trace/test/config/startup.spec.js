@@ -62,7 +62,7 @@ describe('resolve startup configuration', () => {
       },
     }))
     const options = [{ origin: 'code', entries: [{ name: 'env', value: { kind: 'string', value: 'production' } }] }]
-    assert.strictEqual(resolveStartup(options, 7, undefined, { debug: sinon.spy() }, true), undefined)
+    assert.strictEqual(resolveStartup(options, 7, undefined, { debug: sinon.spy() }, {}), undefined)
   })
 
   it('decodes a JSON transform input and reports a native continuation error', () => {

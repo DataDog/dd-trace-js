@@ -449,6 +449,27 @@ describe('Config', () => {
     assert.strictEqual(config.lookup, lookup)
   })
 
+  it('should report a programmatic warning before reading the next nested option', () => {
+    const warning = 'Sample rate out of range between 0 and 1: 1.5 for sampleRate (source: code), picked default'
+    const config = getConfig({
+      sampleRate: 1.5,
+      runtimeMetrics: {
+        get enabled () {
+          sinon.assert.calledWithExactly(log.warn, warning)
+          return true
+        },
+      },
+    })
+
+    assert.strictEqual(config.sampleRate, 1)
+    assert.strictEqual(config.runtimeMetrics.enabled, true)
+    assert.strictEqual(config.getOrigin('sampleRate'), 'code')
+    assertObjectContains(getLatestConfigUpdate('DD_TRACE_SAMPLE_RATE'), {
+      value: 1.5,
+      origin: 'code',
+    })
+  })
+
   it('should preserve RegExp sampling rules in the programmatic configuration snapshot', () => {
     const name = /^health/
     const service = /^web/

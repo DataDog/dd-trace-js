@@ -37,25 +37,30 @@ describe('prepare the libdatadog configuration manifest', () => {
   })
 
   it('binds each host transformer with its input type', () => {
-    const { manifest, hostTransforms } = prepare(6)
+    const { manifest, hostTransforms, codeRules } = prepare(6)
     const [rule] = manifest.supportedConfigurations.DD_SPAN_SAMPLING_RULES_FILE
     const binding = hostTransforms.find(({ name }) => name === rule.transform)
     assert.strictEqual(binding.input, rule.type)
     assert.strictEqual(binding.output, 'host')
-    assert.strictEqual(binding.transform, 'readFilePath')
+    assert.strictEqual(binding.name, 'node.readFilePath')
     assert.strictEqual(new Set(hostTransforms.map(({ slot }) => slot)).size, hostTransforms.length)
+    assert.strictEqual(codeRules.DD_PROFILING_ENABLED, undefined)
+    assert.strictEqual(codeRules.DD_TRACE_CLIENT_IP_HEADER.asciiOnly, true)
+    const [sampleRate] = codeRules.DD_TRACE_SAMPLE_RATE.definitions
+    assert.strictEqual(sampleRate, manifest.supportedConfigurations.DD_TRACE_SAMPLE_RATE[0])
   })
 
   it('binds JavaScript regexp syntax as a host transform', () => {
     const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
     const allowed = '(?=prod)[a-z]+'
     source.supportedConfigurations.DD_ENV[0].allowed = allowed
-    const { manifest, hostTransforms } = prepareManifest(source, 7)
+    const { manifest, hostTransforms, codeRules } = prepareManifest(source, 7)
     const [rule] = manifest.supportedConfigurations.DD_ENV
     const binding = hostTransforms.find(({ name }) => name === rule.transform)
     assert.strictEqual(rule.allowed, undefined)
     assert.strictEqual(binding.input, 'string')
-    assert.strictEqual(binding.allowed, allowed)
+    assert.strictEqual(binding.name, 'node.allowed.DD_ENV')
+    assert.strictEqual(codeRules.DD_ENV, undefined)
   })
 
   it('prepares the packaged manifest when optional dependencies are omitted', () => {

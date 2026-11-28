@@ -11,13 +11,15 @@ const { join } = require('node:path')
  * @typedef {{ kind: 'boolean', value: boolean } | { kind: 'number', value: number | 'Infinity' | '-Infinity' | '-0' }
  * | { kind: 'string' | 'json', value: string } | { kind: 'host', value: number }
  * | { kind: 'array', value: WireValue[] } | { kind: 'map', value: Record<string, string> }} WireValue
- * @typedef {{ name: string, origin: CoreOrigin, input: string | WireValue, parsed?: WireValue,
+ * @typedef {{ name: string, input_name?: string, origin: CoreOrigin, input: string | WireValue, parsed?: WireValue,
  *   value: WireValue | null }} SourceEvent
+ * @typedef {{ kind: 'invalid_value' | 'disallowed_value' | 'transform_rejected' | 'unknown_option' }
+ * | { kind: 'transform_warning', message: string }} DiagnosticProblem
  * @typedef {{
  *   name: string,
+ *   input_name?: string,
  *   origin: CoreOrigin,
- *   problem: { kind: 'invalid_value' | 'disallowed_value' | 'transform_warning' | 'transform_rejected',
- *     message?: string },
+ *   problem: DiagnosticProblem,
  * }} Diagnostic
  * @typedef {{ name: string, property: string, resolved: { origin: CoreOrigin, value: WireValue } | null }} Setting
  * @typedef {{ status: 'complete', settings: Setting[], diagnostics: Diagnostic[], sources: SourceEvent[] }} Snapshot
@@ -27,7 +29,12 @@ const { join } = require('node:path')
  * @typedef {{
  *   request: (request: Buffer) => Buffer,
  * }} NativeResolver
- * @typedef {{ major: number, bindings: object[], defaults?: Record<string, WireValue | null> }} CoreManifestMetadata
+ * @typedef {{
+ *   major: number,
+ *   bindings: object[],
+ *   codeRules?: Record<string, import('./prepare-core-manifest').CodeRule>,
+ *   defaults?: Record<string, WireValue | null>,
+ * }} CoreManifestMetadata
  * @typedef {{ config?: CoreManifestMetadata, failure?: Error }} CoreArtifacts
  */
 
@@ -92,9 +99,9 @@ function request (resolver, body) {
  * @param {number} major
  * @param {((name: string, value: unknown, origin: CoreOrigin) => unknown) | undefined} transform
  * @param {Pick<typeof import('../log'), 'debug'>} log
- * @param {boolean} [coerceCode]
+ * @param {Record<string, import('./prepare-core-manifest').PreparedDefinition[]>} [codeRules]
  */
-function resolveStartup (layers, major, transform, log, coerceCode) {
+function resolveStartup (layers, major, transform, log, codeRules) {
   const { config, failure } = getCoreArtifacts(major)
   if (failure) {
     log.debug('Cannot load the prepared configuration manifest: %s', failure.message)
@@ -114,9 +121,11 @@ function resolveStartup (layers, major, transform, log, coerceCode) {
     resolver = new binding.JsConfigResolver()
     reply = request(resolver, {
       operation: 'resolve_once',
-      manifest: { kind: 'path', value: join(__dirname, 'supported-configurations.prepared.json') },
-      policy: { numbers: 'ecma_script', coerce_code: coerceCode },
-      host_transforms: config.bindings,
+      manifest: codeRules === undefined
+        ? { kind: 'path', value: join(__dirname, 'supported-configurations.prepared.json') }
+        : { kind: 'json', value: JSON.stringify({ version: '2', supportedConfigurations: codeRules }) },
+      policy: { numbers: 'ecma_script', coerce_code: codeRules !== undefined },
+      host_transforms: codeRules === undefined ? config.bindings : undefined,
       inputs: { layers, skip_defaults: true, report_sources: true },
     })
   } catch (error) {
