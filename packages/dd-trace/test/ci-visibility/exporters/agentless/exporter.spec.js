@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const { inspect } = require('node:util')
+const zlib = require('node:zlib')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const context = describe
@@ -13,6 +14,7 @@ const nock = require('nock')
 require('../../../../../dd-trace/test/setup/core')
 const AgentlessCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
+const id = require('../../../../src/id')
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
@@ -270,6 +272,28 @@ describe('CI Visibility Agentless Exporter', () => {
       assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
       assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')
       assert.strictEqual(agentlessExporter._apiUrl.href, 'http://www.example.com/')
+    })
+  })
+
+  describe('coverage requests', () => {
+    it('sends coverage gzipped to the coverage intake', async () => {
+      const request = sinon.stub().yieldsAsync(null, 'OK', 200)
+      const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
+        './coverage-writer': proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer', {
+          '../request': request,
+        }),
+      })
+      const exporter = new Exporter({ site: 'd4tad0g.com', tags: {}, testOptimization: {} })
+
+      exporter._coverageWriter.append({ sessionId: id('1'), suiteId: id('2'), files: ['file.js'] })
+      await new Promise(resolve => exporter._coverageWriter.flush(resolve))
+
+      sinon.assert.calledOnce(request)
+      const [body, options] = request.firstCall.args
+      assert.strictEqual(options.url.href, 'https://citestcov-intake.d4tad0g.com/')
+      assert.strictEqual(options.path, '/api/v2/citestcov')
+      assert.strictEqual(options.headers['Content-Encoding'], 'gzip')
+      assert.match(zlib.gunzipSync(body).toString('latin1'), /name="coverage1"; filename="coverage1\.msgpack"/)
     })
   })
 })
