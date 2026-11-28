@@ -538,15 +538,12 @@ async function getGitDiffAsync (baseCommit, targetCommit, cwd, options) {
 
 /**
  * @param {string} configOutput
- * @param {string} branch
  * @param {string[]} remoteNames
- * @returns {{ branchRemote: string | undefined, configuredRemote: string | undefined, trackingRemotes: Set<string> }}
+ * @returns {{ configuredRemote: string | undefined, trackingRemotes: Set<string> }}
  */
-function parseRemoteConfig (configOutput, branch, remoteNames) {
-  let branchRemote
+function parseRemoteConfig (configOutput, remoteNames) {
   let configuredRemote
   const trackingRemotes = new Set()
-  const branchKey = branch ? `branch.${branch}.remote` : undefined
 
   for (const line of configOutput.split(/\r?\n/)) {
     if (!line) continue
@@ -554,26 +551,21 @@ function parseRemoteConfig (configOutput, branch, remoteNames) {
     if (separatorIndex === -1) continue
     const key = line.slice(0, separatorIndex)
     const value = line.slice(separatorIndex + 1)
-    if (key === branchKey) {
-      branchRemote = value
-    } else if (key.toLowerCase() === 'clone.defaultremotename') {
+    if (key.toLowerCase() === 'clone.defaultremotename') {
       configuredRemote = value
-    }
-    if (key.startsWith('branch.') && key.endsWith('.remote') && value && remoteNames.includes(value)) {
+    } else if (key.startsWith('branch.') && key.endsWith('.remote') && value && remoteNames.includes(value)) {
       trackingRemotes.add(value)
     }
   }
-  return { branchRemote, configuredRemote, trackingRemotes }
+  return { configuredRemote, trackingRemotes }
 }
 
 /**
  * @param {string[]} remoteNames
- * @param {string | undefined} branchRemote
  * @param {string | undefined} configuredRemote
  * @param {Set<string>} trackingRemotes
  */
-function selectRemoteName (remoteNames, branchRemote, configuredRemote, trackingRemotes) {
-  if (branchRemote && branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
+function selectRemoteName (remoteNames, configuredRemote, trackingRemotes) {
   if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
   if (trackingRemotes.size === 1) return trackingRemotes.values().next().value
   return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
@@ -608,6 +600,19 @@ function getGitRemoteName (cwd) {
   )
   const branch = branchRef.replace(/^refs\/heads\//, '')
 
+  if (branch) {
+    // Read effective config so worktree and GIT_CONFIG_* overrides take precedence over local config.
+    const branchRemote = sanitizedExec(
+      ['config', '--get', `branch.${branch}.remote`],
+      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+      true,
+      { expectedFailure: true, uncached: true, cwd }
+    )
+    if (branchRemote && branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
+  }
+
   const localConfig = sanitizedExec(
     ['config', '--local', '--get-regexp', REMOTE_CONFIG_REGEXP],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
@@ -616,22 +621,8 @@ function getGitRemoteName (cwd) {
     false,
     { expectedFailure: true, uncached: true, cwd }
   )
-  const parsed = parseRemoteConfig(localConfig, branch, remoteNames)
-  let branchRemote = parsed.branchRemote
-
-  if (branch && branchRemote === undefined) {
-    // Fall back to inherited git config if the branch remote is not stored locally.
-    branchRemote = sanitizedExec(
-      ['config', '--get', `branch.${branch}.remote`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-      true,
-      { expectedFailure: true, uncached: true, cwd }
-    )
-  }
-
-  return selectRemoteName(remoteNames, branchRemote, parsed.configuredRemote, parsed.trackingRemotes)
+  const parsed = parseRemoteConfig(localConfig, remoteNames)
+  return selectRemoteName(remoteNames, parsed.configuredRemote, parsed.trackingRemotes)
 }
 
 /**
@@ -654,30 +645,19 @@ async function getGitRemoteNameAsync (cwd) {
   if (!remoteNames.length) return 'origin'
   if (remoteNames.length === 1) return remoteNames[0]
 
-  const [branchRef, localConfig] = await Promise.all([
-    sanitizedExecAsync(
-      ['symbolic-ref', '--quiet', 'HEAD'],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-      true,
-      { expectedFailure: true, uncached: true, cwd }
-    ),
-    sanitizedExecAsync(
-      ['config', '--local', '--get-regexp', REMOTE_CONFIG_REGEXP],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-      false,
-      { expectedFailure: true, uncached: true, cwd }
-    ),
-  ])
+  const branchRef = await sanitizedExecAsync(
+    ['symbolic-ref', '--quiet', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true, uncached: true, cwd }
+  )
   const branch = branchRef.replace(/^refs\/heads\//, '')
-  const parsed = parseRemoteConfig(localConfig, branch, remoteNames)
-  let branchRemote = parsed.branchRemote
 
-  if (branch && branchRemote === undefined) {
-    branchRemote = await sanitizedExecAsync(
+  if (branch) {
+    // Read effective config so worktree and GIT_CONFIG_* overrides take precedence over local config.
+    const branchRemote = await sanitizedExecAsync(
       ['config', '--get', `branch.${branch}.remote`],
       { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
       { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
@@ -685,9 +665,19 @@ async function getGitRemoteNameAsync (cwd) {
       true,
       { expectedFailure: true, uncached: true, cwd }
     )
+    if (branchRemote && branchRemote !== '.' && remoteNames.includes(branchRemote)) return branchRemote
   }
 
-  return selectRemoteName(remoteNames, branchRemote, parsed.configuredRemote, parsed.trackingRemotes)
+  const localConfig = await sanitizedExecAsync(
+    ['config', '--local', '--get-regexp', REMOTE_CONFIG_REGEXP],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false,
+    { expectedFailure: true, uncached: true, cwd }
+  )
+  const parsed = parseRemoteConfig(localConfig, remoteNames)
+  return selectRemoteName(remoteNames, parsed.configuredRemote, parsed.trackingRemotes)
 }
 
 function getSourceBranch (cwd) {

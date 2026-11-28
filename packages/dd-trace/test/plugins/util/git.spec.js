@@ -440,7 +440,7 @@ describe('unshallowRepository', () => {
       )
       .onCall(1).returns('origin\nupstream')
       .onCall(2).returns('refs/heads/main')
-      .onCall(3).returns('branch.main.remote origin\n')
+      .onCall(3).returns('origin')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
 
     const options = [
@@ -462,7 +462,7 @@ describe('unshallowRepository', () => {
     cachedExecStub.onCall(0).returns('git version 2.39.0')
     cachedExecStub.onCall(1).returns('origin\nupstream')
     cachedExecStub.onCall(2).returns('refs/heads/main')
-    cachedExecStub.onCall(3).returns('branch.main.remote upstream\n')
+    cachedExecStub.onCall(3).returns('upstream')
     cachedExecStub.onCall(4).returns('b'.repeat(40))
 
     unshallowRepository(false, selected)
@@ -478,7 +478,7 @@ describe('unshallowRepository', () => {
     cachedExecStub.onCall(0).returns('git version 2.39.0')
     cachedExecStub.onCall(1).returns('origin\nupstream')
     cachedExecStub.onCall(2).returns('refs/heads/main')
-    cachedExecStub.onCall(3).returns('branch.main.remote origin\n')
+    cachedExecStub.onCall(3).returns('origin')
     cachedExecStub.onCall(4).returns(selected)
 
     unshallowRepository(false, selected)
@@ -497,7 +497,7 @@ describe('unshallowRepository', () => {
         cachedExecStub.onCall(0).returns('git version 2.39.0')
         cachedExecStub.onCall(1).returns('origin\nupstream')
         cachedExecStub.onCall(2).returns('refs/heads/main')
-        cachedExecStub.onCall(3).returns('branch.main.remote origin\n')
+        cachedExecStub.onCall(3).returns('origin')
         cachedExecStub.onCall(4).returns('b'.repeat(40))
         cachedExecStub.onCall(5).callsFake(() => {
           clock.tick(expired ? 5000 : 100)
@@ -529,7 +529,7 @@ describe('unshallowRepository', () => {
       )
       .onCall(1).returns('origin\nupstream')
       .onCall(2).returns('refs/heads/main')
-      .onCall(3).returns('branch.main.remote origin\n')
+      .onCall(3).returns('origin')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
 
     const options = [
@@ -553,7 +553,7 @@ describe('unshallowRepository', () => {
       )
       .onCall(1).returns('origin\nupstream')
       .onCall(2).returns('refs/heads/main')
-      .onCall(3).returns('branch.main.remote origin\n')
+      .onCall(3).returns('origin')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(5).throws()
       .onCall(6).returns('origin/master')
@@ -579,7 +579,7 @@ describe('unshallowRepository', () => {
       )
       .onCall(1).returns('origin\nupstream')
       .onCall(2).returns('refs/heads/main')
-      .onCall(3).returns('branch.main.remote origin\n')
+      .onCall(3).returns('origin')
       .onCall(4).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(5).throws()
       .onCall(6).returns('origin/master')
@@ -768,30 +768,10 @@ describe('getGitRemoteName', () => {
     sinon.assert.calledOnceWithMatch(cachedExecStub, 'git', ['remote'])
   })
 
-  it('returns upstream remote name when multiple remotes exist', () => {
+  it('returns effective branch remote when multiple remotes exist', () => {
     cachedExecStub.onCall(0).returns('origin\nupstream\n')
     cachedExecStub.onCall(1).returns('refs/heads/main')
-    cachedExecStub.onCall(2).returns('branch.main.remote upstream\n')
-
-    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
-      'node:child_process': { execFileSync: cachedExecStub },
-      './git-cache': { cachedExec: cachedExecStub },
-    })
-
-    assert.strictEqual(getGitRemoteName(), 'upstream')
-    sinon.assert.calledWith(cachedExecStub, 'git', [
-      'config',
-      '--local',
-      '--get-regexp',
-      String.raw`^(clone\.defaultremotename|branch\..*\.remote)$`,
-    ])
-  })
-
-  it('falls back to inherited branch remote config when absent from local config', () => {
-    cachedExecStub.onCall(0).returns('origin\nupstream\n')
-    cachedExecStub.onCall(1).returns('refs/heads/main')
-    cachedExecStub.onCall(2).throws()
-    cachedExecStub.onCall(3).returns('upstream')
+    cachedExecStub.onCall(2).returns('upstream')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
       'node:child_process': { execFileSync: cachedExecStub },
@@ -800,13 +780,15 @@ describe('getGitRemoteName', () => {
 
     assert.strictEqual(getGitRemoteName(), 'upstream')
     sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'branch.main.remote'])
+    sinon.assert.callCount(cachedExecStub, 3)
   })
 
   for (const branch of ['main', 'backup/local-base', 'missing-upstream']) {
     it(`falls back to a configured remote for local upstream of ${branch}`, () => {
       cachedExecStub.onCall(0).returns('backup\norigin\nupstream\n')
       cachedExecStub.onCall(1).returns(`refs/heads/${branch}`)
-      cachedExecStub.onCall(2).returns(`branch.${branch}.remote .\n`)
+      cachedExecStub.onCall(2).returns('.')
+      cachedExecStub.onCall(3).returns(`branch.${branch}.remote .\n`)
       const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
         'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': { cachedExec: cachedExecStub },
@@ -2544,5 +2526,31 @@ current
     const { getGitRemoteName, getGitRemoteNameAsync } = require('../../../src/plugins/util/git')
     assert.strictEqual(getGitRemoteName(checkout), 'custom')
     assert.strictEqual(await getGitRemoteNameAsync(checkout), 'custom')
+  })
+
+  it('preserves GIT_CONFIG_COUNT effective branch remote precedence over local config', async () => {
+    const branch = 'juan-fernandez/merge'
+    git(checkout, ['symbolic-ref', 'HEAD', `refs/heads/${branch}`])
+    git(checkout, ['remote', 'add', 'upstream', pathToFileURL(remote).href])
+    git(checkout, ['config', '--local', `branch.${branch}.remote`, 'origin'])
+
+    const previousCount = process.env.GIT_CONFIG_COUNT
+    const previousKey = process.env.GIT_CONFIG_KEY_0
+    const previousValue = process.env.GIT_CONFIG_VALUE_0
+    try {
+      process.env.GIT_CONFIG_COUNT = '1'
+      process.env.GIT_CONFIG_KEY_0 = `branch.${branch}.remote`
+      process.env.GIT_CONFIG_VALUE_0 = 'upstream'
+      const { getGitRemoteName, getGitRemoteNameAsync } = require('../../../src/plugins/util/git')
+      assert.strictEqual(getGitRemoteName(checkout), 'upstream')
+      assert.strictEqual(await getGitRemoteNameAsync(checkout), 'upstream')
+    } finally {
+      if (previousCount === undefined) delete process.env.GIT_CONFIG_COUNT
+      else process.env.GIT_CONFIG_COUNT = previousCount
+      if (previousKey === undefined) delete process.env.GIT_CONFIG_KEY_0
+      else process.env.GIT_CONFIG_KEY_0 = previousKey
+      if (previousValue === undefined) delete process.env.GIT_CONFIG_VALUE_0
+      else process.env.GIT_CONFIG_VALUE_0 = previousValue
+    }
   })
 })

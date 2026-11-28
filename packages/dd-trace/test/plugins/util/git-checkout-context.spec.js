@@ -1163,75 +1163,103 @@ describe('selected checkout context', () => {
     }
   })
 
-  it('does not serve stale fs-cache entries when working-tree edits occur on an unchanged HEAD', async () => {
-    const repo = path.join(directory, 'fs-cache-working-tree')
-    git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
-    const baseSha = git(repo, ['rev-parse', 'HEAD'])
-    const previousFsCache = process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
-    const configModule = require.resolve('../../../src/config')
-    const fsCacheModule = require.resolve('../../../src/ci-visibility/requests/fs-cache')
-    const testUtilModule = require.resolve('../../../src/plugins/util/test')
-    const clearModules = () => {
-      delete require.cache[configModule]
-      delete require.cache[fsCacheModule]
-      delete require.cache[testUtilModule]
-    }
-    let cacheFilePath
-
-    try {
-      process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
-      clearModules()
-      const { buildCacheKey } = require('../../../src/ci-visibility/requests/fs-cache')
-      const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
-      const expectedKey = buildCacheKey('modified-files', [
-        path.resolve(repo),
-        baseSha,
-        '',
-        '',
-        '',
-        baseSha,
-        '',
-        '',
-        false,
-        'file',
-        null,
-      ])
-      cacheFilePath = path.join(os.tmpdir(), `dd-${expectedKey}.json`)
-
-      const callOptions = {
-        testEnvironmentMetadata: {
-          'git.commit.sha': baseSha,
-          'git.pull_request.base_branch_sha': baseSha,
-        },
-        gitRoot: repo,
-        testFramework: 'vitest',
-        getUserProvidedGitMetadata: () => ({}),
+  it('does not serve stale fs-cache entries when working-tree edits or new commits occur on retained metadata',
+    async () => {
+      const repo = path.join(directory, 'fs-cache-working-tree')
+      git(directory, ['clone', '--quiet', pathToFileURL(root).href, repo])
+      const baseSha = git(repo, ['rev-parse', 'HEAD'])
+      const previousFsCache = process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+      const configModule = require.resolve('../../../src/config')
+      const fsCacheModule = require.resolve('../../../src/ci-visibility/requests/fs-cache')
+      const testUtilModule = require.resolve('../../../src/plugins/util/test')
+      const clearModules = () => {
+        delete require.cache[configModule]
+        delete require.cache[fsCacheModule]
+        delete require.cache[testUtilModule]
       }
+      const cacheFilePaths = []
 
-      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
-      assert.strictEqual(fs.existsSync(cacheFilePath), true)
+      try {
+        process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
+        clearModules()
+        const { buildCacheKey } = require('../../../src/ci-visibility/requests/fs-cache')
+        const { getModifiedFilesForCheckout } = require('../../../src/plugins/util/test')
+        const expectedKey = buildCacheKey('modified-files', [
+          path.resolve(repo),
+          baseSha,
+          '',
+          '',
+          baseSha,
+          '',
+          baseSha,
+          '',
+          '',
+          false,
+          'file',
+          null,
+        ])
+        cacheFilePaths.push(path.join(os.tmpdir(), `dd-${expectedKey}.json`))
 
-      // Edit a tracked file without committing: must not return the cached empty map.
-      const trackedFile = path.join(repo, 'file.txt')
-      const originalContent = fs.readFileSync(trackedFile, 'utf8')
-      fs.writeFileSync(trackedFile, originalContent + '\nmodified\n')
-      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), { 'file.txt': [1] })
+        const callOptions = {
+          testEnvironmentMetadata: {
+            'git.commit.sha': baseSha,
+            'git.pull_request.base_branch_sha': baseSha,
+          },
+          gitRoot: repo,
+          testFramework: 'vitest',
+          getUserProvidedGitMetadata: () => ({}),
+        }
 
-      // Revert back to clean: must immediately reflect empty diff again.
-      fs.writeFileSync(trackedFile, originalContent)
-      assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
-    } finally {
-      if (cacheFilePath) {
-        fs.rmSync(cacheFilePath, { force: true })
+        assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
+        assert.strictEqual(fs.existsSync(cacheFilePaths[0]), true)
+
+        // Edit a tracked file without committing: must not return the cached empty map.
+        const trackedFile = path.join(repo, 'file.txt')
+        const originalContent = fs.readFileSync(trackedFile, 'utf8')
+        fs.writeFileSync(trackedFile, originalContent + '\nmodified\n')
+        assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), { 'file.txt': [1] })
+
+        // Revert back to clean: must immediately reflect empty diff again.
+        fs.writeFileSync(trackedFile, originalContent)
+        assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), {})
+
+        // Commit a new file while retaining the original metadata commit SHA: must not reuse old HEAD's cache.
+        fs.writeFileSync(path.join(repo, 'committed.spec.js'), 'test("committed", () => {})\n')
+        git(repo, ['add', 'committed.spec.js'])
+        git(repo, [
+          '-c', 'commit.gpgsign=false', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+          'commit', '-m', 'committed change',
+        ])
+        const newHeadSha = git(repo, ['rev-parse', 'HEAD'])
+        const newExpectedKey = buildCacheKey('modified-files', [
+          path.resolve(repo),
+          baseSha,
+          '',
+          '',
+          newHeadSha,
+          '',
+          baseSha,
+          '',
+          '',
+          false,
+          'file',
+          null,
+        ])
+        cacheFilePaths.push(path.join(os.tmpdir(), `dd-${newExpectedKey}.json`))
+        assert.deepStrictEqual(await getModifiedFilesForCheckout(callOptions), { 'committed.spec.js': [1] })
+        assert.strictEqual(fs.existsSync(cacheFilePaths[1]), true)
+      } finally {
+        for (const filePath of cacheFilePaths) {
+          fs.rmSync(filePath, { force: true })
+        }
+        if (previousFsCache === undefined) {
+          delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+        } else {
+          process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = previousFsCache
+        }
+        clearModules()
       }
-      if (previousFsCache === undefined) {
-        delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
-      } else {
-        process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = previousFsCache
-      }
-      clearModules()
-    }
-  })
+    })
 
   it('forwards exporter waitForGitUpload from both CiPlugin and CypressPlugin to getModifiedFilesForCheckout',
     async () => {

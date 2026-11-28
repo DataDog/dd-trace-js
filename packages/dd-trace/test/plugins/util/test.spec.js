@@ -2392,61 +2392,71 @@ describe('getModifiedFilesForCheckout', () => {
     sinon.assert.notCalled(getGitDiffAsyncStub)
   })
 
-  it('caches clean or commit-targeted diffs when fs-cache is enabled and bypasses dirty working trees', async () => {
-    const cacheStore = new Map()
-    const getGitDiffAsyncStub = sinon.stub()
-    getGitDiffAsyncStub.onCall(0).rejects(new Error('diff failed'))
-    getGitDiffAsyncStub.onCall(1).resolves('test/cached.spec.js\n')
-    getGitDiffAsyncStub.onCall(2).resolves('test/dirty.spec.js\n')
-    const hasWorkingTreeChangesAsyncStub = sinon.stub()
-    hasWorkingTreeChangesAsyncStub.resolves(false)
+  it('caches clean or commit-targeted diffs when fs-cache is enabled and invalidates on dirty tree or new HEAD',
+    async () => {
+      const cacheStore = new Map()
+      const getGitDiffAsyncStub = sinon.stub()
+      getGitDiffAsyncStub.onCall(0).rejects(new Error('diff failed'))
+      getGitDiffAsyncStub.onCall(1).resolves('test/cached.spec.js\n')
+      getGitDiffAsyncStub.onCall(2).resolves('test/dirty.spec.js\n')
+      getGitDiffAsyncStub.onCall(3).resolves('test/committed.spec.js\n')
+      const hasWorkingTreeChangesAsyncStub = sinon.stub().resolves(false)
+      const getRevParseAsyncStub = sinon.stub().resolves('5'.repeat(40))
 
-    const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
-      './git': {
-        getGitDiffAsync: getGitDiffAsyncStub,
-        hasWorkingTreeChangesAsync: hasWorkingTreeChangesAsyncStub,
-      },
-      '../../ci-visibility/requests/fs-cache': {
-        isCacheEnabled: () => true,
-        buildCacheKey: (prefix, parts) => `${prefix}:${JSON.stringify(parts)}`,
-        writeToCache: (key, data) => cacheStore.set(key, data),
-        withCache: (key, fetchFn, done) => {
-          if (cacheStore.has(key)) {
-            return done(null, cacheStore.get(key))
-          }
-          fetchFn(key, done)
+      const { getModifiedFilesForCheckout } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitDiffAsync: getGitDiffAsyncStub,
+          hasWorkingTreeChangesAsync: hasWorkingTreeChangesAsyncStub,
+          getRevParseAsync: getRevParseAsyncStub,
         },
-      },
+        '../../ci-visibility/requests/fs-cache': {
+          isCacheEnabled: () => true,
+          buildCacheKey: (prefix, parts) => `${prefix}:${JSON.stringify(parts)}`,
+          writeToCache: (key, data) => cacheStore.set(key, data),
+          withCache: (key, fetchFn, done) => {
+            if (cacheStore.has(key)) {
+              return done(null, cacheStore.get(key))
+            }
+            fetchFn(key, done)
+          },
+        },
+      })
+
+      const options = {
+        testEnvironmentMetadata: {
+          'git.commit.sha': '5'.repeat(40),
+          'git.pull_request.base_branch_sha': '6'.repeat(40),
+        },
+        gitRoot: '/repo',
+        testFramework: 'vitest',
+        getUserProvidedGitMetadata: () => ({}),
+      }
+
+      await assert.rejects(
+        getModifiedFilesForCheckout(options),
+        /No modified tests could have been retrieved/
+      )
+      assert.strictEqual(cacheStore.size, 0)
+
+      const firstSuccess = await getModifiedFilesForCheckout(options)
+      const secondSuccess = await getModifiedFilesForCheckout(options)
+      assert.deepStrictEqual(firstSuccess, { 'test/cached.spec.js': [1] })
+      assert.deepStrictEqual(secondSuccess, { 'test/cached.spec.js': [1] })
+      sinon.assert.calledTwice(getGitDiffAsyncStub)
+
+      // When tracked working-tree edits exist and no explicit target commit is set, bypass the cache.
+      hasWorkingTreeChangesAsyncStub.resolves(true)
+      const dirtySuccess = await getModifiedFilesForCheckout(options)
+      assert.deepStrictEqual(dirtySuccess, { 'test/dirty.spec.js': [1] })
+      sinon.assert.calledThrice(getGitDiffAsyncStub)
+
+      // When HEAD advances in a reused process while metadata retains the original commit SHA, key must miss.
+      hasWorkingTreeChangesAsyncStub.resolves(false)
+      getRevParseAsyncStub.resolves('8'.repeat(40))
+      const newHeadSuccess = await getModifiedFilesForCheckout(options)
+      assert.deepStrictEqual(newHeadSuccess, { 'test/committed.spec.js': [1] })
+      sinon.assert.callCount(getGitDiffAsyncStub, 4)
     })
-
-    const options = {
-      testEnvironmentMetadata: {
-        'git.commit.sha': '5'.repeat(40),
-        'git.pull_request.base_branch_sha': '6'.repeat(40),
-      },
-      gitRoot: '/repo',
-      testFramework: 'vitest',
-      getUserProvidedGitMetadata: () => ({}),
-    }
-
-    await assert.rejects(
-      getModifiedFilesForCheckout(options),
-      /No modified tests could have been retrieved/
-    )
-    assert.strictEqual(cacheStore.size, 0)
-
-    const firstSuccess = await getModifiedFilesForCheckout(options)
-    const secondSuccess = await getModifiedFilesForCheckout(options)
-    assert.deepStrictEqual(firstSuccess, { 'test/cached.spec.js': [1] })
-    assert.deepStrictEqual(secondSuccess, { 'test/cached.spec.js': [1] })
-    sinon.assert.calledTwice(getGitDiffAsyncStub)
-
-    // When tracked working-tree edits exist and no explicit target commit is set, bypass the cache.
-    hasWorkingTreeChangesAsyncStub.resolves(true)
-    const dirtySuccess = await getModifiedFilesForCheckout(options)
-    assert.deepStrictEqual(dirtySuccess, { 'test/dirty.spec.js': [1] })
-    sinon.assert.calledThrice(getGitDiffAsyncStub)
-  })
 
   it('waits for pending git upload on shallow checkouts before resolving ancestry', async () => {
     const events = []

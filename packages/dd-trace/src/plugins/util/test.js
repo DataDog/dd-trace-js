@@ -2641,11 +2641,19 @@ async function getModifiedFilesForCheckout ({
       return getModifiedFilesFromDiff(diff) || {}
     }
 
-    const canUseFsCache = Boolean(
-      isCacheEnabled() &&
-      commitSha &&
-      (targetCommit || !(await hasWorkingTreeChangesAsync(gitRoot)))
-    )
+    let currentHeadSha = ''
+    let canUseFsCache = Boolean(isCacheEnabled() && commitSha)
+    if (canUseFsCache && !targetCommit) {
+      const [hasWorkingTreeChanges, headSha] = await Promise.all([
+        hasWorkingTreeChangesAsync(gitRoot),
+        getRevParseAsync('HEAD', gitRoot),
+      ])
+      if (hasWorkingTreeChanges || !headSha) {
+        canUseFsCache = false
+      } else {
+        currentHeadSha = headSha
+      }
+    }
     if (!canUseFsCache) {
       return await computeModifiedFiles()
     }
@@ -2655,6 +2663,7 @@ async function getModifiedFilesForCheckout ({
       commitSha,
       branch || '',
       targetCommit || '',
+      currentHeadSha,
       pullRequestBaseBranch || '',
       pullRequestBaseBranchSha || '',
       pullRequestBaseBranchHeadSha || '',
