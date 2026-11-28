@@ -190,12 +190,12 @@ function normalizeOptions (defaultOptions, options) {
  */
 function createPoolAcquisition (pool, options, queryCtx, mode) {
   const explicit = mode === 'explicit'
-  const measure = explicit || mode === 'measure'
-  const connectionCtx = measure || queryCtx !== undefined ? {} : emptyConnectionContext
+  const measure = (explicit || mode === 'measure') && acquireStartCh.hasSubscribers
+  const connectionCtx = {}
   const acquisition = { connectionCtx, measure, options, pool, queryCtx }
 
-  if (connectionCtx !== emptyConnectionContext) connectionStartCh.publish(connectionCtx)
-  if (explicit) {
+  connectionStartCh.publish(connectionCtx)
+  if (explicit && measure) {
     acquisition.acquireCtx = { conf: options }
     acquireStartCh.publish(acquisition.acquireCtx)
   }
@@ -299,7 +299,7 @@ function recordPoolAcquisition (pool) {
 
   acquisition.acquired = true
   prunePoolAcquisitions(pool)
-  if (!acquisition.measure) {
+  if (!shouldMeasurePoolAcquisition(acquisition)) {
     startPoolCommand(acquisition)
     return
   }
@@ -310,6 +310,13 @@ function recordPoolAcquisition (pool) {
   if (acquisition.acquireCtx !== undefined) acquisition.acquireCtx.poolWaitTime = poolWaitTime
 
   startPoolCommand(acquisition)
+}
+
+/**
+ * @param {PoolAcquisition} acquisition
+ */
+function shouldMeasurePoolAcquisition (acquisition) {
+  return acquisition.measure && (acquisition.acquireCtx !== undefined || acquireStartCh.hasSubscribers)
 }
 
 /**
@@ -378,13 +385,11 @@ function runPoolAcquisition (acquisition, method, receiver, args) {
 
   acquisition.ready = true
   if (!acquisition.acquired && !acquisition.finished) {
-    queuePoolAcquisition(acquisition)
-    if (!acquisition.measure) return result
-
     if (acquisition.error === undefined) {
-      acquisition.start = performance.now()
+      queuePoolAcquisition(acquisition)
+      if (shouldMeasurePoolAcquisition(acquisition)) acquisition.start = performance.now()
     } else {
-      reportPoolQueryAcquireError(acquisition, acquisition.error)
+      finishPoolCommandAcquisition(acquisition, acquisition.error)
     }
   }
 
@@ -399,7 +404,7 @@ function runPoolAcquisition (acquisition, method, receiver, args) {
  */
 function finishPoolCommandAcquisition (acquisition, error) {
   if (acquisition === undefined) return
-  if (error && acquisition.measure) {
+  if (error && shouldMeasurePoolAcquisition(acquisition)) {
     reportPoolQueryAcquireError(acquisition, error)
     if (!acquisition.ready) return
   }
@@ -1042,17 +1047,6 @@ function finishPromiseGetConnection (ctx, connection, options) {
 }
 
 /**
- * Restores the caller context when a promise acquisition fails.
- *
- * @param {object} ctx
- * @param {Error} error
- * @throws {Error} The connection acquisition error.
- */
-function finishPromiseGetConnectionError (ctx, error) {
-  return connectionFinishCh.runStores(ctx, () => { throw error })
-}
-
-/**
  * Finishes an explicit promise acquisition and instruments its connection in the caller context.
  *
  * @param {PoolAcquisition} acquisition
@@ -1092,15 +1086,6 @@ function createWrapPromiseGetConnection (options) {
     return function () {
       if (!connectionStartCh.hasSubscribers) return getConnection.apply(this, arguments)
 
-      if (!acquireStartCh.hasSubscribers) {
-        const ctx = {}
-        connectionStartCh.publish(ctx)
-        return skipCh.runStores({}, getConnection, this, ...arguments).then(
-          connection => finishPromiseGetConnection(ctx, connection, options),
-          error => finishPromiseGetConnectionError(ctx, error)
-        )
-      }
-
       const acquisition = createPoolAcquisition(this, options, undefined, 'explicit')
       let result
 
@@ -1130,18 +1115,6 @@ function createWrapCallbackGetConnection (options) {
       const callback = arguments[arguments.length - 1]
       if (typeof callback !== 'function' || !connectionStartCh.hasSubscribers) {
         return getConnection.apply(this, arguments)
-      }
-
-      if (!acquireStartCh.hasSubscribers) {
-        const ctx = {}
-        arguments[arguments.length - 1] = function () {
-          const connection = arguments[1]
-          if (connection) wrapCallbackConnection(connection, options)
-          return connectionFinishCh.runStores(ctx, callback, this, ...arguments)
-        }
-
-        connectionStartCh.publish(ctx)
-        return skipCh.runStores({}, getConnection, this, ...arguments)
       }
 
       const acquisition = createPoolAcquisition(this, options, undefined, 'explicit')
@@ -1279,7 +1252,7 @@ function runClusterGetConnection (getConnection, receiver, args) {
  * @param {unknown} error
  */
 function reportBundledClusterAcquireError (selection, start, error) {
-  if (!acquireStartCh.hasSubscribers) return
+  if (start === undefined || !acquireStartCh.hasSubscribers) return
   reportPoolAcquireError(start, error, { conf: selection.options ?? emptyOptions }, poolAcquireChannels)
 }
 

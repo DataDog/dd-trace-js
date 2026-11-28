@@ -15,7 +15,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { ANY_STRING, assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
-const { withFakeNow, withoutImmediateClockRead } = require('./helpers')
+const { assertAcquisitionDisabled, withFakeNow, withoutImmediateClockRead } = require('./helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
@@ -1496,6 +1496,20 @@ describe('Plugin', () => {
         })
 
         if (semver.intersects(version, '>=3.4.1')) {
+          for (const method of ['query', 'execute']) {
+            it('suppresses callback pool acquisition telemetry when disabled for ' + method, async () => {
+              await assertAcquisitionDisabled(
+                tracer,
+                promisify(pool.getConnection).bind(pool),
+                promisify(pool[method]).bind(pool),
+                connection => {
+                  const release = promisify(connection.release)
+                  return release.call(connection)
+                }
+              )
+            })
+          }
+
           it('records the pool acquire wait time on a callback pooled query span', async () => {
             await Promise.all([
               agent.assertSomeTraces(traces => {
@@ -1603,6 +1617,17 @@ describe('Plugin', () => {
           })
 
           if (semver.intersects(version, '>=3.4.1')) {
+            for (const method of ['query', 'execute']) {
+              it('suppresses promise pool acquisition telemetry when disabled for ' + method, async () => {
+                await assertAcquisitionDisabled(
+                  tracer,
+                  () => pool.getConnection(),
+                  sql => pool[method](sql),
+                  connection => connection.release()
+                )
+              })
+            }
+
             for (const [method, sql] of [
               ['query', 'SELECT 5 AS promise_pool_wait'],
               ['execute', 'SELECT 6 AS execute_pool_wait'],

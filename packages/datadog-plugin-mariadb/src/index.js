@@ -6,6 +6,7 @@ const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 class MariadbPlugin extends MySQLPlugin {
   static id = 'mariadb'
   static system = 'mariadb'
+  static poolAcquireConfigurable = true
 
   constructor (...args) {
     super(...args)

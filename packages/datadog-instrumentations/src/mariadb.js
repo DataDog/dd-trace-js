@@ -55,11 +55,19 @@ const legacyStorage = storage('legacy')
 let currentPoolAcquireTiming
 let explicitPoolAcquire = false
 
+/**
+ * @param {object} connection
+ */
+function takePoolAcquireWaitTime (connection) {
+  const waitTime = takePoolWaitTime(connection)
+  return acquireStartCh.hasSubscribers ? waitTime : undefined
+}
+
 function wrapCommandStart (start, ctx) {
   return shimmer.wrapFunction(start, start => function (...args) {
     if (!startCh.hasSubscribers) return start.apply(this, args)
 
-    const poolWaitTime = takePoolWaitTime(args[0])
+    const poolWaitTime = takePoolAcquireWaitTime(args[0])
     if (poolWaitTime !== undefined) {
       ctx.poolWaitTime = poolWaitTime
     }
@@ -133,7 +141,7 @@ function createWrapQuery (options) {
 
       const originalSql = normalizeSql(sql)
       const ctx = { sql: originalSql, conf: options }
-      const poolWaitTime = takePoolWaitTime(this)
+      const poolWaitTime = takePoolAcquireWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
       return finishPromiseQuery(ctx, startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql))
@@ -189,7 +197,7 @@ function wrapPreparedExecute (execute) {
       sql: cmdParam.sql,
       conf: this.opts,
     }
-    const poolWaitTime = takePoolWaitTime(this.streamOut)
+    const poolWaitTime = takePoolAcquireWaitTime(this.streamOut)
     if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
     commandAddCh.publish(ctx)
@@ -404,7 +412,7 @@ function wrapPoolMethod (createConnection) {
  */
 function wrapExplicitPoolGetConnection (getConnection) {
   return function wrappedExplicitPoolGetConnection () {
-    if (!connectionStartCh.hasSubscribers) {
+    if (!connectionStartCh.hasSubscribers || !acquireStartCh.hasSubscribers) {
       return getConnection.apply(this, arguments)
     }
 
@@ -423,7 +431,7 @@ function wrapExplicitPoolGetConnection (getConnection) {
  * @returns {Function}
  */
 function wrapPoolQuery (method) {
-  return wrapPoolQueryMethod(method, connectionStartCh)
+  return wrapPoolQueryMethod(method, acquireStartCh)
 }
 
 /**
@@ -549,8 +557,9 @@ function wrapPoolGetConnectionMethod (getConnection) {
     }
 
     const ctx = {}
-    const poolQueryAcquire = isPoolQueryAcquire()
-    const acquireCtx = !poolQueryAcquire && explicitPoolAcquire && acquireStartCh.hasSubscribers
+    const measure = acquireStartCh.hasSubscribers
+    const poolQueryAcquire = measure && isPoolQueryAcquire()
+    const acquireCtx = !poolQueryAcquire && explicitPoolAcquire && measure
       ? { conf: this.opts.connOptions }
       : undefined
     const pool = this
@@ -565,11 +574,8 @@ function wrapPoolGetConnectionMethod (getConnection) {
      * @returns {unknown}
      */
     arguments[1] = function wrappedCallback (error, connection) {
-      const poolWaitTime = poolQueryAcquire || acquireCtx !== undefined
-        ? finishPoolAcquireTiming(ctx)
-        : undefined
-
-      if (poolQueryAcquire) {
+      if (poolQueryAcquire && acquireStartCh.hasSubscribers) {
+        const poolWaitTime = finishPoolAcquireTiming(ctx)
         if (error) {
           return runPoolAcquireError(
             ctx.poolAcquireStartedAt,
@@ -601,7 +607,7 @@ function wrapPoolGetConnectionMethod (getConnection) {
           clearPoolWaitTime(connection.streamOut)
         }
         acquireCtx.error = error
-        acquireCtx.poolWaitTime = poolWaitTime
+        acquireCtx.poolWaitTime = finishPoolAcquireTiming(ctx)
         return connectionFinishCh.runStores(
           ctx,
           finishExplicitPoolAcquire,
