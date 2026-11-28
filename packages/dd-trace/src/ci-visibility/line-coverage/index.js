@@ -17,7 +17,7 @@
 //   installGlobal(globalObject)         for every other realm instrumented code runs in
 //   startTest() / finishTest(test, suites)
 //   startSuiteSetup(suite) / finishSuiteSetup()
-//   takeShared()                        once, after the last test
+//   takeShared()                        after the last test, or after each test file
 
 const fs = require('node:fs')
 const Module = require('node:module')
@@ -40,8 +40,8 @@ let enabled = false
 let rootPrefix = ''
 const stats = { files: 0, instrumentNs: 0n, failures: 0, bytesIn: 0, bytesOut: 0 }
 
-const unowned = new LineSet()
-const suiteSetup = new LineSet()
+let unowned = new LineSet()
+let suiteSetup = new LineSet()
 
 /** @type {WeakMap<object, LineSet>} lines of each suite's setup hooks */
 const fixtures = new WeakMap()
@@ -152,7 +152,7 @@ function finishSuiteSetup () {
 }
 
 /**
- * Returns Shared: what ran outside every test window, in three parts.
+ * Returns Shared, what ran outside every test window since the previous call, in three parts.
  *
  * @returns {Array<{ shared: 'init' | 'suiteSetup' | 'unowned', files: FileCoverage[] }>}
  */
@@ -160,11 +160,15 @@ function takeShared () {
   closeSetup()
   const collector = getCollector()
   collector.take(currentTarget())
-  return [
-    { shared: 'init', files: toFiles(collector.init) },
+  const shared = [
+    { shared: 'init', files: toFiles(collector.sharedInit) },
     { shared: 'suiteSetup', files: toFiles(suiteSetup) },
     { shared: 'unowned', files: toFiles(unowned) },
   ]
+  collector.sharedInit = new LineSet()
+  suiteSetup = new LineSet()
+  unowned = new LineSet()
+  return shared
 }
 
 /**
@@ -229,14 +233,16 @@ function shouldInstrument (filename) {
  *
  * @param {string} code
  * @param {string} filename
- * @param {{ isModule?: boolean, reuse?: boolean }} [options] `reuse` keeps the result for the next call
- *   with the same filename and code, for frameworks that compile a module once per test file
+ * @param {{ isModule?: boolean, reuse?: boolean, sourceMap?: object | string }} [options]
+ *   `reuse` keeps the result for the next call with the same filename and code, for frameworks that
+ *   compile a module once per test file. `sourceMap` maps `code` back to the file on disk: lines are
+ *   reported in the original file, and code mapped to no line of it is not probed.
  */
-function instrumentSource (code, filename, { isModule = false, reuse = false } = {}) {
+function instrumentSource (code, filename, { isModule = false, reuse = false, sourceMap } = {}) {
   if (reuse) {
     const cached = instrumentedByFilename.get(filename)
     if (cached !== undefined && cached.code === code) return cached.instrumented
-    const instrumented = instrumentSource(code, filename, { isModule })
+    const instrumented = instrumentSource(code, filename, { isModule, sourceMap })
     instrumentedByFilename.set(filename, { code, instrumented })
     return instrumented
   }
@@ -246,6 +252,7 @@ function instrumentSource (code, filename, { isModule = false, reuse = false } =
       parse: (source, sourceIsModule) => compiler.parse(source, { isModule: sourceIsModule, range: true }),
       isModule,
       fileIndex: getCollector().fileIndex(filename),
+      originalLine: sourceMap ? getOriginalLine(sourceMap) : undefined,
     })
     if (!result) return code
     stats.files++
@@ -258,6 +265,21 @@ function instrumentSource (code, filename, { isModule = false, reuse = false } =
     return code
   } finally {
     stats.instrumentNs += process.hrtime.bigint() - start
+  }
+}
+
+/**
+ * @param {object | string} sourceMap
+ * @returns {(line: number, column: number) => number}
+ */
+function getOriginalLine (sourceMap) {
+  const { SourceMapConsumer } = require('../../../../../vendor/dist/@datadog/source-map')
+  const consumer = new SourceMapConsumer(typeof sourceMap === 'string' ? JSON.parse(sourceMap) : sourceMap)
+  // A file transformed on its own maps to a single source; lines of other sources are not this file's.
+  const source = consumer.sources.length === 1 ? consumer.sources[0] : null
+  return (line, column) => {
+    const position = consumer.originalPositionFor({ line, column })
+    return position.line !== null && position.source === source ? position.line : 0
   }
 }
 
