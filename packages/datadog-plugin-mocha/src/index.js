@@ -1714,14 +1714,16 @@ class MochaPlugin extends CiPlugin {
       sessionId: context._traceId,
       suiteId: context._parentId,
       testId: context._spanId,
+      parser: this.#lineCoverage.getParserInUse(),
       files,
     })
   }
 
   #exportSharedLineCoverage () {
     const sessionId = this.testSessionSpan.context()._traceId
+    const parser = this.#lineCoverage.getParserInUse()
     for (const { shared, files } of this.#lineCoverage.takeShared()) {
-      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, parser, files })
     }
   }
 

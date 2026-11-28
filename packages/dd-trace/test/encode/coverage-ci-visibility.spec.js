@@ -19,6 +19,8 @@ const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
  *     test_session_id: number,
  *     test_suite_id?: number,
  *     span_id?: number,
+ *     shared?: string,
+ *     parser?: string,
  *     files: { filename: string, bitmap?: Uint8Array }[]
  *   }[] }
  * } CoverageObject
@@ -210,6 +212,30 @@ describe('coverage-ci-visibility', () => {
     assert.ok(!('test_suite_id' in decodedCoverages.coverages[0]))
     assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file4.js')
     assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'gA==')
+  })
+
+  it('should encode the parser a line coverage record names, and no parser key without one', () => {
+    encoder.encode({ ...formattedCoverageTest, parser: 'oxc-binding' })
+    encoder.encode({ sessionId: id('8'), shared: 'init', parser: 'none', files: ['file4.js'] })
+    encoder.encode(formattedCoverage2)
+
+    const form = encoder.makePayload()
+    const { coverages } = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+
+    assert.deepStrictEqual(coverages[0], {
+      test_session_id: 5,
+      test_suite_id: 6,
+      span_id: 7,
+      parser: 'oxc-binding',
+      files: [{ filename: 'file3.js' }],
+    })
+    assert.deepStrictEqual(coverages[1], {
+      test_session_id: 8,
+      shared: 'init',
+      parser: 'none',
+      files: [{ filename: 'file4.js' }],
+    })
+    assert.ok(!('parser' in coverages[2]))
   })
 
   it('should encode a bitmap a test worker sent as base64 as its bytes', () => {

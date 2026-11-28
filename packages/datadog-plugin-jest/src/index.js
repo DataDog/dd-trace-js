@@ -121,6 +121,7 @@ class JestPlugin extends CiPlugin {
       sessionId: context._traceId,
       suiteId: test.suiteId,
       testId: context._spanId,
+      parser: this.#lineCoverage.getParserInUse(),
       files,
     })
   }
@@ -137,8 +138,9 @@ class JestPlugin extends CiPlugin {
     }
     this.#openLineCoverageTests.clear()
     const sessionId = testSuiteSpan.context()._traceId
+    const parser = this.#lineCoverage.getParserInUse()
     for (const { shared, files } of this.#lineCoverage.takeShared()) {
-      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, files })
+      if (files.length > 0) this.tracer._exporter.exportCoverage({ sessionId, shared, parser, files })
     }
   }
 
@@ -377,6 +379,7 @@ class JestPlugin extends CiPlugin {
         if (coverage.suiteId) formattedCoverage.suiteId = id(coverage.suiteId)
         if (coverage.testId) formattedCoverage.testId = id(coverage.testId)
         if (coverage.shared) formattedCoverage.shared = coverage.shared
+        if (coverage.parser) formattedCoverage.parser = coverage.parser
         return formattedCoverage
       })
       for (const formattedCoverage of formattedCoverages) {

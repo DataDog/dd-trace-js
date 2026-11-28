@@ -17,6 +17,8 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 
 const SUMMARY_TIMEOUT_MS = 30_000
+// The parsers a line coverage record can name: none when its process ran only cached code.
+const PARSERS = ['oxc-binding', 'oxc-parser', 'meriyah', 'none']
 
 // Jest compiles ECMAScript modules, with Node.js's --experimental-vm-modules, through transformAsync from 27.
 const esModuleIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=27.0.0') ? it : it.skip
@@ -120,6 +122,7 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
         assert.ok(record.test_session_id)
         assert.ok(record.test_suite_id)
         assert.strictEqual(record.shared, undefined)
+        assertObjectContains(PARSERS, [record.parser])
         // Each test file calls sum.js and has its own lines: more than one covered file, with bitmaps.
         const filenames = record.files.map(({ filename }) => filename)
         assertObjectContains(filenames, ['ci-visibility/test/sum.js'])
@@ -135,6 +138,7 @@ describe(`jest@${JEST_VERSION} per-test line coverage`, () => {
         assert.strictEqual(record.span_id, undefined)
         assert.strictEqual(record.test_suite_id, undefined)
         assert.ok(record.test_session_id)
+        assertObjectContains(PARSERS, [record.parser])
       }
     })
   }
