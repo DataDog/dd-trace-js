@@ -1591,6 +1591,23 @@ describe('Config', () => {
     })
   })
 
+  describe('_DD_REMOTE_CONFIG_WASM_PATH', () => {
+    it('does not select the reactor by default', () => {
+      assert.equal(getEnvironmentVariable('_DD_REMOTE_CONFIG_WASM_PATH'), undefined)
+      assert.equal(getConfig()._DD_REMOTE_CONFIG_WASM_PATH, undefined)
+    })
+
+    it('selects a local reactor without reporting its path in telemetry', () => {
+      process.env._DD_REMOTE_CONFIG_WASM_PATH = '/tmp/remote-config.wasm'
+
+      assert.equal(getEnvironmentVariable('_DD_REMOTE_CONFIG_WASM_PATH'), '/tmp/remote-config.wasm')
+      assert.equal(getConfig()._DD_REMOTE_CONFIG_WASM_PATH, undefined)
+      for (const [updates] of updateConfig.args) {
+        assert.ok(updates.every(({ name }) => name !== '_DD_REMOTE_CONFIG_WASM_PATH'))
+      }
+    })
+  })
+
   describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
     it('maps deployment.environment as a fallback', () => {
       process.env.OTEL_RESOURCE_ATTRIBUTES =

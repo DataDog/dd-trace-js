@@ -1,0 +1,65 @@
+name: Remote Config WASI
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/remote-config-wasi.yml'
+      - 'package.json'
+      - 'packages/dd-trace/src/config/**'
+      - 'packages/dd-trace/src/exporters/common/request.js'
+      - 'packages/dd-trace/src/remote_config/**'
+      - 'packages/dd-trace/test/remote_config/**'
+      - 'scripts/test/remote-config-wasi.js'
+  workflow_dispatch:
+    inputs:
+      remote-config-source:
+        description: Full libdatadog commit to test in place of the pinned source
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  remote-config-wasi:
+    runs-on: ubuntu-24.04
+    env:
+      RC_SOURCE_COMMIT: ${{ inputs.remote-config-source || '1ed63a78e128a2d739a12f1800ceb602ab4f1bb2' }}
+    steps:
+      - name: Check libdatadog source
+        run: |
+          if [[ ! "$RC_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Remote Config source must be a full libdatadog commit ID" >&2
+            exit 2
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - name: Check out libdatadog
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DataDog/libdatadog
+          ref: ${{ env.RC_SOURCE_COMMIT }}
+          path: libdatadog-source
+          persist-credentials: false
+      - name: Build the pinned WASI bundle
+        working-directory: libdatadog-source
+        run: |
+          rustup target add wasm32-wasip1
+          bash libdd-remote-config-wasm/test/build-wasi-bundle.sh "$RUNNER_TEMP/remote-config-wasm"
+      - name: Test the WASI guest and host
+        run: |
+          node_version=$(node --version)
+          report_dir="coverage/node-${node_version#v}-remote-config-wasi"
+          npm exec -- c8 --reporter=lcov --reports-dir "$report_dir" \
+            --include=packages/dd-trace/src/config/remote_config.js \
+            --include=packages/dd-trace/src/exporters/common/request.js \
+            --include=packages/dd-trace/src/remote_config/index.js \
+            --include=packages/dd-trace/src/remote_config/scheduler.js \
+            --include=packages/dd-trace/src/remote_config/wasm-client.js \
+            npm run test:remote-config:wasi -- "$RUNNER_TEMP/remote-config-wasm" "$RC_SOURCE_COMMIT"
+      - uses: ./.github/actions/coverage
+        with:
+          flags: remote-config-wasi

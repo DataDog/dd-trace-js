@@ -1042,6 +1042,44 @@ describe('request', function () {
     })
   })
 
+  describe('with bounded buffer responses', () => {
+    for (const compress of [false, true]) {
+      const encoding = compress ? 'gzip' : 'raw'
+      it(`preserves ${encoding} bytes at the limit and rejects one more byte`, async () => {
+        const maxResponseBytes = 64
+        const headers = compress ? { 'content-encoding': 'gzip' } : {}
+
+        /** @param {Buffer} bytes */
+        function read (bytes) {
+          return new Promise((resolve, reject) => {
+            nock('http://test:123').post('/bounded', 'poll')
+              .reply(404, compress ? zlib.gzipSync(bytes) : bytes, headers)
+            request(stream.Readable.from([Buffer.from('poll')]), {
+              url: new URL('http://test:123/bounded'),
+              method: 'POST',
+              responseType: 'buffer',
+              maxResponseBytes,
+              retry: false,
+            }, (error, body, status) => {
+              if (error) {
+                reject(error)
+              } else {
+                resolve({ body, status })
+              }
+            })
+          })
+        }
+
+        const accepted = Buffer.alloc(maxResponseBytes, 0xff)
+        assert.deepEqual(await read(accepted), { body: accepted, status: 404 })
+        const rejected = Buffer.alloc(maxResponseBytes + 1, 0xff)
+        await assert.rejects(read(rejected), compress
+          ? { code: 'ERR_BUFFER_TOO_LARGE' }
+          : { message: 'Response exceeds the configured byte limit' })
+      })
+    }
+  })
+
   describe('with compressed responses', () => {
     it('can decompress gzip responses', (done) => {
       const compressedData = zlib.gzipSync(Buffer.from(JSON.stringify({ foo: 'bar' })))

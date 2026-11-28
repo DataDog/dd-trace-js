@@ -1,8 +1,27 @@
 'use strict'
 
+const { isDeepStrictEqual } = require('node:util')
+
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
 const applyRemoteConfig = require('./remote-config-layers')
+
+// This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
+// APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
+const tracingCapabilities = RemoteConfigCapabilities.APM_TRACING_MULTICONFIG |
+  // Keep advertising the legacy per-setting capabilities while the backend and UI still use them
+  // to determine which settings are editable. Values are delivered through sdk_config below.
+  RemoteConfigCapabilities.APM_TRACING_ENABLED |
+  RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE |
+  RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES |
+  RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS |
+  RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS |
+  RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION |
+  RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION |
+  RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING |
+  RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN |
+  // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
+  RemoteConfigCapabilities.SDK_CONFIGURATION
 
 module.exports = {
   enable,
@@ -97,9 +116,11 @@ class RCClientManager {
     const sdkConfig = conf.sdk_config?.config
 
     const priority = this.calculatePriority(conf)
-    this.configs.set(configId, { priority, sdkConfig })
+    const projected = { priority, sdkConfig }
+    this.configs.set(configId, projected)
 
     log.debug('[config/remote_config] Added config %s with priority %d', configId, priority)
+    return projected
   }
 
   /**
@@ -145,25 +166,90 @@ class RCClientManager {
  * @param {() => void} onConfigUpdated - Function to call when config is updated
  */
 function enable (rc, config, onConfigUpdated) {
-  // This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
-  // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
+  /** @param {ReturnType<RCClientManager['getMergedConfig']>} value */
+  function applyValue (value) {
+    applyRemoteConfig(config, 'APM_TRACING', value)
+    onConfigUpdated()
+  }
 
-  // Keep advertising the legacy per-setting capabilities while the backend and UI still use them
-  // to determine which settings are editable. Values are delivered through sdk_config below.
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
-  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
+  if (rc.watchValues !== undefined) {
+    const { service, env } = config
+    /** @type {ReturnType<RCClientManager['getMergedConfig']> | undefined} */
+    let installedValue
+    /** @type {Map<string, NonNullable<ReturnType<RCClientManager['addConfig']>>>} */
+    let installedConfigs = new Map()
+    /** @type {Set<string>} */
+    let installedPaths = new Set()
+    rc.watchValues({
+      product: 'APM_TRACING',
+      capabilities: tracingCapabilities,
+      /** @param {import('../remote_config/wasm-client').WatchChanges} changes */
+      project ({ upserts, removals }) {
+        const manager = new RCClientManager(service, env)
+        manager.configs = new Map(installedConfigs)
+        const nextPaths = new Set(installedPaths)
+        const decisions = /** @type {Map<string, import('../remote_config/wasm-client').WatchDecision>} */ (new Map())
 
-  // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
-  rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
+        for (const { path, configId } of removals) {
+          if (nextPaths.delete(path)) {
+            manager.removeConfig(configId)
+          }
+        }
 
+        /** @param {import('../remote_config/wasm-client').WatchUpsert} change */
+        function upsert ({ path, configId, contents }) {
+          try {
+            const file = JSON.parse(contents)
+            if (file === null || typeof file !== 'object' || Array.isArray(file)) {
+              throw new Error('Expected a Remote Config APM object')
+            }
+            if (manager.addConfig(configId, file) === undefined) {
+              decisions.set(path, 'ignored')
+            }
+            nextPaths.add(path)
+          } catch (error) {
+            decisions.set(path, error)
+          }
+        }
+
+        const modifications = /** @type {import('../remote_config/wasm-client').WatchUpsert[]} */ ([])
+        for (const change of upserts) {
+          if (nextPaths.has(change.path)) {
+            modifications.push(change)
+          } else {
+            upsert(change)
+          }
+        }
+        for (const change of modifications) {
+          upsert(change)
+        }
+
+        const value = manager.getMergedConfig()
+        // When both aliases are present, the first key wins.
+        const unchanged = value === installedValue || (value !== null && installedValue != null &&
+          isDeepStrictEqual(Object.entries(value), Object.entries(installedValue)))
+        if (unchanged) {
+          installedConfigs = manager.configs
+          installedPaths = nextPaths
+          return { decisions }
+        }
+        return {
+          decisions,
+          install () {
+            // Applying a layer can change settings before throwing.
+            installedValue = undefined
+            applyValue(value)
+            installedConfigs = manager.configs
+            installedPaths = nextPaths
+            installedValue = value
+          },
+        }
+      },
+    })
+    return
+  }
+
+  rc.updateCapabilities(tracingCapabilities, true)
   const sdkConfigManager = new RCClientManager(config.service, config.env)
 
   // SDK_CONFIGURATION is delivered as a flat sdk_config map under the APM_TRACING product.
@@ -182,8 +268,6 @@ function enable (rc, config, onConfigUpdated) {
       transaction.ack(item.path)
     }
 
-    applyRemoteConfig(config, 'APM_TRACING', sdkConfigManager.getMergedConfig())
-
-    onConfigUpdated()
+    applyValue(sdkConfigManager.getMergedConfig())
   })
 }

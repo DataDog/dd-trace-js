@@ -6,6 +6,7 @@ const { channel } = require('dc-polyfill')
 
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
+const { getEnvironmentVariable } = require('../config/helper')
 const request = require('../exporters/common/request')
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
@@ -24,11 +25,15 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
  * @property {string} path
  * @property {string} product
  * @property {string} configId
- * @property {number} version
+ * @property {number | string} version
  * @property {string} [contents]
  * @property {number} [length]
  * @property {Record<string, string>} [hashes]
+ * @property {import('./wasm-client').RawReceipt} [receipt]
  */
+
+/** @typedef {Pick<import('./wasm-client').Options, 'url' | 'apiKey' | 'hostname'>} WasmEndpoint */
+/** @typedef {import('./wasm-client').ValueWatch} ValueWatch */
 
 let clientId = uuid()
 /** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
@@ -48,9 +53,20 @@ class RemoteConfig {
   #agentless
   /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher | undefined} */
   #fetcher
+  #wasmPath
+  /** @type {WasmEndpoint | undefined} */
+  #wasmEndpoint
+  /** @type {import('./wasm-client') | undefined} */
+  #wasm
+  #interestDirty = true
+  #legacyCapabilities = 0n
   #handlers = new Map()
   #products = new Set()
   #batchHandlers = new Map()
+  /** @type {ValueWatch | undefined} */
+  #valueWatch
+  /** @type {((watch: ValueWatch) => void) | undefined} */
+  watchValues
 
   /**
    * @param {import('../config/config-base')} config - Tracer configuration
@@ -59,6 +75,7 @@ class RemoteConfig {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
     this.#agentless = config.DD_AGENTLESS_ENABLED
+    this.#wasmPath = getEnvironmentVariable('_DD_REMOTE_CONFIG_WASM_PATH')
     this.url = config.url
 
     tagger.add(config.tags, {
@@ -116,6 +133,15 @@ class RemoteConfig {
 
     client = this.state.client
 
+    if (this.#wasmPath !== undefined) {
+      /** @param {ValueWatch} watch */
+      this.watchValues = watch => {
+        this.#valueWatch = watch
+        this.#syncCapabilities()
+        this.updateProducts()
+      }
+    }
+
     if (this.#agentless) {
       if (config.DD_API_KEY === undefined) {
         log.error('[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled')
@@ -124,6 +150,11 @@ class RemoteConfig {
       const siteUrl = createSiteUrl(config.site)
       if (siteUrl === undefined) {
         log.error('[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled', config.site)
+        return
+      }
+
+      if (this.#wasmPath !== undefined) {
+        this.#wasmEndpoint = { url: siteUrl.origin, apiKey: config.DD_API_KEY, hostname: getHostname() }
         return
       }
 
@@ -142,6 +173,9 @@ class RemoteConfig {
         apiKey: config.DD_API_KEY,
         hostname: getHostname(),
       })
+    } else if (this.#wasmPath !== undefined) {
+      this.url ??= new URL('http://localhost:8126')
+      this.#wasmEndpoint = { url: this.url.origin === 'null' ? 'http://localhost' : this.url.origin }
     }
   }
 
@@ -150,16 +184,18 @@ class RemoteConfig {
    * @param {boolean} value
    */
   updateCapabilities (mask, value) {
-    const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
-    let capabilities = BigInt(`0x${hex}`)
-
-    capabilities = value ? capabilities | mask : capabilities & ~mask
-    let str = capabilities.toString(16)
-
-    if (str.length % 2) str = `0${str}`
-
-    this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
+    this.#legacyCapabilities = value ? this.#legacyCapabilities | mask : this.#legacyCapabilities & ~mask
+    this.#syncCapabilities()
     this.#updateProductCapabilities()
+  }
+
+  #syncCapabilities () {
+    const mask = this.#legacyCapabilities | (this.#valueWatch?.capabilities ?? 0n)
+    let hex = mask.toString(16)
+    if (hex.length % 2 !== 0) {
+      hex = `0${hex}`
+    }
+    this.state.client.capabilities = Buffer.from(hex, 'hex').toString('base64')
   }
 
   /**
@@ -197,14 +233,10 @@ class RemoteConfig {
    * @param {...string} products
    */
   subscribeProducts (...products) {
-    const hadProducts = this.#products.size > 0
     for (const product of products) {
       this.#products.add(product)
     }
     this.updateProducts()
-    if ((!this.#agentless || this.#fetcher) && !hadProducts && this.#products.size > 0) {
-      this.scheduler.start()
-    }
   }
 
   /**
@@ -216,19 +248,26 @@ class RemoteConfig {
    * @param {...string} products
    */
   unsubscribeProducts (...products) {
-    const hadProducts = this.#products.size > 0
     for (const product of products) {
       this.#products.delete(product)
     }
     this.updateProducts()
-    if (hadProducts && this.#products.size === 0) {
-      this.scheduler.stop()
-    }
   }
 
   updateProducts () {
-    this.state.client.products = [...this.#products]
+    const hadProducts = this.state.client.products.length > 0
+    const products = [...this.#products]
+    const watched = this.#valueWatch?.product
+    if (watched !== undefined && !this.#products.has(watched)) products.push(watched)
+    this.state.client.products = products
     this.#updateProductCapabilities()
+
+    const enabled = this.#wasmPath === undefined ? !this.#agentless || this.#fetcher : this.#wasmEndpoint !== undefined
+    if (enabled && !hadProducts && products.length > 0) {
+      this.scheduler.start()
+    } else if (hadProducts && products.length === 0) {
+      this.scheduler.stop()
+    }
   }
 
   /**
@@ -236,6 +275,7 @@ class RemoteConfig {
    *
    */
   #updateProductCapabilities () {
+    this.#interestDirty = true
     const fetcher = this.#fetcher
     if (fetcher === undefined) return
 
@@ -278,7 +318,12 @@ class RemoteConfig {
     return JSON.stringify(this.state)
   }
 
+  /** @param {import('./scheduler').PollDone} cb */
   poll (cb) {
+    if (this.#wasmPath !== undefined) {
+      this.#pollWasm(this.#wasmPath, cb)
+      return
+    }
     if (this.#agentless) {
       this.#pollAgentless(cb)
       return
@@ -324,6 +369,82 @@ class RemoteConfig {
   }
 
   /**
+   * @param {string} path
+   * @param {import('./scheduler').PollDone} done
+   */
+  #pollWasm (path, done) {
+    if (this.#wasmEndpoint === undefined) return done()
+
+    const client = this.state.client
+    const tracer = client.client_tracer
+    const identity = {
+      clientId: client.id,
+      runtimeId: tracer.runtime_id,
+      tags: tracer.tags,
+      extraServices: getExtraServices(),
+    }
+    let interest
+    if (this.#wasm === undefined || this.#interestDirty) {
+      interest = { products: client.products, capabilities: decodeCapabilities(client.capabilities) }
+      if (this.#wasm === undefined) {
+        try {
+          const WasmClient = require('./wasm-client')
+          this.#wasm = new WasmClient(path, {
+            ...this.#wasmEndpoint,
+            identity,
+            interest,
+            target: {
+              service: tracer.service,
+              env: tracer.env ?? '',
+              appVersion: tracer.app_version ?? '',
+              processTags: processTags.tagsArray,
+            },
+            language: tracer.language,
+            tracerVersion,
+            timeoutMs: this.#agentless ? AGENTLESS_REQUEST_TIMEOUT_MS : 2000,
+          }, this.#agentless ? undefined : this.url, this.#valueWatch)
+          interest = undefined
+        } catch (error) {
+          this.#disableWasm(error)
+          return done()
+        }
+      }
+    }
+
+    this.#interestDirty = false
+    this.#wasm.poll(identity, interest, (error, result) => {
+      try {
+        if (error !== undefined) {
+          this.#disableWasm(error)
+          return
+        }
+        if (result.error !== undefined) {
+          log.errorWithoutTelemetry('[RC] Error in request: %s', result.error)
+          return
+        }
+        if (result.changes.length !== 0) this.#applyChanges(result.changes)
+      } catch (error) {
+        this.#disableWasm(error)
+      } finally {
+        if (this.#agentless && result !== undefined) {
+          done(result.nextPollAfterMs)
+        } else {
+          done()
+        }
+      }
+    })
+  }
+
+  /** @param {Error} error */
+  #disableWasm (error) {
+    this.#wasmEndpoint = undefined
+    this.scheduler.stop()
+    this.#wasm?.close()
+    this.#wasm = undefined
+    log.errorWithoutTelemetry('[RC] Disabling the Remote Config WASM client', error)
+  }
+
+  /**
    * @param {() => void} cb
    */
   #pollAgentless (cb) {
@@ -365,14 +486,24 @@ class RemoteConfig {
         continue
       }
 
+      const sha256 = change.hashes?.sha256
+      if (change.receipt !== undefined && current?.receipt !== undefined &&
+          sha256 !== undefined && sha256 === current.hashes?.sha256) {
+        current.version = change.version
+        current.hashes = change.hashes
+        current.receipt = change.receipt
+        this.#reportApply(path, current.receipt, current.apply_state, current.apply_error)
+        continue
+      }
+
       let file
       try {
         file = change.contents === '' ? null : JSON.parse(change.contents)
       } catch (error) {
-        if (this.#fetcher === undefined) throw error
+        if (this.#fetcher === undefined && this.#wasm === undefined) throw error
 
         log.error('[RC] Could not parse the config file at path %s', path, error)
-        this.#fetcher.setConfigState(path, ERROR, error.toString())
+        this.#reportApply(path, change.receipt, ERROR, error.toString())
         continue
       }
 
@@ -389,6 +520,7 @@ class RemoteConfig {
         config.length = change.length
         config.hashes = change.hashes
       }
+      if (change.receipt !== undefined) config.receipt = change.receipt
       transactionByPath.set(path, config)
 
       if (change.kind === 'update' && current !== undefined) {
@@ -408,8 +540,22 @@ class RemoteConfig {
     if (this.#batchHandlers.size) {
       for (const [handler, products] of this.#batchHandlers) {
         const transactionView = filterTransactionByProducts(transaction, products)
-        if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+        if (!transactionView.toUnapply.length && !transactionView.toApply.length && !transactionView.toModify.length) {
+          continue
+        }
+        try {
           handler(transactionView)
+        } catch (error) {
+          if (this.#wasm === undefined) {
+            throw error
+          }
+          const message = error instanceof Error ? error.message : 'Remote Config batch handler threw'
+          log.error('[RC] Remote Config batch handler failed: %s', message)
+          for (const { path, product } of transactionByPath.values()) {
+            if (products.has(product) && !transactionOutcomes.has(path)) {
+              transactionView.error(path, message)
+            }
+          }
         }
       }
     }
@@ -419,7 +565,7 @@ class RemoteConfig {
       if (item !== undefined) {
         item.apply_state = outcome.state
         item.apply_error = outcome.error
-        this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+        this.#reportApply(path, item.receipt, outcome.state, outcome.error)
       }
     }
 
@@ -547,7 +693,21 @@ class RemoteConfig {
 
     item.apply_state = applyState
     item.apply_error = applyError
-    this.#fetcher?.setConfigState(item.path, applyState, applyError)
+    this.#reportApply(item.path, item.receipt, applyState, applyError)
+  }
+
+  /**
+   * @param {string} path
+   * @param {import('./wasm-client').RawReceipt | undefined} receipt
+   * @param {number} state
+   * @param {string} message
+   */
+  #reportApply (path, receipt, state, message) {
+    if (receipt === undefined) {
+      this.#fetcher?.setConfigState(path, state, message)
+    } else {
+      this.#wasm?.complete({ path, receipt, state, message })
+    }
   }
 
   /**
@@ -601,12 +761,13 @@ class RemoteConfig {
  * @property {string} path
  * @property {string} product
  * @property {string} id
- * @property {number} version
+ * @property {number | string} version
  * @property {unknown} file
  * @property {number} apply_state
  * @property {string} apply_error
  * @property {number} [length]
  * @property {Record<string, string>} [hashes]
+ * @property {import('./wasm-client').RawReceipt} [receipt]
  */
 
 /**

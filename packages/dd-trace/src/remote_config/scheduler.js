@@ -1,5 +1,7 @@
 'use strict'
 
+/** @typedef {(minimumDelayMs?: number) => void} PollDone */
+
 class Scheduler {
   #active = false
   #callback
@@ -9,7 +11,7 @@ class Scheduler {
   #timer
 
   /**
-   * @param {(done: () => void) => void} callback
+   * @param {(done: PollDone) => void} callback
    * @param {number} interval
    */
   constructor (callback, interval) {
@@ -33,11 +35,14 @@ class Scheduler {
     this.#timer = setTimeout(() => {
       this.#timer = undefined
       this.#inFlight = true
-      this.#callback(() => {
+      this.#callback(minimumDelayMs => {
         this.#inFlight = false
-        if (!this.#active) return
+        if (!this.#active) {
+          return
+        }
 
-        this.#runAfterDelay(this.#generation === generation ? this.#interval : 0)
+        const delay = minimumDelayMs === undefined ? this.#interval : Math.max(this.#interval, minimumDelayMs)
+        this.#runAfterDelay(this.#generation === generation ? delay : 0)
       })
     }, interval)
 

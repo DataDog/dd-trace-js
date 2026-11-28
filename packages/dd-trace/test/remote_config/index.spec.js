@@ -639,6 +639,41 @@ describe('RemoteConfig', () => {
       })
     })
 
+    it('reports a batch exception in the legacy Agent request state', async () => {
+      rc.parseConfig.restore()
+      const path = 'datadog/42/ASM/rules/config'
+      const failure = new Error('WAF installation failed')
+      rc.setBatchHandler(['ASM'], () => { throw failure })
+      rc.subscribeProducts('ASM')
+      const signed = {
+        version: 1,
+        custom: { opaque_backend_state: 'state' },
+        targets: {
+          [path]: {
+            custom: { v: 1 },
+            hashes: { sha256: '44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a' },
+            length: 2,
+          },
+        },
+      }
+      const assignment = {
+        client_configs: [path],
+        targets: toBase64({ signed }),
+        target_files: [{ path, raw: toBase64({}) }],
+      }
+      request
+        .onFirstCall().yieldsRight(null, JSON.stringify(assignment), 200)
+        .onSecondCall().yieldsRight(null, '{}', 200)
+
+      await poll()
+      await poll()
+
+      sinon.assert.calledOnceWithExactly(log.error, '[RC] Could not parse remote config response', failure)
+      const state = JSON.parse(request.secondCall.args[0]).client.state
+      assert.equal(state.has_error, true)
+      assert.equal(state.error, 'Error: WAF installation failed')
+    })
+
     it('should request and do nothing when payload is empty JSON object', (cb) => {
       request.yieldsRight(null, '{}', 200)
 
