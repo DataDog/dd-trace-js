@@ -319,9 +319,10 @@ module.exports = {
    *
    * @param {typeof process.env} [source] The environment to read from
    * @param {boolean} [internalOnly] Only return configurations marked as internal
+   * @param {() => void} [onDeprecation] Called in place of emitting a deprecation warning
    * @returns {TracerEnv} The environment variables
    */
-  getEnvironmentVariables (source = process.env, internalOnly = false) {
+  getEnvironmentVariables (source = process.env, internalOnly = false, onDeprecation) {
     const configs = {}
     for (const [key, value] of Object.entries(source)) {
       if (key.startsWith('DD_') || key.startsWith('OTEL_') || aliasToCanonical[key]) {
@@ -343,7 +344,10 @@ module.exports = {
         //   )
         // This could be moved inside the main config logic.
         }
-        deprecationMethods[key]?.()
+        const deprecation = deprecationMethods[key]
+        if (deprecation) {
+          (onDeprecation ?? deprecation)()
+        }
       } else if (!internalOnly) {
         configs[key] = value
       }

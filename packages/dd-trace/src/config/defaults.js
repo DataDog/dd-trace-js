@@ -12,11 +12,13 @@ const {
   setWarnInvalidValue,
 } = require('./parsers')
 const applyMajorOverrides = require('./major-overrides')
+const { decodeValue, getCoreArtifacts } = require('./startup')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 applyMajorOverrides(supportedConfigurations, DD_MAJOR)
+const preparedDefaults = getCoreArtifacts(DD_MAJOR).config?.defaults
 
 let log
 let seqId = 0
@@ -277,7 +279,10 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     }
     configurationsTable[canonicalName] = option
 
-    if (entry.default === null) {
+    if (preparedDefaults && Object.hasOwn(preparedDefaults, canonicalName)) {
+      const prepared = preparedDefaults[canonicalName]
+      defaults[fullPropertyName] = prepared?.kind === 'map' ? { ...prepared.value } : decodeValue(prepared)
+    } else if (entry.default === null) {
       defaults[fullPropertyName] = undefined
     } else {
       let parsedDefault = parser(entry.default, fullPropertyName, 'default')

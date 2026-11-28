@@ -12,6 +12,7 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { errorChannel, errorRecordChannel, warnChannel } = require('../log/channels')
 const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -50,6 +51,7 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
+const { decodeValue, getCoreArtifacts, resolveStartup } = require('./startup')
 
 const rfdc = createRfdc({
   proto: false,
@@ -196,6 +198,90 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
+/**
+ * @param {import('./startup').DiagnosticProblem} problem
+ * @param {string} name
+ * @param {import('./startup').CoreOrigin} origin
+ * @param {string} type
+ * @param {unknown} input
+ * @param {unknown} parsed
+ */
+function warnStartupDiagnostic (problem, name, origin, type, input, parsed) {
+  switch (problem.kind) {
+    case 'invalid_value':
+      warnInvalidValue(input, name, origin, `Invalid ${type} input`)
+      break
+    case 'disallowed_value':
+      warnInvalidValue(parsed, name, origin, 'Invalid value')
+      break
+    case 'transform_warning':
+      warnInvalidValue(parsed, name, origin, problem.message)
+      break
+  }
+}
+
+/** @typedef {import('./startup').SourceEvent & {problem?: import('./startup').DiagnosticProblem}} ResolvedOption */
+
+/**
+ * @param {Array<[string, unknown]>} entries
+ * @param {string} root
+ */
+function resolvePortableOptions (entries, root) {
+  if (entries.length === 0) return
+
+  const codeRules = getCoreArtifacts(DD_MAJOR).config?.codeRules
+  if (codeRules === undefined) return
+
+  /** @type {Record<string, import('./prepare-core-manifest').PreparedDefinition[]>} */
+  const selected = Object.create(null)
+  /** @type {import('./startup').StartEntry[] | undefined} */
+  let inputs
+  for (const [name, value] of entries) {
+    const fullName = root ? `${root}.${name}` : name
+    const entry = optionsTable[fullName]
+    if (!entry?.canonicalName || entry.nestedProperties) {
+      continue
+    }
+    const rule = codeRules[entry.canonicalName]
+    // Node and Rust can have different Unicode case tables.
+    if (rule === undefined || (rule.asciiOnly && typeof value === 'string' && /[\u0080-\uFFFF]/.test(value))) {
+      continue
+    }
+
+    /** @type {import('./startup').WireValue | undefined} */
+    let encoded
+    if (typeof value === 'string') {
+      encoded = { kind: 'string', value }
+    } else if (typeof value === 'boolean') {
+      encoded = { kind: 'boolean', value }
+    } else if (typeof value === 'number' && Number.isFinite(value) && !Object.is(value, -0)) {
+      encoded = { kind: 'number', value }
+    }
+    if (encoded) {
+      inputs ??= []
+      inputs.push({ name: fullName, value: encoded })
+      selected[entry.canonicalName] = rule.definitions
+    }
+  }
+  if (inputs === undefined) {
+    return
+  }
+
+  const snapshot = resolveStartup([{ origin: 'code', entries: inputs }], DD_MAJOR, undefined, log, selected)
+  if (snapshot === undefined) return
+
+  /** @type {Map<string, ResolvedOption>} */
+  const results = new Map()
+  for (const event of snapshot.sources) {
+    results.set(event.input_name ?? event.name, event)
+  }
+  for (const { name, input_name: inputName, problem } of snapshot.diagnostics) {
+    const result = results.get(inputName ?? name)
+    if (result) result.problem = problem
+  }
+  return results
+}
+
 module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
@@ -251,10 +337,7 @@ class Config extends ConfigBase {
     }
 
     this.#applyDefaults()
-    // TODO: Update origin documentation to list all valid sources. Add local_stable_config and fleet_stable_config.
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config')
-    this.#applyEnvs(getEnvironmentVariables(undefined, true), 'env_var')
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config')
+    this.#applyStartupEnvs()
 
     // Experimental options are applied first, so they can be overridden by non-experimental options.
     // TODO: When using programmatic options, check if there is a higher
@@ -278,6 +361,78 @@ class Config extends ConfigBase {
     }
   }
 
+  #applyStartupEnvs () {
+    // Log callbacks can change later environment sources during startup.
+    const hasLogSubscribers = warnChannel.hasSubscribers || errorChannel.hasSubscribers ||
+      errorRecordChannel.hasSubscribers
+    let hasDeprecation = false
+    const onDeprecation = hasLogSubscribers
+      ? () => {
+          hasDeprecation = true
+        }
+      : undefined
+    const { localEntries, fleetEntries } = this.stableConfig
+    /**
+     * @type {Array<[
+     *   import('./helper').TracerEnv,
+     *   Exclude<import('./startup').StartOrigin, 'code'>,
+     *   typeof process.env | undefined,
+     * ]>}
+     */
+    const sources = [
+      [getEnvironmentVariables(localEntries, true, onDeprecation), 'local_stable_config', localEntries],
+      [getEnvironmentVariables(undefined, true, onDeprecation), 'env_var', undefined],
+      [getEnvironmentVariables(fleetEntries, true, onDeprecation), 'fleet_stable_config', fleetEntries],
+    ]
+    const layers = sources.map(([envs, origin]) => {
+      const entries = /** @type {Array<[string, string]>} */ (Object.entries(envs))
+      return { origin, entries: entries.map(([name, value]) => ({ name, value })) }
+    })
+    const snapshot = hasDeprecation
+      ? undefined
+      : resolveStartup(
+        layers,
+        DD_MAJOR,
+        hasLogSubscribers
+          ? undefined
+          : (name, value, origin) => configurationsTable[name].transformer(value, name, origin),
+        log
+      )
+    if (snapshot === undefined || hasLogSubscribers && snapshot.diagnostics.length > 0) {
+      for (const [envs, origin, source] of sources) {
+        this.#applyEnvs(hasLogSubscribers ? getEnvironmentVariables(source, true) : envs, origin)
+      }
+      return
+    }
+
+    const { settings, diagnostics, sources: events, hostValues } = snapshot
+    for (const { name, origin, problem } of diagnostics) {
+      if (problem.kind === 'transform_rejected') {
+        continue
+      }
+
+      const event = events.find(entry => entry.name === name && entry.origin === origin)
+      warnStartupDiagnostic(problem, name, origin, configurationsTable[name].type, event?.input,
+        decodeValue(event?.parsed, hostValues))
+    }
+
+    const tracked = new Set()
+    for (const { name, origin, value: encoded, parsed, input } of events) {
+      const value = decodeValue(encoded, hostValues)
+      const rawValue = value !== null && typeof value === 'object'
+        ? input
+        : decodeValue(parsed, hostValues) ?? value
+      setAndTrack(this, configurationsTable[name].property ?? name, value, rawValue, origin)
+      tracked.add(name)
+    }
+    for (const { name, property, resolved } of settings) {
+      if (resolved && !tracked.has(name)) {
+        const path = /** @type {ConfigPath} */ (property)
+        setAndTrack(this, path, decodeValue(resolved.value, hostValues), undefined, resolved.origin)
+      }
+    }
+  }
+
   /**
    * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
@@ -297,7 +452,9 @@ class Config extends ConfigBase {
    * @param {string} [root]
    */
   #applyOptions (options, root = '') {
-    for (const [name, value] of Object.entries(options)) {
+    const entries = Object.entries(options)
+    const portable = resolvePortableOptions(entries, root)
+    for (const [name, value] of entries) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
       if (!entry) {
@@ -336,13 +493,22 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const coerced = programmaticTypeCoercions[entry.type](value)
-      if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+      const resolved = portable?.get(fullName)
+      let transformed
+      if (resolved) {
+        if (resolved.problem) {
+          warnStartupDiagnostic(resolved.problem, fullName, 'code', entry.type, value, decodeValue(resolved.parsed))
+        }
+        transformed = decodeValue(resolved.value)
+      } else {
+        const coerced = programmaticTypeCoercions[entry.type](value)
+        if (coerced === undefined && value !== undefined) {
+          warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
+        }
+        transformed = coerced !== undefined && entry.transformer
+          ? entry.transformer(coerced, fullName, 'code')
+          : coerced
       }
-      const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, 'code')
-        : coerced
       setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
