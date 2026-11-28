@@ -126,7 +126,7 @@ describe('release config schema', function () {
 
   it('applies the schema when npm packs a directory using only prepare', () => {
     withFixture(5, directory => {
-      const [pack] = JSON.parse(runNpm(directory, ['pack', '--ignore-scripts', '--json', directory]))
+      const [pack] = JSON.parse(runNpm(directory, ['pack', '--json']))
       const tarball = path.join(directory, pack.filename)
       const config = execFileSync('tar', ['-xOzf', tarball, 'package/' + schemaPath], { encoding: 'utf8' })
       assertVersionedSchema(config, 5)
