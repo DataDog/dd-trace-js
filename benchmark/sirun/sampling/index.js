@@ -21,28 +21,33 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 const CONFIGS = {
   // Non-unit agent rate: forces the Knuth hash + formatKnuthRate, the common
   // case once the agent has reported per-service rates.
-  agent: { rateLimit: 100 },
+  agent: { DD_TRACE_RATE_LIMIT: 100 },
   // A matching rule: glob match, then rule.sample (hash + limiter).
-  'rule-match': { rules: [{ service: 'web-*', sampleRate: 0.5, maxPerSecond: 100 }], rateLimit: 100 },
+  'rule-match': { DD_TRACE_SAMPLING_RULES: [{ service: 'web-*', sampleRate: 0.5, maxPerSecond: 100 }] },
   // Several non-matching rules: measures the glob-miss scan before falling back
   // to the agent decision.
   'rule-miss': {
-    rules: [
+    DD_TRACE_SAMPLING_RULES: [
       { service: 'cron-*', sampleRate: 0.1 },
       { name: 'redis.*', sampleRate: 0.2 },
       { resource: 'GET /health', sampleRate: 0 },
     ],
-    rateLimit: 100,
+    DD_TRACE_RATE_LIMIT: 100,
   },
   // A matching rule with a zero cap deterministically exercises the
   // rule-limited USER_REJECT branch.
-  'rate-limited': { rules: [{ service: 'web-*', sampleRate: 1, maxPerSecond: 0 }], rateLimit: 100 },
+  'rate-limited': { DD_TRACE_SAMPLING_RULES: [{ service: 'web-*', sampleRate: 1, maxPerSecond: 0 }] },
 }
 
 const config = CONFIGS[VARIANT]
 assert.ok(config, `unknown VARIANT: ${VARIANT}`)
 
-const sampler = new PrioritySampler('production', config)
+// Benchmark CI also runs this workload against the older sampler.
+const sampler = new PrioritySampler('production', {
+  ...config,
+  rateLimit: config.DD_TRACE_RATE_LIMIT,
+  rules: config.DD_TRACE_SAMPLING_RULES,
+})
 // The agent variant needs non-default per-service rates so the non-unit Knuth
 // path runs instead of the rate===1 short circuit.
 if (VARIANT === 'agent') {

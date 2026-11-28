@@ -177,7 +177,7 @@ describe('SpanContext', () => {
     })
 
     it('reflects an auto-drop decision rather than defaulting the flag to keep', () => {
-      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
+      const span = startSpan(new PrioritySampler(undefined, { DD_TRACE_SAMPLE_RATE: 0 }))
 
       assert.match(span.context().toTraceparent(), /-00$/)
     })
@@ -192,7 +192,7 @@ describe('SpanContext', () => {
     })
 
     it('does not override a priority that was already decided', () => {
-      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
+      const span = startSpan(new PrioritySampler(undefined, { DD_TRACE_SAMPLE_RATE: 0 }))
       span.setTag(MANUAL_KEEP, true)
 
       assert.match(span.context().toTraceparent(), /-01$/)

@@ -579,8 +579,9 @@ Important fields:
 
 - `type`: parser to use for environment variables. Common values are `string`, `boolean`, `int`, `decimal`, `array`, `map`, `json`.
 - `default`: parsed into the runtime type. `null` means `undefined` at runtime.
-- `configurationNames`: programmatic option names. The first entry becomes the main internal property path.
-- `internalPropertyName`: use this instead of `configurationNames` when the runtime property path should differ from the public option name.
+- `namespace` sets the internal path to `<namespace>.<canonical environment name>`.
+- `internalPropertyName` sets the internal path when `namespace` is absent.
+- `configurationNames` lists the programmatic options. Its first entry supplies the path when both fields are absent.
 - `transform`: extra conversion after parsing. This applies to both env vars and programmatic options.
 - `allowed`: whitelist of accepted values.
 - `aliases`: old or alternate env var names.
@@ -648,7 +649,8 @@ config.runtimeMetrics.enabled === true
 ```json
 "DD_TRACE_SAMPLE_RATE": [{
   "type": "decimal",
-  "configurationNames": ["sampleRate", "ingestion.sampleRate"],
+  "namespace": "sampling",
+  "configurationNames": ["sampleRate"],
   "default": null,
   "transform": "sampleRate"
 }]
@@ -691,6 +693,7 @@ config.headerTags
 ```json
 "DD_TRACE_SAMPLING_RULES": [{
   "type": "json",
+  "namespace": "sampling",
   "configurationNames": ["samplingRules"],
   "default": "[]",
   "transform": "toCamelCase"
@@ -704,7 +707,7 @@ DD_TRACE_SAMPLING_RULES='[{"sample_rate":0.5,"service":"api"}]'
 Result:
 
 ```js
-config.samplingRules
+config.sampling.DD_TRACE_SAMPLING_RULES
 // [{ sampleRate: 0.5, service: 'api' }]
 ```
 

@@ -42,7 +42,7 @@ function addDeliveryAnnotations (msg, tracer, span) {
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
 
-    if (tracer._config.dsmEnabled) {
+    if (tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED) {
       const targetName = span.context().getTag('amqp.link.target.address')
       const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
       const edgeTags = ['direction:out', `exchange:${normalizeRabbitMQName(targetName)}`, 'type:rabbitmq']

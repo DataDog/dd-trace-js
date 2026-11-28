@@ -170,13 +170,29 @@ describe('data streams checkpointer manual api', () => {
     const mockTrackTransaction = sinon.stub()
     tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
 
-    const originalDsmEnabled = tracer._tracer._config.dsmEnabled
-    tracer._tracer._config.dsmEnabled = false
+    const originalDsmEnabled = tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED
+    tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED = false
 
     tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
 
     sinon.assert.notCalled(mockTrackTransaction)
 
-    tracer._tracer._config.dsmEnabled = originalDsmEnabled
+    tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED = originalDsmEnabled
+  })
+
+  it('checkpoint methods are no-ops when Data Streams is disabled', function () {
+    const setCheckpoint = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.setCheckpoint = setCheckpoint
+
+    const originalDsmEnabled = tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED
+    tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED = false
+
+    try {
+      tracer.dataStreamsCheckpointer.setProduceCheckpoint('testProduce', 'test-queue', {})
+      tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', {})
+      sinon.assert.notCalled(setCheckpoint)
+    } finally {
+      tracer._tracer._config.dataStreams.DD_DATA_STREAMS_ENABLED = originalDsmEnabled
+    }
   })
 })

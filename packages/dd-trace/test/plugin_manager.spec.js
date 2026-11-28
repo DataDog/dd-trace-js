@@ -48,6 +48,13 @@ describe('Plugin Manager', () => {
       // #getSharedConfig reads it, so the stand-in must provide it too.
       testOptimization: {},
       tracing: {},
+      dbm: {
+        DD_DBM_INJECT_SQL_BASEHASH: false,
+        DD_DBM_PROPAGATION_MODE: 'disabled',
+      },
+      dataStreams: {
+        DD_DATA_STREAMS_ENABLED: false,
+      },
       ...overrides,
     }
   }
@@ -243,9 +250,10 @@ describe('Plugin Manager', () => {
 
       it('should keep the config for future configure calls', () => {
         pm.configurePlugin('two', { foo: 'bar' })
-        pm.configure(makeTracerConfig())
+        pm.configure(makeTracerConfig({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } }))
         loadChannel.publish({ name: 'two' })
         sinon.assert.calledWithMatch(Two.prototype.configure, {
+          dsmEnabled: true,
           enabled: true,
           foo: 'bar',
         })
@@ -438,7 +446,7 @@ describe('Plugin Manager', () => {
           DD_API_KEY: 'api-key',
           DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25,
           DD_TRACE_AWS_ADD_SPAN_POINTERS: true,
-          dsmEnabled: true,
+          dataStreams: { DD_DATA_STREAMS_ENABLED: true },
           lambda: {
             DD_API_KEY_SECRET_ARN: 'secret-arn',
             DD_CAPTURE_LAMBDA_PAYLOAD: true,
@@ -622,6 +630,19 @@ describe('Plugin Manager', () => {
       } finally {
         delete process.env.AWS_LAMBDA_FUNCTION_NAME
       }
+    })
+
+    it('translates canonical DBM settings for database plugins', () => {
+      pm.configure(makeTracerConfig({
+        dbm: {
+          DD_DBM_PROPAGATION_MODE: 'service',
+        },
+      }))
+      loadChannel.publish({ name: 'two' })
+
+      sinon.assert.calledWithMatch(Two.prototype.configure, {
+        dbmPropagationMode: 'service',
+      })
     })
 
     describe('without the load event', () => {

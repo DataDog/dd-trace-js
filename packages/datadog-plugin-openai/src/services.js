@@ -13,8 +13,8 @@ let interval = null
 module.exports.init = function (tracerConfig) {
   metrics = tracerConfig && tracerConfig.dogstatsd
     ? new DogStatsDClient({
-      host: tracerConfig.dogstatsd.hostname,
-      port: tracerConfig.dogstatsd.port,
+      host: tracerConfig.dogstatsd.DD_DOGSTATSD_HOST,
+      port: tracerConfig.dogstatsd.DD_DOGSTATSD_PORT,
       tags: [
         `service:${tracerConfig.tags.service}`,
         `env:${tracerConfig.tags.env}`,

@@ -23,7 +23,7 @@ const PRODUCER_HASH_HEX = 'e858292fd15a41e4'
 const PRODUCER_HASH = Buffer.from(PRODUCER_HASH_HEX, 'hex')
 const ENTRY_PARENT_HASH_HEX = ENTRY_PARENT_HASH.toString('hex')
 const config = {
-  dsmEnabled: true,
+  dataStreams: { DD_DATA_STREAMS_ENABLED: true },
   env: 'test',
   hostname: '127.0.0.1',
   port: 8126,

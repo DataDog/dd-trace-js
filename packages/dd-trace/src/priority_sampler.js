@@ -69,10 +69,10 @@ class PrioritySampler {
    * Creates an instance of PrioritySampler.
    *
    * @typedef {object} SamplingConfig
-   * @property {number} [sampleRate] - The default sample rate for traces.
+   * @property {number} [DD_TRACE_SAMPLE_RATE] - The default sample rate for traces.
    * @property {string} [provenance] - Optional rule provenance ("customer" or "dynamic").
-   * @property {number} [rateLimit=100] - The maximum number of traces to sample per second.
-   * @property {Array<import('./sampling_rule')>|Array<Record<string, unknown>>} [rules=[]] - Sampling rules or configs.
+   * @property {number} [DD_TRACE_RATE_LIMIT=100] - The maximum number of traces to sample per second.
+   * @property {SamplingRuleLike[]} [DD_TRACE_SAMPLING_RULES] - Sampling rules or configs.
    *
    * @param {string} env - The environment name (e.g., "production", "staging").
    * @param {SamplingConfig} [config] - The configuration object for sampling.
@@ -88,7 +88,12 @@ class PrioritySampler {
    * @param {SamplingConfig} config
    */
   configure (env, config = {}) {
-    const { sampleRate, provenance, rateLimit = 100, rules } = config
+    const {
+      DD_TRACE_SAMPLE_RATE: sampleRate,
+      DD_TRACE_RATE_LIMIT: rateLimit = 100,
+      DD_TRACE_SAMPLING_RULES: rules,
+      provenance,
+    } = config
     this._env = env
     this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)

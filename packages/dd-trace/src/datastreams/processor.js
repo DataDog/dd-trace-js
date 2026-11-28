@@ -214,7 +214,7 @@ class TimeBuckets extends Map {
 
 class DataStreamsProcessor {
   constructor ({
-    dsmEnabled,
+    dataStreams,
     hostname,
     port,
     url,
@@ -232,7 +232,7 @@ class DataStreamsProcessor {
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = dsmEnabled
+    this.enabled = dataStreams.DD_DATA_STREAMS_ENABLED
     this.env = env
     this.tags = tags || {}
     this.service = service || 'unnamed-nodejs-service'

@@ -430,8 +430,8 @@ class Config extends ConfigBase {
     // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this.hostname || /** @type {URL} */ (this.url).hostname
 
-    if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
-      setAndTrack(this, 'dogstatsd.hostname', agentHostname)
+    if (!trackedConfigOrigins.has('dogstatsd.DD_DOGSTATSD_HOST')) {
+      setAndTrack(this, 'dogstatsd.DD_DOGSTATSD_HOST', agentHostname)
     }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
@@ -536,7 +536,8 @@ class Config extends ConfigBase {
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
       try {
         // TODO: Should we log a warning in case this is defined next to spanSamplingRules?
-        setAndTrack(this, 'spanSamplingRules', transformers.toCamelCase(JSON.parse(this.DD_SPAN_SAMPLING_RULES_FILE)))
+        setAndTrack(this, 'sampling.DD_SPAN_SAMPLING_RULES',
+          transformers.toCamelCase(JSON.parse(this.DD_SPAN_SAMPLING_RULES_FILE)))
       } catch (error) {
         log.warn('Error reading span sampling rules file %s; %o', this.DD_SPAN_SAMPLING_RULES_FILE, error)
       }
@@ -684,7 +685,7 @@ class Config extends ConfigBase {
         setAndTrack(this, 'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
-      setAndTrack(this, 'dsmEnabled', false)
+      setAndTrack(this, 'dataStreams.DD_DATA_STREAMS_ENABLED', false)
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
       setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
       if (profilingExporters.length === 0) {
@@ -793,25 +794,17 @@ class Config extends ConfigBase {
     }
 
     // An explicit OTel sampler also applies to native trace exporters.
-    if (!trackedConfigOrigins.has('sampleRate') &&
+    if (!trackedConfigOrigins.has('sampling.DD_TRACE_SAMPLE_RATE') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || usesOtlpTraceExporter(this))) {
-      setAndTrack(this, 'sampleRate',
+      setAndTrack(this, 'sampling.DD_TRACE_SAMPLE_RATE',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
-    }
-
-    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
-    this.sampler = {
-      rules: this.samplingRules,
-      rateLimit: this.rateLimit,
-      sampleRate: this.sampleRate,
-      spanSamplingRules: this.spanSamplingRules,
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
       // Disable rate limiting - server-side sampling will be used
-      setAndTrack(this, 'sampler.rateLimit', -1)
+      setAndTrack(this, 'sampling.DD_TRACE_RATE_LIMIT', -1)
       // Clear sampling rules - server-side sampling handles this
-      setAndTrack(this, 'sampler.rules', [])
+      setAndTrack(this, 'sampling.DD_TRACE_SAMPLING_RULES', [])
     }
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling

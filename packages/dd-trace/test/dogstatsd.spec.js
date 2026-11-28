@@ -193,8 +193,8 @@ describe('dogstatsd', () => {
   function createCustomMetrics (CustomMetricsCtor = CustomMetrics) {
     return new CustomMetricsCtor({
       dogstatsd: {
-        hostname: '127.0.0.1',
-        port: 8125,
+        DD_DOGSTATSD_HOST: '127.0.0.1',
+        DD_DOGSTATSD_PORT: 8125,
       },
       lookup: dns.lookup,
       runtimeMetricsRuntimeId: false,
@@ -1310,8 +1310,8 @@ describe('dogstatsd', () => {
     it('should refresh its tags when the identity-refresh channel fires', () => {
       const config = {
         dogstatsd: {
-          hostname: '127.0.0.1',
-          port: 8125,
+          DD_DOGSTATSD_HOST: '127.0.0.1',
+          DD_DOGSTATSD_PORT: 8125,
         },
         lookup: dns.lookup,
         runtimeMetricsRuntimeId: true,
@@ -1342,8 +1342,8 @@ describe('dogstatsd', () => {
     it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
       const config = {
         dogstatsd: {
-          hostname: '127.0.0.1',
-          port: 8125,
+          DD_DOGSTATSD_HOST: '127.0.0.1',
+          DD_DOGSTATSD_PORT: 8125,
         },
         lookup: dns.lookup,
         runtimeMetricsRuntimeId: true,

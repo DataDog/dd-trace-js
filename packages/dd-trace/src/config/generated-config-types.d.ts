@@ -66,10 +66,13 @@ export interface GeneratedConfig {
       };
     };
   };
-  dbm: {
-    injectSqlBaseHash: boolean;
+  dataStreams: {
+    DD_DATA_STREAMS_ENABLED: boolean;
   };
-  dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
+  dbm: {
+    DD_DBM_INJECT_SQL_BASEHASH: boolean;
+    DD_DBM_PROPAGATION_MODE: "disabled" | "service" | "full" | "dynamic_service";
+  };
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
@@ -419,10 +422,9 @@ export interface GeneratedConfig {
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
   dogstatsd: {
-    hostname: string;
-    port: string | number;
+    DD_DOGSTATSD_HOST: string;
+    DD_DOGSTATSD_PORT: number;
   };
-  dsmEnabled: boolean;
   dynamicInstrumentation: {
     DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
     DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
@@ -547,7 +549,6 @@ export interface GeneratedConfig {
     DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
   };
   protocolVersion: string;
-  rateLimit: number;
   remoteConfig: {
     DD_REMOTE_CONFIGURATION_ENABLED: boolean;
     pollInterval: number;
@@ -563,15 +564,18 @@ export interface GeneratedConfig {
     native: boolean;
   };
   runtimeMetricsRuntimeId: boolean;
-  sampleRate: number | undefined;
-  samplingRules: import('../../../../index').SamplingRule[];
+  sampling: {
+    DD_SPAN_SAMPLING_RULES: import('../../../../index').SpanSamplingRule[] | undefined;
+    DD_TRACE_RATE_LIMIT: number;
+    DD_TRACE_SAMPLE_RATE: number | undefined;
+    DD_TRACE_SAMPLING_RULES: import('../../../../index').SamplingRule[];
+  };
   service: string;
   serviceMapping: Record<string, string>;
   site: string;
   spanAttributeSchema: "v0" | "v1";
   spanComputePeerService: boolean;
   spanRemoveIntegrationFromService: boolean;
-  spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
   startupLogs: boolean;
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
@@ -734,7 +738,7 @@ export interface GeneratedEnvVarConfig {
   DD_DECODE_AUTHORIZER_CONTEXT: boolean;
   DD_DOGSTATSD_HOST: string;
   DD_DOGSTATSD_HOSTNAME: string;
-  DD_DOGSTATSD_PORT: string | number;
+  DD_DOGSTATSD_PORT: number;
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;

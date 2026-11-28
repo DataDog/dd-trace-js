@@ -36,7 +36,7 @@ class DatadogTracer {
     this._env = config.env
     this._logInjection = config.logInjection
     this._debug = config.debug
-    this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
+    this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampling)
 
     const exportOtlpTraces = getExporter.usesOtlpTraceExporter(config)
     let traces

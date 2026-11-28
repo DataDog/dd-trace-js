@@ -11,9 +11,11 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
+const TraceSourcePrioritySampler = require('../src/standalone/tracesource_priority_sampler')
 const getConfig = require('../src/config')
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 const tags = require('../../../ext/tags')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, SAMPLING_PRIORITY_KEY } = require('../../dd-trace/src/constants')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -37,11 +39,39 @@ describe('Tracer', () => {
   describe('configure', () => {
     it('should pass the sampling options to the priority sampler', () => {
       const env = 'test'
-      const sampler = { sampleRate: 0.5 }
-      const options = { env, sampler }
+      const sampling = { DD_TRACE_SAMPLE_RATE: 0.5 }
+      const options = { env, sampling }
       tracer.configure(options)
-      sinon.assert.calledWith(tracer._prioritySampler.configure, env, sampler)
+      sinon.assert.calledOnceWithExactly(tracer._prioritySampler.configure, env, sampling, options)
     })
+
+    for (const [appsec, iast, firstPriority] of [
+      [true, false, AUTO_KEEP],
+      [false, true, AUTO_KEEP],
+      [false, false, AUTO_REJECT],
+    ]) {
+      it(`should preserve standalone sampling with AppSec=${appsec} and IAST=${iast}`, () => {
+        const clock = sinon.useFakeTimers()
+        try {
+          const options = {
+            ...config,
+            apmTracingEnabled: false,
+            appsec: { DD_APPSEC_ENABLED: appsec },
+            iast: { DD_IAST_ENABLED: iast },
+          }
+          const standaloneTracer = new Tracer(options, new TraceSourcePrioritySampler(options.env))
+          const exportSpans = sinon.stub(standaloneTracer._exporter, 'export')
+          standaloneTracer.configure(options)
+          standaloneTracer.startSpan('first').finish()
+          standaloneTracer.startSpan('second').finish()
+
+          const priorities = exportSpans.args.map(([spans]) => spans[0].metrics[SAMPLING_PRIORITY_KEY])
+          assert.deepStrictEqual(priorities, [firstPriority, AUTO_REJECT])
+        } finally {
+          clock.restore()
+        }
+      })
+    }
   })
 
   describe('setUrl', () => {

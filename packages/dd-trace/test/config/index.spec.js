@@ -425,27 +425,27 @@ describe('Config', () => {
     const samplingRules = [{ name, service, resource, tags: { status: tag }, sampleRate: 0 }]
     const config = getConfig({ samplingRules })
 
-    assert.ok(config.samplingRules[0].name instanceof RegExp)
-    assert.ok(config.samplingRules[0].service instanceof RegExp)
-    assert.ok(config.samplingRules[0].resource instanceof RegExp)
-    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
-    assert.notStrictEqual(config.samplingRules[0].name, name)
-    assert.notStrictEqual(config.samplingRules[0].service, service)
-    assert.notStrictEqual(config.samplingRules[0].resource, resource)
-    assert.notStrictEqual(config.samplingRules[0].tags.status, tag)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].name instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].service instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].resource instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].name, name)
+    assert.notStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].service, service)
+    assert.notStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].resource, resource)
+    assert.notStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].tags.status, tag)
 
-    const activeName = config.samplingRules[0].name
+    const activeName = config.sampling.DD_TRACE_SAMPLING_RULES[0].name
     activeName.lastIndex = 2
 
     config.setRemoteConfig({ DD_TRACE_SAMPLING_RULES: '[{"name":"remote","sample_rate":1}]' })
     config.setRemoteConfig(null)
 
-    assert.ok(config.samplingRules[0].name instanceof RegExp)
-    assert.ok(config.samplingRules[0].service instanceof RegExp)
-    assert.ok(config.samplingRules[0].resource instanceof RegExp)
-    assert.ok(config.samplingRules[0].tags.status instanceof RegExp)
-    assert.notStrictEqual(config.samplingRules[0].name, activeName)
-    assert.strictEqual(config.samplingRules[0].name.lastIndex, 0)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].name instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].service instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].resource instanceof RegExp)
+    assert.ok(config.sampling.DD_TRACE_SAMPLING_RULES[0].tags.status instanceof RegExp)
+    assert.notStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].name, activeName)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLING_RULES[0].name.lastIndex, 0)
     assert.strictEqual(samplingRules[0].name, name)
     assert.strictEqual(samplingRules[0].service, service)
     assert.strictEqual(samplingRules[0].resource, resource)
@@ -477,7 +477,7 @@ describe('Config', () => {
       debug: false,
       service: 'service',
       logLevel: 'error',
-      sampleRate: 0.5,
+      sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       runtimeMetrics: {
         enabled: true,
       },
@@ -654,7 +654,7 @@ describe('Config', () => {
       debug: true,
       service: 'otel_service',
       logLevel: 'debug',
-      sampleRate: 0.1,
+      sampling: { DD_TRACE_SAMPLE_RATE: 0.1 },
       runtimeMetrics: {
         enabled: false,
       },
@@ -1745,27 +1745,27 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SAMPLER = 'always_on'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
     let config = getConfig()
-    assert.strictEqual(config.sampleRate, 1.0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 1.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'always_off'
     config = getConfig()
-    assert.strictEqual(config.sampleRate, 0.0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
     config = getConfig()
-    assert.strictEqual(config.sampleRate, 0.1)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.1)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_on'
     config = getConfig()
-    assert.strictEqual(config.sampleRate, 1.0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 1.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_off'
     config = getConfig()
-    assert.strictEqual(config.sampleRate, 0.0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.0)
 
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
     config = getConfig()
-    assert.strictEqual(config.sampleRate, 0.1)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.1)
   })
 
   it('should log when a non-parentbased sampler is upgraded to its parentbased equivalent', () => {
@@ -1803,25 +1803,25 @@ describe('Config', () => {
   it('should default OTEL_TRACES_SAMPLER to parentbased_always_on when OTEL_TRACES_EXPORTER is otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
-    assert.strictEqual(config.sampleRate, 1.0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 1.0)
   })
 
   it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is not otlp', () => {
     const config = getConfig()
-    assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
   })
 
   it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig({ experimental: { exporter: 'electron' } })
-    assert.strictEqual(config.sampleRate, undefined)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
   })
 
   it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.OTEL_TRACES_SAMPLER = 'always_off'
     const config = getConfig({ experimental: { exporter: 'electron' } })
-    assert.strictEqual(config.sampleRate, 0)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0)
   })
 
   for (const [name, options] of [
@@ -1834,7 +1834,7 @@ describe('Config', () => {
       process.env.DD_METRICS_OTEL_ENABLED = 'true'
       const config = getConfig(options)
 
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
     })
 
@@ -1844,7 +1844,7 @@ describe('Config', () => {
       process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
       const config = getConfig(options)
 
-      assert.strictEqual(config.sampleRate, 0)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0)
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
     })
   }
@@ -2090,7 +2090,7 @@ describe('Config', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     const config = getConfig()
-    assert.strictEqual(config.sampleRate, 0.5)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
   })
 
   it('should leave span metrics disabled when OTLP traces and OTel metrics are enabled', () => {
@@ -2260,8 +2260,8 @@ describe('Config', () => {
       DD_CRASHTRACKING_ENABLED: true,
       debug: false,
       dogstatsd: {
-        hostname: '127.0.0.1',
-        port: 8125,
+        DD_DOGSTATSD_HOST: '127.0.0.1',
+        DD_DOGSTATSD_PORT: 8125,
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
@@ -2330,7 +2330,7 @@ describe('Config', () => {
         gc: true,
       },
       runtimeMetricsRuntimeId: false,
-      sampleRate: undefined,
+      sampling: { DD_TRACE_SAMPLE_RATE: undefined },
       DD_TRACE_SCOPE: undefined,
       service: 'node',
       spanAttributeSchema: 'v0',
@@ -2758,8 +2758,8 @@ describe('Config', () => {
       DD_CRASHTRACKING_ENABLED: false,
       debug: true,
       dogstatsd: {
-        hostname: 'dsd-agent',
-        port: 5218,
+        DD_DOGSTATSD_HOST: 'dsd-agent',
+        DD_DOGSTATSD_PORT: 5218,
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
@@ -2819,7 +2819,7 @@ describe('Config', () => {
         native: false,
       },
       runtimeMetricsRuntimeId: true,
-      sampleRate: 0.5,
+      sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
@@ -2843,16 +2843,17 @@ describe('Config', () => {
     assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TYPE, 'k8s_single_step')
     assert.strictEqual(config.DD_INSTRUMENTATION_INSTALL_TIME, '1703188212')
     assert.deepStrictEqual(config.peerServiceMapping, { c: 'cc', d: 'dd' })
-    assert.deepStrictEqual(config.sampler, {
-      sampleRate: 0.5,
-      rateLimit: -1,
-      rules: [
+    assert.strictEqual(Object.hasOwn(config, 'sampler'), false)
+    assert.deepStrictEqual(config.sampling, {
+      DD_TRACE_SAMPLE_RATE: 0.5,
+      DD_TRACE_RATE_LIMIT: -1,
+      DD_TRACE_SAMPLING_RULES: [
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0, discard: true },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
         { sampleRate: 0.1 },
       ],
-      spanSamplingRules: [
+      DD_SPAN_SAMPLING_RULES: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
         { service: 'mysql', sampleRate: 1.0 },
@@ -3094,6 +3095,17 @@ describe('Config', () => {
     ])
   })
 
+  it('should use the canonical Data Streams name internally', () => {
+    const config = getConfig({ dsmEnabled: true })
+
+    assert.strictEqual(config.dataStreams.DD_DATA_STREAMS_ENABLED, true)
+    assert.strictEqual(Object.hasOwn(config, 'dsmEnabled'), false)
+    assert.strictEqual(config.getOrigin('dataStreams.DD_DATA_STREAMS_ENABLED'), 'code')
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_DATA_STREAMS_ENABLED', value: true, origin: 'code' },
+    ])
+  })
+
   it('should transform safe programmatic option types', () => {
     const config = getConfig({
       startupLogs: 'False',
@@ -3202,7 +3214,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.baggageTagKeys, defaults.baggageTagKeys)
     assert.deepStrictEqual(config.headerTags, defaults.headerTags)
     assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
-    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
+    assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, defaults['sampling.DD_TRACE_SAMPLING_RULES'])
     sinon.assert.calledWithExactly(
       log.warn,
       "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
@@ -3250,7 +3262,7 @@ describe('Config', () => {
     assertObjectContains(config, {
       DD_TRACE_ENABLED: false,
       dogstatsd: {
-        hostname: 'agent',
+        DD_DOGSTATSD_HOST: 'agent',
       },
       site: 'datadoghq.eu',
       service: 'service',
@@ -3449,8 +3461,8 @@ describe('Config', () => {
         },
       },
       dogstatsd: {
-        hostname: 'agent-dsd',
-        port: 5218,
+        DD_DOGSTATSD_HOST: 'agent-dsd',
+        DD_DOGSTATSD_PORT: 5218,
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
@@ -3507,7 +3519,7 @@ describe('Config', () => {
         gc: false,
       },
       runtimeMetricsRuntimeId: true,
-      sampleRate: 0.5,
+      sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       service: 'service',
       site: 'datadoghq.eu',
       spanComputePeerService: true,
@@ -3543,16 +3555,16 @@ describe('Config', () => {
     } else {
       assert.ok(!('iast.securityControlsConfiguration' in config))
     }
-    assert.deepStrictEqual(config.sampler, {
-      rateLimit: 1000,
-      rules: [
+    assert.deepStrictEqual(config.sampling, {
+      DD_TRACE_RATE_LIMIT: 1000,
+      DD_TRACE_SAMPLING_RULES: [
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
         { sampleRate: 0.1 },
       ],
-      sampleRate: 0.5,
-      spanSamplingRules: [
+      DD_TRACE_SAMPLE_RATE: 0.5,
+      DD_SPAN_SAMPLING_RULES: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
         { service: 'mysql', sampleRate: 1.0 },
@@ -3697,7 +3709,7 @@ describe('Config', () => {
       site: 'datadoghq.eu',
       service: 'service',
       env: 'test',
-      sampleRate: 0.5,
+      sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
     })
     assert.strictEqual(config.logger, logger)
     assert.strictEqual(config.tags.foo, 'bar')
@@ -3801,7 +3813,7 @@ describe('Config', () => {
 
     let config = getConfig()
 
-    assert.strictEqual(config.dogstatsd.port, 1)
+    assert.strictEqual(config.dogstatsd.DD_DOGSTATSD_PORT, 1)
     assert.strictEqual(config.port, 1)
 
     process.env.DD_DOGSTATSD_PORT = '65535'
@@ -3809,7 +3821,7 @@ describe('Config', () => {
 
     config = getConfig()
 
-    assert.strictEqual(config.dogstatsd.port, 65535)
+    assert.strictEqual(config.dogstatsd.DD_DOGSTATSD_PORT, 65535)
     assert.strictEqual(config.port, 65535)
   })
 
@@ -3827,7 +3839,7 @@ describe('Config', () => {
       log.warn,
       'Invalid value: 0 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
     )
-    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.dogstatsd.DD_DOGSTATSD_PORT, 8125)
     assert.strictEqual(config.port, 8126)
 
     process.env.DD_DOGSTATSD_PORT = '65536'
@@ -3843,7 +3855,7 @@ describe('Config', () => {
       log.warn,
       'Invalid value: 65536 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
     )
-    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.dogstatsd.DD_DOGSTATSD_PORT, 8125)
     assert.strictEqual(config.port, 8126)
   })
 
@@ -4177,8 +4189,8 @@ describe('Config', () => {
         },
       },
       dogstatsd: {
-        hostname: 'server',
-        port: 8888,
+        DD_DOGSTATSD_HOST: 'server',
+        DD_DOGSTATSD_PORT: 8888,
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
@@ -4438,8 +4450,8 @@ describe('Config', () => {
       },
     })
 
-    assert.strictEqual(config.sampleRate, undefined)
-    assert.strictEqual(config.rateLimit, 100)
+    assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
+    assert.strictEqual(config.sampling.DD_TRACE_RATE_LIMIT, 100)
     sinon.assert.calledWith(
       log.warn,
       'Unknown option %s with value %o',
@@ -4488,9 +4500,9 @@ describe('Config', () => {
   })
 
   it('should sanitize the sample rate to be between 0 and 1', () => {
-    assert.strictEqual(getConfig({ sampleRate: -1 }).sampleRate, 0)
-    assert.strictEqual(getConfig({ sampleRate: 2 }).sampleRate, 1)
-    assert.strictEqual(getConfig({ sampleRate: NaN }).sampleRate, undefined)
+    assert.strictEqual(getConfig({ sampleRate: -1 }).sampling.DD_TRACE_SAMPLE_RATE, 0)
+    assert.strictEqual(getConfig({ sampleRate: 2 }).sampling.DD_TRACE_SAMPLE_RATE, 1)
+    assert.strictEqual(getConfig({ sampleRate: NaN }).sampling.DD_TRACE_SAMPLE_RATE, undefined)
   })
 
   it('should ignore empty service names', () => {
@@ -4631,7 +4643,7 @@ describe('Config', () => {
         const config = getConfig({ isCiVisibility: true, experimental: { exporter } })
 
         assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, profiling)
-        assert.strictEqual(config.dsmEnabled, true)
+        assert.strictEqual(config.dataStreams.DD_DATA_STREAMS_ENABLED, true)
       })
     }
 
@@ -4984,7 +4996,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.sampler?.spanSamplingRules, [
+    assert.deepStrictEqual(config.sampling?.DD_SPAN_SAMPLING_RULES, [
       { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
       { service: 'mysql', sampleRate: 0.5 },
       { service: 'mysql', sampleRate: 1.0 },
@@ -5006,7 +5018,7 @@ describe('Config', () => {
     try {
       const config = getConfig()
 
-      assert.strictEqual(config.sampler?.spanSamplingRules, undefined)
+      assert.strictEqual(config.sampling?.DD_SPAN_SAMPLING_RULES, undefined)
       sinon.assert.calledWithMatch(
         log.warn,
         'Error reading span sampling rules file %s; %o',
@@ -5108,7 +5120,9 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.dogstatsd.hostname, 'localhost')
+    assert.strictEqual(config.dogstatsd.DD_DOGSTATSD_HOST, 'localhost')
+    assert.strictEqual(Object.hasOwn(config.dogstatsd, 'hostname'), false)
+    assert.strictEqual(Object.hasOwn(config.dogstatsd, 'port'), false)
   })
 
   it('should use domain namespaces for experimental controls internally', () => {
@@ -5656,6 +5670,50 @@ describe('Config', () => {
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
         name: 'DD_LLMOBS_ENABLED', value: false, origin: 'env_var',
       }])
+    })
+  })
+
+  context('DBM configuration', () => {
+    afterEach(() => {
+      delete process.env.DD_DBM_INJECT_SQL_BASEHASH
+      delete process.env.DD_DBM_PROPAGATION_MODE
+    })
+
+    it('uses canonical internal names', () => {
+      const { dbm } = getConfig()
+
+      assert.deepStrictEqual(dbm, {
+        DD_DBM_INJECT_SQL_BASEHASH: false,
+        DD_DBM_PROPAGATION_MODE: 'disabled',
+      })
+      assert.strictEqual(Object.hasOwn(dbm, 'injectSqlBaseHash'), false)
+    })
+
+    it('maps environment variables to canonical internal names', () => {
+      process.env.DD_DBM_INJECT_SQL_BASEHASH = 'true'
+      process.env.DD_DBM_PROPAGATION_MODE = 'service'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.dbm, {
+        DD_DBM_INJECT_SQL_BASEHASH: true,
+        DD_DBM_PROPAGATION_MODE: 'service',
+      })
+      assert.strictEqual(config.getOrigin('dbm.DD_DBM_INJECT_SQL_BASEHASH'), 'env_var')
+      assert.strictEqual(config.getOrigin('dbm.DD_DBM_PROPAGATION_MODE'), 'env_var')
+    })
+
+    it('keeps programmatic names as public aliases', () => {
+      const config = getConfig({
+        dbm: { injectSqlBaseHash: true },
+        dbmPropagationMode: 'full',
+      })
+
+      assert.deepStrictEqual(config.dbm, {
+        DD_DBM_INJECT_SQL_BASEHASH: true,
+        DD_DBM_PROPAGATION_MODE: 'full',
+      })
+      assert.strictEqual(Object.hasOwn(config, 'dbmPropagationMode'), false)
     })
   })
 
@@ -6687,9 +6745,9 @@ rules:
 
     it('should resolve env-var-keyed configs via configurationsTable', () => {
       const config = getConfig()
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
-      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
     })
 
     it('should resolve a boolean env-var-keyed config', () => {
@@ -6701,33 +6759,32 @@ rules:
 
     it('should resolve a structured (JSON) env-var-keyed config', () => {
       const config = getConfig()
-      assert.deepStrictEqual(config.sampler.rules, [])
+      assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, [])
       config.setRemoteConfig({ DD_TRACE_SAMPLING_RULES: '[{"sample_rate":0.5}]' })
-      assert.deepStrictEqual(config.samplingRules, [{ sampleRate: 0.5 }])
-      assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
+      assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, [{ sampleRate: 0.5 }])
     })
 
     it('should silently ignore keys this tracer version does not recognize', () => {
       const config = getConfig()
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
       config.setRemoteConfig({
         DD_TRACE_SAMPLE_RATE: '0.5',
         DD_SOME_FUTURE_UNRECOGNIZED_SETTING: 'value',
       })
-      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
     })
 
     it('should clamp a sample rate outside the 0-1 range', () => {
       const config = getConfig()
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '1.5' })
-      assert.strictEqual(config.sampleRate, 1)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 1)
     })
 
     it('should ignore an invalid sample rate and fall back to the previous source', () => {
       const config = getConfig({ sampleRate: 0.5 })
       config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: 'not-a-number' })
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.getOrigin('sampleRate'), 'code')
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'code')
     })
 
     it('should resolve dynamic instrumentation enablement to a nested property', () => {
@@ -6786,7 +6843,7 @@ rules:
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
         logInjection: true,
-        sampleRate: 0.5,
+        sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
 
       config.setRemoteConfig({ DD_TRACE_ENABLED: 'false' })
@@ -6794,7 +6851,7 @@ rules:
       assertObjectContains(config, {
         DD_TRACE_ENABLED: false,
         logInjection: true,
-        sampleRate: 0.5,
+        sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
 
       config.setRemoteConfig(null)
@@ -6802,7 +6859,7 @@ rules:
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
         logInjection: true,
-        sampleRate: 0.5,
+        sampling: { DD_TRACE_SAMPLE_RATE: 0.5 },
       })
     })
   })
@@ -6840,15 +6897,15 @@ rules:
         DD_LOGS_INJECTION: 'false',
       })
 
-      assert.strictEqual(config.getOrigin('sampleRate'), 'remote_config')
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'remote_config')
       assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
 
       config.setRemoteConfig({
         DD_LOGS_INJECTION: 'false',
       })
 
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.getOrigin('sampleRate'), 'code')
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'code')
       assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
     })
 
@@ -6888,16 +6945,16 @@ rules:
       })
 
       assert.strictEqual(config.getOrigin('DD_TRACE_ENABLED'), 'remote_config')
-      assert.strictEqual(config.getOrigin('sampleRate'), 'remote_config')
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'remote_config')
 
       config.setRemoteConfig({
         DD_TRACE_SAMPLE_RATE: '0.8',
       })
 
       assert.strictEqual(config.DD_TRACE_ENABLED, true)
-      assert.strictEqual(config.sampleRate, 0.8)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.8)
       assert.strictEqual(config.getOrigin('DD_TRACE_ENABLED'), 'default')
-      assert.strictEqual(config.getOrigin('sampleRate'), 'remote_config')
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLE_RATE'), 'remote_config')
     })
 
     it('should update telemetry when an individual RC option falls back to defaults', () => {
@@ -6933,7 +6990,7 @@ rules:
         logInjection: true,
       })
 
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
 
       config.setRemoteConfig({
         DD_TRACE_ENABLED: 'true',
@@ -6944,7 +7001,7 @@ rules:
       assertObjectContains(config, {
         DD_TRACE_ENABLED: true,
         logInjection: false,
-        sampleRate: 0.8,
+        sampling: { DD_TRACE_SAMPLE_RATE: 0.8 },
       })
 
       config.setRemoteConfig({
@@ -6955,7 +7012,7 @@ rules:
         DD_TRACE_ENABLED: false,
         logInjection: true,
       })
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
     })
   })
 
@@ -7060,7 +7117,7 @@ rules:
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
       assert.strictEqual(config.runtimeMetrics.enabled, false)
-      assert.strictEqual(config.dsmEnabled, false)
+      assert.strictEqual(config.dataStreams.DD_DATA_STREAMS_ENABLED, false)
       assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
@@ -7079,8 +7136,7 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.sampleRate, 0.5)
-      assert.strictEqual(config.sampler.sampleRate, 0.5)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
     })
 
     it('should preserve an explicit OTel trace sampler', () => {
@@ -7092,7 +7148,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      assert.strictEqual(config.sampleRate, 0.25)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.25)
     })
 
     it('should retain native sampling when agentless overrides the OTLP trace exporter', () => {
@@ -7102,7 +7158,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, undefined)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -7225,7 +7281,8 @@ rules:
     it('should disable rate limiting when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.sampler.rateLimit, -1)
+      assert.strictEqual(config.sampling.DD_TRACE_RATE_LIMIT, -1)
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_RATE_LIMIT'), 'calculated')
     })
 
     it('should disable stats computation when agentless is enabled', () => {
@@ -7244,9 +7301,11 @@ rules:
     it('should preserve the trace sample rate and clear sampling rules when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+      process.env.DD_TRACE_SAMPLING_RULES = '[{"sample_rate":1}]'
       const config = getConfig()
-      assert.deepStrictEqual(config.sampler.rules, [])
-      assert.strictEqual(config.sampler.sampleRate, 0.5)
+      assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, [])
+      assert.strictEqual(config.getOrigin('sampling.DD_TRACE_SAMPLING_RULES'), 'calculated')
+      assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
     })
 
     it('should disable 128-bit trace ID generation when agentless is enabled', () => {
@@ -7267,7 +7326,7 @@ rules:
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
       assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
-      assert.notStrictEqual(config.sampler.rateLimit, -1)
+      assert.notStrictEqual(config.sampling.DD_TRACE_RATE_LIMIT, -1)
     })
 
     it('should default OTLP logs/metrics endpoints to the per-site intake and add the API key ' +
@@ -7381,7 +7440,7 @@ rules:
         // The rest of a later update still applies
         config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true', DD_TRACE_SAMPLE_RATE: '0.5' })
         assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
-        assert.strictEqual(config.sampleRate, 0.5)
+        assert.strictEqual(config.sampling.DD_TRACE_SAMPLE_RATE, 0.5)
 
         config.setRemoteConfig(null)
         assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)

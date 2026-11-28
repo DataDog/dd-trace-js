@@ -8,9 +8,9 @@ const SamplingRule = require('./sampling_rule')
  */
 class SpanSampler {
   /**
-   * @param {{ spanSamplingRules?: Array<import('./sampling_rule')>|Array<Record<string, unknown>> }} [config]
+   * @param {{ DD_SPAN_SAMPLING_RULES?: Array<import('./sampling_rule')>|Array<Record<string, unknown>> }} [config]
    */
-  constructor ({ spanSamplingRules = [] } = {}) {
+  constructor ({ DD_SPAN_SAMPLING_RULES: spanSamplingRules = [] } = {}) {
     this._rules = spanSamplingRules.map(SamplingRule.from)
   }
 

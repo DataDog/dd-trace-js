@@ -57,7 +57,7 @@ class SpanProcessor {
       }
     }
 
-    this._spanSampler = new SpanSampler(config.sampler)
+    this._spanSampler = new SpanSampler(config.sampling)
     this._gitMetadataTagger = new GitMetadataTagger(config)
 
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED

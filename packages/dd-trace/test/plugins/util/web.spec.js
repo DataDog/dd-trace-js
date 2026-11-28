@@ -802,8 +802,8 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'HTTP /users/:id')
 
       const prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0,
-        rules: [{ sampleRate: 1, resource: 'HTTP /users/:id' }],
+        DD_TRACE_SAMPLE_RATE: 0,
+        DD_TRACE_SAMPLING_RULES: [{ sampleRate: 1, resource: 'HTTP /users/:id' }],
       })
       prioritySampler.sample(span.context())
       assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
@@ -846,8 +846,8 @@ describe('plugins/util/web', () => {
         assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], resource)
 
         const prioritySampler = new PrioritySampler('test', {
-          sampleRate: 0,
-          rules: [{ sampleRate: 1, resource }],
+          DD_TRACE_SAMPLE_RATE: 0,
+          DD_TRACE_SAMPLING_RULES: [{ sampleRate: 1, resource }],
         })
         prioritySampler.sample(span.context())
         assert.strictEqual(span.context()._sampling.priority, USER_KEEP)

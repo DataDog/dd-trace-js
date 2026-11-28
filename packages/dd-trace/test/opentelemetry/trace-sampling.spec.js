@@ -28,7 +28,7 @@ describe('OTLP consistent probability sampling', () => {
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = false
     config.tracePropagationStyle = { inject: ['tracecontext'], extract: ['datadog', 'tracecontext'] }
     config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'continue'
-    config.sampler = { sampleRate: 0.1 }
+    config.sampling = { DD_TRACE_SAMPLE_RATE: 0.1 }
 
     const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, 'http/json', {}, false)
     // @ts-expect-error - Stub the protected transport boundary; sampling, formatting and serialization remain real.
@@ -67,11 +67,11 @@ describe('OTLP consistent probability sampling', () => {
   }
 
   for (const [source, sampler, threshold] of [
-    ['rule', { sampleRate: 0.1 }, 'e6666666666668'],
+    ['rule', { DD_TRACE_SAMPLE_RATE: 0.1 }, 'e6666666666668'],
     ['agent fallback', {}, '0'],
   ]) {
     it(`exports a ${source} probability decision on every span without injecting`, () => {
-      config.sampler = sampler
+      config.sampling = sampler
       const tracer = new Tracer(config)
       const root = tracer.startSpan('root', { childOf: undecidedParent(tracer) })
       const child = tracer.startSpan('child', { childOf: root })
@@ -120,7 +120,7 @@ describe('OTLP consistent probability sampling', () => {
 
   for (const ot of [undefined, 'foo:bar', 'th:8', 'rv:ef284ace7a91e1', 'th:e6666666666668;foo:bar;rv:ef284ace7a91e1']) {
     it(`preserves an inherited decision with ot=${ot}`, () => {
-      config.sampler = { sampleRate: 0 }
+      config.sampling = { DD_TRACE_SAMPLE_RATE: 0 }
       const tracer = new Tracer(config)
       const inherited = 'dd=s:2;p:0000000000000001,congo=value'
       const parent = sampledParent(tracer, ot ? `${inherited},ot=${ot}` : inherited)
@@ -145,7 +145,7 @@ describe('OTLP consistent probability sampling', () => {
 
   for (const inherited of [false, true]) {
     it(`builds sampling state once per chunk (${inherited ? 'inherited' : 'local'})`, () => {
-      config.sampler = { sampleRate: 1 }
+      config.sampling = { DD_TRACE_SAMPLE_RATE: 1 }
       const tracer = new Tracer(config)
       const original = 'ot=rv:ef284ace7a91e1;th:8,congo=value'
       const parent = inherited ? sampledParent(tracer, original) : undecidedParent(tracer)
@@ -172,7 +172,7 @@ describe('OTLP consistent probability sampling', () => {
 
     it(`updates sampling state after a partial flush (${inherited ? 'inherited' : 'local'})`, () => {
       config.flushMinSpans = 1
-      config.sampler = { sampleRate: 1 }
+      config.sampling = { DD_TRACE_SAMPLE_RATE: 1 }
       const tracer = new Tracer(config)
       const original = 'ot=rv:ef284ace7a91e1;th:8,congo=value'
       const parent = inherited ? sampledParent(tracer, original) : undecidedParent(tracer)
@@ -211,7 +211,7 @@ describe('OTLP consistent probability sampling', () => {
   for (const behavior of ['restart', 'ignore']) {
     it(`generates a new sampling decision after ${behavior}`, () => {
       config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior
-      config.sampler = { sampleRate: 1 }
+      config.sampling = { DD_TRACE_SAMPLE_RATE: 1 }
       const tracer = new Tracer(config)
       const parent = sampledParent(tracer, 'ot=rv:ef284ace7a91e1;th:8')
       tracer.startSpan('new-trace', { childOf: parent }).finish()
@@ -225,7 +225,7 @@ describe('OTLP consistent probability sampling', () => {
 
   for (const parentId of ['1', '18446744073709551615']) {
     it(`exports span and shared parent IDs for Datadog parent ${parentId}`, () => {
-      config.sampler = { sampleRate: 1 }
+      config.sampling = { DD_TRACE_SAMPLE_RATE: 1 }
       const tracer = new Tracer(config)
       const parent = tracer.extract(TEXT_MAP, {
         'x-datadog-trace-id': '2',
@@ -264,12 +264,12 @@ describe('OTLP consistent probability sampling', () => {
   })
 
   for (const [sampler, traceId] of [
-    [{ sampleRate: 0 }, undefined],
-    [{ sampleRate: 1, rateLimit: 0 }, undefined],
-    [{ sampleRate: 0.1 }, '2'],
+    [{ DD_TRACE_SAMPLE_RATE: 0 }, undefined],
+    [{ DD_TRACE_SAMPLE_RATE: 1, DD_TRACE_RATE_LIMIT: 0 }, undefined],
+    [{ DD_TRACE_SAMPLE_RATE: 0.1 }, '2'],
   ]) {
     it(`does not export a rejected trace with ${JSON.stringify(sampler)}`, () => {
-      config.sampler = sampler
+      config.sampling = sampler
       const tracer = new Tracer(config)
       const update = sinon.spy(otelSampling, 'updateOtelTraceState')
       tracer.startSpan('rejected', { childOf: undecidedParent(tracer, traceId) }).finish()

@@ -16,7 +16,7 @@ const context = {
 
 describe('DSMTextMapPropagator', () => {
   it('lazily creates and returns a carrier', () => {
-    const carrier = new DSMTextMapPropagator({ dsmEnabled: true }).inject(context)
+    const carrier = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } }).inject(context)
 
     assert.ok(carrier)
     assert.strictEqual(typeof carrier['dd-pathway-ctx-base64'], 'string')
@@ -24,26 +24,28 @@ describe('DSMTextMapPropagator', () => {
 
   it('returns the provided carrier', () => {
     const carrier = /** @type {Record<string, string>} */ ({})
-    const propagator = new DSMTextMapPropagator({ dsmEnabled: true })
+    const propagator = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } })
 
     assert.strictEqual(propagator.inject(context, carrier), carrier)
   })
 
   it('returns undefined when DSM is disabled', () => {
-    const propagator = new DSMTextMapPropagator({ dsmEnabled: false })
+    const propagator = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: false } })
+    const carrier = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } }).inject(context)
 
     assert.strictEqual(propagator.inject(context), undefined)
+    assert.strictEqual(propagator.extract(carrier), undefined)
   })
 
   it('returns undefined when no pathway context is available', () => {
-    const propagator = new DSMTextMapPropagator({ dsmEnabled: true })
+    const propagator = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } })
 
     assert.strictEqual(propagator.inject(undefined), undefined)
   })
 
   it('extracts a pathway context and evaluates managed-field debug projections', () => {
     const debug = sinon.stub(log, 'debug').callsFake(callback => callback())
-    const propagator = new DSMTextMapPropagator({ dsmEnabled: true })
+    const propagator = new DSMTextMapPropagator({ dataStreams: { DD_DATA_STREAMS_ENABLED: true } })
 
     try {
       const carrier = propagator.inject(context)

@@ -338,8 +338,10 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
    * @returns {{ span: Span, prioritySampler: PrioritySampler }}
    */
   function startSpan ({ traceId = '1', sampleRate, rateLimit = -1, parent } = {}) {
-    const samplingConfig = { rateLimit }
-    if (sampleRate !== undefined) samplingConfig.sampleRate = sampleRate
+    const samplingConfig = { DD_TRACE_RATE_LIMIT: rateLimit }
+    if (sampleRate !== undefined) {
+      samplingConfig.DD_TRACE_SAMPLE_RATE = sampleRate
+    }
     const prioritySampler = new PrioritySampler('test', samplingConfig)
     parent ??= new SpanContext({
       traceId: id(traceId, 10),

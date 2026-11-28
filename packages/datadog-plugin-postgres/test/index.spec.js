@@ -716,9 +716,9 @@ describe('Plugin', () => {
         const resource = 'SELECT current_query() AS query'
         global._ddtrace._tracer.configure({
           env: 'tester',
-          sampler: {
-            sampleRate: 1,
-            rules: [{ resource, sampleRate: 0 }],
+          sampling: {
+            DD_TRACE_SAMPLE_RATE: 1,
+            DD_TRACE_SAMPLING_RULES: [{ resource, sampleRate: 0 }],
           },
         })
 
@@ -743,7 +743,7 @@ describe('Plugin', () => {
           assert.strictEqual(span.resource, resource)
           assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
         } finally {
-          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampling: { DD_TRACE_SAMPLE_RATE: 1 } })
         }
       })
 
