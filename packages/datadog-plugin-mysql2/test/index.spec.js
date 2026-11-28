@@ -1,9 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const net = require('node:net')
-const { inspect } = require('node:util')
+const { pathToFileURL } = require('node:url')
+const { inspect, promisify } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
@@ -533,6 +536,315 @@ describe('Plugin', () => {
           })
 
           await tracePromise
+        })
+
+        describe('with acquisition telemetry disabled', () => {
+          const spanFinish = channel('dd-trace:span:finish')
+          let acquireCount
+
+          function countAcquireSpan (span) {
+            if (span.context()._name === 'mysql2.pool.acquire') acquireCount++
+          }
+
+          beforeEach(() => {
+            acquireCount = 0
+            tracer.use('mysql2', { poolAcquire: false })
+            spanFinish.subscribe(countAcquireSpan)
+          })
+
+          afterEach(() => {
+            spanFinish.unsubscribe(countAcquireSpan)
+            tracer.use('mysql2', {})
+          })
+
+          for (const mode of ['callback', 'promise adapter', 'promise pool']) {
+            it(`skips acquire telemetry for an explicit ${mode} checkout`, async function () {
+              if (mode === 'promise adapter' && typeof pool.promise !== 'function') return this.skip()
+
+              const promisePool = mode === 'promise pool'
+                ? require(`../../../versions/mysql2@${version}`).get('mysql2/promise').createPool({
+                  host: '127.0.0.1', user: 'root',
+                })
+                : mode === 'promise adapter' ? pool.promise() : undefined
+              const sql = 'SELECT 1 AS checkout_disabled'
+
+              try {
+                await Promise.all([
+                  agent.assertSomeTraces(([spans]) => {
+                    assert.strictEqual(spans.some(span => span.name === 'mysql2.pool.acquire'), false)
+                    const query = spans.find(span => span.resource === sql)
+                    assert.ok(query)
+                    assert.strictEqual(query.metrics['mysql2.pool.wait_time'], undefined)
+                  }, { spanResourceMatch: /^SELECT 1 AS checkout_disabled$/ }),
+                  tracer.trace('checkout', async () => {
+                    const getConnection = promisify(pool.getConnection)
+                    const connection = promisePool ? await promisePool.getConnection() : await getConnection.call(pool)
+                    try {
+                      if (promisePool) {
+                        await connection.query(sql)
+                      } else {
+                        const query = promisify(connection.query)
+                        await query.call(connection, sql)
+                      }
+                    } finally {
+                      connection.release()
+                    }
+                  }),
+                ])
+                assert.strictEqual(acquireCount, 0)
+              } finally {
+                if (mode === 'promise pool') await promisePool.end()
+              }
+            })
+          }
+
+          withVersions('mysql2', 'kysely', kyselyVersion => {
+            it('traces the SQL from a Kysely query without creating a checkout span', async () => {
+              const kyselyPath = require(`../../../versions/kysely@${kyselyVersion}`).getPath()
+              const { Kysely, MysqlDialect, sql } = await import(pathToFileURL(kyselyPath).href)
+              const client = new Kysely({ dialect: new MysqlDialect({ pool }) })
+              const statement = 'SELECT 1 AS kysely_checkout'
+
+              await Promise.all([
+                agent.assertSomeTraces(([spans]) => {
+                  assert.strictEqual(spans.some(span => span.name === 'mysql2.pool.acquire'), false)
+                  assert.ok(spans.some(span => span.resource === statement))
+                }, { spanResourceMatch: /^SELECT 1 AS kysely_checkout$/ }),
+                tracer.trace('kysely-query', async () => {
+                  const { rows } = await sql.raw(statement).execute(client)
+                  assert.strictEqual(rows[0].kysely_checkout, 1)
+                }),
+              ])
+              assert.strictEqual(acquireCount, 0)
+            })
+          })
+
+          for (const method of ['query', 'execute']) {
+            it(`preserves queued pool ${method} parents without measuring the wait`, async () => {
+              const firstSql = 'SELECT 1 AS first_checkout'
+              const secondSql = 'SELECT 2 AS queued_checkout'
+
+              async function queryInContext (sql, parent) {
+                const active = await new Promise((resolve, reject) => {
+                  pool[method](sql, [], error => {
+                    if (error) return reject(error)
+                    resolve(tracer.scope().active())
+                  })
+                })
+                assert.strictEqual(active, parent)
+              }
+
+              await Promise.all([
+                agent.assertSomeTraces(([spans]) => {
+                  assert.strictEqual(spans.some(span => span.name === 'mysql2.pool.acquire'), false)
+
+                  for (const [sql, name] of [[firstSql, 'first-caller'], [secondSql, 'second-caller']]) {
+                    const query = spans.find(span => span.resource === sql)
+                    assert.ok(query)
+                    assert.strictEqual(query.metrics['mysql2.pool.wait_time'], undefined)
+                    const caller = spans.find(span => span.name === name)
+                    assert.ok(caller)
+                    assert.strictEqual(query.parent_id.toString(), caller.span_id.toString())
+                  }
+                }, { spanResourceMatch: /^SELECT 2 AS queued_checkout$/ }),
+                tracer.trace('contended-pool', async () => {
+                  await Promise.all([
+                    tracer.trace('first-caller', span => queryInContext(firstSql, span)),
+                    tracer.trace('second-caller', span => queryInContext(secondSql, span)),
+                  ])
+                }),
+              ])
+              assert.strictEqual(acquireCount, 0)
+            })
+          }
+
+          for (const method of ['release', 'destroy']) {
+            for (const enabled of [false, true]) {
+              it(`keeps the queued checkout decision after ${method} with telemetry ${enabled}`, async () => {
+                tracer.use('mysql2', { poolAcquire: enabled })
+                const acquire = promisify(pool.getConnection).bind(pool)
+                const holder = await acquire()
+                const enqueued = once(pool, 'enqueue')
+                async function reconfigureAfterEnqueue () {
+                  await enqueued
+                  tracer.use('mysql2', { poolAcquire: !enabled })
+                  holder[method]()
+                }
+
+                const [connection] = await Promise.all([acquire(), reconfigureAfterEnqueue()])
+                connection.release()
+                assert.strictEqual(acquireCount, enabled ? 2 : 0)
+
+                const next = await acquire()
+                next.release()
+                assert.strictEqual(acquireCount, enabled ? 2 : 1)
+              })
+            }
+          }
+
+          it('keeps the queued checkout setting with native pool diagnostics', async function () {
+            const nativeConnect = channel('tracing:mysql2:pool:connect:start')
+            let starts = 0
+            const onStart = () => { starts++ }
+            nativeConnect.subscribe(onStart)
+            const acquire = promisify(pool.getConnection).bind(pool)
+
+            try {
+              const holder = await acquire()
+              if (starts === 0) {
+                holder.release()
+                return this.skip()
+              }
+
+              const enqueued = once(pool, 'enqueue')
+              async function replaceAfterEnqueue () {
+                await enqueued
+                tracer.use('mysql2', { poolAcquire: true })
+                holder.destroy()
+              }
+
+              const [connection] = await Promise.all([acquire(), replaceAfterEnqueue()])
+              connection.release()
+              assert.strictEqual(acquireCount, 0)
+            } finally {
+              nativeConnect.unsubscribe(onStart)
+            }
+          })
+
+          for (const enabled of [false, true]) {
+            it(`keeps query ownership across cluster retries starting with telemetry ${enabled}`, async function () {
+              tracer.use('mysql2', { poolAcquire: enabled })
+              const options = { host: '127.0.0.1', user: 'root', connectionLimit: 1 }
+              const cluster = mysql2.createPoolCluster({ removeNodeErrorCount: 1 })
+              const unavailable = { ...options, port: await getClosedPort() }
+              cluster.add('first', unavailable)
+              if (enabled) cluster.add('intermediate', unavailable)
+              cluster.add('backup', options)
+
+              try {
+                const namespace = cluster.of('*', 'ORDER')
+                if (typeof namespace.query !== 'function') return this.skip()
+
+                const removed = []
+                cluster.on('remove', name => {
+                  removed.push(name)
+                  tracer.use('mysql2', { poolAcquire: !enabled || name === 'intermediate' })
+                })
+
+                const query = promisify(namespace.query)
+                const rows = await query.call(namespace, 'SELECT 1 AS retried')
+                assert.strictEqual(acquireCount, 0)
+                assert.deepStrictEqual(removed, enabled ? ['first', 'intermediate'] : ['first'])
+                assert.strictEqual(rows[0].retried, 1)
+              } finally {
+                if (cluster.end.length === 0) {
+                  cluster.end()
+                } else {
+                  const end = promisify(cluster.end)
+                  await end.call(cluster)
+                }
+              }
+            })
+          }
+
+          it('traces a new checkout started by a synchronous cluster error callback', async function () {
+            const namespace = mysql2.createPoolCluster().of('*')
+            if (typeof namespace.query !== 'function') return this.skip()
+
+            const connection = await new Promise((resolve, reject) => {
+              namespace.query('SELECT 1', queryError => {
+                assert.match(queryError?.message, /^Pool does Not exists?\.$/)
+                tracer.use('mysql2', { poolAcquire: true })
+                pool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+              })
+            })
+
+            connection.release()
+            assert.strictEqual(acquireCount, 1)
+          })
+
+          it('preserves failed checkout errors without creating spans', async () => {
+            const failingPool = mysql2.createPool({
+              host: '127.0.0.1',
+              port: await getClosedPort(),
+              user: 'root',
+            })
+
+            try {
+              await Promise.all([
+                agent.assertSomeTraces(([spans]) => {
+                  assert.strictEqual(spans.some(span => span.name === 'mysql2.pool.acquire'), false)
+                  assert.strictEqual(spans.length, 1)
+                }, { spanResourceMatch: /^failed-checkout$/ }),
+                tracer.trace('failed-checkout', async () => {
+                  const getConnection = promisify(failingPool.getConnection)
+                  const query = promisify(failingPool.query)
+                  await assert.rejects(getConnection.call(failingPool), { code: 'ECONNREFUSED' })
+                  await assert.rejects(query.call(failingPool, 'SELECT 1'), { code: 'ECONNREFUSED' })
+                }),
+              ])
+              assert.strictEqual(acquireCount, 0)
+            } finally {
+              const end = promisify(failingPool.end)
+              await end.call(failingPool)
+            }
+          })
+
+          it('preserves a synchronous stream factory throw without creating an acquire span', async () => {
+            const error = new Error('stream factory failed')
+            const throwingPool = mysql2.createPool({ stream: () => { throw error } })
+
+            try {
+              assert.throws(() => throwingPool.getConnection(() => {}), thrown => thrown === error)
+              assert.strictEqual(acquireCount, 0)
+            } finally {
+              const end = promisify(throwingPool.end)
+              await end.call(throwingPool)
+            }
+          })
+
+          it('preserves cluster failover and terminal errors without acquire telemetry', async function () {
+            const options = { host: '127.0.0.1', user: 'root', connectionLimit: 1 }
+            const unavailable = { ...options, port: await getClosedPort() }
+            const failing = mysql2.createPoolCluster({ canRetry: false })
+            const retrying = mysql2.createPoolCluster({ canRetry: true })
+            failing.add('unavailable', unavailable)
+            retrying.add('unavailable', unavailable)
+            retrying.add('backup', options)
+            const terminal = failing.of('*')
+            const failover = retrying.of('*', 'ORDER')
+
+            try {
+              if (typeof failover.query !== 'function') return this.skip()
+
+              const sql = 'SELECT 1 AS failover_without_telemetry'
+              await Promise.all([
+                agent.assertSomeTraces(([spans]) => {
+                  assert.strictEqual(spans.some(span => span.name === 'mysql2.pool.acquire'), false)
+                  const query = spans.find(span => span.resource === sql)
+                  assert.ok(query)
+                  assert.strictEqual(query.metrics['mysql2.pool.wait_time'], undefined)
+                }, { spanResourceMatch: /^SELECT 1 AS failover_without_telemetry$/ }),
+                tracer.trace('pool-cluster-opt-out', async () => {
+                  const terminalQuery = promisify(terminal.query)
+                  const failoverQuery = promisify(failover.query)
+                  await assert.rejects(terminalQuery.call(terminal, 'SELECT 1'), { code: 'ECONNREFUSED' })
+                  const rows = await failoverQuery.call(failover, sql)
+                  assert.strictEqual(rows[0].failover_without_telemetry, 1)
+                }),
+              ])
+              assert.strictEqual(acquireCount, 0)
+            } finally {
+              if (retrying.end.length === 0) {
+                retrying.end()
+                failing.end()
+              } else {
+                const endRetrying = promisify(retrying.end)
+                const endFailing = promisify(failing.end)
+                await Promise.all([endRetrying.call(retrying), endFailing.call(failing)])
+              }
+            }
+          })
         })
 
         it('records an error on explicit and pooled-query acquire failures', async () => {

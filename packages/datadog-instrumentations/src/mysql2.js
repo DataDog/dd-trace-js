@@ -20,6 +20,9 @@ const wrappedOnResult = new WeakMap()
 /** @type {WeakSet<object>} */
 const flagWrappedNamespaces = new WeakSet()
 
+/** @type {WeakSet<Function>} */
+const queuedPoolCallbacks = new WeakSet()
+
 const connectionStartCh = channel('apm:mysql2:connection:start')
 const connectionFinishCh = channel('apm:mysql2:connection:finish')
 const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
@@ -29,6 +32,8 @@ const poolAcquireChannels = {
   connectionFinishCh,
   acquireStartCh,
   acquireFinishCh,
+  queuedCallbacks: queuedPoolCallbacks,
+  requireAcquireSubscriber: true,
 }
 
 /**
@@ -40,10 +45,10 @@ function flagWrapNamespace (poolNamespace) {
   flagWrappedNamespaces.add(poolNamespace)
 
   if (typeof poolNamespace.query === 'function') {
-    shimmer.wrap(poolNamespace, 'query', query => wrapPoolClusterMethod(query, connectionStartCh))
+    shimmer.wrap(poolNamespace, 'query', query => wrapPoolClusterMethod(query, connectionStartCh, acquireStartCh))
   }
   if (typeof poolNamespace.execute === 'function') {
-    shimmer.wrap(poolNamespace, 'execute', execute => wrapPoolClusterMethod(execute, connectionStartCh))
+    shimmer.wrap(poolNamespace, 'execute', execute => wrapPoolClusterMethod(execute, connectionStartCh, acquireStartCh))
   }
   if (typeof poolNamespace.getConnection === 'function') {
     shimmer.wrap(
@@ -88,7 +93,7 @@ function wrapConnection (Connection, version) {
     const ctx = {}
 
     if (isQuery) {
-      const waitTime = takePoolWaitTime(this)
+      const waitTime = acquireStartCh.hasSubscribers ? takePoolWaitTime(this) : undefined
       if (waitTime !== undefined) {
         ctx.poolWaitTime = waitTime
       }
@@ -289,12 +294,12 @@ function wrapBasePool (Pool) {
   shimmer.wrap(
     Pool.prototype,
     'query',
-    query => wrapPoolQueryMethod(query, connectionStartCh, deferredQueryAcquire)
+    query => wrapPoolQueryMethod(query, acquireStartCh, deferredQueryAcquire)
   )
   shimmer.wrap(
     Pool.prototype,
     'execute',
-    execute => wrapPoolQueryMethod(execute, connectionStartCh, deferredExecuteAcquire)
+    execute => wrapPoolQueryMethod(execute, acquireStartCh, deferredExecuteAcquire)
   )
 
   return Pool
@@ -349,7 +354,7 @@ function wrapPool (Pool, version) {
     }
 
     return query.apply(this, arguments)
-  }, connectionStartCh, deferredQueryAcquire))
+  }, acquireStartCh, deferredQueryAcquire))
 
   shimmer.wrap(Pool.prototype, 'execute', execute => wrapPoolQueryMethod(function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
@@ -374,7 +379,7 @@ function wrapPool (Pool, version) {
     }
 
     return execute.apply(this, arguments)
-  }, connectionStartCh, deferredExecuteAcquire))
+  }, acquireStartCh, deferredExecuteAcquire))
 
   return Pool
 }
@@ -471,6 +476,32 @@ function wrapPoolCluster (PoolCluster) {
 
   return PoolCluster
 }
+
+addHook({ name: 'mysql2', file: 'lib/tracing.js', versions: ['>=3.11.5'] }, tracing => {
+  shimmer.wrap(tracing.poolConnectChannel, 'traceCallback', traceCallback => {
+    /**
+     * @param {Function} connect
+     * @param {number} position
+     * @param {object} context
+     * @param {object|undefined} receiver
+     * @param {Function} callback
+     */
+    return function (connect, position, context, receiver, callback) {
+      if (position === 0 && queuedPoolCallbacks.has(callback)) {
+        // The native channel passes a different callback to the pool's queue.
+        /** @param {Function} nativeCallback */
+        arguments[0] = function (nativeCallback) {
+          queuedPoolCallbacks.add(nativeCallback)
+          return connect.apply(this, arguments)
+        }
+      }
+
+      return traceCallback.apply(this, arguments)
+    }
+  })
+
+  return tracing
+})
 
 addHook(
   { name: 'mysql2', file: 'lib/base/connection.js', versions: ['>=3.11.5'] },

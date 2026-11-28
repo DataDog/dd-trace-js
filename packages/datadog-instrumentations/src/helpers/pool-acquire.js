@@ -32,11 +32,14 @@ const { performance } = require('node:perf_hooks')
  *   connectionFinishCh: Channel,
  *   acquireStartCh: Channel,
  *   acquireFinishCh: Channel,
- *   reentersQueuedCallbacks?: boolean
+ *   reentersQueuedCallbacks?: boolean,
+ *   requireAcquireSubscriber?: boolean,
+ *   queuedCallbacks?: WeakSet<Function>
  * }} AcquireChannels
  */
 
 const poolQueryAcquire = {}
+const disabledPoolQueryAcquire = {}
 
 /** @type {ClusterAcquire | typeof poolQueryAcquire | undefined} */
 let currentPoolQueryAcquire
@@ -192,14 +195,16 @@ function wrapPoolQueryMethod (method, connectionStartCh, deferred) {
  * @param {Function} inactiveMethod
  * @param {Channel} connectionStartCh
  * @param {boolean} deferred
+ * @param {Channel} [acquireStartCh]
  * @returns {Function}
  */
-function wrapPoolAcquireCarrier (method, inactiveMethod, connectionStartCh, deferred) {
+function wrapPoolAcquireCarrier (method, inactiveMethod, connectionStartCh, deferred, acquireStartCh) {
   if (!deferred) return method
 
   return function (callback) {
     if (!connectionStartCh.hasSubscribers) return inactiveMethod.apply(this, arguments)
-    if (typeof callback !== 'function' || !takeDeferredPoolQueryAcquire(this)) {
+    if (acquireStartCh?.hasSubscribers === false ||
+        typeof callback !== 'function' || !takeDeferredPoolQueryAcquire(this)) {
       return method.apply(this, arguments)
     }
 
@@ -238,12 +243,14 @@ function wrapPoolClusterQueryMethod (method, channels) {
 /**
  * @param {Function} method
  * @param {Channel} connectionStartCh
+ * @param {Channel} [acquireStartCh]
  * @returns {Function}
  */
-function wrapPoolClusterMethod (method, connectionStartCh) {
+function wrapPoolClusterMethod (method, connectionStartCh, acquireStartCh) {
   return function () {
     if (!connectionStartCh.hasSubscribers) return method.apply(this, arguments)
-    return runWithPoolQueryAcquire({}, method, this, arguments)
+    const acquire = acquireStartCh?.hasSubscribers === false ? disabledPoolQueryAcquire : {}
+    return runWithPoolQueryAcquire(acquire, method, this, arguments)
   }
 }
 
@@ -257,9 +264,19 @@ function wrapPoolClusterGetConnection (method, channels) {
     if (!channels.connectionStartCh.hasSubscribers) return method.apply(this, arguments)
 
     const previous = currentPoolQueryAcquire
-    const acquire = isClusterAcquire(previous) && previous.key === undefined
+    const acquire = previous === disabledPoolQueryAcquire || (isClusterAcquire(previous) && previous.key === undefined)
       ? previous
       : takeClusterAcquire(callback)
+
+    if (acquire === disabledPoolQueryAcquire) {
+      // Native failover reuses the query's private callback on the next attempt.
+      const retryCallback = previous === disabledPoolQueryAcquire
+        ? wrapClusterAcquireCallback(callback, acquire, channels)
+        : callback
+      deferredClusterAcquires.set(retryCallback, acquire)
+      arguments[0] = retryCallback
+      return runWithPoolQueryAcquire(acquire, method, this, arguments)
+    }
 
     if (acquire === undefined && previous === undefined) return method.apply(this, arguments)
     if (acquire !== undefined) {
@@ -282,7 +299,8 @@ function wrapPoolClusterGetConnection (method, channels) {
  */
 function wrapPoolGetConnection (getConnection, channels, deferred) {
   const wrapped = wrapSynchronousPoolGetConnection(getConnection, channels)
-  return wrapPoolAcquireCarrier(wrapped, getConnection, channels.connectionStartCh, deferred === true)
+  const acquireStartCh = channels.requireAcquireSubscriber ? channels.acquireStartCh : undefined
+  return wrapPoolAcquireCarrier(wrapped, getConnection, channels.connectionStartCh, deferred === true, acquireStartCh)
 }
 
 /**
@@ -296,9 +314,10 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
     connectionFinishCh,
     acquireStartCh,
     acquireFinishCh,
+    requireAcquireSubscriber,
   } = channels
   const poolWaitTransfer = { deferred: false }
-  const queuedCallbacks = channels.reentersQueuedCallbacks ? new WeakSet() : undefined
+  const queuedCallbacks = channels.queuedCallbacks ?? (channels.reentersQueuedCallbacks ? new WeakSet() : undefined)
 
   return function (callback) {
     if (!connectionStartCh.hasSubscribers || queuedCallbacks?.has(callback)) {
@@ -307,7 +326,10 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
 
     const pool = this
     const ctx = {}
-    const capture = currentPoolAcquireCapture
+    const acquire = currentPoolQueryAcquire
+    const traceAcquire = acquire !== disabledPoolQueryAcquire && acquireStartCh.hasSubscribers
+    const measure = acquire !== disabledPoolQueryAcquire && (traceAcquire || !requireAcquireSubscriber)
+    const capture = measure ? currentPoolAcquireCapture : undefined
     if (capture !== undefined) {
       const start = acquireStart(pool)
 
@@ -326,11 +348,8 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
       }
     }
 
-    const acquire = currentPoolQueryAcquire
-    const acquireCtx = acquire === undefined && acquireStartCh.hasSubscribers
-      ? { conf: pool.config.connectionConfig }
-      : undefined
-    const start = acquireStart(pool, acquire)
+    const acquireCtx = traceAcquire && acquire === undefined ? { conf: pool.config.connectionConfig } : undefined
+    const start = measure ? acquireStart(pool, acquire) : undefined
 
     if (acquireCtx !== undefined) acquireStartCh.publish(acquireCtx)
 
@@ -340,7 +359,11 @@ function wrapSynchronousPoolGetConnection (getConnection, channels) {
      * @returns {unknown}
      */
     const wrappedCallback = function (error, connection) {
-      if (acquire === undefined) {
+      // A failed node can retry the same callback while timing is disabled.
+      if (error && isClusterAcquire(acquire) && acquire.key !== undefined) {
+        deferredClusterAcquires.set(acquire.key, acquire)
+      }
+      if (acquire === undefined || !measure) {
         if (!error && connection !== undefined) clearPoolWaitTime(connection)
         if (acquireCtx !== undefined) {
           acquireCtx.error = error
@@ -729,7 +752,6 @@ function runPoolQueryConnectionCallback (
     const conf = pool.config.connectionConfig
     if (error && isClusterAcquire(acquire)) {
       acquire.conf = conf
-      if (acquire.key !== undefined) deferredClusterAcquires.set(acquire.key, acquire)
       return channels.connectionFinishCh.runStores(ctx, callback, thisArg, ...args)
     }
     if (error && channels.acquireStartCh.hasSubscribers) {
@@ -808,8 +830,13 @@ function runPoolAcquireError (
  * @returns {Function}
  */
 function wrapClusterAcquireCallback (callback, acquire, channels) {
-  return function (error) {
-    if (error) reportClusterAcquireError(acquire, error, channels)
+  return function onAcquire (error) {
+    if (acquire === disabledPoolQueryAcquire || acquire.key === onAcquire) {
+      deferredClusterAcquires.delete(onAcquire)
+    }
+    if (error && acquire !== disabledPoolQueryAcquire) {
+      reportClusterAcquireError(acquire, error, channels)
+    }
     if (currentPoolQueryAcquire !== undefined) {
       return runWithPoolQueryAcquire(undefined, callback, this, arguments)
     }
@@ -846,7 +873,7 @@ function reportClusterAcquireError (acquire, error, channels) {
  * @returns {value is ClusterAcquire}
  */
 function isClusterAcquire (value) {
-  return value !== undefined && value !== poolQueryAcquire
+  return value !== undefined && value !== poolQueryAcquire && value !== disabledPoolQueryAcquire
 }
 
 /**

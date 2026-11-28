@@ -8,6 +8,8 @@ const { storage } = require('../../../datadog-core')
 
 const legacyStorage = storage('legacy')
 
+/** @typedef {Record<string, unknown> & { enabled: boolean }} PluginConfig */
+
 /**
  * Base class for all Datadog plugins.
  *
@@ -27,23 +29,40 @@ const legacyStorage = storage('legacy')
  */
 
 class Subscription {
-  constructor (event, handler) {
-    this._channel = dc.channel(event)
-    this._handler = (message, name) => {
+  #channel
+  #handler
+  #disableOption
+  #enabled = false
+
+  /**
+   * @param {string} event
+   * @param {Function} handler
+   * @param {string} [disableOption]
+   */
+  constructor (event, handler, disableOption) {
+    this.#channel = dc.channel(event)
+    this.#disableOption = disableOption
+    this.#handler = (message, name) => {
       if (!legacyStorage.getHandle()?.noop) {
         handler(message, name)
       }
     }
   }
 
-  enable () {
-    // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.subscribe(event, handler)` instead
-    this._channel.subscribe(this._handler)
-  }
+  /**
+   * @param {PluginConfig} config
+   */
+  configure (config) {
+    const enabled = config.enabled && (this.#disableOption === undefined || config[this.#disableOption] !== false)
+    if (enabled === this.#enabled) return
 
-  disable () {
-    // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.unsubscribe(event, handler)` instead
-    this._channel.unsubscribe(this._handler)
+    // The channel methods support Node.js versions before 18.6.0.
+    if (enabled) {
+      this.#channel.subscribe(this.#handler)
+    } else {
+      this.#channel.unsubscribe(this.#handler)
+    }
+    this.#enabled = enabled
   }
 }
 
@@ -112,8 +131,9 @@ module.exports = class Plugin {
    * @template T
    * @param {string} channelName Diagnostic channel name.
    * @param {(message: T, name: string) => unknown} handler Handler invoked on messages.
+   * @param {string} [disableOption] Keep this subscription inactive when the option is false.
    */
-  addSub (channelName, handler) {
+  addSub (channelName, handler, disableOption) {
     const wrappedHandler = (message, name) => {
       try {
         return handler.call(this, message, name)
@@ -123,7 +143,7 @@ module.exports = class Plugin {
         this.configure(false)
       }
     }
-    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
+    this._subscriptions.push(new Subscription(channelName, wrappedHandler, disableOption))
   }
 
   /**
@@ -156,7 +176,7 @@ module.exports = class Plugin {
   /**
    * Enable or disable the plugin and (re)apply its configuration.
    *
-   * @param {boolean | Record<string, unknown> & {enabled: boolean}} config Either a boolean to
+   * @param {boolean | PluginConfig} config Either a boolean to
    * enable/disable or a configuration object containing at least `{ enabled: boolean }`.
    */
   configure (config) {
@@ -164,23 +184,23 @@ module.exports = class Plugin {
       config = { enabled: config }
     }
     this.config = config
-    if (config.enabled) {
-      if (!this._enabled) {
-        this._enabled = true
-        for (const sub of this._subscriptions) {
-          sub.enable()
-        }
-        for (const sub of this._bindings) {
-          sub.enable()
-        }
-      }
-    } else if (this._enabled) {
-      this._enabled = false
+    const wasEnabled = this._enabled
+    const enabled = config.enabled
+    this._enabled = enabled
+
+    if (enabled || wasEnabled) {
       for (const sub of this._subscriptions) {
-        sub.disable()
+        sub.configure(config)
       }
+    }
+
+    if (enabled !== wasEnabled) {
       for (const sub of this._bindings) {
-        sub.disable()
+        if (enabled) {
+          sub.enable()
+        } else {
+          sub.disable()
+        }
       }
     }
   }
