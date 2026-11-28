@@ -701,7 +701,12 @@ class VitestPlugin extends CiPlugin {
       // Without the map, lines of the transformed module cannot be mapped to lines of the file.
       const sourceMap = ctx.sourceMap ?? getInlineSourceMap(ctx.code)
       if (sourceMap === undefined) return
-      ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, { isModule: true, reuse: true, sourceMap })
+      ctx.code = lineCoverage.instrumentSource(ctx.code, ctx.filename, {
+        isModule: true,
+        reuse: true,
+        sourceMap,
+        cacheDirectory: lineCoverage.getDefaultCacheDirectory(),
+      })
     })
 
     this.addBind('ci:vitest:line-coverage:suite-setup:start', ({ suite }) => {
