@@ -87,6 +87,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         this._coverageWriter = new CoverageWriter({
           url: this._url,
           evpProxyPrefix,
+          isGzipCompatible: this._isGzipCompatible,
         })
         this._codeCoverageReportUrl = this._url
         // Screenshot media uploads go through the Agent's evp_proxy: the uploader prefixes the
