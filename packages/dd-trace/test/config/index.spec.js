@@ -75,6 +75,7 @@ describe('Config', () => {
   const getConfig = (options, overrides = {}) => {
     const {
       ddMajor = DD_MAJOR,
+      startup,
     } = overrides
 
     log = proxyquire('../../src/log', {})
@@ -109,6 +110,7 @@ describe('Config', () => {
       '../serverless': serverless,
       'node:fs': fs,
       './helper': configHelper,
+      ...(startup && { './startup': startup }),
       '../pkg': pkg,
       '../../../../version': { DD_MAJOR: ddMajor },
     })
@@ -451,23 +453,27 @@ describe('Config', () => {
 
   it('should report a programmatic warning before reading the next nested option', () => {
     const warning = 'Sample rate out of range between 0 and 1: 1.5 for sampleRate (source: code), picked default'
-    const config = getConfig({
-      sampleRate: 1.5,
-      runtimeMetrics: {
-        get enabled () {
-          sinon.assert.calledWithExactly(log.warn, warning)
-          return true
-        },
-      },
-    })
+    const runtimeMetrics = { enabled: false }
+    const warnChannel = channel('datadog:log:warn')
+    const onWarning = message => {
+      if (message === warning) {
+        runtimeMetrics.enabled = true
+      }
+    }
+    warnChannel.subscribe(onWarning)
+    try {
+      const config = getConfig({ sampleRate: 1.5, runtimeMetrics })
 
-    assert.strictEqual(config.sampleRate, 1)
-    assert.strictEqual(config.runtimeMetrics.enabled, true)
-    assert.strictEqual(config.getOrigin('sampleRate'), 'code')
-    assertObjectContains(getLatestConfigUpdate('DD_TRACE_SAMPLE_RATE'), {
-      value: 1.5,
-      origin: 'code',
-    })
+      assert.strictEqual(config.sampleRate, 1)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
+      assert.strictEqual(config.getOrigin('sampleRate'), 'code')
+      assertObjectContains(getLatestConfigUpdate('DD_TRACE_SAMPLE_RATE'), {
+        value: 1.5,
+        origin: 'code',
+      })
+    } finally {
+      warnChannel.unsubscribe(onWarning)
+    }
   })
 
   it('should preserve RegExp sampling rules in the programmatic configuration snapshot', () => {
@@ -5976,6 +5982,54 @@ apm_configuration_default:
       const config = getConfig()
       assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
+
+    for (const deprecated of [false, true]) {
+      const label = deprecated ? ' without warning about a removed key' : ''
+      it(`reads process environment after reporting a local Stable Config warning${label}`, () => {
+        fs.writeFileSync(localConfigPath, 'apm_configuration_default:\n  DD_RUNTIME_METRICS_ENABLED: maybe\n')
+        process.env.DD_SERVICE = 'before'
+        const deprecatedKey = 'DD_APPSEC_COLLECT_ALL_HEADERS'
+        if (deprecated) {
+          process.env[deprecatedKey] = 'false'
+        }
+        const name = 'DD_RUNTIME_METRICS_ENABLED'
+        const origin = 'local_stable_config'
+        const resolveStartup = sinon.stub().returns({
+          status: 'complete',
+          settings: [],
+          diagnostics: [{ name, origin, problem: { kind: 'invalid_value' } }],
+          sources: [
+            { name, origin, input: 'maybe', value: null },
+            { name: 'DD_SERVICE', origin: 'env_var', input: 'before', value: { kind: 'string', value: 'before' } },
+          ],
+        })
+        const warnChannel = channel('datadog:log:warn')
+        const onWarning = sinon.spy(message => {
+          if (message.includes(name)) {
+            process.env.DD_SERVICE = 'after-warning'
+            delete process.env[deprecatedKey]
+          }
+        })
+        const emitWarning = sinon.spy(process, 'emitWarning')
+        warnChannel.subscribe(onWarning)
+        try {
+          const config = getConfig(undefined, { startup: { resolveStartup } })
+
+          sinon.assert.neverCalledWithMatch(emitWarning, sinon.match(deprecatedKey))
+          assert.strictEqual(config.service, 'after-warning')
+          assert.strictEqual(config.getOrigin('service'), 'env_var')
+          sinon.assert.calledWithMatch(onWarning, sinon.match(name))
+          if (deprecated) {
+            sinon.assert.notCalled(resolveStartup)
+          } else {
+            sinon.assert.calledOnce(resolveStartup)
+          }
+        } finally {
+          warnChannel.unsubscribe(onWarning)
+          emitWarning.restore()
+        }
+      })
+    }
 
     it('should normalize stable site and OTLP protocol configuration', () => {
       fs.writeFileSync(

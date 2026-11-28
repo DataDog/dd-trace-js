@@ -12,6 +12,7 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { errorChannel, errorRecordChannel, warnChannel } = require('../log/channels')
 const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -361,22 +362,45 @@ class Config extends ConfigBase {
   }
 
   #applyStartupEnvs () {
-    /** @type {Array<[import('./helper').TracerEnv, Exclude<import('./startup').StartOrigin, 'code'>]>} */
+    // Log callbacks can change later environment sources during startup.
+    const hasLogSubscribers = warnChannel.hasSubscribers || errorChannel.hasSubscribers ||
+      errorRecordChannel.hasSubscribers
+    let hasDeprecation = false
+    const onDeprecation = hasLogSubscribers
+      ? () => {
+          hasDeprecation = true
+        }
+      : undefined
+    const { localEntries, fleetEntries } = this.stableConfig
+    /**
+     * @type {Array<[
+     *   import('./helper').TracerEnv,
+     *   Exclude<import('./startup').StartOrigin, 'code'>,
+     *   typeof process.env | undefined,
+     * ]>}
+     */
     const sources = [
-      [getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config'],
-      [getEnvironmentVariables(undefined, true), 'env_var'],
-      [getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config'],
+      [getEnvironmentVariables(localEntries, true, onDeprecation), 'local_stable_config', localEntries],
+      [getEnvironmentVariables(undefined, true, onDeprecation), 'env_var', undefined],
+      [getEnvironmentVariables(fleetEntries, true, onDeprecation), 'fleet_stable_config', fleetEntries],
     ]
     const layers = sources.map(([envs, origin]) => {
       const entries = /** @type {Array<[string, string]>} */ (Object.entries(envs))
       return { origin, entries: entries.map(([name, value]) => ({ name, value })) }
     })
-    const snapshot = resolveStartup(layers, DD_MAJOR, (name, value, origin) => {
-      return configurationsTable[name].transformer(value, name, origin)
-    }, log)
-    if (snapshot === undefined) {
-      for (const [envs, origin] of sources) {
-        this.#applyEnvs(envs, origin)
+    const snapshot = hasDeprecation
+      ? undefined
+      : resolveStartup(
+        layers,
+        DD_MAJOR,
+        hasLogSubscribers
+          ? undefined
+          : (name, value, origin) => configurationsTable[name].transformer(value, name, origin),
+        log
+      )
+    if (snapshot === undefined || hasLogSubscribers && snapshot.diagnostics.length > 0) {
+      for (const [envs, origin, source] of sources) {
+        this.#applyEnvs(hasLogSubscribers ? getEnvironmentVariables(source, true) : envs, origin)
       }
       return
     }
