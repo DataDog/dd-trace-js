@@ -1,0 +1,348 @@
+{
+  "sources": {
+    "math.ts": [
+      "export function add (a: number, b: number) {",
+      "  return a + b",
+      "}",
+      "",
+      "export const answer = 42"
+    ],
+    "value.ts": [
+      "export default 40 + 2"
+    ],
+    "index.ts": [
+      "export { add } from './math'"
+    ],
+    "all.ts": [
+      "export * from './math'"
+    ]
+  },
+  "compilers": {
+    "swc 1.15.41": {
+      "options": "@swc/core transformSync: jsc.parser typescript, jsc.target es2018, module commonjs",
+      "modules": {
+        "value.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "Object.defineProperty(exports, \"default\", {",
+            "    enumerable: true,",
+            "    get: function() {",
+            "        return _default;",
+            "    }",
+            "});",
+            "const _default = 40 + 2;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "value.ts"
+            ],
+            "names": [],
+            "mappings": ";;;;+BAAA;;;eAAA;;;MAAA,WAAe,KAAK"
+          }
+        },
+        "math.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "function _export(target, all) {",
+            "    for(var name in all)Object.defineProperty(target, name, {",
+            "        enumerable: true,",
+            "        get: Object.getOwnPropertyDescriptor(all, name).get",
+            "    });",
+            "}",
+            "_export(exports, {",
+            "    get add () {",
+            "        return add;",
+            "    },",
+            "    get answer () {",
+            "        return answer;",
+            "    }",
+            "});",
+            "function add(a, b) {",
+            "    return a + b;",
+            "}",
+            "const answer = 42;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "math.ts"
+            ],
+            "names": [
+              "add",
+              "answer",
+              "a",
+              "b"
+            ],
+            "mappings": ";;;;;;;;;;;QAAgBA;eAAAA;;QAIHC;eAAAA;;;AAJN,SAASD,IAAKE,CAAS,EAAEC,CAAS;IACvC,OAAOD,IAAIC;AACb;AAEO,MAAMF,SAAS"
+          }
+        }
+      }
+    },
+    "swc 1.3.100": {
+      "options": "@swc/core transformSync: jsc.parser typescript, jsc.target es2018, module commonjs",
+      "modules": {
+        "math.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "    value: true",
+            "});",
+            "function _export(target, all) {",
+            "    for(var name in all)Object.defineProperty(target, name, {",
+            "        enumerable: true,",
+            "        get: all[name]",
+            "    });",
+            "}",
+            "_export(exports, {",
+            "    add: function() {",
+            "        return add;",
+            "    },",
+            "    answer: function() {",
+            "        return answer;",
+            "    }",
+            "});",
+            "function add(a, b) {",
+            "    return a + b;",
+            "}",
+            "const answer = 42;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "math.ts"
+            ],
+            "names": [
+              "add",
+              "answer",
+              "a",
+              "b"
+            ],
+            "mappings": ";;;;;;;;;;;IAAgBA,GAAG;eAAHA;;IAIHC,MAAM;eAANA;;;AAJN,SAASD,IAAKE,CAAS,EAAEC,CAAS;IACvC,OAAOD,IAAIC;AACb;AAEO,MAAMF,SAAS"
+          }
+        }
+      }
+    },
+    "babel 7.28.5": {
+      "options": "@babel/core transformSync: @babel/preset-typescript 7.28.5, @babel/plugin-transform-modules-commonjs 7.27.1",
+      "modules": {
+        "math.ts": {
+          "code": [
+            "\"use strict\";",
+            "",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "  value: true",
+            "});",
+            "exports.add = add;",
+            "exports.answer = void 0;",
+            "function add(a, b) {",
+            "  return a + b;",
+            "}",
+            "const answer = exports.answer = 42;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "math.ts"
+            ],
+            "names": [
+              "add",
+              "a",
+              "b",
+              "answer",
+              "exports"
+            ],
+            "mappings": ";;;;;;;AAAO,SAASA,GAAGA,CAAEC,CAAS,EAAEC,CAAS,EAAE;EACzC,OAAOD,CAAC,GAAGC,CAAC;AACd;AAEO,MAAMC,MAAM,GAAAC,OAAA,CAAAD,MAAA,GAAG,EAAE"
+          }
+        },
+        "index.ts": {
+          "code": [
+            "\"use strict\";",
+            "",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "  value: true",
+            "});",
+            "Object.defineProperty(exports, \"add\", {",
+            "  enumerable: true,",
+            "  get: function () {",
+            "    return _math.add;",
+            "  }",
+            "});",
+            "var _math = require(\"./math\");"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "index.ts"
+            ],
+            "names": [
+              "_math",
+              "require"
+            ],
+            "mappings": ";;;;;;;;;;;AAAA,IAAAA,KAAA,GAAAC,OAAA"
+          }
+        },
+        "all.ts": {
+          "code": [
+            "\"use strict\";",
+            "",
+            "Object.defineProperty(exports, \"__esModule\", {",
+            "  value: true",
+            "});",
+            "var _math = require(\"./math\");",
+            "Object.keys(_math).forEach(function (key) {",
+            "  if (key === \"default\" || key === \"__esModule\") return;",
+            "  if (key in exports && exports[key] === _math[key]) return;",
+            "  Object.defineProperty(exports, key, {",
+            "    enumerable: true,",
+            "    get: function () {",
+            "      return _math[key];",
+            "    }",
+            "  });",
+            "});"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "all.ts"
+            ],
+            "names": [
+              "_math",
+              "require",
+              "Object",
+              "keys",
+              "forEach",
+              "key",
+              "exports",
+              "defineProperty",
+              "enumerable",
+              "get"
+            ],
+            "mappings": ";;;;;AAAA,IAAAA,KAAA,GAAAC,OAAA;AAAAC,MAAA,CAAAC,IAAA,CAAAH,KAAA,EAAAI,OAAA,WAAAC,GAAA;EAAA,IAAAA,GAAA,kBAAAA,GAAA;EAAA,IAAAA,GAAA,IAAAC,OAAA,IAAAA,OAAA,CAAAD,GAAA,MAAAL,KAAA,CAAAK,GAAA;EAAAH,MAAA,CAAAK,cAAA,CAAAD,OAAA,EAAAD,GAAA;IAAAG,UAAA;IAAAC,GAAA,WAAAA,CAAA;MAAA,OAAAT,KAAA,CAAAK,GAAA;IAAA;EAAA;AAAA"
+          }
+        }
+      }
+    },
+    "typescript 6.0.3": {
+      "options": "typescript transpileModule: module CommonJS, target ES2022",
+      "modules": {
+        "math.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", { value: true });",
+            "exports.answer = void 0;",
+            "exports.add = add;",
+            "function add(a, b) {",
+            "    return a + b;",
+            "}",
+            "exports.answer = 42;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "math.ts"
+            ],
+            "names": [],
+            "mappings": ";;;AAAA,kBAEC;AAFD,SAAgB,GAAG,CAAE,CAAS,EAAE,CAAS;IACvC,OAAO,CAAC,GAAG,CAAC,CAAA;AACd,CAAC;AAEY,QAAA,MAAM,GAAG,EAAE,CAAA"
+          }
+        },
+        "index.ts": {
+          "code": [
+            "\"use strict\";",
+            "Object.defineProperty(exports, \"__esModule\", { value: true });",
+            "exports.add = void 0;",
+            "var math_1 = require(\"./math\");",
+            "Object.defineProperty(exports, \"add\", { enumerable: true, get: function () { return math_1.add; } });"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "index.ts"
+            ],
+            "names": [],
+            "mappings": ";;;AAAA,+BAA4B;AAAnB,2FAAA,GAAG,OAAA"
+          }
+        },
+        "all.ts": {
+          "code": [
+            "\"use strict\";",
+            "var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {",
+            "    if (k2 === undefined) k2 = k;",
+            "    var desc = Object.getOwnPropertyDescriptor(m, k);",
+            "    if (!desc || (\"get\" in desc ? !m.__esModule : desc.writable || desc.configurable)) {",
+            "      desc = { enumerable: true, get: function() { return m[k]; } };",
+            "    }",
+            "    Object.defineProperty(o, k2, desc);",
+            "}) : (function(o, m, k, k2) {",
+            "    if (k2 === undefined) k2 = k;",
+            "    o[k2] = m[k];",
+            "}));",
+            "var __exportStar = (this && this.__exportStar) || function(m, exports) {",
+            "    for (var p in m) if (p !== \"default\" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);",
+            "};",
+            "Object.defineProperty(exports, \"__esModule\", { value: true });",
+            "__exportStar(require(\"./math\"), exports);"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "all.ts"
+            ],
+            "names": [],
+            "mappings": ";;;;;;;;;;;;;;;;AAAA,yCAAsB"
+          }
+        }
+      }
+    },
+    "esbuild 0.25.12": {
+      "options": "esbuild transformSync: loader ts, format cjs",
+      "modules": {
+        "math.ts": {
+          "code": [
+            "var __defProp = Object.defineProperty;",
+            "var __getOwnPropDesc = Object.getOwnPropertyDescriptor;",
+            "var __getOwnPropNames = Object.getOwnPropertyNames;",
+            "var __hasOwnProp = Object.prototype.hasOwnProperty;",
+            "var __export = (target, all) => {",
+            "  for (var name in all)",
+            "    __defProp(target, name, { get: all[name], enumerable: true });",
+            "};",
+            "var __copyProps = (to, from, except, desc) => {",
+            "  if (from && typeof from === \"object\" || typeof from === \"function\") {",
+            "    for (let key of __getOwnPropNames(from))",
+            "      if (!__hasOwnProp.call(to, key) && key !== except)",
+            "        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });",
+            "  }",
+            "  return to;",
+            "};",
+            "var __toCommonJS = (mod) => __copyProps(__defProp({}, \"__esModule\", { value: true }), mod);",
+            "var math_exports = {};",
+            "__export(math_exports, {",
+            "  add: () => add,",
+            "  answer: () => answer",
+            "});",
+            "module.exports = __toCommonJS(math_exports);",
+            "function add(a, b) {",
+            "  return a + b;",
+            "}",
+            "const answer = 42;"
+          ],
+          "map": {
+            "version": 3,
+            "sources": [
+              "math.ts"
+            ],
+            "names": [],
+            "mappings": ";;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAO,SAAS,IAAK,GAAW,GAAW;AACzC,SAAO,IAAI;AACb;AAEO,MAAM,SAAS;"
+          }
+        }
+      }
+    }
+  }
+}
