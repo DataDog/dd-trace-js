@@ -28,23 +28,31 @@ const WITH_TRACE_TAG_REPLACEMENTS = VARIANT === 'inject-replacements'
  * @property {number} [optionalTraceTagCount]
  */
 
-// Duck-typed config keeps the bench out of the full `Config` singleton (telemetry
-// registration, env reads). The propagator only reads the fields below.
-const propagator = new TextMapPropagator({
+const styles = ['datadog', 'tracecontext', 'baggage']
+const baggage = {
+  DD_TRACE_BAGGAGE_MAX_BYTES: 8192,
+  DD_TRACE_BAGGAGE_MAX_ITEMS: 64,
+  DD_TRACE_BAGGAGE_TAG_KEYS: ['user.id', 'session.id', 'account.id'],
+  DD_TRACE_LEGACY_BAGGAGE_ENABLED: true,
+}
+
+// Benchmark CI runs this fixture on both revisions without loading the full Config.
+const config = {
   propagation: {
-    DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['datadog', 'tracecontext', 'baggage'],
-    DD_TRACE_PROPAGATION_STYLE_INJECT: ['datadog', 'tracecontext', 'baggage'],
+    DD_TRACE_PROPAGATION_STYLE_EXTRACT: styles,
+    DD_TRACE_PROPAGATION_STYLE_INJECT: styles,
   },
-  baggage: {
-    DD_TRACE_BAGGAGE_MAX_BYTES: 8192,
-    DD_TRACE_BAGGAGE_MAX_ITEMS: 64,
-    DD_TRACE_BAGGAGE_TAG_KEYS: ['user.id', 'session.id', 'account.id'],
-    DD_TRACE_LEGACY_BAGGAGE_ENABLED: true,
-  },
+  baggage,
+  tracePropagationStyle: { extract: styles, inject: styles },
+  baggageMaxBytes: baggage.DD_TRACE_BAGGAGE_MAX_BYTES,
+  baggageMaxItems: baggage.DD_TRACE_BAGGAGE_MAX_ITEMS,
+  baggageTagKeys: baggage.DD_TRACE_BAGGAGE_TAG_KEYS,
+  legacyBaggageEnabled: baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED,
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: 512,
   DD_TRACE_PROPAGATION_EXTRACT_FIRST: false,
   DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
-})
+}
+const propagator = new TextMapPropagator(config)
 
 // Realistic incoming carrier: traceparent + 4-vendor tracestate + 4-key baggage. Most
 // production baggage is plain ASCII (tenant / user / session / locale); the percent
