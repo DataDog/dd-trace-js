@@ -13,6 +13,7 @@ const sinon = require('sinon')
 const nock = require('nock')
 const proxyquire = require('proxyquire')
 
+const { defaults } = require('../../../src/config/defaults')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
@@ -74,7 +75,11 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
 // Default it here so the partial config stand-ins below mirror that guarantee.
 class CiVisibilityExporter extends CiVisibilityExporterBase {
   constructor (config) {
-    super({ testOptimization: {}, ...config })
+    super({
+      testOptimization: {},
+      flush: { DD_TRACE_FLUSH_INTERVAL: defaults['flush.DD_TRACE_FLUSH_INTERVAL'] },
+      ...config,
+    })
   }
 }
 
@@ -1296,7 +1301,7 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy((done) => done?.()),
           setUrl: sinon.spy(),
         }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -1315,7 +1320,7 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy(done => done?.()),
           setUrl: sinon.spy(),
         }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+        const ciVisibilityExporter = new CiVisibilityExporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
@@ -1386,7 +1391,7 @@ describe('CI Visibility Exporter', () => {
         flush: sinon.spy((done) => done?.()),
         setUrl: sinon.spy(),
       }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
       ciVisibilityExporter._isInitialized = true
       ciVisibilityExporter._canUseCiVisProtocol = true
       ciVisibilityExporter._writer = writer
@@ -1405,7 +1410,7 @@ describe('CI Visibility Exporter', () => {
         flush: sinon.spy(done => flushCallbacks.push(done)),
         setUrl: sinon.spy(),
       }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
       ciVisibilityExporter._isInitialized = true
       ciVisibilityExporter._canUseCiVisProtocol = true
       ciVisibilityExporter._writer = writer
@@ -1433,7 +1438,7 @@ describe('CI Visibility Exporter', () => {
         flush: sinon.spy(done => { flushWriter = done }),
         setUrl: sinon.spy(),
       }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, flush: { DD_TRACE_FLUSH_INTERVAL: 0 } })
       ciVisibilityExporter._isInitialized = true
       ciVisibilityExporter._canUseCiVisProtocol = true
       ciVisibilityExporter._writer = writer
@@ -2065,7 +2070,7 @@ describe('CI Visibility Exporter', () => {
           flush: sinon.spy(),
         }
         const ciVisibilityExporter = new CiVisibilityExporter({
-          flushInterval: 0,
+          flush: { DD_TRACE_FLUSH_INTERVAL: 0 },
           testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         ciVisibilityExporter._isInitialized = true

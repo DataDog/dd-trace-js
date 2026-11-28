@@ -17,8 +17,10 @@ const config = {
   service: 'web-api',
   version: '1.2.3',
   env: 'production',
-  traceId128BitGenerationEnabled: true,
-  traceId128BitLoggingEnabled: true,
+  traceId: {
+    DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true,
+    DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED: true,
+  },
 }
 const propagator = new LogPropagator(config)
 

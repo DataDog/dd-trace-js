@@ -23,7 +23,7 @@ const processor = new DataStreamsProcessor({
   dataStreams: { DD_DATA_STREAMS_ENABLED: dsmEnabled },
   service: 'bench-svc',
   env: 'bench-env',
-  flushInterval: 2_147_483_647,
+  flush: { DD_TRACE_FLUSH_INTERVAL: 2_147_483_647 },
 })
 processor.writer.flush = () => {}
 clearInterval(processor.timer)

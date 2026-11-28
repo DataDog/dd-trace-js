@@ -1971,7 +1971,8 @@
           "runtimeMetrics.enabled",
           "runtimeMetrics"
         ],
-        "default": "false"
+        "default": "false",
+        "namespace": "runtimeMetrics"
       }
     ],
     "DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED": [
@@ -1981,7 +1982,8 @@
         "configurationNames": [
           "runtimeMetrics.eventLoop"
         ],
-        "default": "true"
+        "default": "true",
+        "namespace": "runtimeMetrics"
       }
     ],
     "DD_RUNTIME_METRICS_FLUSH_INTERVAL": [
@@ -1998,7 +2000,8 @@
         "configurationNames": [
           "runtimeMetrics.native"
         ],
-        "default": "true"
+        "default": "true",
+        "namespace": "runtimeMetrics"
       }
     ],
     "DD_RUNTIME_METRICS_GC_ENABLED": [
@@ -2008,7 +2011,8 @@
         "configurationNames": [
           "runtimeMetrics.gc"
         ],
-        "default": "true"
+        "default": "true",
+        "namespace": "runtimeMetrics"
       }
     ],
     "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": [
@@ -2018,7 +2022,8 @@
         "configurationNames": [
           "runtimeMetricsRuntimeId"
         ],
-        "default": "false"
+        "default": "false",
+        "namespace": "runtimeMetrics"
       }
     ],
     "DD_ROOT_JS_SESSION_ID": [
@@ -2251,7 +2256,8 @@
         "default": "true",
         "configurationNames": [
           "traceId128BitGenerationEnabled"
-        ]
+        ],
+        "namespace": "traceId"
       }
     ],
     "DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED": [
@@ -2261,7 +2267,8 @@
         "default": "true",
         "configurationNames": [
           "traceId128BitLoggingEnabled"
-        ]
+        ],
+        "namespace": "traceId"
       }
     ],
     "DD_TRACE_AEROSPIKE_ENABLED": [
@@ -3083,6 +3090,7 @@
       {
         "implementation": "B",
         "type": "int",
+        "namespace": "flush",
         "configurationNames": [
           "flushInterval"
         ],
@@ -3835,6 +3843,7 @@
       {
         "implementation": "B",
         "type": "int",
+        "namespace": "flush",
         "configurationNames": [
           "flushMinSpans"
         ],

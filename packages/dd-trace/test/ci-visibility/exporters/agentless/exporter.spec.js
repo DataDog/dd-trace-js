@@ -11,6 +11,7 @@ const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../../../../dd-trace/test/setup/core')
+const { defaults } = require('../../../../src/config/defaults')
 const AgentlessCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
@@ -18,7 +19,11 @@ const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/
 // Default it here so the partial config stand-ins below mirror that guarantee.
 class AgentlessCiVisibilityExporter extends AgentlessCiVisibilityExporterBase {
   constructor (config) {
-    super({ testOptimization: {}, ...config })
+    super({
+      testOptimization: {},
+      flush: { DD_TRACE_FLUSH_INTERVAL: defaults['flush.DD_TRACE_FLUSH_INTERVAL'] },
+      ...config,
+    })
   }
 }
 

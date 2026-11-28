@@ -71,8 +71,8 @@ module.exports = {
 
     meter = metrics.getMeterProvider().getMeter(METER_NAME)
 
-    const trackEventLoop = config.runtimeMetrics.eventLoop !== false
-    const trackGc = config.runtimeMetrics.gc !== false
+    const trackEventLoop = config.runtimeMetrics.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED !== false
+    const trackGc = config.runtimeMetrics.DD_RUNTIME_METRICS_GC_ENABLED !== false
     if (trackEventLoop) {
       eventLoopHistogram = monitorEventLoopDelay({ resolution: 4 })
       eventLoopHistogram.enable()

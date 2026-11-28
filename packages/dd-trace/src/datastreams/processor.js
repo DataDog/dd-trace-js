@@ -222,7 +222,7 @@ class DataStreamsProcessor {
     tags,
     version,
     service,
-    flushInterval,
+    flush: { DD_TRACE_FLUSH_INTERVAL: flushInterval },
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,

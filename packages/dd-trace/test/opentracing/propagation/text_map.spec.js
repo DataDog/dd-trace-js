@@ -2600,7 +2600,7 @@ describe('TextMapPropagator', () => {
       it('should support 128-bit trace IDs', () => {
         textMap.b3 = '00000000000002340000000000000123-0000000000000456'
 
-        config.traceId128BitGenerationEnabled = true
+        config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2619,7 +2619,7 @@ describe('TextMapPropagator', () => {
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
         textMap.b3 = '00000000000000000000000000000123-0000000000000456'
 
-        config.traceId128BitGenerationEnabled = true
+        config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2677,7 +2677,7 @@ describe('TextMapPropagator', () => {
       it('should extract a 128-bit trace ID', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
-        config.traceId128BitGenerationEnabled = true
+        config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2787,7 +2787,7 @@ describe('TextMapPropagator', () => {
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
         textMap.traceparent = '00-00000000000000003333cccc4444dddd-5555eeee6666ffff-01'
         config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
-        config.traceId128BitGenerationEnabled = true
+        config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)

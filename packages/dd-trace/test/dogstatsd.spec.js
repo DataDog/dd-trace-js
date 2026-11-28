@@ -197,7 +197,9 @@ describe('dogstatsd', () => {
         DD_DOGSTATSD_PORT: 8125,
       },
       lookup: dns.lookup,
-      runtimeMetricsRuntimeId: false,
+      runtimeMetrics: {
+        DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: false,
+      },
     })
   }
 
@@ -1314,7 +1316,9 @@ describe('dogstatsd', () => {
           DD_DOGSTATSD_PORT: 8125,
         },
         lookup: dns.lookup,
-        runtimeMetricsRuntimeId: true,
+        runtimeMetrics: {
+          DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: true,
+        },
         tags: { 'runtime-id': 'initial-id' },
       }
 
@@ -1346,7 +1350,9 @@ describe('dogstatsd', () => {
           DD_DOGSTATSD_PORT: 8125,
         },
         lookup: dns.lookup,
-        runtimeMetricsRuntimeId: true,
+        runtimeMetrics: {
+          DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: true,
+        },
         tags: { 'runtime-id': 'initial-id' },
       }
 

@@ -55,7 +55,10 @@ describe('DataStreamsProcessor flush-on-write', () => {
 
   describe('with flushInterval 0', () => {
     beforeEach(() => {
-      processor = new DataStreamsProcessor({ ...baseConfig, flushInterval: 0 })
+      processor = new DataStreamsProcessor({
+        ...baseConfig,
+        flush: { DD_TRACE_FLUSH_INTERVAL: 0 },
+      })
     })
 
     it('does not arm an interval timer', () => {
@@ -83,7 +86,10 @@ describe('DataStreamsProcessor flush-on-write', () => {
 
   describe('with a non-zero flushInterval', () => {
     beforeEach(() => {
-      processor = new DataStreamsProcessor({ ...baseConfig, flushInterval: 1000 })
+      processor = new DataStreamsProcessor({
+        ...baseConfig,
+        flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
+      })
     })
 
     it('arms an interval timer', () => {

@@ -30,7 +30,7 @@ class BufferingExporter {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
 
-    const { flushInterval } = this._config
+    const { DD_TRACE_FLUSH_INTERVAL: flushInterval } = this._config.flush
 
     if (flushInterval === 0 && !deferImmediateFlush) {
       writer.flush()

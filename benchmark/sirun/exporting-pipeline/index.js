@@ -40,7 +40,7 @@ let lastFormatted
 const exporter = { export (formatted) { exported += formatted.length; lastFormatted = formatted } }
 const prioritySampler = new PrioritySampler()
 const config = {
-  flushMinSpans: 100,
+  flush: { DD_TRACE_PARTIAL_FLUSH_MIN_SPANS: 100 },
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: WITH_STATS,
   },

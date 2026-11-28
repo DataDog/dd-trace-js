@@ -274,7 +274,7 @@ class Tracer extends NoopProxy {
         metrics = initializeOpenTelemetryMetrics(config)
       }
 
-      if (config.runtimeMetrics.enabled) {
+      if (config.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED) {
         runtimeMetrics.start(config)
         // Agent trace response metrics are recorded asynchronously, so drain
         // runtime metrics after the trace export has completed.

@@ -225,6 +225,7 @@ describe('DataStreamsProcessor', () => {
   let payloadSize
 
   const config = {
+    flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
     dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
@@ -653,6 +654,7 @@ describe('DataStreamsProcessor with forged parent contexts', () => {
   beforeEach(() => {
     processor = new DataStreamsProcessor({
       dataStreams: { DD_DATA_STREAMS_ENABLED: true },
+      flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
       env: 'test',
       service: 'service1',
     })
@@ -684,6 +686,7 @@ describe('DataStreamsProcessor with forged parent contexts', () => {
 
 describe('DataStreamsProcessor#setCheckpoint payload size', () => {
   const config = {
+    flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
     dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
@@ -789,6 +792,7 @@ describe('CheckpointRegistry', () => {
 
 describe('DataStreamsProcessor.trackTransaction', () => {
   const config = {
+    flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
     dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,
@@ -898,6 +902,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
 
 describe('_serializeBuckets with transactions', () => {
   const config = {
+    flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
     dataStreams: { DD_DATA_STREAMS_ENABLED: true },
     hostname: '127.0.0.1',
     port: 8126,

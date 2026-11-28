@@ -21,7 +21,7 @@ module.exports = {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   start (config) {
-    if (!config?.runtimeMetrics.enabled) return
+    if (!config?.runtimeMetrics.DD_RUNTIME_METRICS_ENABLED) return
 
     runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
       ? require('./otlp_runtime_metrics')

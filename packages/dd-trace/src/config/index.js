@@ -507,7 +507,7 @@ class Config extends ConfigBase {
     }
 
     if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
-      setAndTrack(this, 'flushInterval', 0)
+      setAndTrack(this, 'flush.DD_TRACE_FLUSH_INTERVAL', 0)
     }
 
     if (!trackedConfigOrigins.has('lambda.DD_LAMBDA_FIPS_MODE') &&
@@ -531,8 +531,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'instrumentationSource', 'ssi')
     }
 
-    if (!trackedConfigOrigins.has('runtimeMetrics.enabled') && this.OTEL_METRICS_EXPORTER === 'none') {
-      setAndTrack(this, 'runtimeMetrics.enabled', false)
+    if (!trackedConfigOrigins.has('runtimeMetrics.DD_RUNTIME_METRICS_ENABLED') &&
+        this.OTEL_METRICS_EXPORTER === 'none') {
+      setAndTrack(this, 'runtimeMetrics.DD_RUNTIME_METRICS_ENABLED', false)
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -667,7 +668,7 @@ class Config extends ConfigBase {
     if (this.isCiVisibility) {
       // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
       set(this, 'dogstatsd', undefined)
-      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'runtimeMetrics.DD_RUNTIME_METRICS_ENABLED', false)
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&
@@ -686,7 +687,7 @@ class Config extends ConfigBase {
       if (this.DD_API_KEY === undefined) {
         setAndTrack(this, 'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED', false)
       }
-      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'runtimeMetrics.DD_RUNTIME_METRICS_ENABLED', false)
       setAndTrack(this, 'dataStreams.DD_DATA_STREAMS_ENABLED', false)
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
       setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
@@ -706,8 +707,8 @@ class Config extends ConfigBase {
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
-      if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
-        setAndTrack(this, 'traceId128BitGenerationEnabled', false)
+      if (!trackedConfigOrigins.has('traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED')) {
+        setAndTrack(this, 'traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED', false)
       }
     }
 
@@ -865,7 +866,7 @@ class Config extends ConfigBase {
     if (unsupportedRuntime !== undefined) {
       if (unsupportedRuntime === 'Bun') {
         this.#deactivate(
-          'runtimeMetrics.native',
+          'runtimeMetrics.DD_RUNTIME_METRICS_NATIVE',
           'Native runtime metrics are disabled, because they do not work on Bun.'
         )
         this.#deactivate(

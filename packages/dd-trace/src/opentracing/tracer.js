@@ -70,7 +70,7 @@ class DatadogTracer {
     )
     this._url = this._exporter._url
     this._enableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
-    this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
+    this._traceId128BitGenerationEnabled = config.traceId.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),

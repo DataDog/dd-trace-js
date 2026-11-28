@@ -24,6 +24,7 @@ const PRODUCER_HASH = Buffer.from(PRODUCER_HASH_HEX, 'hex')
 const ENTRY_PARENT_HASH_HEX = ENTRY_PARENT_HASH.toString('hex')
 const config = {
   dataStreams: { DD_DATA_STREAMS_ENABLED: true },
+  flush: { DD_TRACE_FLUSH_INTERVAL: 1000 },
   env: 'test',
   hostname: '127.0.0.1',
   port: 8126,

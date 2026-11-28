@@ -46,8 +46,8 @@ module.exports = {
     // The agent expects a flush every ten seconds, so this is for tests only.
     const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
 
-    const trackEventLoop = config.runtimeMetrics.eventLoop !== false
-    const trackGc = config.runtimeMetrics.gc !== false
+    const trackEventLoop = config.runtimeMetrics.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED !== false
+    const trackGc = config.runtimeMetrics.DD_RUNTIME_METRICS_GC_ENABLED !== false
 
     client = createMetricsClient(config)
     unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
@@ -59,7 +59,7 @@ module.exports = {
     // When per-iteration sampling is available we prefer it over the native
     // addon: it provides accurate event loop delay measurements and lets us
     // collect CPU/GC/heap metrics entirely from JS APIs.
-    const useNative = NATIVE_METRICS_REQUIRED && config.runtimeMetrics.native !== false
+    const useNative = NATIVE_METRICS_REQUIRED && config.runtimeMetrics.DD_RUNTIME_METRICS_NATIVE !== false
 
     if (useNative) {
       // Using no-gc prevents the native gc metrics from being tracked. Not
