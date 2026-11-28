@@ -297,6 +297,9 @@ module.exports = class CiPlugin extends Plugin {
           err,
           isTestDynamicInstrumentationEnabled: this.config.isTestDynamicInstrumentationEnabled,
           libraryConfig: effectiveLibraryConfig,
+          // Per-test line coverage skips no tests, so a run that cannot use Test Impact Analysis keeps it.
+          isLineCoverageAllowed: !err && !basicReportingOnly &&
+            libraryConfig.isItrEnabled === true && libraryConfig.isCodeCoverageEnabled === true,
           repositoryRoot: this.repositoryRoot,
           requestErrorTags: this._getCurrentRequestErrorTags(),
         })
