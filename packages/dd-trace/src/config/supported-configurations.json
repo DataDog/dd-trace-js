@@ -2701,6 +2701,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "baggage",
         "default": "8192",
         "configurationNames": [
           "baggageMaxBytes"
@@ -2711,6 +2712,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "baggage",
         "default": "64",
         "configurationNames": [
           "baggageMaxItems"
@@ -2721,6 +2723,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "baggage",
         "default": "user.id, session.id, account.id",
         "configurationNames": [
           "baggageTagKeys"
@@ -3528,6 +3531,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "baggage",
         "default": "true",
         "configurationNames": [
           "legacyBaggageEnabled"
@@ -4004,6 +4008,7 @@
       {
         "implementation": "B",
         "type": "array",
+        "namespace": "propagation",
         "configurationNames": [
           "tracePropagationStyle.extract"
         ],
@@ -4018,6 +4023,7 @@
       {
         "implementation": "B",
         "type": "array",
+        "namespace": "propagation",
         "configurationNames": [
           "tracePropagationStyle.inject"
         ],

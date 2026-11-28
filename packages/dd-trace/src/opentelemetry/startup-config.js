@@ -55,7 +55,8 @@ function startupConfig (config, rules, pipelines = {}) {
   }
 
   if (tracing) {
-    const { inject, extract } = config.tracePropagationStyle
+    const { DD_TRACE_PROPAGATION_STYLE_EXTRACT: extract, DD_TRACE_PROPAGATION_STYLE_INJECT: inject } =
+      config.propagation
     if (DD_MAJOR >= 6 && config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue' &&
         inject.length === extract.length &&
         inject.every((name, i) => name === extract[i] && VALID_PROPAGATION_STYLES.has(name))) {

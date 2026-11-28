@@ -33,9 +33,16 @@ describe('Disabled APM Tracing or Standalone', () => {
     config = {
       apmTracingEnabled: false,
 
-      tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext', 'b3multi'],
-        extract: ['datadog'],
+      baggage: {
+        DD_TRACE_BAGGAGE_MAX_BYTES: 8192,
+        DD_TRACE_BAGGAGE_MAX_ITEMS: 64,
+        DD_TRACE_BAGGAGE_TAG_KEYS: [],
+        DD_TRACE_LEGACY_BAGGAGE_ENABLED: true,
+      },
+
+      propagation: {
+        DD_TRACE_PROPAGATION_STYLE_INJECT: ['datadog', 'tracecontext', 'b3multi'],
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['datadog'],
       },
     }
 
@@ -163,8 +170,10 @@ describe('Disabled APM Tracing or Standalone', () => {
     for (const style of ['datadog', 'tracecontext']) {
       for (const priority of [-1, 0, 1, USER_KEEP]) {
         it(`marks an inherited ${style} priority ${priority} with a trace source as non-probabilistic`, () => {
-          config.tracePropagationStyle.extract = style === 'datadog' ? ['datadog', 'tracecontext'] : ['tracecontext']
-          config.tracePropagationStyle.inject = ['tracecontext']
+          config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = style === 'datadog'
+            ? ['datadog', 'tracecontext']
+            : ['tracecontext']
+          config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
           standalone.configure(config)
 
           try {
@@ -251,8 +260,8 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should keep the standalone trace source when other trace tags exceed the tracestate budget', () => {
-      config.tracePropagationStyle.inject = ['tracecontext']
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
@@ -331,7 +340,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
 
     it('should return a carrier when baggage remains after trace context is suppressed', () => {
-      config.legacyBaggageEnabled = true
+      config.baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED = true
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
       })

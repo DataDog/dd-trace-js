@@ -298,7 +298,7 @@ function extractB3SingleContext (carrier) {
 }
 
 class TextMapPropagator {
-  /** @type {Set<string> | undefined} Cached `Set` view of `#config.baggageTagKeys`. */
+  /** @type {Set<string> | undefined} Cached `Set` view of the configured baggage tag keys. */
   #baggageTagKeysSet
 
   /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
@@ -344,8 +344,8 @@ class TextMapPropagator {
   }
 
   #refreshB3InjectionStyle () {
-    const origin = this.#config.getOrigin?.('tracePropagationStyle.inject') ?? 'default'
-    const experimentalEnabled = this.#config.experimental?.b3 === true
+    const origin = this.#config.getOrigin?.('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT') ?? 'default'
+    const experimentalEnabled = this.#config.propagation.DD_TRACE_EXPERIMENTAL_B3_ENABLED === true
     const sharedOrigin = origin === 'calculated'
       ? this.#config.getOrigin?.('DD_TRACE_PROPAGATION_STYLE') ?? 'default'
       : undefined
@@ -369,7 +369,7 @@ class TextMapPropagator {
   }
 
   /**
-   * Returns a `Set` view of `#config.baggageTagKeys` that is rebuilt only
+   * Returns a `Set` view of the baggage tag keys that is rebuilt only
    * when the source array reference changes. Avoids an `O(n)` `Set` alloc
    * per baggage extract (which is per-request when baggage propagation is
    * enabled).
@@ -377,7 +377,7 @@ class TextMapPropagator {
    * @returns {Set<string>}
    */
   #getBaggageTagKeysSet () {
-    const source = this.#config.baggageTagKeys
+    const source = this.#config.baggage.DD_TRACE_BAGGAGE_TAG_KEYS
     if (this.#baggageTagKeysSetSource !== source) {
       this.#baggageTagKeysSet = new Set(source)
       this.#baggageTagKeysSetSource = source
@@ -451,7 +451,7 @@ class TextMapPropagator {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pickTextMap(carrier))
-      const styles = this.#config.tracePropagationStyle.extract.join(', ')
+      const styles = this.#config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT.join(', ')
 
       return `Extract from carrier (${styles}): ${keys}.`
     })
@@ -490,8 +490,9 @@ class TextMapPropagator {
    * @returns {Record<string, string> | undefined}
    */
   #injectBaggageItems (spanContext, carrier) {
+    const baggageConfig = this.#config.baggage
     let injectedCarrier
-    if (this.#config.legacyBaggageEnabled) {
+    if (baggageConfig.DD_TRACE_LEGACY_BAGGAGE_ENABLED) {
       const baggageItems = spanContext?._baggageItems
       if (baggageItems) {
         for (const key of Object.keys(baggageItems)) {
@@ -528,13 +529,13 @@ class TextMapPropagator {
         byteCounter += item.length
 
         // Check for item count limit exceeded
-        if (itemCounter > this.#config.baggageMaxItems) {
+        if (itemCounter > baggageConfig.DD_TRACE_BAGGAGE_MAX_ITEMS) {
           tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
           break
         }
 
         // Check for byte count limit exceeded
-        if (byteCounter > this.#config.baggageMaxBytes) {
+        if (byteCounter > baggageConfig.DD_TRACE_BAGGAGE_MAX_BYTES) {
           tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
           break
         }
@@ -768,7 +769,10 @@ class TextMapPropagator {
    * @param {string} name
    */
   #hasPropagationStyle (mode, name) {
-    return this.#config.tracePropagationStyle[mode].includes(name)
+    const styles = mode === 'extract'
+      ? this.#config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+      : this.#config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT
+    return styles.includes(name)
   }
 
   /**
@@ -839,7 +843,7 @@ class TextMapPropagator {
     let extractBaggage = false
     let traceContext
     let traceContextExtracted = false
-    for (const extractor of this.#config.tracePropagationStyle.extract) {
+    for (const extractor of this.#config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT) {
       let extractedContext
       switch (extractor) {
         case 'datadog':
@@ -1103,7 +1107,7 @@ class TextMapPropagator {
    * @param {DatadogSpanContext} spanContext
    */
   #extractLegacyBaggageItems (carrier, spanContext) {
-    if (!this.#config.legacyBaggageEnabled) return
+    if (!this.#config.baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED) return
     readLegacyBaggage(carrier, spanContext._baggageItems)
   }
 
@@ -1118,6 +1122,7 @@ class TextMapPropagator {
     const header = readBaggage(carrier)
     if (!header) return
 
+    const baggageConfig = this.#config.baggage
     const baggageTagKeys = this.#getBaggageTagKeysSet()
     const tagAllKeys = baggageTagKeys.has('*')
     /** @type {Record<string, string> | undefined} */
@@ -1127,7 +1132,7 @@ class TextMapPropagator {
     let start = 0
 
     while (start <= header.length) {
-      if (itemCount >= this.#config.baggageMaxItems) {
+      if (itemCount >= baggageConfig.DD_TRACE_BAGGAGE_MAX_ITEMS) {
         tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
         break
       }
@@ -1138,7 +1143,7 @@ class TextMapPropagator {
 
       // Charge the comma slot before the empty-entry skip so a `,,,,,foo=bar` can't iterate for free.
       byteCount += end - memberStart + 1
-      if (byteCount > this.#config.baggageMaxBytes) {
+      if (byteCount > baggageConfig.DD_TRACE_BAGGAGE_MAX_BYTES) {
         tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
         break
       }

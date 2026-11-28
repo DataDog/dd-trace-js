@@ -48,9 +48,12 @@ export interface GeneratedConfig {
     DD_APPSEC_WAF_TIMEOUT: number;
     DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
   };
-  baggageMaxBytes: number;
-  baggageMaxItems: number;
-  baggageTagKeys: string[];
+  baggage: {
+    DD_TRACE_BAGGAGE_MAX_BYTES: number;
+    DD_TRACE_BAGGAGE_MAX_ITEMS: number;
+    DD_TRACE_BAGGAGE_TAG_KEYS: string[];
+    DD_TRACE_LEGACY_BAGGAGE_ENABLED: boolean;
+  };
   clientIpEnabled: boolean;
   clientIpHeader: string | undefined;
   cloudPayloadTagging: {
@@ -435,9 +438,6 @@ export interface GeneratedConfig {
     DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: number;
   };
   env: string | undefined;
-  experimental: {
-    b3: boolean;
-  };
   featureFlags: {
     DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: boolean;
     DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: number;
@@ -492,7 +492,6 @@ export interface GeneratedConfig {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
     DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   };
-  legacyBaggageEnabled: boolean;
   llmobs: {
     DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
@@ -547,6 +546,11 @@ export interface GeneratedConfig {
   port: string | number;
   profiling: {
     DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
+  };
+  propagation: {
+    DD_TRACE_EXPERIMENTAL_B3_ENABLED: boolean;
+    DD_TRACE_PROPAGATION_STYLE_EXTRACT: string[];
+    DD_TRACE_PROPAGATION_STYLE_INJECT: string[];
   };
   protocolVersion: string;
   remoteConfig: {
@@ -625,10 +629,6 @@ export interface GeneratedConfig {
   };
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
-  tracePropagationStyle: {
-    extract: string[];
-    inject: string[];
-  };
   traceWebsocketMessagesEnabled: boolean;
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;

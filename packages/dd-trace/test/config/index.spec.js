@@ -485,9 +485,9 @@ describe('Config', () => {
         foo: 'bar',
         baz: 'qux',
       },
-      tracePropagationStyle: {
-        inject: ['b3', 'tracecontext'],
-        extract: ['b3', 'tracecontext'],
+      propagation: {
+        DD_TRACE_PROPAGATION_STYLE_INJECT: ['b3', 'tracecontext'],
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['b3', 'tracecontext'],
       },
     })
 
@@ -662,9 +662,9 @@ describe('Config', () => {
         foo: 'bar1',
         baz: 'qux1',
       },
-      tracePropagationStyle: {
-        inject: ['b3', 'datadog'],
-        extract: ['b3', 'datadog'],
+      propagation: {
+        DD_TRACE_PROPAGATION_STYLE_INJECT: ['b3', 'datadog'],
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['b3', 'datadog'],
       },
     })
 
@@ -1103,8 +1103,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['tracecontext'])
   })
 
   it('should treat an empty OTEL_PROPAGATORS as unset', () => {
@@ -1112,10 +1112,12 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
-    assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'default')
-    assert.strictEqual(config.getOrigin('tracePropagationStyle.extract'), 'default')
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['datadog', 'tracecontext', 'baggage']
+    )
+    assert.strictEqual(config.getOrigin('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT'), 'default')
+    assert.strictEqual(config.getOrigin('propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT'), 'default')
     sinon.assert.notCalled(log.warn)
   })
 
@@ -1124,8 +1126,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['none'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['none'])
     sinon.assert.notCalled(log.warn)
   })
 
@@ -1134,8 +1136,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['none'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['none'])
     sinon.assert.calledWith(log.warn,
       "'none' cannot be combined with other propagators: 'tracecontext,none' for OTEL_PROPAGATORS " +
       '(source: env_var), disabled propagation'
@@ -1147,8 +1149,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['none', 'tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['none', 'tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['none', 'tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['none', 'tracecontext'])
   })
 
   it('should prefer an invalid DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
@@ -1157,8 +1159,10 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['datadog', 'tracecontext', 'baggage']
+    )
     assert.strictEqual(config.getOrigin('DD_TRACE_PROPAGATION_STYLE'), 'default')
   })
 
@@ -1167,8 +1171,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, [])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, [])
   })
 
   it('should prefer an empty DD_TRACE_PROPAGATION_STYLE over OTEL_PROPAGATORS', () => {
@@ -1177,8 +1181,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, [])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, [])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, [])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, [])
   })
 
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {
@@ -2349,8 +2353,11 @@ describe('Config', () => {
     assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT,
+      ['datadog', 'tracecontext', 'baggage']
+    )
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['datadog', 'tracecontext', 'baggage'])
     assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 837)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP.length, 190)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP.length, 578)
@@ -2861,8 +2868,8 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3', 'tracecontext'])
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -3106,6 +3113,38 @@ describe('Config', () => {
     ])
   })
 
+  it('should use canonical baggage names internally', () => {
+    const config = getConfig({
+      baggageMaxBytes: 1024,
+      baggageMaxItems: 8,
+      baggageTagKeys: ['user.id'],
+      legacyBaggageEnabled: false,
+    })
+
+    assertObjectContains(config.baggage, {
+      DD_TRACE_BAGGAGE_MAX_BYTES: 1024,
+      DD_TRACE_BAGGAGE_MAX_ITEMS: 8,
+      DD_TRACE_BAGGAGE_TAG_KEYS: ['user.id'],
+      DD_TRACE_LEGACY_BAGGAGE_ENABLED: false,
+    })
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_BAGGAGE_MAX_BYTES', value: 1024, origin: 'code' },
+      { name: 'DD_TRACE_BAGGAGE_MAX_ITEMS', value: 8, origin: 'code' },
+      { name: 'DD_TRACE_BAGGAGE_TAG_KEYS', value: 'user.id', origin: 'code' },
+      { name: 'DD_TRACE_LEGACY_BAGGAGE_ENABLED', value: false, origin: 'code' },
+    ])
+  })
+
+  it('should use canonical propagation names internally', () => {
+    process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
+    const config = getConfig({ tracePropagationStyle: ['datadog'] }, { ddMajor: 5 })
+
+    const styles = ['datadog', 'b3', 'b3 single header']
+    assert.strictEqual(config.propagation.DD_TRACE_EXPERIMENTAL_B3_ENABLED, true)
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, styles)
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, styles)
+  })
+
   it('should transform safe programmatic option types', () => {
     const config = getConfig({
       startupLogs: 'False',
@@ -3123,7 +3162,7 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     assert.strictEqual(config.service, '1234')
-    assert.deepStrictEqual(config.baggageTagKeys, ['valid', 1, true])
+    assert.deepStrictEqual(config.baggage.DD_TRACE_BAGGAGE_TAG_KEYS, ['valid', 1, true])
   })
 
   it('should accept infinite numeric programmatic option values', () => {
@@ -3211,7 +3250,10 @@ describe('Config', () => {
     assert.strictEqual(config.flushInterval, defaults.flushInterval)
     assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
     assert.strictEqual(config.service, 'node')
-    assert.deepStrictEqual(config.baggageTagKeys, defaults.baggageTagKeys)
+    assert.deepStrictEqual(
+      config.baggage.DD_TRACE_BAGGAGE_TAG_KEYS,
+      defaults['baggage.DD_TRACE_BAGGAGE_TAG_KEYS']
+    )
     assert.deepStrictEqual(config.headerTags, defaults.headerTags)
     assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
     assert.deepStrictEqual(config.sampling.DD_TRACE_SAMPLING_RULES, defaults['sampling.DD_TRACE_SAMPLING_RULES'])
@@ -3277,8 +3319,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['tracecontext'])
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -3575,14 +3617,20 @@ describe('Config', () => {
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     if (DD_MAJOR < 6) {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
+      assert.deepStrictEqual(
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT,
+        ['datadog', 'b3', 'b3 single header']
+      )
+      assert.deepStrictEqual(
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT,
+        ['datadog', 'b3', 'b3 single header']
+      )
       sinon.assert.calledOnce(log.warn)
     } else {
       // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
       // propagation styles stay at the explicit input (`tracePropagationStyle: { inject: ['datadog'], ... }`).
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['datadog'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['datadog'])
       sinon.assert.calledThrice(log.warn)
       sinon.assert.calledWithExactly(
         log.warn,
@@ -3726,11 +3774,11 @@ describe('Config', () => {
     const config = getConfig()
 
     if (DD_MAJOR < 6) {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['b3 single header'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3 single header'])
     } else {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['b3'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3'])
     }
   })
 
@@ -3740,8 +3788,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['datadog', 'tracecontext'])
+    assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['datadog'])
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -4258,9 +4306,9 @@ describe('Config', () => {
         version: '1.0.0',
         env: 'development',
       },
-      tracePropagationStyle: {
-        extract: ['abc'],
-        inject: ['abc'],
+      propagation: {
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['abc'],
+        DD_TRACE_PROPAGATION_STYLE_INJECT: ['abc'],
       },
     })
     assert.strictEqual(config.url.toString(), 'https://agent2:6218/')
@@ -6144,8 +6192,8 @@ apm_configuration_default:
 
       // Tracing
       assert.strictEqual(config.traceId128BitGenerationEnabled, true)
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['tracecontext'])
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT, ['tracecontext'])
 
       // Appsec
       assertObjectContains(config, {
@@ -6700,18 +6748,18 @@ rules:
       process.env.OTEL_PROPAGATORS = 'b3'
       const config = getConfig(undefined, { ddMajor: 5 })
 
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
-      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3'])
+      assert.strictEqual(config.getOrigin('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT'), 'calculated')
 
       config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
 
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
-      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'remote_config')
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3'])
+      assert.strictEqual(config.getOrigin('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT'), 'remote_config')
 
       config.setRemoteConfig(null)
 
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
-      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+      assert.deepStrictEqual(config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT, ['b3'])
+      assert.strictEqual(config.getOrigin('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT'), 'calculated')
     })
 
     it('should resolve deprecated AppSec env configs to canonical Remote Config fields', () => {

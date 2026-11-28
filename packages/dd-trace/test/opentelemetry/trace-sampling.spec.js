@@ -26,7 +26,10 @@ describe('OTLP consistent probability sampling', () => {
     config.OTEL_TRACES_EXPORTER = 'otlp'
     config.OTEL_TRACES_SPAN_METRICS_ENABLED = false
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = false
-    config.tracePropagationStyle = { inject: ['tracecontext'], extract: ['datadog', 'tracecontext'] }
+    config.propagation = {
+      DD_TRACE_PROPAGATION_STYLE_EXTRACT: ['datadog', 'tracecontext'],
+      DD_TRACE_PROPAGATION_STYLE_INJECT: ['tracecontext'],
+    }
     config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'continue'
     config.sampling = { DD_TRACE_SAMPLE_RATE: 0.1 }
 

@@ -156,7 +156,7 @@ describe('TextMapPropagator', () => {
 
     it('should log injection through the managed field projection', () => {
       const carrier = {}
-      config.tracePropagationStyle.inject = ['datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['datadog']
 
       propagator.inject(createContext(), carrier)
 
@@ -248,7 +248,7 @@ describe('TextMapPropagator', () => {
     it('should drop excess baggage items when there are too many pairs', () => {
       /** @type {Record<string, unknown>} */
       const carrier = {}
-      for (let i = 0; i < config.baggageMaxItems + 1; i++) {
+      for (let i = 0; i < config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS + 1; i++) {
         setBaggageItem(`key-${i}`, String(i))
       }
       propagator.inject(undefined, carrier)
@@ -256,13 +256,13 @@ describe('TextMapPropagator', () => {
       if (typeof baggage !== 'string') {
         throw new Error('Expected baggage header to be a string')
       }
-      assert.strictEqual(baggage.split(',').length, config.baggageMaxItems)
+      assert.strictEqual(baggage.split(',').length, config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS)
     })
 
     it('should drop excess baggage items when the resulting baggage header contains many bytes', () => {
       const carrier = {}
       setBaggageItem('raccoon', 'chunky')
-      setBaggageItem('foo', Buffer.alloc(config.baggageMaxBytes).toString())
+      setBaggageItem('foo', Buffer.alloc(config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES).toString())
 
       propagator.inject(undefined, carrier)
       assert.strictEqual(carrier.baggage, 'raccoon=chunky')
@@ -388,7 +388,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -415,7 +415,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -434,7 +434,7 @@ describe('TextMapPropagator', () => {
         },
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3multi']
 
       propagator.inject(spanContext, carrier)
 
@@ -458,7 +458,7 @@ describe('TextMapPropagator', () => {
       spanContext._trace.origin = 'foo,bar='
       spanContext._trace.tags['_dd.p.foo bar,baz='] = 'abc~!@#$%^&*()_+`-='
 
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       propagator.inject(spanContext, carrier)
       assert.strictEqual(spanContext._isRemote, false)
@@ -489,7 +489,7 @@ describe('TextMapPropagator', () => {
         },
         isRemote: false,
       })
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       propagator.inject(spanContext, carrier)
 
@@ -523,7 +523,7 @@ describe('TextMapPropagator', () => {
         sampling: { priority: USER_KEEP },
       })
 
-      config.tracePropagationStyle.inject = [B3_SINGLE_STYLE]
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = [B3_SINGLE_STYLE]
 
       propagator.inject(spanContext, carrier)
 
@@ -539,7 +539,7 @@ describe('TextMapPropagator', () => {
         parentId: id('0000000000000789'),
         sampling: { priority: USER_KEEP },
       })
-      config.tracePropagationStyle.inject = [B3_SINGLE_STYLE]
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = [B3_SINGLE_STYLE]
 
       propagator.inject(spanContext, carrier)
 
@@ -555,7 +555,7 @@ describe('TextMapPropagator', () => {
           sampling: { priority: USER_KEEP },
         })
 
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
 
         propagator.inject(spanContext, carrier)
 
@@ -571,7 +571,7 @@ describe('TextMapPropagator', () => {
           sampling: { priority: USER_KEEP },
         })
 
-        config.tracePropagationStyle.inject = ['b3multi']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3multi']
 
         propagator.inject(spanContext, carrier)
 
@@ -588,7 +588,7 @@ describe('TextMapPropagator', () => {
           sampling: { priority: USER_KEEP },
         })
 
-        config.tracePropagationStyle.inject = ['b3 single header']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3 single header']
 
         propagator.inject(spanContext, carrier)
 
@@ -604,7 +604,7 @@ describe('TextMapPropagator', () => {
         spanId: id('0000000000000456'),
       })
 
-      config.tracePropagationStyle.inject = []
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = []
 
       propagator.inject(spanContext, carrier)
 
@@ -617,7 +617,7 @@ describe('TextMapPropagator', () => {
         tracestate: TraceState.fromString('other=value,dd=s:1'),
       })
       config.apmTracingEnabled = false
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       propagator.inject(spanContext, carrier)
 
@@ -632,7 +632,7 @@ describe('TextMapPropagator', () => {
         spanId: id('0000000000000456'),
       })
 
-      config.tracePropagationStyle.inject = []
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = []
 
       const injectedCarrier = propagator.inject(spanContext, carrier)
 
@@ -659,15 +659,15 @@ describe('TextMapPropagator', () => {
       })
 
       it('returns undefined when no style writes and there is no baggage', () => {
-        config.tracePropagationStyle.inject = []
-        config.legacyBaggageEnabled = false
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = []
+        config.baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED = false
         baggageItems = {}
 
         assert.strictEqual(propagator.inject(createContext()), undefined)
       })
 
       it('returns a lazily created carrier when only baggage is written', () => {
-        config.tracePropagationStyle.inject = ['baggage']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['baggage']
         setBaggageItem('foo', 'bar')
 
         // No spanContext: the datadog/b3/traceparent styles are skipped, baggage still runs.
@@ -707,7 +707,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should match replacement keys only at key positions', () => {
-      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['datadog', 'tracecontext']
       const carrier = {}
       const spanContext = createContext({
         isRemote: false,
@@ -722,7 +722,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should serialize injection-local trace tags to tracestate', () => {
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
       const carrier = {}
       const spanContext = createContext({ isRemote: false })
 
@@ -775,7 +775,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should keep required injection-local trace tags when pruning tracestate', () => {
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
       const carrier = {}
       const spanContext = createContext({
         isRemote: false,
@@ -793,7 +793,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should remove stale Datadog state when required injection-local trace tags exceed the member limit', () => {
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
       const carrier = {}
       const spanContext = createContext({
         isRemote: false,
@@ -807,8 +807,8 @@ describe('TextMapPropagator', () => {
     })
 
     it('should not publish when nothing was injected', () => {
-      config.tracePropagationStyle.inject = []
-      config.legacyBaggageEnabled = false
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = []
+      config.baggage.DD_TRACE_LEGACY_BAGGAGE_ENABLED = false
       baggageItems = {}
       const onSpanInject = sinon.stub()
       injectCh.subscribe(onSpanInject)
@@ -842,8 +842,8 @@ describe('TextMapPropagator', () => {
 
       it('should track truncation metric when baggage item count exceeds limit', () => {
         const carrier = {}
-        const originalMaxItems = config.baggageMaxItems
-        config.baggageMaxItems = 2
+        const originalMaxItems = config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS
+        config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS = 2
 
         // Add 3 items to exceed the limit
         setBaggageItem('key1', 'value1')
@@ -859,13 +859,13 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(tracerMetrics.count().inc)
 
         // Restore original config
-        config.baggageMaxItems = originalMaxItems
+        config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS = originalMaxItems
       })
 
       it('should track truncation metric when baggage byte count exceeds limit', () => {
         const carrier = {}
-        const originalMaxBytes = config.baggageMaxBytes
-        config.baggageMaxBytes = 50
+        const originalMaxBytes = config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES
+        config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES = 50
 
         // Add a large value to exceed byte limit
         setBaggageItem('small-key', 'a'.repeat(100))
@@ -879,7 +879,7 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(tracerMetrics.count().inc)
 
         // Restore original config
-        config.baggageMaxBytes = originalMaxBytes
+        config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES = originalMaxBytes
       })
     })
   })
@@ -948,7 +948,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract legacy baggage for a tracecontext winner', () => {
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
       const carrier = {
         traceparent: '00-0000000000000000000000000000007b-0000000000000456-01',
         'ot-baggage-foo': 'bar',
@@ -960,7 +960,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should not extract legacy baggage for a B3 winner', () => {
-      config.tracePropagationStyle.extract = ['b3multi']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['b3multi']
       const carrier = {
         'x-b3-traceid': '0000000000000123',
         'x-b3-spanid': '0000000000000456',
@@ -1217,7 +1217,7 @@ describe('TextMapPropagator', () => {
 
       for (const extract of [['baggage', 'datadog'], ['datadog', 'baggage']]) {
         removeAllBaggageItems()
-        config.tracePropagationStyle.extract = extract
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = extract
 
         const spanContext = propagator.extract(carrier)
 
@@ -1543,14 +1543,14 @@ describe('TextMapPropagator', () => {
 
     it('should skip extraction of datadog headers without the feature flag', () => {
       const carrier = textMap
-      config.tracePropagationStyle.extract = []
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = []
 
       const spanContext = propagator.extract(carrier)
       assert.strictEqual(spanContext, null)
     })
 
     it('should support prioritization', () => {
-      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext', 'datadog']
 
       // No traceparent yet, will skip ahead to datadog
       const second = propagator.extract(textMap)
@@ -1579,8 +1579,8 @@ describe('TextMapPropagator', () => {
     it('should always extract tracestate from tracecontext when trace IDs match', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=bleh,ot=rv:ffffffffffffff;th:8'
-      config.tracePropagationStyle.extract = ['datadog']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1594,8 +1594,8 @@ describe('TextMapPropagator', () => {
       textMap['x-datadog-sampling-priority'] = '0'
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8'
-      config.tracePropagationStyle.extract = ['datadog']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1614,8 +1614,8 @@ describe('TextMapPropagator', () => {
         traceparent: `00-${traceId}-${spanId}-01`,
         tracestate: 'ot=rv:123456789abcde;th:8',
       }
-      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [B3_SINGLE_STYLE, 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1634,8 +1634,8 @@ describe('TextMapPropagator', () => {
         traceparent: `00-${traceId}-${spanId}-01`,
         tracestate: 'ot=rv:ffffffffffffff;th:8',
       }
-      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'datadog']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [B3_SINGLE_STYLE, 'datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1652,8 +1652,8 @@ describe('TextMapPropagator', () => {
         traceparent: `00-${traceId}-${spanId}-00`,
         tracestate: 'ot=rv:00000000000000;th:8',
       }
-      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [B3_SINGLE_STYLE, 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1670,8 +1670,8 @@ describe('TextMapPropagator', () => {
         traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
         tracestate: 'dd=s:2;t.dm:-5,ot=rv:ffffffffffffff',
       }
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1696,8 +1696,8 @@ describe('TextMapPropagator', () => {
           traceparent: `00-0000000000000000000000000000007b-00000000000001c8-${flag}`,
           tracestate: `dd=t.dm:-3,ot=rv:${randomValue};th:8`,
         }
-        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
-        config.tracePropagationStyle.inject = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
         const carrier = propagator.inject(spanContext, {})
@@ -1724,8 +1724,8 @@ describe('TextMapPropagator', () => {
           traceparent: `00-${traceId}-${spanId}-01`,
           tracestate: 'dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
         }
-        config.tracePropagationStyle.extract = [style, 'tracecontext']
-        config.tracePropagationStyle.inject = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [style, 'tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
         const carrier = propagator.inject(spanContext, {})
@@ -1746,8 +1746,8 @@ describe('TextMapPropagator', () => {
         traceparent: `00-${traceId}-${spanId}-00`,
         tracestate: 'ot=rv:00000000000000;th:8;vendor:value',
       }
-      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [B3_SINGLE_STYLE, 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1765,8 +1765,8 @@ describe('TextMapPropagator', () => {
         traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
         tracestate: 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
       }
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
-      config.tracePropagationStyle.inject = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['tracecontext']
 
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
@@ -1784,7 +1784,7 @@ describe('TextMapPropagator', () => {
         traceparent: '00-0000000000000000000000000000007b-0000000000000456-01',
         tracestate: `${other.join(',')},dd=s:2;o:foo`,
       }
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const spanContext = propagator.extract(carrier)
       const outboundCarrier = {}
@@ -1807,7 +1807,7 @@ describe('TextMapPropagator', () => {
             return '00-0000000000000000000000000000007B-0000000000000456-01'
           },
         })
-        config.tracePropagationStyle.extract = extract
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = extract
 
         propagator.extract(carrier)
 
@@ -1834,7 +1834,7 @@ describe('TextMapPropagator', () => {
           return '456'
         },
       })
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
 
       const spanContext = propagator.extract(carrier)
 
@@ -1846,7 +1846,7 @@ describe('TextMapPropagator', () => {
     it('should extract the last datadog parent id from tracestate when p dd member is availible', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=bleh,dd=s:2;o:foo;p:2244eeee6666aaaa'
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1858,7 +1858,7 @@ describe('TextMapPropagator', () => {
     it('should preserve trace header tid when tracestate contains an inconsistent tid', () => {
       textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
       textMap.tracestate = 'dd=t.tid:640cfd8d0000ffff'
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1871,7 +1871,7 @@ describe('TextMapPropagator', () => {
     it('should preserve trace header tid when tracestate contains a malformed tid', () => {
       textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
       textMap.tracestate = 'dd=t.tid:XXXX'
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1884,7 +1884,7 @@ describe('TextMapPropagator', () => {
     it('should set the last datadog parent id to zero when p: is NOT in the tracestate', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=gg,dd=s:-1;'
-      config.tracePropagationStyle.extract = ['tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1894,7 +1894,7 @@ describe('TextMapPropagator', () => {
     it('should not extract tracestate from tracecontext when trace IDs don\'t match', () => {
       textMap.traceparent = '00-00000000000000000000000000000789-0000000000000456-01'
       textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1912,7 +1912,7 @@ describe('TextMapPropagator', () => {
         },
       })
       carrier.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
       config.DD_TRACE_PROPAGATION_EXTRACT_FIRST = true
 
       const spanContext = propagator.extract(carrier)
@@ -1925,7 +1925,7 @@ describe('TextMapPropagator', () => {
       textMap['x-datadog-trace-id'] = '61185'
       textMap['x-datadog-parent-id'] = '15'
       textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
-      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1941,7 +1941,7 @@ describe('TextMapPropagator', () => {
         textMap['x-datadog-parent-id'] = '15'
         textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
         textMap.tracestate = 'other=bleh,dd=p:0000000000000001;s:2;o:foo;t.dm:-4'
-        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2006,7 +2006,7 @@ describe('TextMapPropagator', () => {
 
       it('should drop excess baggage items when the carrier has too many pairs', () => {
         const entries = []
-        for (let index = 0; index < config.baggageMaxItems + 1; index++) {
+        for (let index = 0; index < config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS + 1; index++) {
           entries.push(`key${index}=${index}`)
         }
         const carrier = {
@@ -2017,7 +2017,7 @@ describe('TextMapPropagator', () => {
 
         propagator.extract(carrier)
 
-        assert.strictEqual(Object.keys(getAllBaggageItems()).length, config.baggageMaxItems)
+        assert.strictEqual(Object.keys(getAllBaggageItems()).length, config.baggage.DD_TRACE_BAGGAGE_MAX_ITEMS)
         sinon.assert.calledWith(tracerMetrics.count,
           'context_header.truncated',
           ['truncation_reason:baggage_item_count_exceeded']
@@ -2029,7 +2029,7 @@ describe('TextMapPropagator', () => {
         const carrier = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
-          baggage: `foo=${'a'.repeat(config.baggageMaxBytes)}`,
+          baggage: `foo=${'a'.repeat(config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES)}`,
         }
 
         propagator.extract(carrier)
@@ -2044,7 +2044,7 @@ describe('TextMapPropagator', () => {
       })
 
       it('should truncate later baggage items when their bytes would exceed the cap', () => {
-        const half = config.baggageMaxBytes / 2
+        const half = config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES / 2
         const carrier = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
@@ -2066,7 +2066,7 @@ describe('TextMapPropagator', () => {
         const carrier = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
-          baggage: `foo=${'a'.repeat(config.baggageMaxBytes)}`,
+          baggage: `foo=${'a'.repeat(config.baggage.DD_TRACE_BAGGAGE_MAX_BYTES)}`,
         }
 
         propagator.extract(carrier)
@@ -2141,7 +2141,7 @@ describe('TextMapPropagator', () => {
       const spanId = '5555eeee6666ffff'
       textMap.traceparent = `00-${traceId}-${spanId}-01`
 
-      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+      config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext', 'datadog']
 
       const first = propagator.extract(textMap)
 
@@ -2166,7 +2166,7 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
-        config.tracePropagationStyle.extract = ['b3multi']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['b3multi']
 
         delete textMap['x-datadog-trace-id']
         delete textMap['x-datadog-parent-id']
@@ -2238,7 +2238,7 @@ describe('TextMapPropagator', () => {
         textMap['x-b3-traceid'] = '0000000000000123'
         textMap['x-b3-spanid'] = '0000000000000456'
 
-        config.tracePropagationStyle.extract = []
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = []
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2270,7 +2270,7 @@ describe('TextMapPropagator', () => {
       function createV5Propagator (envName, injectEnvName, injectOrigin = 'calculated', trackOrigins = true) {
         if (trackOrigins) {
           sinon.stub(config, 'getOrigin')
-            .withArgs('tracePropagationStyle.inject')
+            .withArgs('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT')
             .returns(injectOrigin)
         } else {
           config.getOrigin = undefined
@@ -2290,7 +2290,7 @@ describe('TextMapPropagator', () => {
           },
         })
 
-        config.tracePropagationStyle.extract = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['b3']
         delete textMap['x-datadog-trace-id']
         delete textMap['x-datadog-parent-id']
 
@@ -2299,7 +2299,7 @@ describe('TextMapPropagator', () => {
 
       it('should support configs without origin tracking', () => {
         propagator = createV5Propagator('DD_TRACE_PROPAGATION_STYLE', undefined, undefined, false)
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2346,7 +2346,7 @@ describe('TextMapPropagator', () => {
 
       it('should inject the OTEL B3 style as a single header', () => {
         propagator = createV5Propagator('OTEL_PROPAGATORS')
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2361,7 +2361,7 @@ describe('TextMapPropagator', () => {
 
       it('should inject the OTEL B3 style with tracecontext', () => {
         propagator = createV5Propagator('OTEL_PROPAGATORS')
-        config.tracePropagationStyle.inject = ['b3', 'tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3', 'tracecontext']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2377,7 +2377,7 @@ describe('TextMapPropagator', () => {
 
       it('should inject the legacy B3 style as multiple headers', () => {
         propagator = createV5Propagator('DD_TRACE_PROPAGATION_STYLE')
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2398,7 +2398,7 @@ describe('TextMapPropagator', () => {
           'DD_TRACE_PROPAGATION_STYLE_INJECT',
           'env_var'
         )
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2413,7 +2413,7 @@ describe('TextMapPropagator', () => {
 
       it('should prefer the programmatic injection style over OTEL', () => {
         propagator = createV5Propagator('OTEL_PROPAGATORS', undefined, 'code')
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2428,8 +2428,8 @@ describe('TextMapPropagator', () => {
 
       it('should refresh the injection style after remote configuration', () => {
         propagator = createV5Propagator('OTEL_PROPAGATORS')
-        config.tracePropagationStyle.inject = ['b3']
-        config.getOrigin.withArgs('tracePropagationStyle.inject').returns('remote_config')
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
+        config.getOrigin.withArgs('propagation.DD_TRACE_PROPAGATION_STYLE_INJECT').returns('remote_config')
         const carrier = {}
 
         propagator.inject(createContext({
@@ -2444,7 +2444,7 @@ describe('TextMapPropagator', () => {
 
       it('should refresh the injection style after shared remote configuration', () => {
         propagator = createV5Propagator('OTEL_PROPAGATORS')
-        config.tracePropagationStyle.inject = ['b3']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3']
         config.getOrigin.withArgs('DD_TRACE_PROPAGATION_STYLE').returns('remote_config')
         const carrier = {}
 
@@ -2459,8 +2459,8 @@ describe('TextMapPropagator', () => {
       })
 
       it('should preserve both B3 styles for the experimental setting', () => {
-        config.experimental = { b3: true }
-        config.tracePropagationStyle.inject = ['b3', 'b3 single header']
+        config.propagation.DD_TRACE_EXPERIMENTAL_B3_ENABLED = true
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_INJECT = ['b3', 'b3 single header']
         propagator = createV5Propagator('OTEL_PROPAGATORS')
         const carrier = {}
 
@@ -2477,7 +2477,7 @@ describe('TextMapPropagator', () => {
 
     describe('with B3 propagation as a single header', () => {
       beforeEach(() => {
-        config.tracePropagationStyle.extract = [B3_SINGLE_STYLE]
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = [B3_SINGLE_STYLE]
 
         delete textMap['x-datadog-trace-id']
         delete textMap['x-datadog-parent-id']
@@ -2589,7 +2589,7 @@ describe('TextMapPropagator', () => {
       it('should skip extraction without the feature flag', () => {
         textMap.b3 = '0000000000000123-0000000000000456-1-0000000000000789'
 
-        config.tracePropagationStyle.extract = []
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = []
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2651,7 +2651,7 @@ describe('TextMapPropagator', () => {
 
       it('should skip extraction without the feature flag', () => {
         textMap.traceparent = '00-000000000000000000000000000004d2-000000000000162e-01'
-        config.tracePropagationStyle.extract = []
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = []
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2661,7 +2661,7 @@ describe('TextMapPropagator', () => {
       it('should extract the header', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
@@ -2676,7 +2676,7 @@ describe('TextMapPropagator', () => {
 
       it('should extract a 128-bit trace ID', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
         config.traceId128BitGenerationEnabled = true
 
         const carrier = textMap
@@ -2698,7 +2698,7 @@ describe('TextMapPropagator', () => {
           ['1a', 0], ['1c', 0], ['1e', 0], ['1f', 1],
           ['ab', 1], ['cd', 1], ['fe', 0], ['ff', 1],
         ]
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
         for (const [flags, sampled] of cases) {
           const carrier = { traceparent: `00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-${flags}` }
           const spanContext = propagator.extract(carrier)
@@ -2709,7 +2709,7 @@ describe('TextMapPropagator', () => {
       it('should round-trip origin = through tracestate ~ encoding', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'dd=o:foo~bar'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2722,7 +2722,7 @@ describe('TextMapPropagator', () => {
       it('should combine array-valued tracestate per W3C §3.3.1.1 / RFC 7230 §3.2.2', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = ['vendor1=value1', 'vendor2=value2']
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
         assert.strictEqual(spanContext._tracestate.get('vendor1'), 'value1')
@@ -2736,7 +2736,7 @@ describe('TextMapPropagator', () => {
           'dd=s:1',
           { toString () { throw new Error('boom') } },
         ]
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
         assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
@@ -2748,7 +2748,7 @@ describe('TextMapPropagator', () => {
       it('should extract a valid context when array-valued tracestate has only non-string members', () => {
         textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = [Symbol('x'), 42, { toString () { throw new Error('nope') } }]
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
         assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
@@ -2758,7 +2758,7 @@ describe('TextMapPropagator', () => {
       })
 
       it('should ignore non-string traceparent values without crashing', () => {
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
         for (const value of [['00-bad'], { foo: 'bar' }, 42, true, [42]]) {
           assert.strictEqual(propagator.extract({ traceparent: value }), null)
         }
@@ -2769,14 +2769,14 @@ describe('TextMapPropagator', () => {
           '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
           '00-99998888777766665555444433332222-1111000022223333-01',
         ]
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         assert.strictEqual(propagator.extract(textMap), null)
       })
 
       it('should accept a single traceparent field represented as an array', () => {
         textMap.traceparent = ['00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01']
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const spanContext = propagator.extract(textMap)
 
@@ -2786,7 +2786,7 @@ describe('TextMapPropagator', () => {
 
       it('should skip extracting upper bits for 64-bit trace IDs', () => {
         textMap.traceparent = '00-00000000000000003333cccc4444dddd-5555eeee6666ffff-01'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
         config.traceId128BitGenerationEnabled = true
 
         const carrier = textMap
@@ -2799,7 +2799,7 @@ describe('TextMapPropagator', () => {
       it('should propagate the version', () => {
         textMap.traceparent = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2814,7 +2814,7 @@ describe('TextMapPropagator', () => {
       it('should propagate other vendors', () => {
         textMap.traceparent = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2827,7 +2827,7 @@ describe('TextMapPropagator', () => {
       it('should propagate last datadog id', () => {
         textMap.traceparent = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=s:2;o:foo;t.dm:-4;p:4444eeee6666aaaa'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2843,7 +2843,7 @@ describe('TextMapPropagator', () => {
         textMap['x-datadog-trace-id'] = '61185'
         textMap['x-datadog-parent-id'] = '15'
         textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
-        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['datadog', 'tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2858,7 +2858,7 @@ describe('TextMapPropagator', () => {
       it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
         textMap.traceparent = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:4'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2872,7 +2872,7 @@ describe('TextMapPropagator', () => {
       it('should maintain hyphen prefix when a default mechanism of 0 is received', () => {
         textMap.traceparent = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-0'
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)
@@ -2887,7 +2887,7 @@ describe('TextMapPropagator', () => {
         const traceparent = textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         const tracestate = textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
 
-        config.tracePropagationStyle.extract = ['tracecontext']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['tracecontext']
 
         propagator.extract(textMap)
 
@@ -3173,28 +3173,28 @@ describe('TextMapPropagator', () => {
 
     describe('extract dispatch table', () => {
       it('skips the warn for the silent baggage entry', () => {
-        config.tracePropagationStyle.extract = ['baggage']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['baggage']
 
         assert.strictEqual(propagator.extract({}), null)
         sinon.assert.notCalled(log.warn)
       })
 
       it('skips the warn for the none propagation style', () => {
-        config.tracePropagationStyle.extract = ['none']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['none']
 
         assert.strictEqual(propagator.extract({}), null)
         sinon.assert.notCalled(log.warn)
       })
 
       it('warns once per unknown style without crashing the extract loop', () => {
-        config.tracePropagationStyle.extract = ['unknown_style']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['unknown_style']
 
         assert.strictEqual(propagator.extract({}), null)
         sinon.assert.calledOnceWithExactly(log.warn, 'Unknown propagation style:', 'unknown_style')
       })
 
       it('continues to the next extractor when one returns undefined', () => {
-        config.tracePropagationStyle.extract = ['unknown_style', 'datadog']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['unknown_style', 'datadog']
 
         const extracted = propagator.extract({
           'x-datadog-trace-id': '123',
@@ -3209,7 +3209,7 @@ describe('TextMapPropagator', () => {
 
     describe('b3-multi empty extraction path', () => {
       beforeEach(() => {
-        config.tracePropagationStyle.extract = ['b3multi']
+        config.propagation.DD_TRACE_PROPAGATION_STYLE_EXTRACT = ['b3multi']
       })
 
       it('returns null when an empty b3-sampled value defeats the fast-path guard', () => {
