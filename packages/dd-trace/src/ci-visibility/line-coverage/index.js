@@ -286,11 +286,6 @@ function finishTest (test, suites) {
     }
   }
   if (dumpPath) testUnion.addAll(coverage)
-  const init = collector.init.bitmaps
-  for (const file of coverage.bitmaps.keys()) {
-    const initLines = init.get(file)
-    if (initLines !== undefined) coverage.addBitmap(file, initLines)
-  }
   return toFiles(coverage)
 }
 
@@ -505,9 +500,7 @@ function receiveWorkerLines (owner, files) {
  */
 function receiveWorkerInit (files) {
   if (files === undefined) return
-  const collector = getCollector()
-  addPathLines(collector.init, files)
-  addPathLines(collector.sharedInit, files)
+  addPathLines(getCollector().sharedInit, files)
 }
 
 /**
