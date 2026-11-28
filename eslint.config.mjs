@@ -67,6 +67,7 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/datadog-instrumentations/src/cypress-config.js',
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
+  'packages/dd-trace/src/child-process-env.js', // A child inherits this process's environment.
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
   'packages/dd-trace/src/config/helper.js',
@@ -75,7 +76,6 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/dd-trace/src/debugger/index.js',
   'packages/dd-trace/src/log/index.js',
   'packages/dd-trace/src/plugins/util/test.js', // Reads DDTest's artifact locator and its existing alias.
-  'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
 const TEST_FILES = [
