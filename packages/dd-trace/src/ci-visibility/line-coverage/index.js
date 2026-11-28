@@ -500,7 +500,9 @@ function receiveWorkerLines (owner, files) {
  */
 function receiveWorkerInit (files) {
   if (files === undefined) return
-  addPathLines(getCollector().sharedInit, files)
+  const collector = getCollector()
+  addPathLines(collector.init, files)
+  addPathLines(collector.sharedInit, files)
 }
 
 /**
