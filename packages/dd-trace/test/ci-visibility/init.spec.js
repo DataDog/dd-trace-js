@@ -102,4 +102,24 @@ describe('Test Optimization initialization', () => {
 
     sinon.assert.notCalled(tracer.init)
   })
+
+  it('looks for a parent thread that collects lines only in a worker thread', () => {
+    const workerThreads = { getParentSettings: sinon.stub() }
+    const loadInit = isMainThread => proxyquire('../../../../ci/init', {
+      'node:worker_threads': { isMainThread },
+      '../packages/dd-trace': { init: sinon.stub(), use: sinon.stub() },
+      '../packages/dd-trace/src/ci-visibility/line-coverage/worker-threads': workerThreads,
+      '../packages/dd-trace/src/config/helper': {
+        getEnvironmentVariable: () => undefined,
+        getValueFromEnvSources: (name, skipDefault) => skipDefault,
+      },
+      '../packages/dd-trace/src/log': { debug: sinon.stub() },
+    })
+
+    loadInit(true)
+    sinon.assert.notCalled(workerThreads.getParentSettings)
+
+    loadInit(false)
+    sinon.assert.calledOnce(workerThreads.getParentSettings)
+  })
 })

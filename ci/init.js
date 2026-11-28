@@ -1,6 +1,8 @@
 'use strict'
 
 /* eslint-disable no-console */
+const { isMainThread } = require('node:worker_threads')
+
 const exporters = require('../ext/exporters')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
@@ -96,7 +98,8 @@ if (shouldInit && !skipVitestWorkerInit) {
   tracer.use('fs', false)
   tracer.use('child_process', false)
   // A worker thread or a child process started by a test reports the lines it runs to that test.
-  if (require('../packages/dd-trace/src/ci-visibility/line-coverage/worker-threads').getParentSettings()) {
+  // Only a worker thread can have a parent thread to report to, so the main thread loads none of that code.
+  if (!isMainThread && getLineCoverageParentSettings()) {
     require('../packages/dd-trace/src/ci-visibility/line-coverage').enableWorker()
   } else if (getEnvironmentVariable('_DD_LINE_COVERAGE_CHILD')) {
     require('../packages/dd-trace/src/ci-visibility/line-coverage').enableChild()
@@ -104,6 +107,10 @@ if (shouldInit && !skipVitestWorkerInit) {
 }
 
 module.exports = tracer
+
+function getLineCoverageParentSettings () {
+  return require('../packages/dd-trace/src/ci-visibility/line-coverage/worker-threads').getParentSettings()
+}
 
 function shouldSkipVitestWorkerInit () {
   return getValueFromEnvSources('DD_VITEST_WORKER') &&
