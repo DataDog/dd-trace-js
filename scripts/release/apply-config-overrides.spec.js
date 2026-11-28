@@ -42,14 +42,14 @@ function runNpm (directory, args) {
  * @param {(directory: string) => void} test
  * @param {Record<string, string>} [hooks]
  */
-function withFixture (major, test, hooks = { prepack: scripts.prepack }) {
+function withFixture (major, test, hooks) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-config-pack-'))
   try {
     writeFileSync(path.join(directory, 'package.json'), JSON.stringify({
       name: 'dd-trace-config-fixture',
       version: major + '.0.0',
       files,
-      scripts: hooks,
+      scripts: hooks ?? { prepack: scripts.prepack },
     }))
     for (const file of [
       'index.d.ts',
