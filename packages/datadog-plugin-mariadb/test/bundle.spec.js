@@ -17,7 +17,7 @@ const { ANY_STRING } = require('../../../integration-tests/helpers')
 const { CLIENT_PORT_KEY, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { withFakeNow, withoutImmediateClockRead } = require('./helpers')
+const { assertAcquisitionDisabled, withFakeNow, withoutImmediateClockRead } = require('./helpers')
 
 const queryStartCh = dc.channel('apm:mariadb:query:start')
 
@@ -38,6 +38,31 @@ function callbackResult (invoke) {
   return new Promise((resolve, reject) => {
     invoke((error, ...results) => error ? reject(error) : resolve(results))
   })
+}
+
+/**
+ * @param {import('../../..').Tracer} tracer
+ * @param {() => Promise<unknown>} acquire
+ * @param {RegExp | { code: string, errno: number }} expectedError
+ */
+async function assertDisabledClusterAcquire (tracer, acquire, expectedError) {
+  const finishChannel = dc.channel('dd-trace:span:finish')
+  let acquireCount = 0
+  const onSpanFinish = span => {
+    if (span.context()._name === 'mariadb.pool.acquire') acquireCount++
+  }
+
+  tracer.use('mariadb', { poolAcquire: false })
+  finishChannel.subscribe(onSpanFinish)
+  try {
+    const rejected = assert.rejects(acquire(), expectedError)
+    tracer.use('mariadb', { poolAcquire: true })
+    await rejected
+    assert.strictEqual(acquireCount, 0)
+  } finally {
+    finishChannel.unsubscribe(onSpanFinish)
+    tracer.use('mariadb', {})
+  }
 }
 
 /**
@@ -607,6 +632,22 @@ describe('Plugin', () => {
           }
         })
 
+        for (const method of ['query', 'execute']) {
+          it('suppresses promise pool acquisition telemetry when disabled for ' + method, async () => {
+            const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+            try {
+              await assertAcquisitionDisabled(
+                tracer,
+                () => pool.getConnection(),
+                sql => pool[method](sql),
+                connection => connection.release()
+              )
+            } finally {
+              await pool.end()
+            }
+          })
+        }
+
         for (const [method, sql] of [
           ['query', 'SELECT 23 AS bundle_pool_wait'],
           ['execute', 'SELECT 24 AS bundle_execute_pool_wait'],
@@ -900,6 +941,16 @@ describe('Plugin', () => {
           }
         })
 
+        it('keeps a rejected promise cluster checkout out of tracing when poolAcquire is enabled later', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false })
+
+          try {
+            await assertDisabledClusterAcquire(tracer, () => cluster.getConnection(), /No node have been added/)
+          } finally {
+            await cluster.end()
+          }
+        })
+
         it('traces pool clusters, falsy selectors, and selected node metadata', async () => {
           const cluster = mariadb.createPoolCluster()
           cluster.add('primary', { ...connectionOptions, minimumIdle: 0 })
@@ -1185,6 +1236,22 @@ describe('Plugin', () => {
           }
         })
 
+        for (const method of ['query', 'execute']) {
+          it('suppresses callback pool acquisition telemetry when disabled for ' + method, async () => {
+            const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+            try {
+              await assertAcquisitionDisabled(
+                tracer,
+                async () => (await callbackResult(callback => pool.getConnection(callback)))[0],
+                async sql => (await callbackResult(callback => pool[method](sql, callback)))[0],
+                connection => callbackResult(callback => connection.release(callback))
+              )
+            } finally {
+              await callbackResult(callback => pool.end(callback))
+            }
+          })
+        }
+
         it('records the pool acquire wait time on a bundled callback query span', async () => {
           const pool = mariadb.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
           const sql = 'SELECT 31 AS bundle_callback_pool_wait'
@@ -1250,6 +1317,35 @@ describe('Plugin', () => {
           } finally {
             tracer.use('mariadb', true)
             await callbackResult(callback => pool.end(callback))
+          }
+        })
+
+        it('releases a closed pool error when the callback disables acquisition tracing', async function () {
+          if (typeof global.gc !== 'function') return this.skip()
+
+          const pool = mariadb.createPool({ minimumIdle: 0 })
+          await callbackResult(callback => pool.end(callback))
+          let rejected
+          try {
+            pool.query('SELECT 1', error => {
+              assert.strictEqual(error.code, 'ER_POOL_ALREADY_CLOSED')
+              rejected = new WeakRef(error)
+              tracer.use('mariadb', { poolAcquire: false })
+            })
+            assert.ok(rejected)
+
+            for (let attempt = 0; attempt < 20; attempt++) {
+              global.gc()
+              await nextImmediate()
+              if (rejected.deref() === undefined) break
+              await nextImmediate()
+            }
+
+            // Keep the closed pool reachable until after collection.
+            assert.strictEqual(pool.totalConnections(), 0)
+            assert.strictEqual(rejected.deref(), undefined)
+          } finally {
+            tracer.use('mariadb', {})
           }
         })
 
@@ -1384,6 +1480,28 @@ describe('Plugin', () => {
               return callbackResult(callback => cluster.of('missing').query('SELECT 37', callback))
             }))
             await assertion
+          } finally {
+            await callbackResult(callback => cluster.end(callback))
+          }
+        })
+
+        it('keeps a rejected callback cluster checkout out of tracing when poolAcquire is enabled later', async () => {
+          const cluster = mariadb.createPoolCluster({ canRetry: false })
+          cluster.add('failing', {
+            ...connectionOptions,
+            acquireTimeout: 500,
+            connectTimeout: 100,
+            host: '127.0.0.1',
+            minimumIdle: 0,
+            port: await getClosedPort(),
+          })
+
+          try {
+            await assertDisabledClusterAcquire(
+              tracer,
+              () => callbackResult(callback => cluster.getConnection('failing', callback)),
+              { code: 'ER_GET_CONNECTION_TIMEOUT', errno: 45028 }
+            )
           } finally {
             await callbackResult(callback => cluster.end(callback))
           }
